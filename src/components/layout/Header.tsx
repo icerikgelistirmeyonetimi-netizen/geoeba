@@ -250,7 +250,7 @@ export function Header() {
 
   return (
     <>
-      <header className="h-14 bg-white/95 dark:bg-[#15171c]/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-4 flex items-center justify-between z-[100] sticky top-0 shadow-xs select-none">
+      <header data-uygulama-basligi className="h-14 bg-white/95 dark:bg-[#15171c]/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-4 flex items-center justify-between z-[100] sticky top-0 shadow-xs select-none">
         {/* ================= SOL: LOGO + KADEME BUTONLARI ================= */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0 mr-2">
           {/* Menü Hamburger Butonu */}
