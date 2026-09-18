@@ -162,6 +162,8 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
   const [icerik, setIcerik] = useState<{ uniteId: string; konu: Topic } | null>(null);
   // Kazanım kodu → aktarılmış içerik sayfası (aktarım yapılmadıysa boş kalır)
   const [kazanimlar, setKazanimlar] = useState<Record<string, KazanimIcerigi>>({});
+  // Ders sayfası birkaç MB; yüklenene kadar çerçevenin üstünde geometrik yükleme ekranı durur
+  const [dersHazir, setDersHazir] = useState(false);
   const icerikBaslikRef = useRef<HTMLHeadingElement>(null);
   const icerikAcan = useRef<HTMLElement | null>(null);
   const icerikTemizle = useRef<number | undefined>(undefined);
@@ -224,6 +226,11 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
       gecerli = false;
     };
   }, [ANA]);
+
+  // Başka bir ders açıldığında çerçeve yeniden yüklenir; yükleme ekranı da baştan görünür
+  useEffect(() => {
+    setDersHazir(false);
+  }, [icerik?.konu.id]);
 
   // Panel açılınca odak panele; Esc önce açık içeriği, sonra paneli kapatır
   useEffect(() => {
@@ -853,14 +860,28 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
                   data-kazanim={icerik.konu.code}
                 >
                   {icerikAdresi ? (
-                    <iframe
-                      key={icerikAdresi}
-                      className={s['icerik-cerceve']}
-                      src={icerikAdresi}
-                      title={`${icerik.konu.title} içeriği`}
-                      loading="lazy"
-                      allow="fullscreen; autoplay; microphone"
-                    />
+                    <>
+                      <iframe
+                        key={icerikAdresi}
+                        className={`${s['icerik-cerceve']} ${dersHazir ? s['icerik-cerceve--hazir'] : ''}`}
+                        src={icerikAdresi}
+                        title={`${icerik.konu.title} içeriği`}
+                        allow="fullscreen; autoplay; microphone"
+                        onLoad={() => setDersHazir(true)}
+                        onError={() => setDersHazir(true)}
+                      />
+                      {!dersHazir && (
+                        <div className={s['ders-yukleniyor']} role="status">
+                          <svg className={s['ders-cizim']} viewBox="0 0 100 100" aria-hidden="true">
+                            <circle className={s['ders-cember']} cx="50" cy="50" r="38" />
+                            <rect className={s['ders-kare']} x="26" y="26" width="48" height="48" rx="3" />
+                            <polygon className={s['ders-ucgen']} points="50,25 73,64 27,64" />
+                            <circle className={s['ders-nokta']} cx="50" cy="50" r="4.5" />
+                          </svg>
+                          <p className={s['ders-yukleme-yazi']}>Ders hazırlanıyor…</p>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <p className={s['icerik-bos']}>Bu kazanımın içeriği henüz eklenmedi.</p>
                   )}
