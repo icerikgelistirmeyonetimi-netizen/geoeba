@@ -1,25 +1,49 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ilkAcilisAnimasyonuAl } from './logoAnimasyonu';
 
+/** public/ altındaki dosyalar basePath ile otomatik öneklenmez (bkz. next.config.mjs). */
+const VARLIK_ONEKI = process.env.NEXT_PUBLIC_ASSET_PREFIX ?? '';
+const LOGO = `${VARLIK_ONEKI}/images/eba/eba-logo-karakter-yatay`;
+
+/**
+ * EBA logosu: yazı markası + taşıyıcı tip (göz motifli karakter).
+ * Kaynak: EBA Görsel Kimlik Kullanım Kılavuzu s. 24–26. Açık temada kırmızı,
+ * koyu temada kılavuzun beyaz sürümü gösterilir; dosyalar public/images/eba/ altında.
+ * Uygulama ilk açıldığında göz animasyonu bir kez oynar, sonra nötr pozda durur.
+ */
 export function Brand() {
-  return <span className="flex items-center gap-2.5 sm:gap-3 whitespace-nowrap">
-    <span className="relative flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center text-indigo-600 dark:text-indigo-300">
-      <svg viewBox="0 0 40 40" className="h-9 w-9" fill="none" aria-hidden="true">
-        <circle cx="20" cy="20" r="13" stroke="currentColor" strokeWidth="1.2" opacity=".55" />
-        <path d="M10 28 20 9 30 28Z" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-        <path d="M10 28 25 19M20 9v19" stroke="#0891b2" strokeWidth="1.3" strokeLinecap="round" />
-        <circle cx="20" cy="9" r="2.3" fill="#0891b2" />
-        <circle cx="10" cy="28" r="2.1" fill="currentColor" />
-        <circle cx="30" cy="28" r="2.1" fill="currentColor" />
-        <circle cx="20" cy="22" r="2" fill="currentColor" />
-      </svg>
+  const kok = useRef<HTMLSpanElement>(null);
+  // Sunucu çıktısıyla uyum için duragan başlar; animasyon yalnız istemcide açılır.
+  const [canli, setCanli] = useState(false);
+  useEffect(() => {
+    // Ada ekranı açıkken üst bar gizlidir (globals.css: body[data-ada-ekrani]); açılış
+    // animasyonunu ekranda görünen logo alsın diye kısa bir bekleyişle görünürlük denetlenir.
+    const id = window.setTimeout(() => {
+      const el = kok.current;
+      if (el && el.getClientRects().length > 0 && ilkAcilisAnimasyonuAl()) setCanli(true);
+    }, 300);
+    return () => window.clearTimeout(id);
+  }, []);
+  const ek = canli ? '-animasyon-tek' : '';
+
+  return (
+    <span ref={kok} className="flex items-center whitespace-nowrap">
+      <img
+        src={`${LOGO}${ek}.svg`}
+        alt="EBA"
+        width={820}
+        height={220}
+        className="h-9 w-auto sm:h-10 dark:hidden"
+        draggable={false}
+      />
+      <img
+        src={`${LOGO}-koyu-zemin${ek}.svg`}
+        alt="EBA"
+        width={820}
+        height={220}
+        className="hidden h-9 w-auto sm:h-10 dark:block"
+        draggable={false}
+      />
     </span>
-    <span className="flex flex-col items-start gap-1">
-      <span className="inline-flex items-baseline gap-2 text-[22px] sm:text-[25px] font-extrabold leading-none tracking-[-0.055em] text-slate-900 dark:text-slate-50">
-        <span>Geo</span><span className="text-[#d50032] tracking-[-0.035em]">EBA</span>
-      </span>
-      <span className="hidden sm:block text-[8px] font-semibold leading-none tracking-[0.16em] text-slate-500 dark:text-slate-400">
-        GEOMETRİ &amp; MATEMATİK
-      </span>
-    </span>
-  </span>;
+  );
 }

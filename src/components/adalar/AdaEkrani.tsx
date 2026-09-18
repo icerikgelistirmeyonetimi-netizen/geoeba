@@ -28,6 +28,7 @@ import {
   type AdaSayfasiKimligi,
 } from './adaEslemeleri';
 import s from './adalar.module.css';
+import { ilkAcilisAnimasyonuAl } from '@/components/layout/logoAnimasyonu';
 
 const VARLIK_ONEKI = process.env.NEXT_PUBLIC_ASSET_PREFIX ?? '';
 const RENKLER: Record<string, string> = {
@@ -77,13 +78,9 @@ const ikon = {
       />
     </svg>
   ),
-  marka: (
-    <svg viewBox="0 0 32 32" aria-hidden="true">
-      <circle cx="16" cy="16" r="15" fill="#f6efe0" />
-      <path d="M6 20.5c3-1.6 6.5-1.6 10 0s7 1.6 10 0" fill="none" stroke="#2a8f8f" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="M9.5 18l4.2-8.2 3.4 5.6 1.9-2.6 3.5 5.2" fill="none" stroke="#1d3a37" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="21.5" cy="9.5" r="1.8" fill="#c99a52" />
-    </svg>
+  /** EBA taşıyıcı tipi (göz karakteri), animasyonlu: yükleyicide kullanılır. Kaynak: EBA Görsel Kimlik Kılavuzu s. 22. */
+  markaCanli: (
+    <img src={`${VARLIK_ONEKI}/images/eba/eba-karakter-animasyon.svg`} alt="" width={220} height={220} draggable={false} />
   ),
 };
 
@@ -153,7 +150,6 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
   const [uzerinde, setUzerinde] = useState<string | null>(null);
   const [secili, setSecili] = useState<string | null>(null);
   const [perde, setPerde] = useState(false);
-  const [dokunmatik, setDokunmatik] = useState(false);
   const [canli, setCanli] = useState('');
   const [panelSinif, setPanelSinif] = useState<GradeId | null>(null);
   const [panelAcik, setPanelAcik] = useState(false);
@@ -164,6 +160,11 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
   const [kazanimlar, setKazanimlar] = useState<Record<string, KazanimIcerigi>>({});
   // Ders sayfası birkaç MB; yüklenene kadar çerçevenin üstünde geometrik yükleme ekranı durur
   const [dersHazir, setDersHazir] = useState(false);
+  // Adalar hazır olunca EBA logosunun açılış animasyonu bir kez oynar (uygulama başına tek sefer)
+  const [logoCanli, setLogoCanli] = useState(false);
+  useEffect(() => {
+    if (hazir && ilkAcilisAnimasyonuAl()) setLogoCanli(true);
+  }, [hazir]);
   const icerikBaslikRef = useRef<HTMLHeadingElement>(null);
   const icerikAcan = useRef<HTMLElement | null>(null);
   const icerikTemizle = useRef<number | undefined>(undefined);
@@ -179,7 +180,6 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
   const sinifaGitRef = useRef<(sinif: GradeId) => void>(() => {});
 
   useEffect(() => {
-    setDokunmatik(matchMedia('(pointer: coarse)').matches);
     azHareket.current = matchMedia('(prefers-reduced-motion: reduce)').matches;
   }, []);
 
@@ -605,8 +605,14 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
         <div className={s['ust-sol']}>
           {ANA ? (
             <p className={s.marka}>
-              <span className={s['marka-ikon']}>{ikon.marka}</span>
-              <span>GeoEBA</span>
+              <img
+                className={s['marka-logo']}
+                src={`${VARLIK_ONEKI}/images/eba/eba-logo-karakter-yatay-koyu-zemin${logoCanli ? '-animasyon-tek' : ''}.svg`}
+                alt="EBA"
+                width={820}
+                height={220}
+                draggable={false}
+              />
             </p>
           ) : (
             <button type="button" className={s['geri-baglanti']} onClick={anaSayfayaDon}>
@@ -614,7 +620,6 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
               <span>Tüm adalar</span>
             </button>
           )}
-          <p className={s['ust-yazi']}>{ANA ? 'Matematik · Kademe seçimi' : `GeoEBA · ${kademe?.ad ?? ''}`}</p>
           <h1 className={s.baslik}>{ANA ? 'Matematik Takımadaları' : kademe?.baslik}</h1>
           <p className={s.aciklama}>
             {ANA ? 'Matematiğin yeni rotası' : `${kademe?.aralik} · Ünitelerini görmek için bir sınıf binası seç.`}
@@ -729,9 +734,6 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
         )}
 
         <div ref={kontrollerRef} className={s.kontroller}>
-          <p className={s.ipucu}>
-            {dokunmatik ? 'Tek parmak: çevir · İki parmak: yakınlaş' : 'Sürükle: çevir · Tekerlek: yakınlaş · Sağ tık: kaydır'}
-          </p>
           <button type="button" className={s['yuvarlak-dugme']} aria-label="Görünümü sıfırla" title="Görünümü sıfırla" onClick={gorunumuSifirla}>
             {ikon.sifirla}
           </button>
@@ -872,13 +874,8 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
                       />
                       {!dersHazir && (
                         <div className={s['ders-yukleniyor']} role="status">
-                          <svg className={s['ders-cizim']} viewBox="0 0 100 100" aria-hidden="true">
-                            <circle className={s['ders-cember']} cx="50" cy="50" r="38" />
-                            <rect className={s['ders-kare']} x="26" y="26" width="48" height="48" rx="3" />
-                            <polygon className={s['ders-ucgen']} points="50,25 73,64 27,64" />
-                            <circle className={s['ders-nokta']} cx="50" cy="50" r="4.5" />
-                          </svg>
-                          <p className={s['ders-yukleme-yazi']}>Ders hazırlanıyor…</p>
+                          <span className={s['ders-logo']}>{ikon.markaCanli}</span>
+                          <p className={s['ders-yukleme-yazi']}>Etkinlik hazırlanıyor…</p>
                         </div>
                       )}
                     </>
@@ -906,7 +903,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
           role="status"
         >
           <div className={s['yukleyici-ic']}>
-            <span className={s['yukleyici-ikon']}>{ikon.marka}</span>
+            <span className={s['yukleyici-ikon']}>{ikon.markaCanli}</span>
             <p className={s['yukleyici-baslik']}>{ANA ? 'Matematik Takımadaları' : kademe?.baslik}</p>
             <p className={s['yukleyici-durum']}>{hataMesaji ?? 'Adalar hazırlanıyor…'}</p>
             {hataMesaji ? (

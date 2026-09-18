@@ -18,7 +18,7 @@ export interface KademeAdasi {
 export const KADEME_ADALARI: readonly KademeAdasi[] = [
   { id: 'ilkokul', ad: 'İlkokul', baslik: 'İlkokul Adası', aralik: '1–4. sınıf', renk: '#d9805f' },
   { id: 'ortaokul', ad: 'Ortaokul', baslik: 'Ortaokul Adası', aralik: '5–8. sınıf', renk: '#2a9d94' },
-  { id: 'lise', ad: 'Lise', baslik: 'Lise Adası', aralik: 'Hazırlık + 9–12. sınıf', renk: '#7f88c4' },
+  { id: 'lise', ad: 'Lise', baslik: 'Lise Adası', aralik: 'Hazırlık – 12. sınıf', renk: '#7f88c4' },
 ];
 
 /** Ana sayfadaki deniz feneri: Serbest Çizim Stüdyosu'nu açar. */
