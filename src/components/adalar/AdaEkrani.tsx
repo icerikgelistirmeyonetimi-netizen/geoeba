@@ -86,10 +86,11 @@ const ikon = {
 
 /**
  * Kazanım içerikleri: `scripts/kazanim-icerik-aktar.mjs` üretim panelinin sayfalarını
- * `public/kazanim-icerikleri/` altına kopyalar ve kod → dosya eşlemesini `liste.json`e yazar.
+ * `public/kazanim-icerikleri/` altına kopyalar ve konu kodu → içerikler eşlemesini `liste.json`e yazar.
+ * Üretilen her sayfa bir konuya atanır; bir konu birden çok sayfa taşıyabilir (`icerikler`).
  * Liste bir kez, ilk kademe adası açıldığında indirilir; dosya yoksa panel eski boş iletisini gösterir.
  */
-interface KazanimIcerigi {
+interface IcerikSayfasi {
   /** public/kazanim-icerikleri/ altındaki sayfa */
   dosya: string;
   /** Sayfanın anlattığı MEB kazanımı (proje kodlaması MEB'den farklı sıralandığı için ayrı tutulur) */
@@ -97,6 +98,17 @@ interface KazanimIcerigi {
   kazanimMetni: string;
   unite: string;
   skor: number;
+}
+
+interface KazanimIcerigi extends IcerikSayfasi {
+  /** Konunun bütün içerikleri; eski tek içerikli listelerde yoktur (kaydın kendisi tek içeriktir) */
+  icerikler?: IcerikSayfasi[];
+}
+
+/** Konunun içerik sayfaları (eski biçimde tek kayıt da bir öğeli liste olur). */
+function konuSayfalari(kayit: KazanimIcerigi | undefined): IcerikSayfasi[] {
+  if (!kayit) return [];
+  return kayit.icerikler?.length ? kayit.icerikler : [kayit];
 }
 
 const KAZANIM_KLASORU = `${VARLIK_ONEKI}/kazanim-icerikleri`;
@@ -158,6 +170,8 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
   const [icerik, setIcerik] = useState<{ uniteId: string; konu: Topic } | null>(null);
   // Kazanım kodu → aktarılmış içerik sayfası (aktarım yapılmadıysa boş kalır)
   const [kazanimlar, setKazanimlar] = useState<Record<string, KazanimIcerigi>>({});
+  // Açık konunun birden çok içeriği varsa seçili olanın sırası
+  const [icerikSirasi, setIcerikSirasi] = useState(0);
   // Ders sayfası birkaç MB; yüklenene kadar çerçevenin üstünde geometrik yükleme ekranı durur
   const [dersHazir, setDersHazir] = useState(false);
   // Adalar hazır olunca EBA logosunun açılış animasyonu bir kez oynar (uygulama başına tek sefer)
@@ -227,10 +241,11 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
     };
   }, [ANA]);
 
-  // Başka bir ders açıldığında çerçeve yeniden yüklenir; yükleme ekranı da baştan görünür
+  // Başka bir ders (konu ya da konunun başka içeriği) açıldığında çerçeve yeniden yüklenir;
+  // yükleme ekranı da baştan görünür
   useEffect(() => {
     setDersHazir(false);
-  }, [icerik?.konu.id]);
+  }, [icerik?.konu.id, icerikSirasi]);
 
   // Panel açılınca odak panele; Esc önce açık içeriği, sonra paneli kapatır
   useEffect(() => {
@@ -493,6 +508,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
       return;
     }
     if (!icerik) panelGeometrisiDegisecek();
+    setIcerikSirasi(0);
     setIcerik({ uniteId, konu });
     setCanli(`${konu.title} açıldı.`);
   }
@@ -575,7 +591,8 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
     .join(' ');
   const paneldekiUniteler = panelSinif != null ? sinifUniteleri(panelSinif) : [];
   const icerikUnitesi = icerik ? paneldekiUniteler.find((u) => u.id === icerik.uniteId) : undefined;
-  const acikKazanim = icerik?.konu.code ? kazanimlar[icerik.konu.code] : undefined;
+  const acikSayfalar = icerik?.konu.code ? konuSayfalari(kazanimlar[icerik.konu.code]) : [];
+  const acikKazanim: IcerikSayfasi | undefined = acikSayfalar[icerikSirasi] ?? acikSayfalar[0];
   const icerikAdresi = acikKazanim ? `${KAZANIM_KLASORU}/${encodeURIComponent(acikKazanim.dosya)}` : null;
   const kokStili = kademe ? ({ '--vurgu': kademe.renk } as React.CSSProperties) : undefined;
   const siniflar = kademe ? ADA_SINIFLARI[kademe.id] : [];
@@ -796,19 +813,27 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
                       </button>
                       {acik && (
                         <ul id={`${unite.id}-konular`} className={s['konu-listesi']}>
-                          {unite.topics.map((konu) => (
-                            <li key={konu.id}>
-                              <button
-                                type="button"
-                                className={s.konu}
-                                aria-current={icerik?.konu.id === konu.id ? 'true' : undefined}
-                                onClick={(e) => konuyuAc(unite.id, konu, e.currentTarget)}
-                              >
-                                <span>{konu.title}</span>
-                                <span className={s['konu-ok']}>{ikon.ok}</span>
-                              </button>
-                            </li>
-                          ))}
+                          {unite.topics.map((konu) => {
+                            const sayfaSayisi = konu.code ? konuSayfalari(kazanimlar[konu.code]).length : 0;
+                            return (
+                              <li key={konu.id}>
+                                <button
+                                  type="button"
+                                  className={s.konu}
+                                  aria-current={icerik?.konu.id === konu.id ? 'true' : undefined}
+                                  onClick={(e) => konuyuAc(unite.id, konu, e.currentTarget)}
+                                >
+                                  <span>{konu.title}</span>
+                                  {sayfaSayisi > 1 && (
+                                    <span className={s['konu-sayi']} title={`${sayfaSayisi} içerik`}>
+                                      {sayfaSayisi} içerik
+                                    </span>
+                                  )}
+                                  <span className={s['konu-ok']}>{ikon.ok}</span>
+                                </button>
+                              </li>
+                            );
+                          })}
                         </ul>
                       )}
                     </li>
@@ -855,6 +880,28 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
                     </a>
                   )}
                 </div>
+                {acikSayfalar.length > 1 && (
+                  <div className={s['icerik-secici']} role="tablist" aria-label={`${icerik.konu.title} içerikleri`}>
+                    {acikSayfalar.map((sayfa, sira) => (
+                      <button
+                        key={sayfa.dosya}
+                        type="button"
+                        role="tab"
+                        aria-selected={sayfa === acikKazanim}
+                        className={s['icerik-secici-dugme']}
+                        title={sayfa.kazanimMetni}
+                        onClick={() => {
+                          if (sayfa === acikKazanim) return;
+                          setIcerikSirasi(sira);
+                          setCanli(`${sira + 1}. içerik açıldı: ${sayfa.kazanimKodu}.`);
+                        }}
+                      >
+                        <span className={s['icerik-secici-no']}>{sira + 1}</span>
+                        <span className={s['icerik-secici-kod']}>{sayfa.kazanimKodu}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {/* Aktarılmış kazanım sayfası (konu kimliği: data-konu); yoksa boş ileti kalır */}
                 <div
                   className={`${s['icerik-alani']} ${icerikAdresi ? s['icerik-alani--sayfa'] : ''}`}
