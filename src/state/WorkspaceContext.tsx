@@ -1,6 +1,8 @@
 'use client';
 import { resolveCommandBindings, constructionDependencies, commandCircleGeometry } from '@/math/commandBindings';
 import type { PointAnimUpdate } from '@/math/pathAnimation';
+import { bagimliZleriHesapla, nesneleriZdeOtele } from '@/math/zEkseni';
+import { ortakGeriAlmaHedefi, ortakYinelemeHedefi } from '@/math/ortakGecmis';
 
 import React, {
   createContext,
@@ -74,18 +76,43 @@ import { extractVariableNames,
 } from '@/math/parser';
 import { useCurriculum } from './CurriculumContext';
 import { createId } from './ids';
-import { pointAngleAction } from '@/math/pointAngles';
+import { pointAngleAction, providesAngleArm } from '@/math/pointAngles';
 import { withLengthMeasurement } from '@/math/partialLengths';
+import { NOKTALI_SEKILLER, gorunurNoktaAdlari, noktalariyla, silmeIpucu } from '@/math/nesneAdlari';
+import {
+  addArcMeasurement, arcMeasurementDependencies, arcNearMissHint, arcValueText, circlesThroughPoint, commonCircles, dropDanglingArcMeasurements,
+  arcTitle, findArcMeasurement, resolveArc, type ArcSpec,
+} from '@/math/arcMeasure';
 import { fitPolynomial, polynomialToExpression, coefficientOfDetermination } from '@/math/regression';
 import type { HostShape } from '@/math/geometry';
 import type { ValuePromptRequest } from '@/components/workspace/ValuePromptDialog';
 import confetti from 'canvas-confetti';
+import { ObjectClipboard, copyObjects, pasteObjects } from '@/math/objectClipboard';
+import { ProjectFile, parseProjectFile } from '@/math/projectFile';
+import type { WorkspaceScene } from '@/types/workspaceScene';
+import type { Solid3DObject } from '@/types/workspace3d';
 
 export { createId } from './ids';
 
 type ObjectsUpdater = MathObject[] | ((prev: MathObject[]) => MathObject[]);
 
 interface WorkspaceContextType {
+  objectClipboard: ObjectClipboard | null;
+  setObjectClipboard: React.Dispatch<React.SetStateAction<ObjectClipboard | null>>;
+  sceneBridge: WorkspaceScene | null;
+  setSceneBridge: React.Dispatch<React.SetStateAction<WorkspaceScene | null>>;
+  getProject: () => ProjectFile;
+  loadProject: (project: ProjectFile) => void;
+  copySelection: () => void;
+  cutSelection: () => void;
+  pasteSelection: (location?: Point2D) => void;
+  deleteSelection: () => void;
+  selectAll: () => void;
+  canPaste: boolean;
+  undoWorkspace: () => void;
+  redoWorkspace: () => void;
+  canUndoWorkspace: boolean;
+  canRedoWorkspace: boolean;
   constraintError: string | null;
   objects: MathObject[];
   selectedObjectId: string | null;
@@ -141,11 +168,15 @@ interface WorkspaceContextType {
   addObject: (obj: MathObject, historyLabel?: string) => void;
   addObjects: (objs: MathObject[], description?: string) => void;
   updateObject: (id: string, updates: Partial<MathObject>, recordHistory?: boolean) => void;
-  deleteObject: (id: string) => void;
-  deleteObjects: (ids: string[], description?: string) => void;
+  /** Şekli KENDİ kullanılmayan noktalarıyla siler (planDeletion). `keepPoints` yalnızca şekli siler, noktalar kalır. */
+  deleteObject: (id: string, options?: Pick<DeletionOptions, 'keepPoints'>) => void;
+  /** Şekilleri KENDİ kullanılmayan noktalarıyla siler (planDeletion). Yalnızca şekli değiştirecek kod `keepPoints` versin. */
+  deleteObjects: (ids: string[], description?: string, options?: Pick<DeletionOptions, 'keepPoints'>) => void;
   moveObject: (objectId: string, delta: Point2D, recordHistory?: boolean) => void;
   /** `capa`: sürüklemenin tutulduğu nokta ve onun grubunun isteyeceği öteleme (kısıtlı çapanın eksik kalan kısmı dâhil). */
   moveObjects: (objectIds: string[], delta: Point2D, recordHistory?: boolean, capa?: { id: string; delta: Point2D }) => void;
+  /** Nesneleri (tanım noktalarıyla) 3B'de z ekseninde öteler; kilitliler ve konumlu türler (metin, görsel…) atlanır. */
+  moveObjectsZ: (objectIds: string[], dz: number, recordHistory?: boolean) => void;
   clearWorkspace: () => void;
   resetViewport: () => void;
   handlePointClick: (pointId: string, objectsOverride?: MathObject[]) => void;
@@ -199,6 +230,15 @@ interface WorkspaceContextType {
   hideMeasurement: (objectId: string, kind: MeasurementKind | string) => void;
   setLabelOffset: (objectId: string, kind: MeasurementKind | string, offset: Point2D, recordHistory?: boolean) => void;
   measureArcLength: (arcId: string) => void;
+  /**
+   * Aynı çemberin üzerindeki iki nokta arasındaki yayı ölçer (çember BÖLÜNMEZ). Varsayılan küçük yay;
+   * throughPointId o noktayı içeren yayı, major büyük yayı seçer. Ölçümün kimliğini (ya da null) döndürür.
+   */
+  measureArcBetween: (
+    firstPointId: string,
+    secondPointId: string,
+    options?: { circleId?: string; throughPointId?: string; major?: boolean }
+  ) => string | null;
   toggleAngleReflex: (angleId: string) => void;
   setSegmentLength: (segmentId: string, target: number) => void;
   setAngleDegrees: (angleId: string, targetDeg: number) => void;
@@ -380,15 +420,16 @@ export function hostBicimi(o: MathObject, objects: MathObject[]): HostShape | nu
   if (o.type === 'ellipse') {
     const merkez = nk(o.centerPointId);
     return merkez
-      ? { kind: 'ellipse', center: merkez, radiusX: o.radiusX, radiusY: o.radiusY }
+      ? { kind: 'ellipse', center: merkez, radiusX: o.radiusX, radiusY: o.radiusY, rotation: o.rotation }
       : null;
   }
   if (o.type === 'arc' || o.type === 'sector') {
     const merkez = nk(o.centerPointId);
     const bas = nk(o.startPointId);
-    if (!merkez || !bas) return null;
-    const r = calculateDistance(merkez, bas);
-    return r > 0 ? { kind: 'circle', center: merkez, radius: r } : null;
+    const son = nk(o.directionPointId);
+    if (!merkez || !bas || !son) return null;
+    const geometry = getArcGeometry(merkez, bas, son);
+    return geometry ? { kind: 'arc', center: merkez, radius: geometry.radius, startAngle: geometry.startAngle, sweep: geometry.sweep, sector: o.type === 'sector' } : null;
   }
   if (o.type === 'polygon') {
     const kose = o.pointIds.map(nk).filter(Boolean) as PointObject[];
@@ -416,8 +457,14 @@ export function hostBicimi(o: MathObject, objects: MathObject[]): HostShape | nu
 export function sarkikBaglariCoz(objects: MathObject[]): MathObject[] {
   const ids = new Set(objects.map((o) => o.id));
   const sarkik = (o: MathObject) => o.type === 'point' && !!o.onObjectId && !ids.has(o.onObjectId);
-  if (!objects.some(sarkik)) return objects;
+  // Açısı silinmiş kol parçası: "açının kolu" hatırlatması da düşer (parça sıradan bir parça olur)
+  const sahipsizKol = (o: MathObject) => o.type === 'segment' && !!o.armOfAngleId && !ids.has(o.armOfAngleId);
+  if (!objects.some((o) => sarkik(o) || sahipsizKol(o))) return objects;
   return objects.map((o) => {
+    if (sahipsizKol(o)) {
+      const { armOfAngleId: _kol, ...parca } = o as SegmentObject;
+      return parca as MathObject;
+    }
     if (!sarkik(o)) return o;
     const { onObjectId: _sarkik, ...serbest } = o as PointObject;
     return serbest as MathObject;
@@ -442,14 +489,29 @@ export function bagliNoktalariOturt(objects: MathObject[], previous: MathObject[
       const shape = host && hostBicimi(host, [...resolved.values()]);
       if (shape) {
         let position: Point2D = object;
-        if (shape.kind === 'circle') {
+        if (shape.kind === 'circle' || shape.kind === 'arc' || shape.kind === 'ellipse') {
           const old = oldById.get(id);
           const unchanged = old?.type === 'point' && old.onObjectId === object.onObjectId && old.x === object.x && old.y === object.y;
           const sourceScene = unchanged ? previous : objects;
           const sourceHost = sourceScene.find(o => o.id === object.onObjectId);
           const sourceShape = sourceHost && hostBicimi(sourceHost, sourceScene);
-          if (sourceShape?.kind === 'circle') {
+          if (sourceShape && 'center' in sourceShape) {
             position = { x: shape.center.x + object.x - sourceShape.center.x, y: shape.center.y + object.y - sourceShape.center.y };
+            if (unchanged && shape.kind === 'ellipse' && sourceShape.kind === 'ellipse') {
+              const oldAngle = (sourceShape.rotation ?? 0) * Math.PI / 180;
+              const newAngle = (shape.rotation ?? 0) * Math.PI / 180;
+              const dx = object.x - sourceShape.center.x, dy = object.y - sourceShape.center.y;
+              const x = (Math.cos(oldAngle) * dx + Math.sin(oldAngle) * dy) * shape.radiusX / sourceShape.radiusX;
+              const y = (-Math.sin(oldAngle) * dx + Math.cos(oldAngle) * dy) * shape.radiusY / sourceShape.radiusY;
+              position = { x: shape.center.x + Math.cos(newAngle) * x - Math.sin(newAngle) * y, y: shape.center.y + Math.sin(newAngle) * x + Math.cos(newAngle) * y };
+            }
+            if (unchanged && shape.kind === 'arc' && sourceShape.kind === 'arc' && !shape.sector) {
+              const tau = 2 * Math.PI;
+              const oldAngle = Math.atan2(object.y - sourceShape.center.y, object.x - sourceShape.center.x);
+              const t = Math.min(1, (((oldAngle - sourceShape.startAngle) % tau + tau) % tau) / sourceShape.sweep);
+              const angle = shape.startAngle + t * shape.sweep;
+              position = { x: shape.center.x + shape.radius * Math.cos(angle), y: shape.center.y + shape.radius * Math.sin(angle) };
+            }
           }
         }
         const projected = projectOntoHost(position, shape);
@@ -596,7 +658,8 @@ export function objectDependencies(o: MathObject): string[] {
     case 'polygon':
       return o.pointIds;
     case 'measurement':
-      return o.pointIds;
+      // Yay ölçümü çembere de bağlıdır: çember (ya da merkezi) silinince ölçüm de gider
+      return o.kind === 'arc' ? arcMeasurementDependencies(o) : o.pointIds;
     case 'checkbox':
       return o.targetIds;
     case 'button': {
@@ -620,14 +683,20 @@ export function objectDependencies(o: MathObject): string[] {
 /**
  * Silinecek nesnelerle birlikte kaldırılması gerekenlerin tamamı.
  *
- * İki kural birlikte çalışır:
+ * Dört kural birlikte çalışır:
  *  1. BAĞIMLILIK: bir nesne, silinen bir nesneye dayanıyorsa o da silinir (geçişli).
  *     Böylece hiçbir nesne var olmayan bir noktaya işaret eder hâlde kalmaz.
  *  2. ŞEKLE AİT ETİKETLER: bir ŞEKİL silindiğinde, yalnızca o şeklin noktalarını
  *     kullanan açı ve ölçüm etiketleri de silinir. Üçgeni silen kullanıcı, üçgenin
- *     açısının ekranda kalmasını beklemez. Noktalar korunur: bağımsız nesnelerdir.
+ *     açısının ekranda kalmasını beklemez. (Bu fonksiyon noktaları silmez; şeklin kendi noktalarını planDeletion toplar.)
+ *  3. KOLU SİLİNEN AÇI: açının bir kolunu çizen şekil (parça, doğru, ışın, çokgen kenarı)
+ *     silinir ve o kolu başka hiçbir şekil çizmezse açı da silinir (providesAngleArm).
+ *  4. AÇIYLA ÇİZİLEN KOLLAR: açının KENDİSİ silinince, açıyla aynı adımda onun kolu olarak
+ *     çizilen parçalar (armOfAngleId) da silinir; kalan bir nesne onlara dayanmıyorsa.
+ *
+ * keepPoints: "Yalnızca şekli sil" - kullanılmayan çember merkezi de kalır.
  */
-export function collectDependentIds(objects: MathObject[], ids: string[]): Set<string> {
+export function collectDependentIds(objects: MathObject[], ids: string[], options: { keepPoints?: boolean } = {}): Set<string> {
   const removal = new Set<string>(ids);
 
   // 1) Geçişli bağımlılık
@@ -670,9 +739,71 @@ export function collectDependentIds(objects: MathObject[], ids: string[]): Set<s
     }
   }
 
+  // 3) KOLU SİLİNEN AÇI: açının iki kolundan biri (köşe -> 1. nokta ya da köşe -> 3. nokta)
+  //    silinen bir şekil tarafından çiziliyordu ve artık KALAN hiçbir şekil onu çizmiyorsa açı da gider.
+  //    Yoksa yay ve derece rozeti, kolu olmayan bir köşede boşlukta asılı kalıyordu.
+  //    Kolu hiçbir şekil tarafından çizilmemiş serbest üç noktalı açılar bu kuraldan etkilenmez.
+  const kolSekilleri = objects.filter(
+    (o) => o.type === 'segment' || o.type === 'line' || o.type === 'ray' || o.type === 'polygon'
+  );
+  const silinenKollar = kolSekilleri.filter((o) => removal.has(o.id));
+  if (silinenKollar.length > 0) {
+    const kalanKollar = kolSekilleri.filter((o) => !removal.has(o.id));
+    for (const o of objects) {
+      if (o.type !== 'angle' || removal.has(o.id)) continue;
+      const koptu = [o.point1Id, o.point3Id].some(
+        (uc) =>
+          silinenKollar.some((s) => providesAngleArm(s, o.vertexPointId, uc)) &&
+          !kalanKollar.some((s) => providesAngleArm(s, o.vertexPointId, uc))
+      );
+      if (koptu) removal.add(o.id);
+    }
+  }
+
+  // 4) AÇIYLA BİRLİKTE ÇİZİLEN KOLLAR: kullanıcı AÇININ KENDİSİNİ sildiyse (rozet, yay, liste, "ABC açısını sil"),
+  //    Açı aracının ve "ABC açısını çiz" komutunun açıyla aynı adımda çizdiği kol parçaları da gider; yoksa yay
+  //    silinse de açının iki turuncu çizgisi ekranda kalıyordu. Parça hâlâ o açının kolu olmalı (kopyası ya da
+  //    uçları değişmiş parça sayılmaz). KALAN bir nesnenin dayandığı (üzerindeki nokta, kesişim...) ya da kalan
+  //    başka bir açının kolunu tek başına çizen parça korunur. Açı başka bir silmenin sonucu olarak giderse
+  //    (kolu, uç noktası, üçgeni silindi) kollar yalnızca yukarıdaki kurallara uyar.
+  const istenenler = new Set(ids);
+  const silinenAcilar = objects.filter((o): o is AngleObject => o.type === 'angle' && istenenler.has(o.id));
+  if (silinenAcilar.length > 0) {
+    const adaylar = objects.filter(
+      (o): o is SegmentObject =>
+        o.type === 'segment' &&
+        !removal.has(o.id) &&
+        silinenAcilar.some(
+          (a) =>
+            o.armOfAngleId === a.id &&
+            (providesAngleArm(o, a.vertexPointId, a.point1Id) || providesAngleArm(o, a.vertexPointId, a.point3Id))
+        )
+    );
+    if (adaylar.length > 0) {
+      const adayIds = new Set(adaylar.map((s) => s.id));
+      const kalanlar = objects.filter((o) => !removal.has(o.id) && !adayIds.has(o.id));
+      const kalanKolSekilleri = kalanlar.filter(
+        (o) => o.type === 'segment' || o.type === 'line' || o.type === 'ray' || o.type === 'polygon'
+      );
+      for (const s of adaylar) {
+        if (kalanlar.some((o) => objectDependencies(o).includes(s.id))) continue;
+        const tekKol = kalanlar.some(
+          (o) =>
+            o.type === 'angle' &&
+            [o.point1Id, o.point3Id].some(
+              (uc) =>
+                providesAngleArm(s, o.vertexPointId, uc) &&
+                !kalanKolSekilleri.some((k) => providesAngleArm(k, o.vertexPointId, uc))
+            )
+        );
+        if (!tekKol) removal.add(s.id);
+      }
+    }
+  }
+
   // Silinen çemberin artık hiçbir nesnede kullanılmayan merkezi sahnede kalmasın.
   // Ortak merkezler ve başka inşaların kullandığı noktalar korunur.
-  const centers = new Set(objects.flatMap(o =>
+  const centers = new Set<string>(options.keepPoints ? [] : objects.flatMap(o =>
     o.type === 'circle' && removal.has(o.id) && !o.throughPointIds?.length ? [o.centerPointId] : []));
   let centerRemoved = true;
   while (centerRemoved) {
@@ -684,6 +815,200 @@ export function collectDependentIds(objects: MathObject[], ids: string[]): Set<s
     }
   }
   return removal;
+}
+
+export interface DeletionOptions {
+  /**
+   * "Yalnızca şekli sil (noktalar kalsın)": hiçbir nokta şeklin kendi noktası diye silinmez, kullanılmayan çember
+   * merkezi de kalır. Seçimde şekille birlikte noktalar da varsa (çerçeveyle seçim) o noktalar da kalır; şeklin
+   * ÜZERİNDE duran noktalar silinmez, bağı çözülüp serbest nokta olur.
+   */
+  keepPoints?: boolean;
+  /** Kullanımda sayılan kimlikler: yarım kalmış çokgen/parça çiziminin tıklanmış noktaları (pendingPointIds). */
+  protectedIds?: readonly string[];
+}
+
+export interface DeletionPlan {
+  /** Silinecek her şey: istenenler + bağımlıları (collectDependentIds) + şekillerin kullanılmayan kendi noktaları. */
+  removal: Set<string>;
+  /** Kendi noktaları toplanan (ya da keepPoints'te noktaları korunan) istenen şekiller. İpucu ve yanıt bunları anar. */
+  shapeIds: string[];
+  /** İstenen bir şekle ait olduğu için giden noktalar (istenenler hariç), sahne sırasıyla. */
+  ownPointIds: string[];
+  /** keepPoints: varsayılan silmenin ya da seçimin götüreceği ama yerinde kalan noktalar, sahne sırasıyla. */
+  keptPointIds: string[];
+  /** keepPoints: silinen şeklin ÜZERİNDE durduğu için bağı çözülecek (serbest kalacak) noktalar. */
+  unbindIds: string[];
+}
+
+/** Dönüşüm kurulumları: merkez, eksen, vektör ve ön görüntü öğretmenin kendi noktasıdır, görüntüye ait değildir. */
+const DONUSUM_KURULUMLARI = new Set<string>(['reflect', 'rotate', 'translate', 'dilate']);
+const KOL_CIZEN_TURLER = new Set<string>(['segment', 'line', 'ray', 'polygon']);
+
+const baginiCoz = (o: MathObject): MathObject => {
+  if (o.type !== 'point' || !o.onObjectId) return o;
+  const { onObjectId: _tasiyici, ...serbest } = o;
+  return serbest as MathObject;
+};
+
+/**
+ * ŞEKLİN KENDİ NOKTALARI KURALI: silme planı. Ekrandaki her silme yolu (Delete/Backspace, sağ tık "Sil", Sil aracı,
+ * seçim çubuğu, Düzenle > Sil, nesne listesi, çerçeveyle seçim, 3B görünüm) ve yazılı/sesli "sil" komutu bu tek
+ * fonksiyondan geçer; aynı şekil hangi yoldan silinirse silinsin aynı noktalar gider.
+ *
+ * 0) Taban: collectDependentIds (bağımlılar, şekle ait etiketler, kolu kopan açı, açının kolları, çember merkezi).
+ * 1) Tohumlar: YALNIZCA istenen nokta tanımlı şekiller (çokgen, parça, doğru, ışın, çember, elips, yay, dilim). Başka bir
+ *    silmenin sonucu giden şekil ve istenen bir NOKTAYLA zaten gidecek şekil (çerçeve A noktasının çevresindeyse ABC
+ *    üçgeni ve AD parçası) tohum değildir: nokta silmek başka noktaları silmez, açı/ölçüm silmek hiç nokta silmez.
+ * 2) Adaylar: tohumların tanım noktaları (köşe, uç, merkez, yarıçap noktası, geçtiği noktalar) ve bunların kurulum
+ *    kaynakları (orta nokta, oran, ayak, açıortay, üçgen köşesi/merkezi...); gizli yardımcılar dâhil. Dönüşümlerin
+ *    (yansıma, döndürme, öteleme, büyütme) GÖRÜNÜR SERBEST kaynakları (döndürme merkezi O, vektör uçları) aday olmaz.
+ *    Silinen bir açının, şeklin kendi noktaları arasında açıyla birlikte çizilmiş kol parçaları (armOfAngleId) da gider:
+ *    yoksa üçgenle birlikte ölçülmüş açının turuncu kolları noktaları ekranda tutuyordu.
+ * 3) Kullanım denetimi (en büyük sabit nokta): aday, KALAN bir nesne onu kullanıyorsa (bağımlılık, ÜZERİNDE durduğu
+ *    şekil, açı, ölçüm, yay ölçümü, onay kutusu/düğme hedefi...), izi açık ya da canlandırılıyorsa veya yarım kalmış bir
+ *    çizimin tıklanmış noktasıysa kalır. Kalan aday kendi kaynaklarını da korur.
+ * keepPoints ("Yalnızca şekli sil"): 1-3 atlanır, yalnızca şekil ve gerçek bağımlıları gider.
+ *
+ * Saftır (StrictMode'da güncelleyici iki kez çalışır): girdiyi değiştirmez, kimlik üretmez.
+ */
+export function planDeletion(objects: MathObject[], ids: string[], options: DeletionOptions = {}): DeletionPlan {
+  const byId = new Map(objects.map((o) => [o.id, o]));
+  const noktaMi = (id: string | undefined): id is string => !!id && byId.get(id)?.type === 'point';
+  const sekilMi = (id: string) => {
+    const o = byId.get(id);
+    return !!o && NOKTALI_SEKILLER.has(o.type);
+  };
+
+  if (options.keepPoints) {
+    const sekiller = ids.filter(sekilMi);
+    // Çerçeveyle seçimde şekille birlikte gelen noktalar da kalır: madde "noktalar kalsın" diyor.
+    const istenen = sekiller.length ? ids.filter((id) => !noktaMi(id)) : [...ids];
+    const istenenSet = new Set(istenen);
+    const baglilar = new Set(
+      objects.filter((o) => o.type === 'point' && !!o.onObjectId && istenenSet.has(o.onObjectId) && !istenenSet.has(o.id)).map((o) => o.id)
+    );
+    const gorunum = baglilar.size ? objects.map((o) => (baglilar.has(o.id) ? baginiCoz(o) : o)) : objects;
+    const removal = collectDependentIds(gorunum, istenen, { keepPoints: true });
+    const unbindIds = objects.filter((o) => baglilar.has(o.id) && !removal.has(o.id)).map((o) => o.id);
+    const varsayilan = planDeletion(objects, istenen, { protectedIds: options.protectedIds });
+    const kalan = new Set([...varsayilan.ownPointIds, ...ids.filter(noktaMi), ...unbindIds]);
+    const keptPointIds = objects.filter((o) => kalan.has(o.id) && !removal.has(o.id)).map((o) => o.id);
+    return { removal, shapeIds: sekiller, ownPointIds: [], keptPointIds, unbindIds };
+  }
+
+  const istenen = new Set(ids);
+  const removal = collectDependentIds(objects, ids);
+  const bos: DeletionPlan = { removal, shapeIds: [], ownPointIds: [], keptPointIds: [], unbindIds: [] };
+  const istenenNoktalar = ids.filter(noktaMi);
+  const noktayla = istenenNoktalar.length ? collectDependentIds(objects, istenenNoktalar) : new Set<string>();
+  const tohumlar = [...istenen]
+    .map((id) => byId.get(id))
+    .filter((o): o is MathObject => !!o && NOKTALI_SEKILLER.has(o.type) && !noktayla.has(o.id));
+  if (!tohumlar.length) return bos;
+
+  // 2) Adaylar: tanım noktaları ve kurulum kaynakları (yalnızca noktalar; şekil ve kaydırıcıya geçilmez)
+  const adaylar = new Set<string>();
+  const gezilen = new Set<string>();
+  const kuyruk = tohumlar.flatMap((o) => objectDependencies(o)).filter(noktaMi);
+  while (kuyruk.length) {
+    const id = kuyruk.pop()!;
+    if (gezilen.has(id)) continue;
+    gezilen.add(id);
+    if (!istenen.has(id)) adaylar.add(id);
+    const p = byId.get(id) as PointObject;
+    const donusum = !!p.construction && DONUSUM_KURULUMLARI.has(p.construction.kind);
+    for (const kaynak of constructionDependencies(p)) {
+      if (!noktaMi(kaynak)) continue;
+      const k = byId.get(kaynak) as PointObject;
+      if (donusum && k.visible !== false && !k.construction) continue;
+      kuyruk.push(kaynak);
+    }
+  }
+
+  // Silinen açının şeklin kendi noktaları arasında açıyla birlikte çizilmiş kolları (kural 4'ün korumalarıyla)
+  const silinenAcilar = objects.filter((o): o is AngleObject => o.type === 'angle' && removal.has(o.id) && !istenen.has(o.id));
+  if (silinenAcilar.length > 0) {
+    const kollar = objects.filter(
+      (o): o is SegmentObject =>
+        o.type === 'segment' &&
+        !removal.has(o.id) &&
+        !!o.armOfAngleId &&
+        adaylar.has(o.startPointId) &&
+        adaylar.has(o.endPointId) &&
+        silinenAcilar.some(
+          (a) =>
+            a.id === o.armOfAngleId &&
+            (providesAngleArm(o, a.vertexPointId, a.point1Id) || providesAngleArm(o, a.vertexPointId, a.point3Id))
+        )
+    );
+    if (kollar.length > 0) {
+      const kolIds = new Set(kollar.map((s) => s.id));
+      const kalanlar = objects.filter((o) => !removal.has(o.id) && !kolIds.has(o.id));
+      const kalanKolSekilleri = kalanlar.filter((o) => KOL_CIZEN_TURLER.has(o.type));
+      for (const s of kollar) {
+        if (kalanlar.some((o) => objectDependencies(o).includes(s.id))) continue;
+        const tekKol = kalanlar.some(
+          (o) =>
+            o.type === 'angle' &&
+            [o.point1Id, o.point3Id].some(
+              (uc) =>
+                providesAngleArm(s, o.vertexPointId, uc) &&
+                !kalanKolSekilleri.some((k) => providesAngleArm(k, o.vertexPointId, uc))
+            )
+        );
+        if (!tekKol) removal.add(s.id);
+      }
+    }
+  }
+
+  // 3) Kullanım denetimi: ters dizin bir kez kurulur, sonra en büyük sabit nokta
+  const kullananlar = new Map<string, string[]>();
+  for (const o of objects) {
+    if (removal.has(o.id)) continue;
+    for (const d of objectDependencies(o)) {
+      if (d === o.id || !adaylar.has(d)) continue;
+      const liste = kullananlar.get(d);
+      if (liste) liste.push(o.id);
+      else kullananlar.set(d, [o.id]);
+    }
+  }
+  const korunan = new Set(options.protectedIds ?? []);
+  const gidecek = new Set([...adaylar].filter((id) => !removal.has(id)));
+  for (let degisti = true; degisti; ) {
+    degisti = false;
+    for (const id of gidecek) {
+      const p = byId.get(id) as PointObject;
+      const kalir =
+        korunan.has(id) ||
+        !!p.showTrace ||
+        !!p.animating ||
+        (!!p.onObjectId && byId.has(p.onObjectId) && !removal.has(p.onObjectId)) ||
+        (kullananlar.get(id) ?? []).some((u) => !gidecek.has(u));
+      if (kalir) {
+        gidecek.delete(id);
+        degisti = true;
+      }
+    }
+  }
+  for (const id of gidecek) removal.add(id);
+  return {
+    ...bos,
+    shapeIds: tohumlar.map((o) => o.id),
+    ownPointIds: objects.filter((o) => adaylar.has(o.id) && removal.has(o.id)).map((o) => o.id),
+  };
+}
+
+/** Yalnızca silinecek kimlikler (metin gerekmeyen çağıranlar için). */
+export function collectDeletionIds(objects: MathObject[], ids: string[], options: DeletionOptions = {}): Set<string> {
+  return planDeletion(objects, ids, options).removal;
+}
+
+/** Planı uygular: silinecekleri çıkarır, keepPoints'te silinen şeklin üzerindeki noktaların bağını çözer. Saftır. */
+export function applyDeletionPlan(objects: MathObject[], plan: DeletionPlan): MathObject[] {
+  if (!plan.removal.size && !plan.unbindIds.length) return objects;
+  const coz = new Set(plan.unbindIds);
+  return objects.filter((o) => !plan.removal.has(o.id)).map((o) => (coz.has(o.id) ? baginiCoz(o) : o));
 }
 
 /**
@@ -828,25 +1153,16 @@ function oteleSekil(
 }
 
 /** LocalStorage'daki serbest çalışma kaydını doğrulayarak okur. */
-function loadSavedSandboxObjects(): MathObject[] | null {
+function loadSavedSandboxProject(): ProjectFile | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(WORKSPACE_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (parsed.version !== WORKSPACE_STORAGE_VERSION) return null;
-    if (!Array.isArray(parsed.objects)) return null;
-    const valid = (parsed.objects as unknown[]).filter(
-      (o): o is MathObject =>
-        !!o &&
-        typeof o === 'object' &&
-        typeof (o as MathObject).id === 'string' &&
-        KNOWN_OBJECT_TYPES.has((o as MathObject).type)
-    );
-    return sarkikBaglariCoz(eskiMerkezAcilariniTasi(valid));
+    if (!parsed || typeof parsed !== 'object' || parsed.version !== WORKSPACE_STORAGE_VERSION || !Array.isArray(parsed.objects)) throw new Error('Geçersiz yerel kayıt');
+    return parseProjectFile({ ...parsed, objects: sarkikBaglariCoz(eskiMerkezAcilariniTasi(parsed.objects)) });
   } catch (e) {
-    return null;
+    throw new Error('Kayıtlı çizim açılamadı. Önceki kayıt korunuyor; çalışmanızı Dosya menüsünden kaydedebilirsiniz.');
   }
 }
 
@@ -910,15 +1226,19 @@ export function eskiMerkezAcilariniTasi(objects: MathObject[]): MathObject[] {
 interface DocState {
   constraintError?: string | null;
   objects: MathObject[];
-  history: WorkspaceHistoryStep[];
+  history: (WorkspaceHistoryStep & { projectChange?: { before: ProjectFile; after: ProjectFile } })[];
   historyIndex: number;
   persist: boolean; // Serbest çalışma masasında LocalStorage'a kaydedilsin mi
 }
 
 type DocAction =
-  | { type: 'commit'; next: ObjectsUpdater; description: string }
+  | { type: 'project'; before: ProjectFile; after: ProjectFile }
+  // now: eylemin GÖNDERİLDİĞİ an (reducer'ın çalıştığı an değil). 3B cisim geçmişi de gönderim
+  // anını kullanır; aynı olay işleyicisindeki karma silme böylece render süresinden bağımsız
+  // olarak iki geçmişte de neredeyse aynı zamanı taşır (ortakGecmis).
+  | { type: 'commit'; next: ObjectsUpdater; description: string; now?: number }
   | { type: 'set'; next: React.SetStateAction<MathObject[]> }
-  | { type: 'record'; description: string }
+  | { type: 'record'; description: string; now?: number }
   | { type: 'undo' }
   | { type: 'redo' }
   | { type: 'reset'; objects: MathObject[]; description: string; persist: boolean };
@@ -931,12 +1251,19 @@ const initialDocState: DocState = {
 };
 
 function resolveUpdater(next: ObjectsUpdater, prev: MathObject[]): MathObject[] {
-  return bagliNoktalariOturt(resolveCommandBindings(typeof next === 'function' ? next(prev) : next), prev);
+  const raw = typeof next === 'function' ? next(prev) : next;
+  // Güncelleyici hiçbir şeyi değiştirmediyse (aynı dizi) çözümleme zinciri yeni bir dizi üretip
+  // "değişiklik var" sanılmasına yol açmasın: aksi hâlde 'record' geçmişe boş bir adım yazıyordu
+  // (ör. 3B'de orta noktanın z okuyla sürüklenmesi, ardından Ctrl+Z hiçbir şey yapmıyor gibi).
+  if (raw === prev) return prev;
+  // Son adım: kurulumlu ve nesne üzerindeki noktaların 3B z'si kaynaklarından türetilir (bkz. zEkseni).
+  // Çemberi/noktası kalmamış yay ölçümleri ayıklanır (ör. çember iki yaya bölününce): kayıtlı çizim yeniden açılabilsin.
+  return bagimliZleriHesapla(bagliNoktalariOturt(resolveCommandBindings(dropDanglingArcMeasurements(raw)), prev));
 }
 
-function appendHistory(state: DocState, objects: MathObject[], description: string): DocState {
+function appendHistory(state: DocState, objects: MathObject[], description: string, now: number = Date.now()): DocState {
   const base = state.history.slice(0, state.historyIndex + 1);
-  base.push({ objects, description, timestamp: Date.now() });
+  base.push({ objects, description, timestamp: now });
   const trimmed = base.length > MAX_HISTORY_LENGTH ? base.slice(base.length - MAX_HISTORY_LENGTH) : base;
   return {
     ...state,
@@ -950,12 +1277,17 @@ function appendHistory(state: DocState, objects: MathObject[], description: stri
 function docReducer(state: DocState, action: DocAction): DocState {
   try {
   switch (action.type) {
+    case 'project': {
+      const next = appendHistory(state, bagimliZleriHesapla(action.after.objects), 'Proje açıldı');
+      next.history[next.historyIndex] = { ...next.history[next.historyIndex], projectChange: { before: action.before, after: action.after } };
+      return next;
+    }
     case 'commit': {
       const nextObjects = resolveUpdater(action.next, state.objects);
       // Hiçbir şey değişmediyse geçmişe boş bir adım yazma (ör. aynı ölçümü ikinci kez istemek):
       // aksi hâlde Ctrl+Z hiçbir şey yapmıyormuş gibi görünür.
       if (nextObjects === state.objects) return state;
-      return appendHistory(state, nextObjects, action.description);
+      return appendHistory(state, nextObjects, action.description, action.now);
     }
     case 'set': {
       const nextObjects = resolveUpdater(action.next, state.objects);
@@ -965,7 +1297,7 @@ function docReducer(state: DocState, action: DocAction): DocState {
     case 'record': {
       const current = state.history[state.historyIndex];
       if (current && current.objects === state.objects) return state;
-      return appendHistory(state, state.objects, action.description);
+      return appendHistory(state, state.objects, action.description, action.now);
     }
     case 'undo': {
       if (state.historyIndex <= 0) return state;
@@ -978,9 +1310,13 @@ function docReducer(state: DocState, action: DocAction): DocState {
       return { ...state, historyIndex: idx, objects: state.history[idx].objects, constraintError: null };
     }
     case 'reset': {
+      // Yüklenen kayıtta kurulumlu noktaların z'si henüz türetilmemiş olabilir: ilk durum ve geçmişin
+      // başı aynı (türetilmiş) diziyi taşısın ki sonraki ilk 'set' (ör. 3B'de Esc ile geri yükleme)
+      // geçmişin dışında kalan bir fark üretmesin.
+      const objects = bagimliZleriHesapla(action.objects);
       return {
-        objects: action.objects,
-        history: [{ objects: action.objects, description: action.description, timestamp: Date.now() }],
+        objects,
+        history: [{ objects, description: action.description, timestamp: Date.now() }],
         historyIndex: 0,
         persist: action.persist,
       };
@@ -998,6 +1334,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const [doc, dispatch] = useReducer(docReducer, initialDocState);
   const { objects, history, historyIndex } = doc;
+  const docRef = useRef(doc);
+  docRef.current = doc;
+  const [objectClipboard, setObjectClipboard] = useState<ObjectClipboard | null>(null);
+  const [solidClipboard, setSolidClipboard] = useState<Solid3DObject[] | null>(null);
+  const [sceneBridge, setSceneBridge] = useState<WorkspaceScene | null>(null);
 
   const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
   const selectedObjectId = selectedObjectIds[0] || null;
@@ -1126,26 +1467,29 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         ...(selectedActivity.initialViewport || {}),
       }));
     } else {
-      // Serbest Çalışma Masası: her zaman temiz/boş çalışma alanı ile başla
-      dispatch({
-        type: 'reset',
-        objects: [],
-        description: 'Boş çalışma alanı',
-        persist: true,
-      });
+      try {
+        const saved = loadSavedSandboxProject();
+        dispatch({ type: 'reset', objects: saved?.objects ?? [], description: saved ? 'Kayıtlı çalışma açıldı' : 'Boş çalışma alanı', persist: true });
+        if (saved?.viewport) setViewport(prev => ({ ...prev, ...saved.viewport, width: prev.width, height: prev.height }));
+        if (saved?.styleSettings) setStyleSettings(saved.styleSettings);
+        if (saved?.layoutMode) setLayoutMode(saved.layoutMode);
+      } catch (error) {
+        dispatch({ type: 'reset', objects: [], description: 'Kayıt açılamadı', persist: false });
+        setHintMessageState((error as Error).message);
+      }
     }
   }, [selectedActivity]);
 
   // Serbest çalışma masasında her değişikliği LocalStorage'a kaydet
   useEffect(() => {
-    if (!doc.persist) return;
+    if (!doc.persist || selectedActivity) return;
     try {
       localStorage.setItem(
         WORKSPACE_STORAGE_KEY,
-        JSON.stringify({ objects, version: WORKSPACE_STORAGE_VERSION })
+        JSON.stringify({ objects, viewport, styleSettings, layoutMode, version: WORKSPACE_STORAGE_VERSION })
       );
-    } catch (e) {}
-  }, [objects, doc.persist]);
+    } catch (e) { setHintMessageState('Çalışma tarayıcıya kaydedilemedi. Dosya → Kaydet ile bir kopya alın.'); }
+  }, [objects, viewport, styleSettings, layoutMode, doc.persist, selectedActivity]);
 
   // Etkinlik doğrulaması (Deterministik Kural Motoru)
   useEffect(() => {
@@ -1240,7 +1584,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // -------------------------------------------------------------------------
 
   const commit = useCallback((next: ObjectsUpdater, description: string) => {
-    dispatch({ type: 'commit', next, description });
+    dispatch({ type: 'commit', next, description, now: Date.now() });
   }, []);
 
   // Geçmişe kaydetmeden nesneleri değiştirme (sürükleme, kaydırıcı gibi geçici işlemler)
@@ -1280,34 +1624,45 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [commit]
   );
 
+  /**
+   * Nesneleri siler. Bir ŞEKİL silinince (çokgen, parça, doğru, ışın, çember, elips, yay, dilim) artık hiçbir nesnenin
+   * kullanmadığı KENDİ noktaları da aynı adımda gider (planDeletion): tek Ctrl+Z şekli ve noktalarını birlikte geri
+   * getirir. Yalnızca şekli değiştirmek isteyen kod `{ keepPoints: true }` vermeli ya da doğrudan commit kullanmalı.
+   */
   const deleteObjects = useCallback(
-    (ids: string[], description?: string) => {
+    (ids: string[], description?: string, tercih: Pick<DeletionOptions, 'keepPoints'> = {}) => {
       if (ids.length === 0) return;
-      const currentObjects = latest.current.objects;
-      const removal = collectDependentIds(currentObjects, ids);
+      const { objects: currentObjects, pendingPointIds: bekleyen } = latest.current;
+      const secenek: DeletionOptions = { keepPoints: tercih.keepPoints, protectedIds: bekleyen };
+      const plan = planDeletion(currentObjects, ids, secenek);
+      const removal = plan.removal;
       if (removal.size === 0) return;
 
       const targets = ids.map((id) => currentObjects.find((o) => o.id === id)).filter(Boolean) as MathObject[];
+      const gidenAdlar = gorunurNoktaAdlari(currentObjects, plan.ownPointIds);
       const desc =
         description ??
         (targets.length === 1
-          ? `${describeObject(targets[0])} silindi`
+          ? `${describeObject(targets[0])}${gidenAdlar.length ? ` (${noktalariyla(gidenAdlar)} birlikte)` : ''} silindi`
           : `${targets.length || ids.length} nesne silindi`);
 
       commit((prev) => {
-        const set = collectDependentIds(prev, ids);
-        return prev.filter((o) => !set.has(o.id));
+        const plan2 = planDeletion(prev, ids, secenek);
+        return applyDeletionPlan(prev, plan2);
       }, desc);
 
       setSelectedObjectIds((prev) => (prev.some((id) => removal.has(id)) ? prev.filter((id) => !removal.has(id)) : prev));
       setPendingPointIds((prev) => (prev.some((id) => removal.has(id)) ? prev.filter((id) => !removal.has(id)) : prev));
+
+      const ipucu = silmeIpucu(currentObjects, plan.shapeIds, plan.ownPointIds, plan.keptPointIds);
+      if (ipucu) setHintMessage(ipucu);
     },
-    [commit]
+    [commit, setHintMessage]
   );
 
   const deleteObject = useCallback(
-    (id: string) => {
-      deleteObjects([id]);
+    (id: string, options?: Pick<DeletionOptions, 'keepPoints'>) => {
+      deleteObjects([id], undefined, options);
     },
     [deleteObjects]
   );
@@ -1459,6 +1814,23 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [commit]
   );
 
+  const moveObjectsZ = useCallback(
+    (objectIds: string[], dz: number, recordHistory = false) => {
+      if (!Number.isFinite(dz) || dz === 0 || objectIds.length === 0) return;
+      const updater = (prev: MathObject[]) => nesneleriZdeOtele(prev, objectIds, dz);
+      if (recordHistory) {
+        const labels = objectIds
+          .map((id) => latest.current.objects.find((o) => o.id === id))
+          .filter(Boolean)
+          .map((o) => describeObject(o));
+        commit(updater, labels.length === 1 ? `${labels[0]} yükseltildi` : `${objectIds.length} nesne yükseltildi`);
+      } else {
+        dispatch({ type: 'set', next: updater });
+      }
+    },
+    [commit]
+  );
+
   const moveObject = useCallback(
     (objectId: string, delta: Point2D, recordHistory = false) => {
       moveObjects([objectId], delta, recordHistory);
@@ -1468,7 +1840,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   // Mevcut (güncel) nesne durumunu geçmişe kaydet
   const recordHistory = useCallback((description: string) => {
-    dispatch({ type: 'record', description });
+    dispatch({ type: 'record', description, now: Date.now() });
   }, []);
 
   // Kaydırıcı değişimi (geçmişe yazmaz)
@@ -1855,6 +2227,71 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }, 'Yay uzunluğu ölçüldü');
     },
     [commit]
+  );
+
+  /**
+   * İKİ NOKTA ARASINDAKİ YAYI ölçer — çember bölünmez, değiştirilmez (src/math/arcMeasure.ts).
+   * Çember verilmezse iki noktanın birlikte durduğu görünür çemberlerden ilki kullanılır; aynı yay zaten
+   * ölçülmüşse yenisi eklenmez (gizliyse yeniden gösterilir). Oluşturma tek geçmiş adımıdır.
+   */
+  const measureArcBetween = useCallback(
+    (
+      firstPointId: string,
+      secondPointId: string,
+      options: { circleId?: string; throughPointId?: string; major?: boolean } = {}
+    ): string | null => {
+      const objs = latest.current.objects;
+      const noktasi = (id: string) => objs.find((o) => o.id === id && o.type === 'point') as PointObject | undefined;
+      const a = noktasi(firstPointId);
+      const b = noktasi(secondPointId);
+      if (!a || !b || a.id === b.id) {
+        setHintMessage('Yay ölçmek için aynı çemberin üzerindeki iki FARKLI noktayı seçin.');
+        return null;
+      }
+      const ortak = commonCircles(a.id, b.id, objs, { visibleOnly: !options.circleId });
+      const cember = options.circleId ? ortak.find((c) => c.id === options.circleId) : ortak[0];
+      if (!cember) {
+        const yakin = arcNearMissHint(a.id, b.id, objs);
+        setHintMessage(`${a.label} ile ${b.label} aynı çemberin üzerinde değil; aralarındaki yay ölçülemez.${yakin ? ` ${yakin}` : ''}`);
+        return null;
+      }
+      const spec: ArcSpec = {
+        circleId: cember.id,
+        pointIds: [a.id, b.id],
+        ...(options.throughPointId ? { throughPointId: options.throughPointId } : {}),
+        ...(options.major ? { major: true } : {}),
+      };
+      const sonuc = addArcMeasurement(objs, spec);
+      if ('error' in sonuc) {
+        setHintMessage(sonuc.error);
+        return null;
+      }
+      const m = sonuc.measurement;
+      const yay = resolveArc(m, sonuc.objects);
+      const baslik = arcTitle(m, sonuc.objects, yay);
+      if (sonuc.created) {
+        // Kimlik ve nesne güncelleyicinin DIŞINDA üretilir (StrictMode çift çağrısı); iki hızlı tıklama kopya eklemesin
+        commit((prev) => (findArcMeasurement(spec, prev) ? prev : [...prev, m]), `${baslik} ölçüldü`);
+      } else if (sonuc.revealed) {
+        commit(
+          (prev) => prev.map((o) => (o.id === m.id ? ({ ...o, showValue: true, visible: true } as MathObject) : o)),
+          `${baslik} yeniden gösterildi`
+        );
+      }
+      // Alt menü maddeleri ve araç, 'olc-' sarmalayıcısının dışında: ölçümler Sade görünümde de görünür olsun
+      setViewport((prev) => (prev.showMeasurements === false ? { ...prev, showMeasurements: true } : prev));
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('geoeba:show-measurements'));
+      let ipucu =
+        sonuc.created || sonuc.revealed
+          ? `${baslik}: ${yay ? arcValueText(yay) : ''}. ${yay?.half ? 'Diğer yarım çember' : yay?.major ? 'Küçük yay' : 'Büyük yay'} için rozete sağ tıklayın.`
+          : `${baslik} zaten ölçülmüş.`;
+      if (!options.circleId && ortak.length > 1) {
+        ipucu += ` (${a.label} ile ${b.label} birden çok çemberin üzerinde; ${cember.label || 'çember'} kullanıldı. Diğeri için noktaya sağ tıklayıp Yay ölç menüsünü kullanın.)`;
+      }
+      setHintMessage(ipucu);
+      return m.id;
+    },
+    [commit, setHintMessage]
   );
 
   /** Bir ölçüm etiketini gizler (etikete tıklayınca). Sağ tık menüsünden yeniden açılabilir. */
@@ -2410,6 +2847,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         startPointId: b1.id,
         directionPointId: b2.id,
         color: renk,
+        equalityMark: undefined, // elle konmuş eşitlik çentiği bölünen yaylara kopyalanmaz (yanlış eşlik iddiası olurdu)
         createdAt: Date.now(),
       });
 
@@ -2526,8 +2964,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       const k = target / uzunluk;
-      const yeniX = Number((sabit.x + dx * k).toFixed(4));
-      const yeniY = Number((sabit.y + dy * k).toFixed(4));
+      // 10 basamak: 4 basamaklı yuvarlama "AB = 5, AC = 5" yapılan kenarları eşit olmaktan çıkarıyordu (eşitlik çentikleri)
+      const yeniX = Number((sabit.x + dx * k).toFixed(10));
+      const yeniY = Number((sabit.y + dy * k).toFixed(10));
       commit(
         (prev) => prev.map((o) => (o.id === oynak.id ? ({ ...o, x: yeniX, y: yeniY } as MathObject) : o)),
         `${seg.label || 'Kenar'} uzunluğu ${formatTurkishNumber(target)} yapıldı`
@@ -2567,8 +3006,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const farkRad = ((targetDeg - mevcut) * Math.PI) / 180 * yon;
         const cos = Math.cos(farkRad);
         const sin = Math.sin(farkRad);
-        const yeniX = Number((vertex.x + rx * cos - ry * sin).toFixed(4));
-        const yeniY = Number((vertex.y + rx * sin + ry * cos).toFixed(4));
+        const yeniX = Number((vertex.x + rx * cos - ry * sin).toFixed(10));
+        const yeniY = Number((vertex.y + rx * sin + ry * cos).toFixed(10));
         return prev.map((o) => (o.id === kol.id ? ({ ...o, x: yeniX, y: yeniY } as MathObject) : o));
       }, `Açı ${formatTurkishNumber(targetDeg)}° yapıldı`);
     },
@@ -2685,8 +3124,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         // Merkezle çakışıksa varsayılan olarak sağa doğru aç
         const ux = uz < 1e-9 ? 1 : dx / uz;
         const uy = uz < 1e-9 ? 0 : dy / uz;
-        const yeniX = Number((merkez.x + ux * target).toFixed(4));
-        const yeniY = Number((merkez.y + uy * target).toFixed(4));
+        const yeniX = Number((merkez.x + ux * target).toFixed(10));
+        const yeniY = Number((merkez.y + uy * target).toFixed(10));
         return prev.map((o) => (o.id === yariNokta.id ? ({ ...o, x: yeniX, y: yeniY } as MathObject) : o));
       }, `Yarıçap ${formatTurkishNumber(target)} yapıldı`);
     },
@@ -2869,8 +3308,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           type: 'point',
           label: ad,
           showLabel: true,
-          x: Number(x.toFixed(4)),
-          y: Number(y.toFixed(4)),
+          x: Number(x.toFixed(10)),
+          y: Number(y.toFixed(10)),
           color: renk,
           visible: true,
           isIndependent: true,
@@ -2878,8 +3317,45 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         };
       };
 
+      /** Yay Ölç: aynı çemberin üzerindeki iki nokta arasındaki yay (çember bölünmez) */
+      if (tool === 'measure_arc') {
+        const p = pointOf(pointId);
+        if (!p) return;
+        if (pending.length === 0) {
+          if (!circlesThroughPoint(pointId, objs, { visibleOnly: true }).length) {
+            setHintMessage(`${p.label} noktası bir çemberin üzerinde değil. Yay ölçmek için çemberin üzerindeki bir noktaya tıklayın.`);
+            return;
+          }
+          setPendingPointIds([pointId]);
+          setHintMessage(`${p.label} seçildi. Şimdi aynı çemberin üzerindeki ikinci noktaya tıklayın.`);
+          return;
+        }
+        const ilk = pointOf(pending[0]);
+        if (!ilk) {
+          setPendingPointIds([]);
+          setHintMessage('İlk nokta artık yok; baştan başlayın.');
+          return;
+        }
+        if (ilk.id === pointId) {
+          setPendingPointIds([]);
+          setHintMessage('İki FARKLI nokta seçmelisiniz.');
+          return;
+        }
+        if (!commonCircles(ilk.id, pointId, objs, { visibleOnly: true }).length) {
+          const yakin = arcNearMissHint(ilk.id, pointId, objs);
+          // İlk nokta seçili kalır: öğretmen doğru ikinci noktaya tıklayabilir
+          setHintMessage(
+            `${ilk.label} ile ${p.label} aynı çemberin üzerinde değil. ${ilk.label} ile aynı çemberde duran bir noktaya tıklayın ya da Temizle ile baştan başlayın.${yakin ? ` ${yakin}` : ''}`
+          );
+          return;
+        }
+        setPendingPointIds([]);
+        measureArcBetween(ilk.id, pointId);
+        return;
+      }
+
       /** İki nokta isteyen inşa araçları */
-      const IKI_NOKTALI = ['midpoint', 'divide_ratio', 'perp_bisector', 'measure_slope'];
+      const IKI_NOKTALI =['midpoint', 'divide_ratio', 'perp_bisector', 'measure_slope'];
       if (IKI_NOKTALI.includes(tool)) {
         const nextPending = [...pending, pointId];
         if (nextPending.length < 2) {
@@ -3257,8 +3733,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           const yayUstunde =
             yeniMi && uz > 1e-9 && yaricap > 1e-9
               ? {
-                  x: Number((a.x + (dx / uz) * yaricap).toFixed(4)),
-                  y: Number((a.y + (dy / uz) * yaricap).toFixed(4)),
+                  x: Number((a.x + (dx / uz) * yaricap).toFixed(10)),
+                  y: Number((a.y + (dy / uz) * yaricap).toFixed(10)),
                 }
               : null;
           const kaydirilmisNoktalar = yayUstunde
@@ -3329,7 +3805,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const deg = p1 && vertex && p3 ? Math.round(calculateAngleDegrees(p1, vertex, p3)) : 0;
         const label = p1 && vertex && p3 ? `∠${p1.label}${vertex.label}${p3.label}` : 'Açı';
 
-        // Açının kollarını birleştiren doğru parçaları
+        // Açının kollarını birleştiren doğru parçaları. Açıyla birlikte çizildikleri için açının kimliğini
+        // taşırlar: açı silinince (başka nesne kullanmıyorsa) kolları da gider, turuncu çizgiler sahipsiz kalmaz.
+        const angleId = createId('ang');
         const seg1: SegmentObject = {
           id: createId('seg'),
           type: 'segment',
@@ -3340,6 +3818,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           color: '#f59e0b',
           visible: true,
           thickness: 2,
+          armOfAngleId: angleId,
           createdAt: Date.now(),
         };
 
@@ -3353,11 +3832,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           color: '#f59e0b',
           visible: true,
           thickness: 2,
+          armOfAngleId: angleId,
           createdAt: Date.now(),
         };
 
         const newAngle: AngleObject = {
-          id: createId('ang'),
+          id: angleId,
           type: 'angle',
           label,
           showLabel: true,
@@ -3489,7 +3969,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       // Diğer araçlarda yeni nokta oluşturulduysa yine de kaydet
       commitPendingOnly();
     },
-    [commit, deleteObject, setSelectedObjectId]
+    [commit, deleteObject, setSelectedObjectId, measureArcBetween]
   );
 
   // -------------------------------------------------------------------------
@@ -3680,6 +4160,16 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           kaydiricilar.length > 0
             ? `Düğme ${kaydiricilar.length} kaydırıcının canlandırmasını başlatıp durduracak.`
             : `Düğme ${hedefler.length} nesneyi gösterip gizleyecek.`
+        );
+        return;
+      }
+
+      // Yay Ölç yalnızca var olan noktalarla çalışır: boş tuvale tıklama nokta üretmez, yol gösterir
+      if (tool === 'measure_arc') {
+        setHintMessage(
+          latest.current.pendingPointIds.length
+            ? 'İkinci noktaya tıklayın: ilk noktayla aynı çemberin üzerinde olmalı.'
+            : 'Yay ölçmek için çemberin üzerindeki bir noktaya tıklayın.'
         );
         return;
       }
@@ -3887,19 +4377,125 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [addObject, addObjects, handlePointClick, openRegularPolygonDialog, openCircleRadiusDialog, setSelectedObjectId]
   );
 
-  // Geri Al
+  const documentRef = useRef({ viewport, styleSettings, layoutMode, sceneBridge, studioDimension, objectClipboard, solidClipboard });
+  documentRef.current = { viewport, styleSettings, layoutMode, sceneBridge, studioDimension, objectClipboard, solidClipboard };
+
+  const getProject = useCallback((): ProjectFile => {
+    const current = documentRef.current;
+    return { version: '2.0', objects: latest.current.objects, solids: current.sceneBridge?.solids ?? [], viewport: current.viewport,
+      styleSettings: current.styleSettings, layoutMode: current.layoutMode, camera3D: current.sceneBridge?.camera };
+  }, []);
+
+  const applyProjectMetadata = useCallback((project: ProjectFile) => {
+    setViewport(prev => ({ ...DEFAULT_VIEWPORT, ...project.viewport, width: prev.width, height: prev.height }));
+    setStyleSettings(project.styleSettings ?? DEFAULT_STYLE_SETTINGS);
+    setLayoutMode(project.layoutMode ?? (project.solids.length ? '3d_only' : '2d_only'));
+    documentRef.current.sceneBridge?.restore(project.solids, project.camera3D);
+    setSelectedObjectIds([]); setPendingPointIds([]); setActiveToolState('select');
+  }, []);
+
+  const loadProject = useCallback((input: ProjectFile) => {
+    const after = parseProjectFile(input);
+    // Bağlantıları da canlı belgeye dokunmadan çöz; geçersiz inşa kısmi yükleme yapmasın.
+    after.objects = resolveUpdater(after.objects, after.objects);
+    const before = getProject();
+    dispatch({ type: 'project', before, after });
+    applyProjectMetadata(after);
+  }, [getProject, applyProjectMetadata]);
+
+  const copySelection = useCallback(() => {
+    const current = documentRef.current;
+    if (current.studioDimension === '3D' && current.sceneBridge) {
+      const scene = current.sceneBridge;
+      if (!scene.selectedIds.length) return;
+      setSolidClipboard(structuredClone(scene.solids.filter(o => scene.selectedIds.includes(o.id))));
+      setObjectClipboard(null);
+    } else if (latest.current.selectedObjectIds.length) {
+      setObjectClipboard(copyObjects(latest.current.objects, latest.current.selectedObjectIds));
+      setSolidClipboard(null);
+    }
+  }, []);
+
+  // Hangi görünümde olunursa olsun seçili 2B nesneler VE seçili 3B cisimler birlikte silinir
+  // (3B'de seçilen 2B nesne 3B'de, 2B'de seçilen cisim 2B'de silinebilir).
+  const deleteSelection = useCallback(() => {
+    const scene = documentRef.current.sceneBridge;
+    const nesneler = latest.current.selectedObjectIds;
+    if (scene && scene.selectedIds.length > 0) {
+      const silinecek = new Set(scene.selectedIds);
+      scene.setSolids(scene.solids.filter(o => !silinecek.has(o.id))); scene.select([]);
+    }
+    if (nesneler.length > 0) {
+      deleteObjects(nesneler, nesneler.length === 1 ? undefined : `${nesneler.length} seçili nesne silindi`);
+      setSelectedObjectIds([]);
+    }
+  }, [deleteObjects]);
+
+  const cutSelection = useCallback(() => { copySelection(); deleteSelection(); }, [copySelection, deleteSelection]);
+
+  const pasteSelection = useCallback((location?: Point2D) => {
+    const current = documentRef.current;
+    if (current.studioDimension === '3D' && current.sceneBridge && current.solidClipboard?.length) {
+      const scene = current.sceneBridge;
+      const pasted = structuredClone(current.solidClipboard).map(o => ({ ...o, id: createId('solid'), name: `${o.name} kopyası`, position: { ...o.position, x: o.position.x + 1, z: o.position.z + 1 } }));
+      scene.setSolids([...scene.solids, ...pasted]); scene.select(pasted.map(o => o.id));
+    } else if (current.studioDimension === '2D' && current.objectClipboard?.objects.length) {
+      const v = current.viewport;
+      const target = location ?? { x: -v.panX / v.zoom + 1, y: v.panY / v.zoom + 1 };
+      const pasted = pasteObjects(current.objectClipboard, latest.current.objects, target);
+      addObjects(pasted.objects, 'Nesneler yapıştırıldı');
+      setActiveToolState('select'); setSelectedObjectIds(pasted.selectedIds);
+    }
+  }, [addObjects]);
+
+  const selectAll = useCallback(() => {
+    const current = documentRef.current;
+    if (current.studioDimension === '3D' && current.sceneBridge) current.sceneBridge.select(current.sceneBridge.solids.map(o => o.id));
+    else { setActiveToolState('select'); setSelectedObjectIds(latest.current.objects.map(o => o.id)); }
+  }, []);
+
+  // Proje açma, 2B nesneleri ve 3B/görünüm anlık görüntüsünü birlikte geri alır.
   const undo = useCallback(() => {
+    const current = docRef.current;
+    const change = current.history[current.historyIndex]?.projectChange;
+    if (current.historyIndex > 0 && change) applyProjectMetadata(change.before);
     dispatch({ type: 'undo' });
     setSelectedObjectIds([]);
     setPendingPointIds([]);
-  }, []);
+  }, [applyProjectMetadata]);
 
   // Yinele
   const redo = useCallback(() => {
+    const current = docRef.current;
+    const change = current.history[current.historyIndex + 1]?.projectChange;
+    if (change) applyProjectMetadata(change.after);
     dispatch({ type: 'redo' });
     setSelectedObjectIds([]);
     setPendingPointIds([]);
-  }, []);
+  }, [applyProjectMetadata]);
+
+  // 2B ve 3B geçmişleri ayrıdır; hangi görünümde olunursa olsun ZAMANCA en son adım geri alınır
+  // (3B'de taşınan/silinen 2B nesne 3B'de, 2B'de silinen cisim 2B'de geri gelir). Bkz. math/ortakGecmis.
+  const undoWorkspace = useCallback(() => {
+    const scene = documentRef.current.sceneBridge;
+    const d = docRef.current;
+    const hedef = ortakGeriAlmaHedefi(
+      d.historyIndex > 0 ? d.history[d.historyIndex]?.timestamp ?? 0 : undefined,
+      scene?.canUndo ? scene.undoTime ?? 0 : undefined
+    );
+    if (hedef.includes('3b')) scene?.undo();
+    if (hedef.includes('2b')) undo();
+  }, [undo]);
+  const redoWorkspace = useCallback(() => {
+    const scene = documentRef.current.sceneBridge;
+    const d = docRef.current;
+    const hedef = ortakYinelemeHedefi(
+      d.historyIndex < d.history.length - 1 ? d.history[d.historyIndex + 1]?.timestamp ?? 0 : undefined,
+      scene?.canRedo ? scene.redoTime ?? 0 : undefined
+    );
+    if (hedef.includes('3b')) scene?.redo();
+    if (hedef.includes('2b')) redo();
+  }, [redo]);
 
   // Etkinliği Yeniden Başlat
   const restartCurrentActivity = useCallback(() => {
@@ -3914,9 +4510,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const canUndo = historyIndex > 0;
   const canRedo = historyIndex < history.length - 1;
+  const canPaste = studioDimension === '3D' ? !!solidClipboard?.length : !!objectClipboard?.objects.length;
+  const canUndoWorkspace = canUndo || !!sceneBridge?.canUndo;
+  const canRedoWorkspace = canRedo || !!sceneBridge?.canRedo;
 
   const value = useMemo<WorkspaceContextType>(
     () => ({
+      objectClipboard, setObjectClipboard, sceneBridge, setSceneBridge, getProject, loadProject,
+      copySelection, cutSelection, pasteSelection, deleteSelection, selectAll, canPaste,
+      undoWorkspace, redoWorkspace, canUndoWorkspace, canRedoWorkspace,
       constraintError: doc.constraintError ?? null,
       objects,
       selectedObjectId,
@@ -3972,6 +4574,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       deleteObjects,
       moveObject,
       moveObjects,
+      moveObjectsZ,
       clearWorkspace,
       resetViewport,
       handlePointClick,
@@ -4008,6 +4611,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       hideMeasurement,
       setLabelOffset,
       measureArcLength,
+      measureArcBetween,
       toggleAngleReflex,
       setSegmentLength,
       setAngleDegrees,
@@ -4016,6 +4620,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       setCircleRadius,
     }),
     [
+      objectClipboard, sceneBridge, getProject, loadProject, copySelection, cutSelection, pasteSelection, deleteSelection, selectAll, canPaste,
+      undoWorkspace, redoWorkspace, canUndoWorkspace, canRedoWorkspace,
       doc.constraintError,
       objects,
       selectedObjectId,
@@ -4066,6 +4672,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       deleteObjects,
       moveObject,
       moveObjects,
+      moveObjectsZ,
       clearWorkspace,
       resetViewport,
       handlePointClick,
@@ -4101,6 +4708,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       hideMeasurement,
       setLabelOffset,
       measureArcLength,
+      measureArcBetween,
       toggleAngleReflex,
       setSegmentLength,
       setAngleDegrees,

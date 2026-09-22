@@ -210,7 +210,7 @@ export function Properties3D({
               : 'bg-card border-border/80 text-foreground hover:bg-muted font-medium'
           }`}
         >
-          <Columns2 className="w-3.5 h-3.5 shrink-0 text-blue-500" />
+          <Columns2 className="w-3.5 h-3.5 shrink-0 text-ada-vurgu" />
           <span className="text-[11px] truncate">Cebir + 2D</span>
         </button>
 
@@ -223,7 +223,7 @@ export function Properties3D({
               : 'bg-card border-border/80 text-foreground hover:bg-muted font-medium'
           }`}
         >
-          <Columns2 className="w-3.5 h-3.5 shrink-0 text-purple-500" />
+          <Columns2 className="w-3.5 h-3.5 shrink-0 text-ada-lavanta" />
           <span className="text-[11px] truncate">2D + 3D</span>
         </button>
 
@@ -249,7 +249,7 @@ export function Properties3D({
               : 'bg-card border-border/80 text-foreground hover:bg-muted font-medium'
           }`}
         >
-          <Columns2 className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+          <Columns2 className="w-3.5 h-3.5 shrink-0 text-ada-lavanta" />
           <span className="text-[11px] truncate">Cebir + 3D</span>
         </button>
 
@@ -262,7 +262,7 @@ export function Properties3D({
               : 'bg-card border-border/80 text-foreground hover:bg-muted font-medium'
           }`}
         >
-          <Box className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+          <Box className="w-3.5 h-3.5 shrink-0 text-ada-lavanta" />
           <span className="text-[11px] truncate">Sadece 3D Grafik</span>
         </button>
       </div>
@@ -354,7 +354,7 @@ export function Properties3D({
         </div>
         <button
           onClick={onDeleteSolid}
-          className="p-1.5 rounded-xl hover:bg-rose-500/10 text-destructive transition-colors cursor-pointer"
+          className="p-1.5 rounded-xl hover:bg-destructive/10 text-destructive transition-colors cursor-pointer"
           title="Cismi Sil"
         >
           <Trash2 className="w-4 h-4" />
@@ -362,7 +362,7 @@ export function Properties3D({
       </div>
 
       {/* 2. CANLI ÖLÇÜMLER */}
-      <div className="p-3 rounded-2xl bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-purple-500/10 border border-primary/20 space-y-2.5">
+      <div className="p-3 rounded-2xl bg-gradient-to-br from-ada-deniz/10 via-ada-vurgu/5 to-ada-lavanta/10 border border-primary/20 space-y-2.5">
         <div className="flex items-center gap-1.5 font-black text-xs text-primary">
           <Sparkles className="w-3.5 h-3.5" />
           <span>Matematiksel Ölçümler</span>
@@ -371,11 +371,11 @@ export function Properties3D({
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="p-2 rounded-xl bg-card border border-border/80 text-center">
             <span className="text-[10px] font-bold text-muted-foreground block">Hacim (V)</span>
-            <span className="font-mono font-black text-blue-600 dark:text-blue-400 text-sm">{formatTurkishNumber(volume, 1)} br³</span>
+            <span className="font-mono font-black text-ada-deniz dark:text-ada-vurgu text-sm">{formatTurkishNumber(volume, 1)} br³</span>
           </div>
           <div className="p-2 rounded-xl bg-card border border-border/80 text-center">
             <span className="text-[10px] font-bold text-muted-foreground block">Yüzey Alanı (A)</span>
-            <span className="font-mono font-black text-purple-600 dark:text-purple-400 text-sm">{formatTurkishNumber(surfaceArea, 1)} br²</span>
+            <span className="font-mono font-black text-ada-deniz-koyu dark:text-ada-lavanta text-sm">{formatTurkishNumber(surfaceArea, 1)} br²</span>
           </div>
         </div>
 
@@ -383,7 +383,7 @@ export function Properties3D({
           <div className="flex items-center justify-between text-[11px] font-bold">
             <span className="text-foreground">Euler Karakteristiği:</span>
             {counts.eulerValid && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-extrabold bg-emerald-500/10 px-2 py-0.5 rounded-md">
+              <span className="inline-flex items-center gap-1 text-[10px] text-ada-vurgu font-extrabold bg-ada-vurgu/10 px-2 py-0.5 rounded-md">
                 <CheckCircle2 className="w-3 h-3" /> Doğrulandı
               </span>
             )}
@@ -409,8 +409,8 @@ export function Properties3D({
 
       {/* 2b. SEÇİLİ YÜZ */}
       {selectedFace && (
-        <div className="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/30 space-y-2">
-          <div className="flex items-center justify-between text-xs font-black text-sky-700 dark:text-sky-300">
+        <div className="p-3 rounded-2xl bg-ada-deniz/10 border border-ada-deniz/30 space-y-2">
+          <div className="flex items-center justify-between text-xs font-black text-ada-deniz-koyu dark:text-ada-kum">
             <span className="flex items-center gap-1.5">
               <ScanSearch className="w-3.5 h-3.5" />
               <span>Seçili Yüz: {selectedFace.label}</span>
@@ -427,7 +427,7 @@ export function Properties3D({
                 title={`Yüzü ${c.name} yap`}
                 aria-label={`Yüzü ${c.name} yap`}
                 className={`w-6 h-6 rounded-lg transition-all cursor-pointer ${
-                  selectedFace.color === c.hex ? 'scale-110 ring-2 ring-sky-600 ring-offset-1' : 'hover:scale-105'
+                  selectedFace.color === c.hex ? 'scale-110 ring-2 ring-primary ring-offset-1' : 'hover:scale-105'
                 }`}
                 style={{ backgroundColor: c.hex }}
               />
@@ -454,13 +454,13 @@ export function Properties3D({
 
       {/* 3. AÇINIM */}
       {selectedSolid.type !== 'sphere' && (
-        <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 space-y-2.5">
-          <div className="flex items-center justify-between text-xs font-bold text-amber-800 dark:text-amber-300">
+        <div className="p-3.5 rounded-2xl bg-ada-altin/10 border border-ada-altin/25 space-y-2.5">
+          <div className="flex items-center justify-between text-xs font-bold text-foreground">
             <span className="flex items-center gap-1.5">
               <span>📖</span>
               <span>Açınım / Yüzeyleri Ayır</span>
             </span>
-            <span className="font-mono font-black text-sm text-amber-600 dark:text-amber-400">%{Math.round(unfold * 100)}</span>
+            <span className="font-mono font-black text-sm text-ada-altin">%{Math.round(unfold * 100)}</span>
           </div>
           <input
             type="range"
@@ -469,7 +469,7 @@ export function Properties3D({
             step={0.01}
             value={unfold}
             onChange={(e) => onUpdateSolid({ unfoldProgress: parseFloat(e.target.value) })}
-            className="w-full h-2 bg-amber-200 dark:bg-amber-950 rounded-lg appearance-none cursor-pointer accent-amber-600"
+            className="w-full h-2 bg-ada-altin/25 rounded-lg appearance-none cursor-pointer accent-ada-altin"
           />
           <div className="flex items-center justify-between gap-1 pt-1">
             {[
@@ -481,7 +481,7 @@ export function Properties3D({
                 key={b.v}
                 onClick={() => onUpdateSolid({ unfoldProgress: b.v })}
                 className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
-                  Math.abs(unfold - b.v) < 0.03 ? 'bg-amber-600 text-white border-amber-700' : 'bg-card text-foreground border-border hover:bg-muted'
+                  Math.abs(unfold - b.v) < 0.03 ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border hover:bg-muted'
                 }`}
               >
                 {b.label}
@@ -526,8 +526,8 @@ export function Properties3D({
             min={0.25}
             max={8}
             step={0.25}
-            accent="accent-purple-600"
-            valueClass="text-purple-600"
+            accent="accent-ada-lavanta"
+            valueClass="text-ada-deniz-koyu dark:text-ada-lavanta"
             onChange={(r) =>
               updateDims({ radius: r, width: r * 2, depth: r * 2, ...(selectedSolid.type === 'sphere' ? { height: r * 2 } : {}) })
             }

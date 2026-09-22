@@ -161,7 +161,9 @@ export function transformPoints(
 /** Nesnenin etiketinde sırayla geçen nokta kimlikleri (ör. çokgen köşeleri, [AB], ∠ABC, "A Merkezli Çember"). */
 export function labelSequence(o: MathObject): string[] {
   switch (o.type) {
-    case 'polygon': case 'measurement': return o.pointIds;
+    case 'polygon': return o.pointIds;
+    // "BCD yayı": ara nokta etikette ortadadır
+    case 'measurement': return o.kind === 'arc' && o.throughPointId ? [o.pointIds[0], o.throughPointId, o.pointIds[1]] : o.pointIds;
     case 'segment': return [o.startPointId, o.endPointId];
     case 'line': return [o.point1Id, o.point2Id];
     case 'ray': return [o.startPointId, o.throughPointId];

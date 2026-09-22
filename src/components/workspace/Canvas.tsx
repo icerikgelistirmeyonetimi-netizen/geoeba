@@ -33,6 +33,9 @@ import {
   worldToScreen,
   screenToWorld,
   snapToGridPoint,
+  snapPointToGrid,
+  visibleGridStep,
+  isometricSide,
   getVisibleWorldBounds,
   getAdaptiveGridStep,
   formatTurkishNumber,
@@ -42,6 +45,7 @@ import { MeasurementInstruments } from './MeasurementInstruments';
 import { ToolCursor } from './ToolCursor';
 import { TextNoteDialog } from './TextNoteDialog';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
+import { secimBasligi } from './secimBasligi';
 import { useSliderPlayback } from '@/hooks/useSliderPlayback';
 import { Solid3DObject, Point3D } from '@/types/workspace3d';
 import { projectSolidFor2D, SolidProjectionMode } from '@/math/solidProjection2D';
@@ -71,7 +75,7 @@ const TYPE_LABELS: Record<string, string> = {
   image: 'Görsel',
 };
 import { isAnyModalOpen } from '@/components/ui/modalState';
-import { objectDependencies } from '@/state/WorkspaceContext';
+import { objectDependencies, planDeletion } from '@/state/WorkspaceContext';
 import { RotateGizmo } from '@/components/workspace/RotateGizmo';
 import {
   CanvasCheckbox,
@@ -108,9 +112,20 @@ import {
 } from '@/math/geometry';
 import { compileMathExpression } from '@/math/parser';
 import { copyObjects, pasteObjects, ObjectClipboard } from '@/math/objectClipboard';
+import { workspaceOwnsKeyboard } from './toolShortcuts';
 import { contextMenuSelection } from './contextMenuSelection';
 import { pointLockCandidates, isPointLocked } from '@/math/pointLock';
 import { pointAngleAction } from '@/math/pointAngles';
+import {
+  arcBadgeTitle, arcDetachedText, arcFlipLabel, arcOptionsForCircle, arcOptionsForPair, arcOptionsForPoint, arcValueText, circleGeometryOf, flipArcMeasurement,
+  isArcMeasurement, resolveArc, YAY_MENU_SINIRI, YAY_OLCUMU_RENGI, type ArcMeasurement, type ArcPairOption,
+} from '@/math/arcMeasure';
+import {
+  etiketSilAraciylaSilinirMi,
+  etiketSilindiIpucu,
+  etiketTiklamaEylemi,
+  uzunBasisMi,
+} from '@/math/measurementLabelClick';
 import {
   distanceLabelLevel,
   isLengthShown,
@@ -123,30 +138,34 @@ import {
 import {
   Grid,
   Contrast,
-  Magnet,
-  Play,
-  Pause,
   RotateCcw,
   RotateCw,
   Hand,
   MousePointer,
-  Home,
   ZoomIn,
   ZoomOut,
-  Maximize2,
-  Layers,
-  Eye,
-  EyeOff,
-  FileEdit,
   Trash2,
-  Eraser,
   Search,
   Settings,
   Check,
-  ChevronDown,
-  GripVertical,
-  GripHorizontal,
+  Grid3x3,
+  Magnet,
+  SquareMousePointer,
 } from 'lucide-react';
+import { EksenSimgesi, IzgaraSimgesi } from './GrafikMenuSimgeleri';
+import { temaZemini, zeminTonu } from './zeminTonu';
+import { eksenSayilariniYerlestir, tuvalEngelleri, type EksenCentigi } from './eksenSayilari';
+import { useTheme } from '@/state/ThemeContext';
+import { KayanCubuk, CubukMetni, CubukAyirici, CubukDugmesi } from './KayanCubuk';
+import { aracYonergesi } from './aracYonergeleri';
+import { etiketDondurme } from './olcuEtiketi';
+import { esitlikIsaretleri, esitlikYamalariniUygula } from '@/math/esitlikIsaretleri';
+import { EsitlikIsaretleriKatmani, esitlikMenuMaddeleri, esitUzunluklarMaddesi } from './EsitlikIsaretleri';
+import { etiketPayi } from './esitlikCizimi';
+import { imlecDegeri, imlecSinifi } from './imlecSiniflari';
+import { gorunumKaydirmaBasisiMi, kaydirmaDisiHedefMi, nesneBasisiIslenmeli } from './gorunumKaydirma';
+import { noktaAdiYeri, noktaEngelleri } from './noktaAdi';
+import { Box, FlipHorizontal2, Info, Lightbulb, MousePointer2, Pentagon, X as CarpiSimgesi } from 'lucide-react';
 
 // Derlenmiş fonksiyon ifadeleri önbelleği (ifade başına tek derleme)
 const compiledExpressionCache = new Map<string, ((x: number, scope?: Record<string, number>) => number) | null>();
@@ -248,6 +267,8 @@ interface CanvasProps {
   onSelectSolids?: (ids: string[]) => void;
   onUpdateSolidPosition?: (id: string, pos: Point3D) => void;
   onDeleteSolid?: (id: string) => void;
+  /** Birden çok cismi TEK geçmiş adımıyla siler (2B seçim çubuğu). Yoksa onDeleteSolid tek tek çağrılır. */
+  onDeleteSolids?: (ids: string[]) => void;
   onDragEnd?: () => void;
 }
 
@@ -260,15 +281,19 @@ export function Canvas({
   onSelectSolids,
   onUpdateSolidPosition,
   onDeleteSolid,
+  onDeleteSolids,
   onDragEnd,
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  /** 2B seçim çubuğunun saydığı/sildiği 3B cisimler */
+  const seciliCisimler = selectedSolidIds.length > 0 ? selectedSolidIds : selectedSolidId ? [selectedSolidId] : [];
 
   const { selectedLevel, selectedGrade, isFreeSandbox, selectedActivity } = useCurriculum();
   const isPrimary = selectedLevel?.id === 'ilkokul' || (selectedGrade && selectedGrade.gradeNumber <= 4);
 
   const {
+    objectClipboard, setObjectClipboard,
     objects,
     selectedObjectId,
     selectedObjectIds,
@@ -311,6 +336,7 @@ export function Canvas({
     hideMeasurement,
     setLabelOffset,
     measureArcLength,
+    measureArcBetween,
     styleSettings,
     splitPolygon,
     splitSegmentAtPoint,
@@ -337,6 +363,9 @@ export function Canvas({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const pendingImageWorldPosRef = useRef<Point2D | null>(null);
 
+  // 2B'de izdüşümü gösterilen 3B cisme sağ tıklanınca açılan menü
+  const [cisimMenusu, setCisimMenusu] = useState<{ solidId: string; ad: string; x: number; y: number } | null>(null);
+
   // Sağ tık bağlam menüsü hedefi (nesne + ekran konumu)
   const [contextTarget, setContextTarget] = useState<{
     obj: MathObject | null;
@@ -344,8 +373,9 @@ export function Canvas({
     y: number;
     /** Çokgene sağ tıklandıysa imlece EN YAKIN kenarın dizini (yoksa null). */
     edgeIndex: number | null;
+    /** Bir iz çizgisine (İzi Göster) sağ tıklandıysa o izin sahibi nesnenin kimliği */
+    izId?: string;
   } | null>(null);
-  const [objectClipboard, setObjectClipboard] = useState<ObjectClipboard | null>(null);
   // Dokunmatik uzun basma durumu
   const longPressRef = useRef<{ timer: number; startX: number; startY: number; obj: MathObject } | null>(null);
 
@@ -357,6 +387,12 @@ export function Canvas({
   // Sürükleme ve Kaydırma (Pan/Drag) Durumları
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  /**
+   * Son basışı el aracı (ya da orta tuş / Alt) yuttu mu?
+   * Kaydırma bitince gelen `click` / `dblclick` işaret kutusunu değiştirmesin,
+   * düğmeyi çalıştırmasın, etiketi gizlemesin diye tutulur (gorunumKaydirma.ts).
+   */
+  const kaydirmaYuttuRef = useRef(false);
   const [draggingObjState, setDraggingObjState] = useState<{
     objectIds: string[];
     startWorld: Point2D;
@@ -388,90 +424,6 @@ export function Canvas({
   // Sürükleyerek Şekil Boyutlandırma ve Oluşturma Durumu
   const [dragCreateStart, setDragCreateStart] = useState<Point2D | null>(null);
 
-  // Yüzen Hızlı Menü Kenar Konumu (alt, sol, sağ, üst)
-  type DockPosition = 'right' | 'left' | 'bottom' | 'top';
-  const [dockPosition, setDockPosition] = useState<DockPosition>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('geoeba_canvas_dock_pos_v2');
-      if (saved === 'left' || saved === 'right' || saved === 'bottom' || saved === 'top') return saved;
-    }
-    return 'bottom';
-  });
-  const [isDraggingDock, setIsDraggingDock] = useState(false);
-  const [dockPreview, setDockPreview] = useState<DockPosition | null>(null);
-
-  const cycleDockPosition = useCallback(() => {
-    setDockPosition((prev) => {
-      const next: DockPosition =
-        prev === 'bottom' ? 'left' : prev === 'left' ? 'top' : prev === 'top' ? 'right' : 'bottom';
-      if (typeof window !== 'undefined') localStorage.setItem('geoeba_canvas_dock_pos_v2', next);
-      return next;
-    });
-  }, []);
-
-  const handleDockDragStart = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingDock(true);
-
-    const onPointerMove = (moveEv: PointerEvent) => {
-      const container = containerRef.current;
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      const x = Math.max(0, Math.min(rect.width, moveEv.clientX - rect.left));
-      const y = Math.max(0, Math.min(rect.height, moveEv.clientY - rect.top));
-      const relX = x / rect.width;
-      const relY = y / rect.height;
-
-      const distLeft = relX;
-      const distRight = 1 - relX;
-      const distTop = relY;
-      const distBottom = 1 - relY;
-      const minDist = Math.min(distLeft, distRight, distTop, distBottom);
-
-      let target: DockPosition = 'bottom';
-      if (minDist === distLeft) target = 'left';
-      else if (minDist === distRight) target = 'right';
-      else if (minDist === distTop) target = 'top';
-      else if (minDist === distBottom) target = 'bottom';
-
-      setDockPreview(target);
-    };
-
-    const onPointerUp = (upEv: PointerEvent) => {
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      setIsDraggingDock(false);
-
-      const container = containerRef.current;
-      if (container) {
-        const rect = container.getBoundingClientRect();
-        const x = Math.max(0, Math.min(rect.width, upEv.clientX - rect.left));
-        const y = Math.max(0, Math.min(rect.height, upEv.clientY - rect.top));
-        const relX = x / rect.width;
-        const relY = y / rect.height;
-
-        const distLeft = relX;
-        const distRight = 1 - relX;
-        const distTop = relY;
-        const distBottom = 1 - relY;
-        const minDist = Math.min(distLeft, distRight, distTop, distBottom);
-
-        let finalPos: DockPosition = 'bottom';
-        if (minDist === distLeft) finalPos = 'left';
-        else if (minDist === distRight) finalPos = 'right';
-        else if (minDist === distTop) finalPos = 'top';
-        else if (minDist === distBottom) finalPos = 'bottom';
-
-        setDockPosition(finalPos);
-        if (typeof window !== 'undefined') localStorage.setItem('geoeba_canvas_dock_pos_v2', finalPos);
-      }
-      setDockPreview(null);
-    };
-
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-  }, []);
   const [dragCreateCurrent, setDragCreateCurrent] = useState<Point2D | null>(null);
   const [rotatingFeedback, setRotatingFeedback] = useState<{ shapeId: string; deg: number } | null>(null);
   const [reflectTargetPolyId, setReflectTargetPolyId] = useState<string | null>(null);
@@ -481,10 +433,8 @@ export function Canvas({
   const [isDrawingPen, setIsDrawingPen] = useState(false);
   const [currentPenStroke, setCurrentPenStroke] = useState<Point2D[]>([]);
 
-  // 2D üst seçenekler: düzlem ve ayrıntı görünümü
-  const [planeType, setPlaneType] = useState<'dik_koordinat' | 'kareli_duzlem' | 'bos_duzlem'>('dik_koordinat');
+  // Ayrıntı görünümü (Ayrıntılı / Sade): sağ tık menüsünden ve yazılı komuttan seçilir
   const [styleMode, setStyleMode] = useState<'Sade' | 'Ayrıntılı'>('Ayrıntılı');
-  const [openDropdown, setOpenDropdown] = useState<'plane' | 'style' | null>(null);
 
   useEffect(() => {
     const show = () => setStyleMode('Ayrıntılı');
@@ -492,7 +442,7 @@ export function Canvas({
     return () => window.removeEventListener('geoeba:show-measurements', show);
   }, []);
 
-  // Yazılı komut: "sade görünüm" / "ayrıntılı görünüm" — açılır menüdeki seçimle aynı etki
+  // Yazılı komut: "sade görünüm" / "ayrıntılı görünüm" — sağ tık menüsündeki seçimle aynı etki
   useEffect(() => {
     const onStyleMode = (event: Event) => {
       const mode = (event as CustomEvent<unknown>).detail;
@@ -506,18 +456,16 @@ export function Canvas({
     return () => window.removeEventListener('geoeba:style-mode', onStyleMode);
   }, [setViewport]);
 
-  // Yazılı komut: "kareli düzlem", "boş düzlem", "dik koordinat sistemi" — açılır menüdeki seçimle aynı etki
+  // Yazılı komut: "kareli düzlem", "boş düzlem", "dik koordinat sistemi" — eksen ve ızgara görünürlüğünü
+  // ayarlar (sağ tık menüsündeki "Eksenleri Göster" / "Izgarayı Göster" ile aynı alanlar)
   useEffect(() => {
     const onPlaneType = (event: Event) => {
       const plane = (event as CustomEvent<unknown>).detail;
       if (plane === 'dik_koordinat') {
-        setPlaneType('dik_koordinat');
         setViewport((prev) => ({ ...prev, showGrid: true, showAxes: true }));
       } else if (plane === 'kareli_duzlem') {
-        setPlaneType('kareli_duzlem');
         setViewport((prev) => ({ ...prev, showGrid: true, showAxes: false, showCoordinates: false }));
       } else if (plane === 'bos_duzlem') {
-        setPlaneType('bos_duzlem');
         setViewport((prev) => ({ ...prev, showGrid: false, showAxes: false, showCoordinates: false }));
       }
     };
@@ -534,7 +482,12 @@ export function Canvas({
 
     const updateSize = () => {
       if (!containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
+      // Yerleşim boyutu (CSS px). getBoundingClientRect ata öğelerin dönüşümünü içerir: pencere açılırken
+      // (pencere-ac: scale(0.96) -> 1) ölçülen boyut %4'e kadar küçük kalıyordu ve ResizeObserver dönüşüm
+      // bitince yeniden tetiklenmediği için eksen sayıları, rozetler ve oklar alttan/sağdan ~25-35 px içeride
+      // çiziliyordu. clientWidth/clientHeight dönüşümden etkilenmez (kapta kenarlık / iç boşluk yok).
+      const el = containerRef.current;
+      const rect = { width: el.clientWidth, height: el.clientHeight };
       if (rect.width > 0 && rect.height > 0) {
         setViewport((prev) => {
           if (prev.width === rect.width && prev.height === rect.height) return prev;
@@ -816,6 +769,7 @@ export function Canvas({
     selectedSolidId,
     selectedSolidIds,
     onDeleteSolid,
+    onDeleteSolids,
     onSelectSolid,
     onSelectSolids,
   });
@@ -837,6 +791,7 @@ export function Canvas({
     selectedSolidId,
     selectedSolidIds,
     onDeleteSolid,
+    onDeleteSolids,
     onSelectSolid,
     onSelectSolids,
   };
@@ -844,6 +799,7 @@ export function Canvas({
   // Klavye Kısayolları (Delete/Backspace: sil, Ctrl+Z: geri al, Ctrl+Y / Ctrl+Shift+Z: yinele, Esc: iptal)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!workspaceOwnsKeyboard(e, svgRef.current)) return;
       const target = e.target as HTMLElement | null;
       if (target) {
         const tag = target.tagName;
@@ -854,7 +810,6 @@ export function Canvas({
       // (Fonksiyon, Kaydırıcı, Nesne Ekle, Düzgün Çokgen, Tuvali Temizle...)
       if (k.dialogOpen || isAnyModalOpen()) return;
       // Odak bir diyalog içindeyken de kısayollar tuvale ulaşmamalı
-      if (target instanceof Element && target.closest('[role="dialog"]')) return;
 
       const isMod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
@@ -901,10 +856,13 @@ export function Canvas({
           const count = k.selectedObjectIds.length;
           k.deleteObjects(k.selectedObjectIds, count === 1 ? undefined : `${count} seçili nesne silindi`);
           k.setSelectedObjectIds([]);
-        } else if (k.selectedSolidIds.length > 0 || k.selectedSolidId) {
+        }
+        if (k.selectedSolidIds.length > 0 || k.selectedSolidId) {
           e.preventDefault();
           const toDelete = k.selectedSolidIds.length > 0 ? k.selectedSolidIds : (k.selectedSolidId ? [k.selectedSolidId] : []);
-          toDelete.forEach((sid) => k.onDeleteSolid?.(sid));
+          // Birden çok cisim tek geçmiş adımıyla silinsin (tek Ctrl+Z hepsini geri getirir)
+          if (k.onDeleteSolids) k.onDeleteSolids(toDelete);
+          else toDelete.forEach((sid) => k.onDeleteSolid?.(sid));
           k.onSelectSolid?.(null);
           k.onSelectSolids?.([]);
         }
@@ -941,17 +899,19 @@ export function Canvas({
     return map;
   }, [objects]);
 
-  // Mesafe etiketlerinin katları ORTAK bir kutu genişliğiyle dizilir (en az 120 px): uzun bir etiket komşu katla çakışmasın
-  const mesafeEtiketiYariGenislik = useMemo(() => {
-    let enGenis = 120;
-    for (const o of objects) {
-      if (o.type !== 'measurement' || o.kind !== 'distance' || o.showValue === false || o.visible === false) continue;
-      const a = pointsById.get(o.pointIds[0]);
-      const b = pointsById.get(o.pointIds[1]);
-      if (a && b) enGenis = Math.max(enGenis, mesafeEtiketMetni(a, b).length * 6.4 + 14);
-    }
-    return enGenis / 2;
-  }, [objects, pointsById]);
+  // EŞİTLİK İŞARETLERİ (|, ||, |||): birbirine değen şekillerde eşit uzunluk/yaylar + elle konanlar.
+  // Yalnız nesneler ve aç/kapa değişince hesaplanır; kaydırma/yakınlaştırma yeniden gruplamaz (viewport'a bağlı DEĞİL).
+  const esitlik = useMemo(
+    () => esitlikIsaretleri(objects, { otomatik: viewport.showEqualityMarks !== false }),
+    [objects, viewport.showEqualityMarks]
+  );
+
+  // Nokta adlarının kaçınacağı çizgiler (noktadan çıkan/geçen parça, doğru, ışın, çokgen kenarı, çember).
+  // Ekran koordinatında tutulur; yakınlaştırma, kaydırma ve sürüklemede yeniden hesaplanır.
+  const noktaEngelHaritasi = useMemo(
+    () => noktaEngelleri(objects, pointsById, (p) => worldToScreen(p, viewport)),
+    [objects, pointsById, viewport]
+  );
 
   // Aktif Kaydırıcı Değişkenleri Haritası (Fonksiyon grafikleri için)
   // Sahnedeki kaydırıcılar (oynatma ve tuval üstü çizim için)
@@ -983,15 +943,32 @@ export function Canvas({
   // İz bırakma (GeoGebra Trace) durumu
   const [traces, setTraces] = useState<Record<string, { points: Point2D[]; color: string }>>({});
   const clearTraces = useCallback(() => setTraces({}), []);
+  /** Tek bir nesnenin iz çizgisini siler (iz çizgisine sağ tık → "Bu izi sil") */
+  const clearTrace = useCallback((id: string) => {
+    setTraces((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }, []);
 
   // showTrace: true olan nesnelerin hareket izlerini kaydet
   useEffect(() => {
     const traceObjects = objects.filter((o) => o.showTrace && o.visible);
-    if (traceObjects.length === 0) return;
 
     setTraces((prev) => {
       let changed = false;
       const next = { ...prev };
+      // Nesne silindiyse ya da izi kapatıldıysa ("İzi Gizle") eski iz çizgileri de kalkar;
+      // aksi hâlde ekranda silinemeyen kesikli çizgiler kalıyordu.
+      const byId = new Map(objects.map((o) => [o.id, o]));
+      for (const id of Object.keys(next)) {
+        if (!byId.get(id)?.showTrace) {
+          delete next[id];
+          changed = true;
+        }
+      }
       for (const obj of traceObjects) {
         if (obj.type === 'point') {
           const pt = obj as PointObject;
@@ -1063,6 +1040,11 @@ export function Canvas({
     startOffset: Point2D;
     moved: boolean;
   } | null>(null);
+  // Etikete son basışın anı: dokunmatik uzun basış (sağ tık menüsü) rozetin silme tıklaması sayılmasın
+  const etiketBasisRef = useRef<{ zaman: number; fare: boolean } | null>(null);
+  // Nesne menüsünün en son AÇILDIĞI an (uzun basış zamanlayıcısı ya da tarayıcının contextmenu olayı):
+  // dokunmatik basış sırasında menü açıldıysa parmak kalkınca gelen tıklama rozeti silmez
+  const menuAcilisZamaniRef = useRef<number | null>(null);
 
   // Tuval üstü kaydırıcı tutamağının sürüklenmesi
   const sliderDragRef = useRef<{ id: string } | null>(null);
@@ -1173,7 +1155,10 @@ export function Canvas({
    * Taşınabilir ve tıklanabilir bir ölçüm etiketi için ortak SVG özellikleri.
    * - transform: şekle göre kayıklığı uygular
    * - sürükle: etiketi taşır (tek geçmiş adımı)
-   * - tıkla: etiketi gizler (sağ tık menüsünden geri getirilebilir)
+   * - tıkla: şekle ait etiketi gizler (sağ tık menüsünden geri getirilebilir).
+   *   AÇI rozeti açının kendisidir: tıklamak açıyı yayıyla birlikte siler (tek adım, Geri Al ile döner).
+   *   Sil aracında bağımsız ölçüm etiketi (eğim, oranlar, |AP|) de ölçüm nesnesiyle birlikte silinir.
+   *   Kurallar: etiketTiklamaEylemi (src/math/measurementLabelClick.ts).
    */
   const olcumEtiketi = useCallback(
     (
@@ -1195,10 +1180,13 @@ export function Canvas({
       // her zaman tıklanabilir olabilirler: şekli sürüklerken etiketi yakalama riski yok.
       // Önceki "yalnızca seçiliyken tıklanabilir" kuralı, hiç seçilemeyen açı rozetinin
       // asla gizlenememesine yol açıyordu.
+      // Sil aracında açı rozeti ve bağımsız ölçüm etiketi bir SİLME düğmesidir: sürüklenmez.
+      const silAraciylaSilinir = etiketSilAraciylaSilinirMi(obj, kind, activeTool, gizlenebilir);
       return {
         transform: `translate(${dx}, ${dy})`,
         style: {
-          cursor: 'move' as const,
+          // Çizim araçlarında ve Silde artı, Seç'te taşıma okları, El aracında açık el (imlecSiniflari.ts)
+          cursor: imlecDegeri(activeTool, 'etiket'),
           pointerEvents: 'auto' as const,
           // Dokunmatik cihazda parmak hareketini tarayıcı kaydırma sanmasın
           touchAction: 'none' as const,
@@ -1207,14 +1195,22 @@ export function Canvas({
         // Yalnızca onMouseDown varken tablet ve akıllı tahtada etiket sürüklenemiyordu
         // (parmak touchmove üretir, mousemove üretmez) — kullanıcı "taşıyamıyorum" diyordu.
         onPointerDown: (e: React.PointerEvent) => {
+          // El aracında etiket sürüklenmez; basış görünümü kaydırır (gorunumKaydirma.ts)
+          if (!nesneBasisiIslenmeli(activeTool, e)) return;
           if (e.pointerType === 'mouse' && e.button !== 0) return;
           e.stopPropagation();
+          etiketBasisRef.current = { zaman: Date.now(), fare: e.pointerType === 'mouse' };
+          labelJustDraggedRef.current = false;
+          if (silAraciylaSilinir) {
+            // Titreme etiketi taşımaya çevirmesin; silme 'click' ile yapılır
+            labelDragRef.current = null;
+            return;
+          }
           try {
             (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
           } catch {
             /* yakalama desteklenmiyorsa sürükleme yine window dinleyicisiyle yürür */
           }
-          labelJustDraggedRef.current = false;
           labelDragRef.current = {
             objectId,
             kind,
@@ -1224,18 +1220,31 @@ export function Canvas({
           };
         },
         onClick: (e: React.MouseEvent) => {
+          // El aracında etiket gizlenmez/silinmez: görünüm aracı sahneyi değiştirmez
+          if (!nesneBasisiIslenmeli(activeTool, e)) return;
           e.stopPropagation();
-          // Taşıma yapıldıysa bu tıklama sürüklemenin devamıdır; etiketi gizleme.
+          // Taşıma yapıldıysa bu tıklama sürüklemenin devamıdır; etiketi gizleme/silme.
           if (labelJustDraggedRef.current || labelDragRef.current?.moved) {
             labelJustDraggedRef.current = false;
             return;
           }
-          if (!gizlenebilir) return;
+          const eylem = etiketTiklamaEylemi(obj, kind, activeTool, gizlenebilir);
+          if (eylem === 'yok') return;
+          if (eylem === 'aciyiSil' || eylem === 'olcumuSil') {
+            // Dokunmatik uzun basış sağ tık menüsünü açtı; parmak kalkınca gelen tıklama nesneyi silmesin
+            if (uzunBasisMi(etiketBasisRef.current, menuAcilisZamaniRef.current)) return;
+            if (!obj) return;
+            // Açının yalnızca rozetini gizlemek turuncu yayı sahipsiz bırakıyordu: açı bütünüyle,
+            // tek geçmiş adımında silinir (Geri Al yay ve rozeti birlikte getirir).
+            deleteObjects([objectId]);
+            setHintMessage(etiketSilindiIpucu(obj));
+            return;
+          }
           hideMeasurement(objectId, kind);
         },
       };
     },
-    [objects, viewport.zoom, selectedObjectIds, hideMeasurement]
+    [objects, viewport.zoom, selectedObjectIds, hideMeasurement, activeTool, deleteObjects, setHintMessage]
   );
 
   const sliderScope = useMemo(() => {
@@ -1249,26 +1258,16 @@ export function Canvas({
     return scope;
   }, [objects]);
 
-  // Tuvali sayfanın tam ortasında (0, 0) büyük ve dengeli + haç şeklinde başlat
-  useEffect(() => {
-    if (selectedActivity?.initialViewport) {
-      setViewport((prev) => ({
-        ...prev,
-        ...selectedActivity.initialViewport,
-      }));
-    } else {
-      setViewport((prev) => ({
-        ...prev,
-        panX: 0,
-        panY: 0,
-        zoom: DEFAULT_ZOOM,
-      }));
-    }
-  }, [isFreeSandbox, selectedActivity, setViewport]);
+  // İlk görünüm ve proje/etkinlik yükleme WorkspaceContext tarafından yönetilir.
+  // Tuval 3B'den dönünce yeniden bağlanabilir; kayıtlı yakınlaştırmayı sıfırlama.
 
   // Görünür dünya sınırları ve ızgara çizgileri
   const worldBounds = useMemo(() => getVisibleWorldBounds(viewport), [viewport]);
-  const gridInfo = useMemo(() => getAdaptiveGridStep(viewport.zoom), [viewport.zoom]);
+  // Çizilen ızgara adımı: Ayarlar > Izgara aralığı "Otomatik" ise yakınlaştırmaya göre, değilse girilen sabit aralık
+  const gridInfo = useMemo(
+    () => visibleGridStep(viewport),
+    [viewport.zoom, viewport.gridStep, viewport.gridStepAuto] // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   // Izgara çizgilerini ve eksen çentiklerini hesapla (Tam Ekran Kapsamı)
   const gridLines = useMemo(() => {
@@ -1298,7 +1297,8 @@ export function Canvas({
 
   // Izgaraya yapıştırma (çizilen uyarlanabilir ızgara adımıyla)
   const snapIfEnabled = (p: Point2D): Point2D =>
-    viewport.snapToGrid ? snapToGridPoint(p, gridInfo.step) : p;
+    // Tek yakalama kuralı: mod (Otomatik / Sıçra / Sabitli / Kapalı) ve ızgara biçimi (kareli / noktalı / izometrik)
+    snapPointToGrid(p, viewport, gridInfo.step);
 
   // Yeni nokta nesnesi üretici
   const makePoint = (label: string, x: number, y: number, color: string): PointObject => ({
@@ -1651,6 +1651,28 @@ export function Canvas({
     setPergel(null);
   };
 
+  /**
+   * Görünüm kaydırmayı başlatır (El aracı, orta tuş, Alt + sürükle).
+   *
+   * `pointerId` verilirse imleç KÖK SVG'ye yakalanır: basış bir noktanın ya da
+   * şeklin üstünde başlasa bile sonraki pointermove/pointerup olayları tuvale
+   * gelir, parmak tuvalin dışına çıksa da kaydırma sürer.
+   */
+  const kaydirmayaBasla = useCallback((clientX: number, clientY: number, pointerId?: number) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    setIsPanning(true);
+    setPanStart({ x: clientX - rect.left, y: clientY - rect.top });
+    if (pointerId !== undefined) {
+      try {
+        svg.setPointerCapture(pointerId);
+      } catch {
+        /* Yakalama desteklenmiyorsa olağan olay akışı sürer. */
+      }
+    }
+  }, []);
+
   const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!svgRef.current) return;
     const rect = svgRef.current.getBoundingClientRect();
@@ -1658,11 +1680,12 @@ export function Canvas({
     const screenY = e.clientY - rect.top;
     const world = screenToWorld({ x: screenX, y: screenY }, viewport);
 
-    // Orta tuş, Alt veya Pan aracı: her araçta görünümü kaydırma
-    if (e.button === 1 || e.altKey || activeTool === 'pan') {
+    // Orta tuş, Alt veya El aracı: her araçta görünümü kaydırma.
+    // (Normalde basış buraya hiç gelmez: kök SVG'nin yakalama aşamasındaki
+    //  koruma onu daha önce alır — bu dal yalnızca güvenlik ağıdır.)
+    if (gorunumKaydirmaBasisiMi(activeTool, e)) {
       e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ x: screenX, y: screenY });
+      kaydirmayaBasla(e.clientX, e.clientY);
       return;
     }
 
@@ -1670,7 +1693,10 @@ export function Canvas({
     if (e.button !== 0) return;
 
     const isBackground =
-      e.target === svgRef.current || (e.target as HTMLElement).id === 'grid-background';
+      e.target === svgRef.current ||
+      (e.target as HTMLElement).id === 'grid-background' ||
+      // İz çizgisinin görünmez yakalayıcısı yalnız sağ tık içindir; sol tıkta boş alan sayılır
+      (e.target as Element).hasAttribute?.('data-iz-yakalayici');
 
     if (activeTool === 'text') {
       setPendingTextWorldPos(snapIfEnabled(world));
@@ -1992,6 +2018,7 @@ export function Canvas({
         edgeIndex = enYakinKenar(obj as PolygonObject, { x: e.clientX - rect.left, y: e.clientY - rect.top });
       }
       setContextTarget({ obj, x: e.clientX, y: e.clientY, edgeIndex });
+      menuAcilisZamaniRef.current = Date.now();
     },
     [setSelectedObjectIds, selectedObjectIds, enYakinKenar, imlecinNoktasi]
   );
@@ -1999,6 +2026,8 @@ export function Canvas({
   /** Dokunmatik cihazlarda 600 ms basılı tutmak menüyü açar; 12 px'ten fazla kayma sürükleme sayılır. */
   const handleTouchStartOnObject = useCallback(
     (e: React.TouchEvent, obj: MathObject) => {
+      // El aracında parmak sürüklemesi görünümü kaydırır; uzun basış menüsü açılmaz (gorunumKaydirma.ts)
+      if (!nesneBasisiIslenmeli(activeTool)) return;
       const t = e.touches[0];
       if (!t) return;
       const startX = t.clientX;
@@ -2016,11 +2045,12 @@ export function Canvas({
           edgeIndex = enYakinKenar(hedef as PolygonObject, { x: startX - rect.left, y: startY - rect.top });
         }
         setContextTarget({ obj: hedef, x: startX, y: startY, edgeIndex });
+        menuAcilisZamaniRef.current = Date.now();
         longPressRef.current = null;
       }, 600);
       longPressRef.current = { timer, startX, startY, obj };
     },
-    [setSelectedObjectId, setSelectedObjectIds, enYakinKenar, imlecinNoktasi]
+    [activeTool, setSelectedObjectId, setSelectedObjectIds, enYakinKenar, imlecinNoktasi]
   );
 
   const cancelLongPress = useCallback((e?: React.TouchEvent) => {
@@ -2113,16 +2143,114 @@ export function Canvas({
       },
     };
     if (!hedef) {
-      const bostaMaddeler = [pasteItem];
-      if (Object.keys(traces).length > 0) {
-        bostaMaddeler.push({
-          id: 'izleri-temizle',
-          label: 'İzleri Temizle',
+      // BOŞ ALAN (Grafik) MENÜSÜ: eksenler, ızgara biçimi, ızgaraya sıçrama, izler, sığdırma, ayarlar.
+      // Yapıştır yalnızca panoda nesne varken en üstte görünür.
+      const izVar = Object.keys(traces).length > 0;
+      const izgaraBicimi = viewport.showGrid ? viewport.gridStyle ?? 'kareli' : 'yok';
+      const izgaraSec = (bicim: 'yok' | 'kareli' | 'noktali' | 'izometrik') =>
+        setViewport((prev) =>
+          bicim === 'yok' ? { ...prev, showGrid: false } : { ...prev, showGrid: true, gridStyle: bicim }
+        );
+      const bostaMaddeler: ContextMenuItem[] = [
+        {
+          id: 'eksenleri-goster',
+          label: 'Eksenleri Göster',
+          icon: <EksenSimgesi />,
+          checked: viewport.showAxes,
+          separatorBefore: !!objectClipboard?.objects.length,
+          onSelect: () => setViewport((prev) => ({ ...prev, showAxes: !prev.showAxes })),
+        },
+        {
+          id: 'izgarayi-goster',
+          label: 'Izgarayı Göster',
+          icon: <Grid3x3 className="w-4 h-4" />,
+          submenu: [
+            { id: 'izgara-yok', label: 'Izgara yok', icon: <IzgaraSimgesi bicim="yok" />, radio: true, checked: izgaraBicimi === 'yok', onSelect: () => izgaraSec('yok') },
+            { id: 'izgara-kareli', label: 'Kareli ızgara', icon: <IzgaraSimgesi bicim="kareli" />, radio: true, checked: izgaraBicimi === 'kareli', onSelect: () => izgaraSec('kareli') },
+            { id: 'izgara-noktali', label: 'Noktalı ızgara', icon: <IzgaraSimgesi bicim="noktali" />, radio: true, checked: izgaraBicimi === 'noktali', onSelect: () => izgaraSec('noktali') },
+            { id: 'izgara-izometrik', label: 'İzometrik ızgara', icon: <IzgaraSimgesi bicim="izometrik" />, radio: true, checked: izgaraBicimi === 'izometrik', onSelect: () => izgaraSec('izometrik') },
+          ],
+        },
+        {
+          id: 'izgaraya-sicra',
+          label: 'Izgaraya Sıçra',
+          icon: <Magnet className="w-4 h-4" />,
+          checked: viewport.snapToGrid,
+          onSelect: () =>
+            setViewport((prev) =>
+              prev.snapToGrid
+                ? { ...prev, snapToGrid: false, pointSnapMode: 'off' }
+                : {
+                    ...prev,
+                    snapToGrid: true,
+                    pointSnapMode: prev.pointSnapMode && prev.pointSnapMode !== 'off' ? prev.pointSnapMode : 'snapToGrid',
+                  }
+            ),
+        },
+        // Eşit uzunluk/yay çentikleri (otomatik); elle konanlar kapalıyken de çizilir
+        esitUzunluklarMaddesi(viewport.showEqualityMarks !== false, () =>
+          setViewport((prev) => ({ ...prev, showEqualityMarks: prev.showEqualityMarks === false }))
+        ),
+        // Ayrıntı görünümü (eskiden tuvalin sol üst köşesindeki açılır menü): Ayrıntılı = ölçüler ve
+        // koordinatlar görünür; Sade = yalnız çizim
+        {
+          id: 'gorunum-ayrintili',
+          label: 'Ayrıntılı Görünüm',
+          radio: true,
+          checked: styleMode === 'Ayrıntılı',
           separatorBefore: true,
+          onSelect: () => {
+            setStyleMode('Ayrıntılı');
+            setViewport((prev) => ({ ...prev, showMeasurements: true }));
+          },
+        },
+        {
+          id: 'gorunum-sade',
+          label: 'Sade Görünüm',
+          radio: true,
+          checked: styleMode === 'Sade',
+          onSelect: () => {
+            setStyleMode('Sade');
+            setViewport((prev) => ({ ...prev, showCoordinates: false, showMeasurements: false }));
+          },
+        },
+        {
+          id: 'izleri-temizle',
+          label: 'Tüm İzleri Temizle',
+          icon: <RotateCcw className="w-4 h-4" />,
+          separatorBefore: true,
+          disabled: !izVar,
           onSelect: () => clearTraces(),
-        });
-      }
-      return bostaMaddeler;
+        },
+        {
+          id: 'tum-nesneleri-goster',
+          label: 'Tüm Nesneleri Göster',
+          icon: <SquareMousePointer className="w-4 h-4" />,
+          onSelect: () => fitToObjects(),
+        },
+        {
+          id: 'ayarlar',
+          label: 'Ayarlar',
+          icon: <Settings className="w-4 h-4" />,
+          onSelect: () => window.dispatchEvent(new CustomEvent('geoeba:calisma-ayarlari', { detail: 'duzlem' })),
+        },
+      ];
+      // İz çizgisine sağ tıklandıysa en üstte yalnız o izi silen madde
+      const izHedefi = contextTarget?.izId && traces[contextTarget.izId] ? contextTarget.izId : null;
+      const izSahibi = izHedefi ? objects.find((o) => o.id === izHedefi) : undefined;
+      const izMaddesi: ContextMenuItem[] = izHedefi
+        ? [
+            {
+              id: 'bu-izi-sil',
+              label: izSahibi?.label ? `${izSahibi.label} noktasının izini sil` : 'Bu izi sil',
+              icon: <Trash2 className="w-4 h-4" />,
+              danger: true,
+              onSelect: () => clearTrace(izHedefi),
+            },
+          ]
+        : [];
+      if (izMaddesi.length) bostaMaddeler[0] = { ...bostaMaddeler[0], separatorBefore: true };
+      return [...izMaddesi, ...(objectClipboard?.objects.length ? [pasteItem] : []), ...bostaMaddeler];
     }
     const targetIds = selectedObjectIds.includes(hedef.id) ? selectedObjectIds : [hedef.id];
     const maddeler: ContextMenuItem[] = [
@@ -2137,6 +2265,38 @@ export function Canvas({
         setSelectedObjectIds(targetIds);
         setActiveTool('select');
       } });
+    }
+
+    // YAY ÖLÇ (çember bölünmeden, src/math/arcMeasure.ts): madde ölçümün EKRANDAKİ durumunu söyler.
+    // İşaretliyse (görünür ölçüm) seçmek ölçümü kaldırır; gizli ya da Sade görünümdeyse yeniden gösterir.
+    const yayAcik = (o: ArcPairOption) => !!o.existingId && !!o.existingShown && showDetails;
+    const yayKaldir = (o: ArcPairOption) => {
+      if (!o.existingId) return;
+      deleteObjects([o.existingId]);
+      setHintMessage(`${o.title} ölçümü kaldırıldı. Geri almak için Geri Al'ı (Ctrl+Z) kullanın.`);
+    };
+    const yayMaddesi = (o: ArcPairOption): ContextMenuItem => ({
+      id: `yay-olc-${o.circleId}-${o.pointIds.join('-')}`,
+      label: `${o.title} (${formatTurkishNumber(o.degrees, 1)}°)`,
+      checked: yayAcik(o),
+      onSelect: () => (yayAcik(o) ? yayKaldir(o) : measureArcBetween(o.pointIds[0], o.pointIds[1], { circleId: o.circleId })),
+    });
+    // İki nokta seçiliyken (Shift ile) birine sağ tıklanınca: "BD yayını ölç" menünün başında
+    if (hedef.type === 'point') {
+      const seciliIki = selectedObjectIds.filter((id) => pointsById.has(id));
+      if (seciliIki.length === 2 && seciliIki.includes(hedef.id)) {
+        const ciftSecenekleri = arcOptionsForPair(seciliIki[0], seciliIki[1], objects);
+        ciftSecenekleri.forEach((o, i) => {
+          const cemberAdi = ciftSecenekleri.length > 1 ? ` (${objects.find((c) => c.id === o.circleId)?.label || 'çember'})` : '';
+          const olcAdi = o.title.replace(/ yayı$/, ' yayını').replace(/ yarım çemberi$/, ' yarım çemberini');
+          maddeler.push({
+            id: `yay-olc-cift-${o.circleId}`,
+            label: yayAcik(o) ? `${o.title} ölçümünü kaldır${cemberAdi}` : `${olcAdi} ölç${cemberAdi}`,
+            separatorBefore: i === 0,
+            onSelect: () => (yayAcik(o) ? yayKaldir(o) : measureArcBetween(o.pointIds[0], o.pointIds[1], { circleId: o.circleId })),
+          });
+        });
+      }
     }
 
     // PARÇALI UZUNLUK: "[AB] baştan sona" + aradaki her nokta için "[AP] P noktasına kadar" /
@@ -2318,6 +2478,27 @@ export function Canvas({
         }
       }
 
+      // YAY ÖLÇ: nokta bir ya da birkaç çemberin üzerindeyse o çemberdeki diğer noktalarla arasındaki küçük yaylar
+      // (bağlantı türü fark etmez: yarıçap noktası, kesişim noktası…). Birden çok çember varsa çember adı başlıklarıyla
+      // gruplanır; alt menü kaydırılmadığı için her çemberden sınırlı sayıda (en yakın yaylar önce) listelenir.
+      const yayGruplari = arcOptionsForPoint(hedef.id, objects).filter((g) => g.options.length > 0);
+      if (yayGruplari.length) {
+        const grupSiniri = Math.max(3, Math.floor(YAY_MENU_SINIRI / yayGruplari.length));
+        const alt: ContextMenuItem[] = [];
+        let fazlasi = 0;
+        yayGruplari.forEach((g, gi) => {
+          if (yayGruplari.length > 1) {
+            alt.push({ id: `yay-olc-baslik-${g.circle.id}`, label: g.circle.label || 'Çember', disabled: true, separatorBefore: gi > 0 });
+          }
+          g.options.slice(0, grupSiniri).forEach((o) => alt.push(yayMaddesi(o)));
+          fazlasi += Math.max(0, g.options.length - grupSiniri);
+        });
+        if (fazlasi > 0) {
+          alt.push({ id: 'yay-olc-fazlasi', label: `${fazlasi} yay daha var: diğer noktaya sağ tıklayıp oradan seçin`, disabled: true, separatorBefore: true });
+        }
+        maddeler.push({ id: 'yay-olc', label: 'Yay ölç', separatorBefore: true, submenu: alt });
+      }
+
       // Nokta bir parçanın/doğrunun ARASINDA (ya da bölünmüş zincirin eklem yerinde) duruyorsa
       // "baştan sona" ve "noktaya kadar" uzunlukları noktanın kendi menüsünde de sunulur.
       const noktaUzunluklari = lengthOptionsAtPoint(objects, hedef.id)?.options ?? [];
@@ -2383,6 +2564,24 @@ export function Canvas({
           label: `${ikisi.map((o) => o.label).join(' – ')} noktalarından iki yaya ayır`,
           onSelect: () => splitCircleAtPoints(circ.id, ikisi.map((o) => o.id)),
         });
+      }
+      // YAY ÖLÇ: çemberin üzerindeki her nokta çifti arasındaki küçük yay (çember bölünmez). Önce komşu
+      // noktalar arasındakiler; alt menü kaydırılmadığı için liste sınırlanır ve kalan sayı söylenir.
+      const yayCiftleri = arcOptionsForCircle(circ.id, objects);
+      if (yayCiftleri.length) {
+        const fazlasi = yayCiftleri.length - YAY_MENU_SINIRI;
+        maddeler.push({
+          id: 'yay-olc',
+          label: 'Yay ölç',
+          submenu: [
+            ...yayCiftleri.slice(0, YAY_MENU_SINIRI).map(yayMaddesi),
+            ...(fazlasi > 0
+              ? [{ id: 'yay-olc-fazlasi', label: `${fazlasi} yay daha var: bir noktaya sağ tıklayıp oradan seçin`, disabled: true, separatorBefore: true }]
+              : []),
+          ],
+        });
+      } else {
+        maddeler.push({ id: 'yay-olc-yok', label: 'Yay ölçmek için çemberin üzerine iki nokta koyun', disabled: true });
       }
 
       maddeler.push({
@@ -2571,7 +2770,41 @@ export function Canvas({
     }
 
     if (hedef.type === 'text') maddeler.push({ id: 'metni-duzenle', label: 'Metni düzenle…', onSelect: () => { setEditingTextObj(hedef); setPendingTextWorldPos({ x: hedef.x, y: hedef.y }); setIsTextDialogOpen(true); } });
-    if (hedef.type === 'measurement') maddeler.push({ id: 'olcum-goster', label: hedef.showValue === false ? 'Ölçümü göster' : 'Ölçümü gizle', onSelect: () => updateObject(hedef.id, { showValue: hedef.showValue === false } as Partial<MathObject>, true) });
+    // Yay ölçümü: diğer yaya (büyük ↔ küçük, yarım çemberde öbür yarıya) tek geçmiş adımında geçilir.
+    // "Ölçümü gizle" sunulmaz: gizlenen yayın sağ tıklanacak parçası kalmaz; rozete tıklamak ölçümü kaldırır.
+    if (isArcMeasurement(hedef)) {
+      const simdiki = resolveArc(hedef, objects);
+      if (simdiki) {
+        const gecis = flipArcMeasurement(hedef, objects);
+        const yazi = arcFlipLabel(simdiki);
+        maddeler.push(
+          'error' in gecis
+            ? { id: 'yay-tarafi', label: gecis.error, disabled: true, separatorBefore: true }
+            : {
+                id: 'yay-tarafi',
+                label: yazi,
+                separatorBefore: true,
+                onSelect: () => {
+                  commit((prev) => prev.map((o) => (o.id === hedef.id ? gecis.object : o)), `${gecis.title} ölçüldü`);
+                  setHintMessage(`${gecis.title} ölçüldü.`);
+                },
+              }
+        );
+      }
+    }
+    if (hedef.type === 'measurement' && hedef.kind !== 'arc') maddeler.push({ id: 'olcum-goster', label: hedef.showValue === false ? 'Ölçümü göster' : 'Ölçümü gizle', onSelect: () => updateObject(hedef.id, { showValue: hedef.showValue === false } as Partial<MathObject>, true) });
+
+    // EŞİTLİK ÇENTİĞİ: parça, tıklanan çokgen kenarı, yay, dilim ve yay ölçümü; çoklu seçimde "Eşit olarak işaretle"
+    maddeler.push(...esitlikMenuMaddeleri({
+      hedef,
+      kenarNo: contextTarget?.edgeIndex ?? null,
+      objects,
+      seciliIdler: selectedObjectIds,
+      sonuc: esitlik,
+      uygula: (yamalar, aciklama) => {
+        if (yamalar.length) commit((prev) => esitlikYamalariniUygula(prev, yamalar), aciklama);
+      },
+    }));
 
     // İZ BIRAKMA (GeoGebra Show Trace)
     const traceDestekleyenler = ['point', 'segment', 'line', 'ray', 'circle', 'polygon', 'arc', 'sector', 'ellipse', 'function'];
@@ -2584,23 +2817,44 @@ export function Canvas({
       });
     }
 
+    if (traces[hedef.id]) {
+      maddeler.push({
+        id: 'izini-temizle',
+        label: 'Bu Nesnenin İzini Temizle',
+        separatorBefore: true,
+        onSelect: () => clearTrace(hedef.id),
+      });
+    }
     if (Object.keys(traces).length > 0) {
       maddeler.push({
         id: 'izleri-temizle',
         label: 'Tüm İzleri Temizle',
-        separatorBefore: true,
+        separatorBefore: !traces[hedef.id],
         onSelect: () => clearTraces(),
       });
     }
 
-    // "Sil" her nesne türünde bulunur
+    // "Sil" her nesne türünde bulunur. Delete tuşu ve seçim çubuğuyla aynı kümeyi siler: tıklanan nesne seçimin
+    // içindeyse seçimin tamamı (Kopyala ile aynı targetIds). Şekil silinince kendi kullanılmayan noktaları da gider.
+    const silAciklamasi = targetIds.length > 1 ? `${targetIds.length} nesne silindi` : undefined;
     maddeler.push({
       id: 'sil',
-      label: 'Sil',
+      label: targetIds.length > 1 ? `Seçili ${targetIds.length} nesneyi sil` : 'Sil',
       danger: true,
       separatorBefore: maddeler.length > 0,
-      onSelect: () => deleteObject(hedef.id),
+      onSelect: () => deleteObjects(targetIds, silAciklamasi),
     });
+    // Kaçış kapısı: yalnızca şekli siler, noktalar yerinde kalır. Yalnızca varsayılan silmenin GÖRÜNÜR bir noktayı
+    // götüreceği durumlarda görünür (nokta, açı, ölçüm ve ortak noktalı şekillerde çıkmaz).
+    const gidecekNoktalar = planDeletion(objects, targetIds).ownPointIds;
+    if (gidecekNoktalar.some(id => pointsById.get(id)?.visible !== false)) {
+      maddeler.push({
+        id: 'yalnizca-sekli-sil',
+        label: 'Yalnızca şekli sil (noktalar kalsın)',
+        danger: true,
+        onSelect: () => deleteObjects(targetIds, silAciklamasi, { keepPoints: true }),
+      });
+    }
     return maddeler.map(item => item.id.startsWith('olc-') && item.onSelect ? {
       ...item,
       onSelect: () => {
@@ -2627,6 +2881,9 @@ export function Canvas({
     splitCircleAtPoints,
     splitArcAtPoint,
     uzerindekiNoktalar,
+    measureArcBetween,
+    deleteObjects,
+    setHintMessage,
     connectPoints,
     disconnectPoints,
     fitPolynomialToPoints,
@@ -2646,9 +2903,14 @@ export function Canvas({
     clearTraces,
     sliderPlaying,
     toggleSliderPlayback,
+    styleMode,
+    setViewport,
+    esitlik,
   ]);
 
   const handleObjectMouseDown = (e: React.MouseEvent, obj: MathObject) => {
+    // El aracı (orta tuş / Alt) görünümü kaydırır: basış yutulmaz, nesne seçilmez (gorunumKaydirma.ts)
+    if (!nesneBasisiIslenmeli(activeTool, e)) return;
     if (e.button !== 0) return; // Sadece sol tık
     e.stopPropagation();
 
@@ -2663,6 +2925,12 @@ export function Canvas({
 
     if (activeTool === 'delete') {
       deleteObject(obj.id);
+      return;
+    }
+
+    // Yay Ölç noktalarla çalışır: çembere (ya da başka bir şekle) tıklanınca yol göster
+    if (activeTool === 'measure_arc' && obj.type !== 'point') {
+      setHintMessage('Yay Ölç: çemberin kendisine değil, üzerindeki NOKTALARA tıklayın.');
       return;
     }
 
@@ -2900,6 +3168,8 @@ export function Canvas({
 
   const handleSolidMouseDown = useCallback(
     (solid: Solid3DObject, e: React.MouseEvent) => {
+      // El aracında cismin izdüşümü de görünümü kaydırır; basış yutulmaz (gorunumKaydirma.ts)
+      if (!nesneBasisiIslenmeli(activeTool, e)) return;
       e.stopPropagation();
       if (e.button !== 0) return;
 
@@ -2908,8 +3178,10 @@ export function Canvas({
         const next = isAlreadySelected
           ? selectedSolidIds.filter((id) => id !== solid.id)
           : [...selectedSolidIds, solid.id];
-        onSelectSolids?.(next);
-        onSelectSolid?.(next.length > 0 ? next[next.length - 1] : null);
+        // Çoklu seçim listesi onSelectSolids ile verilir; ardından onSelectSolid çağrılırsa
+        // (tek kimliklik liste kurar) Shift/Ctrl ile kurulan seçim silinirdi.
+        if (onSelectSolids) onSelectSolids(next);
+        else onSelectSolid?.(next.length > 0 ? next[next.length - 1] : null);
       } else {
         onSelectSolid?.(solid.id);
         onSelectSolids?.([solid.id]);
@@ -2933,7 +3205,7 @@ export function Canvas({
         hasMoved: false,
       });
     },
-    [selectedSolidId, selectedSolidIds, onSelectSolid, onSelectSolids, setSelectedObjectId, setSelectedObjectIds, viewport]
+    [activeTool, selectedSolidId, selectedSolidIds, onSelectSolid, onSelectSolids, setSelectedObjectId, setSelectedObjectIds, viewport]
   );
 
   // Çokgeni belirli bir açıyla döndürme (pozitif: saat yönünün tersi, negatif: saat yönü)
@@ -3029,6 +3301,8 @@ export function Canvas({
   };
 
   const handleStartRotateShape = (e: React.MouseEvent, obj: MathObject) => {
+    // El aracı bir GÖRÜNÜM aracıdır: döndürme kolu da kaydırır, şekil dönmez (gorunumKaydirma.ts)
+    if (!nesneBasisiIslenmeli(activeTool, e)) return;
     e.stopPropagation();
     e.preventDefault();
 
@@ -3090,12 +3364,12 @@ export function Canvas({
       if (lastDeg !== 0) {
         recordHistory(`${obj.label || 'Şekil'} ${formatTurkishNumber(lastDeg)}° döndürüldü`);
       }
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('pointermove', handleMouseMove);
+      window.removeEventListener('pointerup', handleMouseUp);
     };
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('pointermove', handleMouseMove);
+    window.addEventListener('pointerup', handleMouseUp);
   };
 
   // Yansıtma Fonksiyonu: Herhangi bir simetri doğrusuna (p1, p2) göre nesneyi yansıt
@@ -3196,23 +3470,67 @@ export function Canvas({
     });
   };
 
+  // Özel zemin renginin tonu (koyu temada açık zemin → tuvalin içi açık temayla çizilir)
+  // Temaya duyarlı zemin: koyu temada açık renk seçimi koyu bir tona dönüşür, koordinat sistemi koyu kalır
+  const { isDark: koyuTema } = useTheme();
+  const tuvalZemini = useMemo(() => temaZemini(viewport.backgroundColor, koyuTema), [viewport.backgroundColor, koyuTema]);
+  const zeminTonuDegeri = useMemo(() => zeminTonu(tuvalZemini), [tuvalZemini]);
+
   // Eksen Çizgileri ve Merkez
   const originScreen = useMemo(
     () => worldToScreen({ x: 0, y: 0 }, viewport),
     [viewport]
   );
 
+  // Eksen sayıları, çentikler ve +x / +y / -y rozetlerinin yerleşimi (eksenSayilari.ts): eksen ekran dışındayken
+  // kenara yapışan sayılar sol panelin, "<" tutamacının, araç düğmelerinin, alt bilginin ve yakınlaştırma
+  // düğmelerinin altına girmez; köşede birbirini ezmez.
+  const eksenYerlesimi = useMemo(() => {
+    if (!viewport.showAxes) return null;
+    const hazirla = (degerler: number[], ekran: (d: number) => number, uzunluk: number): EksenCentigi[] => {
+      const out: EksenCentigi[] = [];
+      for (const deger of degerler) {
+        if (deger === 0) continue;
+        const e = ekran(deger);
+        if (e < 0 || e > uzunluk) continue;
+        out.push({ deger, ekran: e, metin: formatTurkishNumber(deger) });
+      }
+      return out;
+    };
+    return eksenSayilariniYerlestir({
+      genislik: viewport.width,
+      yukseklik: viewport.height,
+      orijin: originScreen,
+      xCentikleri: hazirla(gridLines.xLines, (d) => worldToScreen({ x: d, y: 0 }, viewport).x, viewport.width),
+      yCentikleri: hazirla(gridLines.yLines, (d) => worldToScreen({ x: 0, y: d }, viewport).y, viewport.height),
+      adim: gridInfo.step,
+      yaziBoyu: fs(10, 'axis'),
+      engeller: tuvalEngelleri(viewport.width, viewport.height, { cisimSecici: solids.length > 0 }),
+    });
+  }, [viewport, originScreen, gridLines, gridInfo.step, fs, solids.length]);
+  // Sayıların zemin renginde halesi: ızgara çizgileri ve şekiller üstünde okunur kalır (özel zemin, koyu tema, zemin-acik)
+  const eksenSayiHalesi = {
+    stroke: tuvalZemini || 'hsl(var(--background))',
+    strokeWidth: Math.min(6, Math.max(2.5, fs(3, 'axis'))),
+    strokeLinejoin: 'round' as const,
+    paintOrder: 'stroke',
+  };
+
   return (
     <div
       ref={containerRef}
-      className="relative flex-1 min-w-0 min-h-0 h-full w-full bg-[#fdfbf7] dark:bg-[#14151a] overflow-hidden select-none cursor-crosshair"
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
+      data-zemin-tonu={zeminTonuDegeri ?? undefined}
+      className={`relative flex-1 min-w-0 min-h-0 h-full w-full bg-background overflow-hidden select-none ${imlecSinifi(activeTool, 'bos', { kaydiriliyor: isPanning })} ${
+        // Seçilen zemin rengi açık/koyu ise tuvalin içi o zemine uygun temayla çizilir (yazı, ızgara, düğmeler okunur kalır)
+        zeminTonuDegeri === 'acik' ? 'zemin-acik' : zeminTonuDegeri === 'koyu' ? 'dark' : ''
+      }`}
+      onPointerUp={handleMouseUp}
+      onPointerLeave={handleMouseUp}
     >
       {/* 1. ÜST 2D / 3D DÜZLEM VE SEÇENEKLER ŞERİDİ (Referans Görsel Birebir) */}
-      <div className="absolute top-3 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
+      <div className="absolute top-3 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
         {/* Sol alan: düzlem ve ayrıntı menüleri */}
-        <div className="flex items-center gap-2 pointer-events-auto">
+        <div className="flex flex-wrap min-w-0 items-center gap-2 pointer-events-auto">
           <button
             type="button"
             onClick={() => setActiveTool('select')}
@@ -3222,135 +3540,73 @@ export function Canvas({
             title="Seç ve Taşı (V)"
             className={`relative w-9 h-9 shrink-0 rounded-xl flex items-center justify-center border shadow-sm backdrop-blur-md transition-colors cursor-pointer ${
               activeTool === 'select'
-                ? 'bg-blue-600 border-blue-600 text-white'
-                : 'bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-blue-50 dark:hover:bg-slate-800'
+                ? 'bg-primary border-primary text-primary-foreground'
+                : 'bg-card/95 border-border text-foreground hover:bg-accent'
             }`}
           >
             <MousePointer className="w-5 h-5" />
             <kbd className="absolute bottom-0.5 right-1 text-[8px] leading-none opacity-75">V</kbd>
           </button>
-          {/* 2. Seçenek: Dik koordinat sistemi / Kareli düzlem / Boş düzlem */}
-          <div className="relative">
-            <button
-              onClick={() => setOpenDropdown(openDropdown === 'plane' ? null : 'plane')}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-2 border-teal-600/70 dark:border-teal-500/80 shadow-sm text-xs font-black text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
-            >
-              <span>
-                {planeType === 'dik_koordinat'
-                  ? 'Dik koordinat sistemi'
-                  : planeType === 'kareli_duzlem'
-                  ? 'Kareli düzlem'
-                  : 'Boş düzlem'}
-              </span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-            </button>
-
-            {openDropdown === 'plane' && (
-              <div className="absolute left-0 top-11 w-52 p-1.5 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 z-30 space-y-1 text-xs">
-                <button
-                  onClick={() => {
-                    setPlaneType('dik_koordinat');
-                    setViewport((prev) => ({ ...prev, showGrid: true, showAxes: true }));
-                    setOpenDropdown(null);
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                    planeType === 'dik_koordinat'
-                      ? 'bg-[#2563eb] text-white shadow-sm'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  Dik koordinat sistemi
-                </button>
-
-                <button
-                  onClick={() => {
-                    setPlaneType('kareli_duzlem');
-                    setViewport((prev) => ({ ...prev, showGrid: true, showAxes: false, showCoordinates: false }));
-                    setOpenDropdown(null);
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                    planeType === 'kareli_duzlem'
-                      ? 'bg-[#2563eb] text-white shadow-sm'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  Kareli düzlem
-                </button>
-
-                <button
-                  onClick={() => {
-                    setPlaneType('bos_duzlem');
-                    setViewport((prev) => ({ ...prev, showGrid: false, showAxes: false, showCoordinates: false }));
-                    setOpenDropdown(null);
-                  }}
-                  className={`w-full text-left px-3 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                    planeType === 'bos_duzlem'
-                      ? 'bg-[#2563eb] text-white shadow-sm'
-                      : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  Boş düzlem
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* 3. Seçenek: Sade */}
-          <div className="relative">
-            <button
-              onClick={() => setOpenDropdown(openDropdown === 'style' ? null : 'style')}
-              className="flex items-center gap-2 px-3.5 py-1.5 rounded-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-sm text-xs font-black text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
-            >
-              <span>{styleMode}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            </button>
-
-            {openDropdown === 'style' && (
-              <div className="absolute left-0 top-11 w-36 p-1.5 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 z-30 space-y-1 text-xs">
-                {(['Ayrıntılı', 'Sade'] as const).map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => {
-                      setStyleMode(s);
-                      if (s === 'Sade') {
-                        setViewport((prev) => ({
-                          ...prev,
-                          showCoordinates: false,
-                          showMeasurements: false,
-                        }));
-                      } else {
-                        setViewport((prev) => ({
-                          ...prev,
-                          showMeasurements: true,
-                        }));
-                      }
-                      setOpenDropdown(null);
-                    }}
-                    className={`w-full text-left px-3 py-2 rounded-xl font-bold transition-all cursor-pointer ${
-                      styleMode === s
-                        ? 'bg-[#2563eb] text-white shadow-sm'
-                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Görünümü Kaydır (El): imlecin hemen yanında */}
+          <button
+            type="button"
+            onClick={() => setActiveTool(activeTool === 'pan' ? 'select' : 'pan')}
+            aria-label="Görünümü Kaydır (El Aracı)"
+            aria-pressed={activeTool === 'pan'}
+            title="Görünümü Kaydır (El Aracı)"
+            className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center border shadow-sm backdrop-blur-md transition-colors cursor-pointer ${
+              activeTool === 'pan'
+                ? 'bg-primary border-primary text-primary-foreground'
+                : 'bg-card/95 border-border text-foreground hover:bg-accent'
+            }`}
+          >
+            <Hand className="w-5 h-5" />
+          </button>
+          {/* Geri Al / Yinele */}
+          <button
+            type="button"
+            onClick={undo}
+            disabled={!canUndo}
+            aria-label="Geri Al"
+            aria-keyshortcuts="Control+Z"
+            title="Geri Al (Ctrl+Z)"
+            className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center border shadow-sm backdrop-blur-md transition-colors bg-card/95 border-border ${
+              canUndo
+                ? 'text-foreground hover:bg-accent cursor-pointer'
+                : 'text-muted-foreground/50 cursor-not-allowed'
+            }`}
+          >
+            <RotateCcw className="w-[18px] h-[18px]" />
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={!canRedo}
+            aria-label="Yinele"
+            aria-keyshortcuts="Control+Y"
+            title="Yinele (Ctrl+Y)"
+            className={`w-9 h-9 shrink-0 rounded-xl flex items-center justify-center border shadow-sm backdrop-blur-md transition-colors bg-card/95 border-border ${
+              canRedo
+                ? 'text-foreground hover:bg-accent cursor-pointer'
+                : 'text-muted-foreground/50 cursor-not-allowed'
+            }`}
+          >
+            <RotateCw className="w-[18px] h-[18px]" />
+          </button>
+          {/* Düzlem (eksen / ızgara) ve Ayrıntılı / Sade seçimi sağ tık menüsünde ve Görünüm menüsündedir */}
         </div>
 
         {/* Sağ Alan: 3D Cisim Üstten Görünüm Modu (Varsa) */}
         <div className="flex items-center gap-2 pointer-events-auto">
 
           {solids && solids.length > 0 && (
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 shadow-xs">
+            <div className="flex items-center bg-muted p-0.5 rounded-xl border border-border/80 shadow-xs">
               <button
                 type="button"
                 onClick={() => setSolidProjectionMode('top')}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   solidProjectionMode === 'top'
-                    ? 'bg-white dark:bg-slate-900 text-foreground shadow-xs font-bold'
+                    ? 'bg-card text-foreground shadow-xs font-bold'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
                 title="3D cisimler 2D düzlemde üstten görünüm (kare, dikdörtgen, daire) olarak gösterilir"
@@ -3363,12 +3619,12 @@ export function Canvas({
                 onClick={() => setSolidProjectionMode('axonometric')}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                   solidProjectionMode === 'axonometric'
-                    ? 'bg-white dark:bg-slate-900 text-foreground shadow-xs font-bold'
+                    ? 'bg-card text-foreground shadow-xs font-bold'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
                 title="3D cisimler 2D düzlemde 3D hacimli aksonometrik izdüşümle gösterilir"
               >
-                <span>🧊</span>
+                <Box className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>3D İzdüşüm</span>
               </button>
             </div>
@@ -3380,13 +3636,51 @@ export function Canvas({
       <ToolCursor tool={activeTool} surfaceRef={svgRef} />
       <svg
         ref={svgRef}
+        data-workspace-canvas="2d"
         className="w-full h-full block transition-colors duration-200"
-        style={{ backgroundColor: viewport.backgroundColor || 'transparent' }}
+        style={{ backgroundColor: tuvalZemini || 'transparent', touchAction: 'none' }}
+        /* EL ARACI KORUMASI — tuvaldeki TEK kural (gorunumKaydirma.ts).
+           Basış, nesne katmanlarına inmeden önce burada süzülür: El aracı (ya da
+           orta tuş / Alt) etkinse olay hiçbir alt işleyiciye ulaşmaz, görünüm kayar.
+           Böylece yeni bir nesne katmanı eklendiğinde kuralı unutamaz. */
+        onPointerDownCapture={(e) => {
+          kaydirmaYuttuRef.current = false;
+          if (gorunumKaydirmaBasisiMi(activeTool, e) && !kaydirmaDisiHedefMi(e.target as Element)) {
+            kaydirmaYuttuRef.current = true;
+            e.preventDefault();
+            e.stopPropagation();
+            cancelLongPress();
+            kaydirmayaBasla(e.clientX, e.clientY, e.pointerId);
+            return;
+          }
+          if ((e.target as Element).closest('foreignObject, input, button, textarea, select')) return;
+          if (e.pointerType !== 'mouse') e.preventDefault();
+          // Yakalamayı basılan öğede tut: SVG köküne almak etiket/düğme click'ini yutar.
+          try { (e.target as Element).setPointerCapture(e.pointerId); } catch { /* Yakalama desteklenmiyorsa normal olay akışı sürer. */ }
+        }}
+        /* Dokunmada uzun basış menüsü de aynı korumadan geçer: parmakla kaydırırken
+           600 ms sonra nesne menüsü açılmasın. */
+        onTouchStartCapture={(e) => {
+          if (gorunumKaydirmaBasisiMi(activeTool) && !kaydirmaDisiHedefMi(e.target as Element)) e.stopPropagation();
+        }}
+        /* Kaydırma basışının ardından gelen tıklama nesneyi değiştirmesin:
+           işaret kutusu değişmez, düğme çalışmaz, ölçüm etiketi gizlenmez. */
+        onClickCapture={(e) => {
+          if (!kaydirmaYuttuRef.current) return;
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDoubleClickCapture={(e) => {
+          if (!kaydirmaYuttuRef.current) return;
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onPointerCancel={() => { cancelLongPress(); handleMouseUp(); }}
         /* Süzgeç KÖKE uygulanır; böylece dışa aktarımda kök SVG kopyalandığında
            (PNG/SVG/PDF/Word) çıktı da kendiliğinden siyah–beyaz olur. */
         filter={viewport.blackWhite ? 'url(#geoeba-siyah-beyaz)' : undefined}
-        onMouseMove={handleMouseMove}
-        onMouseDown={handleMouseDown}
+        onPointerMove={handleMouseMove}
+        onPointerDown={handleMouseDown}
         onContextMenu={(e) => {
           e.preventDefault();
           setContextTarget({ obj: null, x: e.clientX, y: e.clientY, edgeIndex: null });
@@ -3406,12 +3700,75 @@ export function Canvas({
           y={0}
           width="100%"
           height="100%"
-          fill={viewport.backgroundColor || 'transparent'}
+          fill={tuvalZemini || 'transparent'}
         />
 
+        {/* 1a. NOKTALI IZGARA ("noktalı zemin"): kesişimlerde noktalar; tam birimlerde ve 5'in katlarında daha iri.
+            Tek dikdörtgen + SVG deseni: binlerce <circle> yerine sabit maliyet. */}
+        {viewport.showGrid && viewport.gridStyle === 'noktali' && (() => {
+          const desenler = [
+            { id: 'geoeba-noktali-izgara-adim', aralik: gridInfo.step * viewport.zoom, r: 1.6, sinif: 'fill-ada-murekkep-2/45 dark:fill-ada-fildisi/30' },
+            ...(gridInfo.step < 1 ? [{ id: 'geoeba-noktali-izgara-birim', aralik: viewport.zoom, r: 2.1, sinif: 'fill-ada-murekkep-2/65 dark:fill-ada-fildisi/45' }] : []),
+            { id: 'geoeba-noktali-izgara-ana', aralik: 5 * viewport.zoom, r: 2.8, sinif: 'fill-ada-murekkep-2/80 dark:fill-ada-fildisi/60' },
+          ].filter((d) => d.aralik >= 6);
+          return (
+            <g className="grid-dots select-none pointer-events-none" data-grid-style="noktali" opacity={viewport.gridOpacity ?? 1}>
+              <defs>
+                {desenler.map((d) => (
+                  <pattern
+                    key={d.id}
+                    id={d.id}
+                    patternUnits="userSpaceOnUse"
+                    width={d.aralik}
+                    height={d.aralik}
+                    x={originScreen.x - d.aralik / 2}
+                    y={originScreen.y - d.aralik / 2}
+                  >
+                    <circle cx={d.aralik / 2} cy={d.aralik / 2} r={d.r} className={d.sinif} />
+                  </pattern>
+                ))}
+              </defs>
+              {desenler.map((d) => (
+                <rect key={d.id} x={0} y={0} width="100%" height="100%" fill={`url(#${d.id})`} />
+              ))}
+            </g>
+          );
+        })()}
+
+        {/* 1b. İZOMETRİK IZGARA: dikey ve ±30° eğik çizgi aileleri (eşkenar üçgen örgü, izometrik kâğıt).
+            Her aile tek bir döndürülmüş SVG deseni; çizgiler orijinden geçer, aralık = kenar × √3/2. */}
+        {viewport.showGrid && viewport.gridStyle === 'izometrik' && (() => {
+          const kenar = isometricSide(viewport, gridInfo.step) * viewport.zoom; // üçgen kenarı (piksel); yakalamayla aynı kural
+          const aralik = (kenar * Math.sqrt(3)) / 2;
+          if (aralik < 6) return null;
+          const aileler = [90, 30, -30];
+          return (
+            <g className="grid-isometric select-none pointer-events-none" data-grid-style="izometrik" opacity={viewport.gridOpacity ?? 1}>
+              <defs>
+                {aileler.map((aci) => (
+                  <pattern
+                    key={aci}
+                    id={`geoeba-izometrik-${aci < 0 ? 'eksi' : ''}${Math.abs(aci)}`}
+                    patternUnits="userSpaceOnUse"
+                    width={64}
+                    height={aralik}
+                    patternTransform={`translate(${originScreen.x} ${originScreen.y}) rotate(${-aci})`}
+                  >
+                    <line x1={0} y1={0} x2={64} y2={0} strokeWidth={1.1} className="stroke-ada-murekkep-2/30 dark:stroke-ada-fildisi/20" />
+                    <line x1={0} y1={aralik} x2={64} y2={aralik} strokeWidth={1.1} className="stroke-ada-murekkep-2/30 dark:stroke-ada-fildisi/20" />
+                  </pattern>
+                ))}
+              </defs>
+              {aileler.map((aci) => (
+                <rect key={aci} x={0} y={0} width="100%" height="100%" fill={`url(#geoeba-izometrik-${aci < 0 ? 'eksi' : ''}${Math.abs(aci)})`} />
+              ))}
+            </g>
+          );
+        })()}
+
         {/* 1. IZGARA KATMANI (NET VE BELİRGİN GRAFİK KAĞIDI IZGARASI) */}
-        {viewport.showGrid && (
-          <g className="grid-lines select-none pointer-events-none">
+        {viewport.showGrid && (viewport.gridStyle ?? 'kareli') === 'kareli' && (
+          <g className="grid-lines select-none pointer-events-none" data-grid-style="kareli" opacity={viewport.gridOpacity ?? 1}>
             {gridLines.xLines.map((xVal) => {
               const p = worldToScreen({ x: xVal, y: 0 }, viewport);
               const isMainAxis = xVal === 0;
@@ -3430,10 +3787,10 @@ export function Canvas({
                   y2={Math.max(viewport.height, 2000) + 1000}
                   className={
                     isMajor
-                      ? 'stroke-slate-400/80 dark:stroke-slate-500/60'
+                      ? 'stroke-ada-murekkep-2/45 dark:stroke-ada-fildisi/25'
                       : isInteger
-                      ? 'stroke-slate-300/90 dark:stroke-slate-600/60'
-                      : 'stroke-slate-200/90 dark:stroke-slate-700/50'
+                      ? 'stroke-ada-murekkep-2/25 dark:stroke-ada-fildisi/15'
+                      : 'stroke-ada-murekkep-2/14 dark:stroke-ada-fildisi/8'
                   }
                   strokeWidth={isMajor ? 1.4 : isInteger ? 1.0 : 0.7}
                 />
@@ -3457,10 +3814,10 @@ export function Canvas({
                   y2={p.y}
                   className={
                     isMajor
-                      ? 'stroke-slate-400/80 dark:stroke-slate-500/60'
+                      ? 'stroke-ada-murekkep-2/45 dark:stroke-ada-fildisi/25'
                       : isInteger
-                      ? 'stroke-slate-300/90 dark:stroke-slate-600/60'
-                      : 'stroke-slate-200/90 dark:stroke-slate-700/50'
+                      ? 'stroke-ada-murekkep-2/25 dark:stroke-ada-fildisi/15'
+                      : 'stroke-ada-murekkep-2/14 dark:stroke-ada-fildisi/8'
                   }
                   strokeWidth={isMajor ? 1.4 : isInteger ? 1.0 : 0.7}
                 />
@@ -3505,7 +3862,7 @@ export function Canvas({
 
         {/* 3. EKSENLER VE SAYISAL ÇENTİKLER KATMANI */}
         {viewport.showAxes && (
-          <g fontSize={fs(10, 'axis')} className="axes text-muted-foreground font-mono">
+          <g fontSize={fs(10, 'axis')} className="axes text-muted-foreground font-mono pointer-events-none">
             {/* X Ekseni */}
             {originScreen.y >= -1000 && originScreen.y <= Math.max(viewport.height, 2000) + 1000 && (
               <>
@@ -3527,13 +3884,15 @@ export function Canvas({
                   points={`12,${originScreen.y - 6} 2,${originScreen.y} 12,${originScreen.y + 6}`}
                   fill="#737373"
                 />
-                {/* X Eksen Etiketi */}
-                <g transform={`translate(${viewport.width - 46}, ${Math.max(14, Math.min(viewport.height - 30, originScreen.y - 24))})`}>
+                {/* X Eksen Etiketi: yalnız eksen ekrandayken, düğmelere ve alt bilgiye girmeyen yerde */}
+                {eksenYerlesimi?.rozetler.artiX.gorunur && (
+                <g transform={`translate(${eksenYerlesimi.rozetler.artiX.x}, ${eksenYerlesimi.rozetler.artiX.y})`}>
                   <rect width="36" height="20" rx="6" fill="#737373" className="shadow-sm" />
                   <text x="18" y="14" textAnchor="middle" fill="#ffffff" fontSize={fs(11, 'axis')} className="font-black font-sans">
                     +x
                   </text>
                 </g>
+                )}
               </>
             )}
 
@@ -3558,77 +3917,57 @@ export function Canvas({
                   points={`${originScreen.x - 6},${viewport.height - 12} ${originScreen.x},${viewport.height - 2} ${originScreen.x + 6},${viewport.height - 12}`}
                   fill="#737373"
                 />
-                {/* Y Eksen Üst Etiketi (+y) */}
-                <g transform={`translate(${Math.max(10, Math.min(viewport.width - 46, originScreen.x + 10))}, 10)`}>
+                {/* Y Eksen Üst Etiketi (+y): yalnız eksen ekrandayken */}
+                {eksenYerlesimi?.rozetler.artiY.gorunur && (
+                <g transform={`translate(${eksenYerlesimi.rozetler.artiY.x}, ${eksenYerlesimi.rozetler.artiY.y})`}>
                   <rect width="36" height="20" rx="6" fill="#737373" className="shadow-sm" />
                   <text x="18" y="14" textAnchor="middle" fill="#ffffff" fontSize={fs(11, 'axis')} className="font-black font-sans">
                     +y
                   </text>
                 </g>
-                {/* Y Eksen Alt Etiketi (-y) */}
-                <g transform={`translate(${Math.max(10, Math.min(viewport.width - 46, originScreen.x + 10))}, ${viewport.height - 30})`}>
+                )}
+                {/* Y Eksen Alt Etiketi (-y): yalnız eksen ekrandayken, alt bilgiye ve düğmelere girmeden */}
+                {eksenYerlesimi?.rozetler.eksiY.gorunur && (
+                <g transform={`translate(${eksenYerlesimi.rozetler.eksiY.x}, ${eksenYerlesimi.rozetler.eksiY.y})`}>
                   <rect width="36" height="20" rx="6" fill="#737373" className="shadow-sm" />
                   <text x="18" y="14" textAnchor="middle" fill="#ffffff" fontSize={fs(11, 'axis')} className="font-black font-sans">
                     -y
                   </text>
                 </g>
+                )}
               </>
             )}
 
-            {/* Sayısal Değerler (Çentikler) */}
-            {gridLines.xLines.map((xVal) => {
-              if (xVal === 0) return null;
-              const p = worldToScreen({ x: xVal, y: 0 }, viewport);
-              const clampedOriginY = Math.max(8, Math.min(viewport.height - 8, originScreen.y));
-              const labelY = Math.max(16, Math.min(viewport.height - 8, originScreen.y + 14));
-              return (
-                <g key={`tx-${xVal}`}>
-                  <line
-                    x1={p.x}
-                    y1={clampedOriginY - 3}
-                    x2={p.x}
-                    y2={clampedOriginY + 3}
-                    stroke="#737373"
-                    strokeWidth={1.5}
-                  />
-                  <text
-                    x={p.x}
-                    y={labelY}
-                    textAnchor="middle"
-                    fontSize={fs(10, 'axis')} className="fill-foreground/80 select-none font-bold"
-                  >
-                    {formatTurkishNumber(xVal)}
-                  </text>
+            {/* Sayısal Değerler (Çentikler): yerleşim eksenSayilari.ts'te (eksen ekran dışındayken kenara yapışır,
+                sol panelden / tutamaçtan uzak durur, düğmelerin ve alt bilginin altına düşen sayı çizilmez) */}
+            {eksenYerlesimi && (['x', 'y'] as const).map((eksen) =>
+              eksenYerlesimi[eksen].ogeler.map((o) => (
+                <g key={`t${eksen}-${o.deger}`}>
+                  {o.centikGorunur && (
+                    <line
+                      x1={o.centik.x1}
+                      y1={o.centik.y1}
+                      x2={o.centik.x2}
+                      y2={o.centik.y2}
+                      stroke="#737373"
+                      strokeWidth={1.5}
+                    />
+                  )}
+                  {o.sayi.gorunur && (
+                    <text
+                      data-eksen={eksen}
+                      x={o.sayi.x}
+                      y={o.sayi.y}
+                      textAnchor={o.sayi.hiza}
+                      {...eksenSayiHalesi}
+                      fontSize={fs(10, 'axis')} className="fill-foreground/80 select-none font-bold"
+                    >
+                      {o.sayi.metin}
+                    </text>
+                  )}
                 </g>
-              );
-            })}
-
-            {gridLines.yLines.map((yVal) => {
-              if (yVal === 0) return null;
-              const p = worldToScreen({ x: 0, y: yVal }, viewport);
-              const clampedOriginX = Math.max(8, Math.min(viewport.width - 8, originScreen.x));
-              const labelX = Math.max(8, Math.min(viewport.width - 24, originScreen.x - 8));
-              return (
-                <g key={`ty-${yVal}`}>
-                  <line
-                    x1={clampedOriginX - 3}
-                    y1={p.y}
-                    x2={clampedOriginX + 3}
-                    y2={p.y}
-                    stroke="#737373"
-                    strokeWidth={1.5}
-                  />
-                  <text
-                    x={labelX}
-                    y={p.y + 3.5}
-                    textAnchor="end"
-                    fontSize={fs(10, 'axis')} className="fill-foreground/80 select-none font-bold"
-                  >
-                    {formatTurkishNumber(yVal)}
-                  </text>
-                </g>
-              );
-            })}
+              ))
+            )}
 
             {/* O (Orijin 0,0) Rozeti ve Odak Halkası */}
             {originScreen.x >= -30 && originScreen.x <= viewport.width + 30 && originScreen.y >= -30 && originScreen.y <= viewport.height + 30 && (
@@ -3656,8 +3995,23 @@ export function Canvas({
             })
             .join(' ');
           return (
-            <g key={`trace-${id}`} className="pointer-events-none select-none">
+            <g key={`trace-${id}`} className="select-none" data-iz-id={id}>
+              {/* Görünmez geniş yakalayıcı: iz çizgisine sağ tıklayınca "Bu izi sil" menüsü açılır (sol tık tuvale geçer) */}
               <polyline
+                points={ptsStr}
+                fill="none"
+                stroke="transparent"
+                strokeWidth={12}
+                style={{ pointerEvents: 'stroke' }}
+                data-iz-yakalayici=""
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextTarget({ obj: null, x: e.clientX, y: e.clientY, edgeIndex: null, izId: id });
+                }}
+              />
+              <polyline
+                className="pointer-events-none"
                 points={ptsStr}
                 fill="none"
                 stroke={trace.color || '#2563eb'}
@@ -3673,6 +4027,7 @@ export function Canvas({
                 return (
                   <circle
                     key={`tr-pt-${id}-${idx}`}
+                    className="pointer-events-none"
                     cx={sp.x}
                     cy={sp.y}
                     r={2}
@@ -3759,7 +4114,7 @@ export function Canvas({
             }
 
             return (
-              <g key={fn.id} className="function-plot" data-object-id={fn.id} onContextMenu={(e) => openContextMenu(e, fn)} onMouseDown={(e) => handleObjectMouseDown(e, fn)} onTouchStart={(e) => handleTouchStartOnObject(e, fn)} onTouchMove={cancelLongPress} onTouchEnd={() => cancelLongPress()} onTouchCancel={() => cancelLongPress()}>
+              <g key={fn.id} className={`function-plot ${imlecSinifi(activeTool, 'nesne')}`} data-object-id={fn.id} onContextMenu={(e) => openContextMenu(e, fn)} onPointerDown={(e) => handleObjectMouseDown(e, fn)} onTouchStart={(e) => handleTouchStartOnObject(e, fn)} onTouchMove={cancelLongPress} onTouchEnd={() => cancelLongPress()} onTouchCancel={() => cancelLongPress()}>
                 <path d={pathD} fill="none" stroke="transparent" strokeWidth={14} />
                 <path
                   d={pathD}
@@ -3800,13 +4155,13 @@ export function Canvas({
             return (
               <g
                 key={poly.id}
-                onMouseDown={(e) => handleObjectMouseDown(e, poly)}
+                onPointerDown={(e) => handleObjectMouseDown(e, poly)}
                 data-object-id={poly.id} onContextMenu={(e) => openContextMenu(e, poly)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, poly)}
                 onTouchMove={cancelLongPress}
                 onTouchEnd={() => cancelLongPress()}
                 onTouchCancel={() => cancelLongPress()}
-                className={activeTool === 'select' ? 'cursor-move select-none' : 'cursor-pointer'}
+                className={`select-none ${imlecSinifi(activeTool, 'nesne')}`}
               >
                 <polygon
                   points={pointsAttr}
@@ -3840,8 +4195,12 @@ export function Canvas({
                       nx = -nx;
                       ny = -ny;
                     }
-                    const ex = ortaEkran.x + nx * 16;
-                    const ey = ortaEkran.y + ny * 16;
+                    // Eşitlik çentiği kenarın ortasındadır: etiket çentiğin ucuna değmesin. İşaretler açıkken tüm kenar
+                    // etiketleri aynı payla durur (çentik gelip gidince etiket sıçramaz).
+                    const centik = esitlik.isaretHaritasi.get(esitlik.temsilci.get(`edge:${poly.id}:${i}`) ?? '');
+                    const kenarAraligi = 16 + (centik || esitlik.otomatik ? etiketPayi(centik?.kalinlik ?? 2, styleSettings.strokeScale, 6) : 0);
+                    const ex = ortaEkran.x + nx * kenarAraligi;
+                    const ey = ortaEkran.y + ny * kenarAraligi;
 
                     const metin = `${formatTurkishNumber(uzunluk)} br`;
                     const genislik = Math.max(38, metin.length * 6.6 + 10);
@@ -3856,30 +4215,32 @@ export function Canvas({
                         onClick={et.onClick}
                         className="select-none"
                       >
-                        <rect
-                          x={ex - genislik / 2}
-                          y={ey - 10}
-                          width={genislik}
-                          height={20}
-                          rx="6"
-                          fill="#ffffff"
-                          fillOpacity={0.92}
-                          style={styleSettings.hideLabelBoxes ? { display: 'none' } : undefined}
-                          stroke={poly.color || '#10b981'}
-                          strokeWidth="1.2"
-                          className="dark:fill-slate-900"
-                        />
-                        <text
-                          x={ex}
-                          y={ey + 4}
-                          textAnchor="middle"
-                          fontSize="11"
-                          fontWeight="700"
-                          fill={poly.color || '#10b981'}
-                          className="dark:fill-emerald-300"
-                        >
-                          {metin}
-                        </text>
+                        {/* Kutu ve yazı kenara PARALEL döner (kullanıcı isteği); açı her karede uçlardan hesaplanır */}
+                        <g transform={etiketDondurme(dx, dy, ex, ey)}>
+                          <rect
+                            x={ex - genislik / 2}
+                            y={ey - 10}
+                            width={genislik}
+                            height={20}
+                            rx="6"
+                            fill="#ffffff"
+                            fillOpacity={0.92}
+                            style={styleSettings.hideLabelBoxes ? { display: 'none' } : undefined}
+                            stroke={poly.color || '#10b981'}
+                            strokeWidth="1.2"
+                            className="dark:fill-card"
+                          />
+                          <text
+                            x={ex}
+                            y={ey + 4}
+                            textAnchor="middle"
+                            fontSize="11"
+                            fontWeight="700"
+                            fill={poly.color || '#10b981'}
+                          >
+                            {metin}
+                          </text>
+                        </g>
                       </g>
                     );
                   })}
@@ -3912,13 +4273,13 @@ export function Canvas({
                           style={styleSettings.hideLabelBoxes ? { display: 'none' } : undefined}
                           stroke={poly.color || '#10b981'}
                           strokeWidth="1.2"
-                          className="shadow-sm dark:fill-slate-900"
+                          className="shadow-sm dark:fill-card"
                         />
                         <text
                           x="0"
                           y="-4"
                           textAnchor="middle"
-                          fontSize={fs(11, 'measure')} className="fill-emerald-700 dark:fill-emerald-400 font-bold font-sans"
+                          fontSize={fs(11, 'measure')} className="fill-ada-deniz-koyu dark:fill-ada-vurgu font-bold font-sans"
                         >
                           Alan = {formatTurkishNumber(area)} br²
                         </text>
@@ -3926,7 +4287,7 @@ export function Canvas({
                           x="0"
                           y="13"
                           textAnchor="middle"
-                          fontSize={fs(11, 'measure')} className="fill-indigo-700 dark:fill-indigo-400 font-bold font-sans"
+                          fontSize={fs(11, 'measure')} className="fill-ada-murekkep-2 dark:fill-ada-kum font-bold font-sans"
                         >
                           Çevre = {formatTurkishNumber(perimeter)} br
                         </text>
@@ -3944,13 +4305,13 @@ export function Canvas({
                           style={styleSettings.hideLabelBoxes ? { display: 'none' } : undefined}
                           stroke="#6366f1"
                           strokeWidth="1.2"
-                          className="shadow-sm dark:fill-slate-900"
+                          className="shadow-sm dark:fill-card"
                         />
                         <text
                           x="0"
                           y="5"
                           textAnchor="middle"
-                          fontSize={fs(11, 'measure')} className="fill-indigo-700 dark:fill-indigo-400 font-bold font-sans"
+                          fontSize={fs(11, 'measure')} className="fill-ada-murekkep-2 dark:fill-ada-kum font-bold font-sans"
                         >
                           Çevre = {formatTurkishNumber(perimeter)} br
                         </text>
@@ -3968,13 +4329,13 @@ export function Canvas({
                           style={styleSettings.hideLabelBoxes ? { display: 'none' } : undefined}
                           stroke="#10b981"
                           strokeWidth="1.2"
-                          className="shadow-sm dark:fill-slate-900"
+                          className="shadow-sm dark:fill-card"
                         />
                         <text
                           x="0"
                           y="5"
                           textAnchor="middle"
-                          fontSize={fs(11, 'measure')} className="fill-emerald-700 dark:fill-emerald-400 font-bold font-sans"
+                          fontSize={fs(11, 'measure')} className="fill-ada-deniz-koyu dark:fill-ada-vurgu font-bold font-sans"
                         >
                           Alan = {formatTurkishNumber(area)} br²
                         </text>
@@ -4010,8 +4371,16 @@ export function Canvas({
                 <g
                   key={solid.id}
                   id={`solid-${solid.id}`}
-                  className="cursor-move group"
-                  onMouseDown={(e) => handleSolidMouseDown(solid, e)}
+                  className={`group ${imlecSinifi(activeTool, 'cisim')}`}
+                  data-solid-id={solid.id}
+                  onPointerDown={(e) => handleSolidMouseDown(solid, e)}
+                  onContextMenu={(e) => {
+                    // Boş alan menüsü yerine cismin kendi menüsü (en az "Sil")
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setContextTarget(null);
+                    setCisimMenusu({ solidId: solid.id, ad: solid.name, x: e.clientX, y: e.clientY });
+                  }}
                 >
                   {/* ======================================================== */}
                   {/* A) ÜSTTEN GÖRÜNÜM MODU (Küp -> Kare, Prizma -> Dikdörtgen, vb.) */}
@@ -4155,14 +4524,14 @@ export function Canvas({
                               fillOpacity="0.92"
                               stroke="#cbd5e1"
                               strokeWidth="0.9"
-                              className="dark:fill-slate-900 dark:stroke-slate-700 shadow-2xs"
+                              className="dark:fill-card dark:stroke-border shadow-2xs"
                             />
                             <text
                               x={lbl.x}
                               y={lbl.y + 3}
                               textAnchor="middle"
                               fontSize="10"
-                              className="font-mono font-bold fill-slate-800 dark:fill-slate-200"
+                              className="font-mono font-bold fill-foreground"
                             >
                               {lbl.text}
                             </text>
@@ -4396,6 +4765,7 @@ export function Canvas({
           .filter((o) => o.type === 'measurement' && o.visible !== false)
           .map((obj) => {
             const m = obj as MeasurementObject;
+            if (m.kind === 'arc') return null; // yay ölçümü 7.5 katmanında çizilir
             const noktalar = m.pointIds.map((id) => pointsById.get(id));
             if (noktalar.some((p) => !p)) return null;
             if (!showDetails || m.showValue === false) return null;
@@ -4423,10 +4793,10 @@ export function Canvas({
               }
               const metin = mesafeEtiketMetni(a, b);
               const genislik = Math.max(64, metin.length * 6.4 + 14);
-              // Kutunun çizgiye dik yöndeki yarı uzanımı sahnedeki EN GENİŞ mesafe etiketiyle hesaplanır ki farklı
-              // genişlikteki etiketlerin katları da çakışmasın. İlk kat çizgiden ve uç nokta harflerinden ~26 px açıkta
-              // durur; her kat bir öncekinin dış kenarını 4 px aşar.
-              const yariUzanim = Math.abs(nx) * mesafeEtiketiYariGenislik + Math.abs(ny) * 11;
+              // Kutu ölçü çizgisine PARALEL döndüğü için çizgiye dik yarı uzanımı her açıda kutu yarı yüksekliğidir
+              // (11 px). İlk kat çizgiden ve uç nokta harflerinden ~26 px açıkta durur; her kat bir öncekinin dış
+              // kenarını 4 px aşar.
+              const yariUzanim = 11;
               const ofs = 26 + yariUzanim + distanceLabelLevel(objects, m.id) * (2 * yariUzanim + 4);
               const ax = sa.x + nx * ofs;
               const ay = sa.y + ny * ofs;
@@ -4438,19 +4808,22 @@ export function Canvas({
                   <line x1={ax} y1={ay} x2={bx} y2={by} stroke={renk} strokeWidth={1.25} strokeDasharray="4 3" />
                   <line x1={ax - nx * 5} y1={ay - ny * 5} x2={ax + nx * 5} y2={ay + ny * 5} stroke={renk} strokeWidth={1.25} />
                   <line x1={bx - nx * 5} y1={by - ny * 5} x2={bx + nx * 5} y2={by + ny * 5} stroke={renk} strokeWidth={1.25} />
-                  <rect
-                    x={(ax + bx) / 2 - genislik / 2}
-                    y={(ay + by) / 2 - 11}
-                    width={genislik}
-                    height={22}
-                    rx={7}
-                    className="fill-background/95 stroke-border"
-                    strokeWidth={1}
-                    style={styleSettings.hideLabelBoxes ? { display: 'none' } : undefined}
-                  />
-                  <text x={(ax + bx) / 2} y={(ay + by) / 2 + 4} textAnchor="middle" fontSize={fs(11, 'measure')} fill={renk} className="font-bold">
-                    {metin}
-                  </text>
+                  {/* Kutu ve yazı ölçü çizgisine PARALEL döner; açı her karede uçlardan hesaplanır */}
+                  <g transform={etiketDondurme(dx, dy, (ax + bx) / 2, (ay + by) / 2)}>
+                    <rect
+                      x={(ax + bx) / 2 - genislik / 2}
+                      y={(ay + by) / 2 - 11}
+                      width={genislik}
+                      height={22}
+                      rx={7}
+                      className="fill-background/95 stroke-border"
+                      strokeWidth={1}
+                      style={styleSettings.hideLabelBoxes ? { display: 'none' } : undefined}
+                    />
+                    <text x={(ax + bx) / 2} y={(ay + by) / 2 + 4} textAnchor="middle" fontSize={fs(11, 'measure')} fill={renk} className="font-bold">
+                      {metin}
+                    </text>
+                  </g>
                 </g>
               );
             }
@@ -4719,6 +5092,8 @@ export function Canvas({
                   strokeWidth={2.5}
                   className="cursor-grab active:cursor-grabbing drop-shadow-md"
                   onPointerDown={(e) => {
+                    // El aracında tutamak da görünümü kaydırır; kaydırıcı değeri değişmez (gorunumKaydirma.ts)
+                    if (!nesneBasisiIslenmeli(activeTool, e)) return;
                     if (e.button !== 0) return;
                     e.stopPropagation();
                     setSelectedObjectId(s.id);
@@ -4797,13 +5172,13 @@ export function Canvas({
             return (
               <g
                 key={shape.id}
-                onMouseDown={(e) => handleObjectMouseDown(e, shape)}
+                onPointerDown={(e) => handleObjectMouseDown(e, shape)}
                 data-object-id={shape.id} onContextMenu={(e) => openContextMenu(e, shape)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, shape)}
                 onTouchMove={cancelLongPress}
                 onTouchEnd={() => cancelLongPress()}
                 onTouchCancel={() => cancelLongPress()}
-                className={activeTool === 'select' ? 'cursor-move select-none' : 'cursor-pointer'}
+                className={`select-none ${imlecSinifi(activeTool, 'nesne')}`}
               >
                 {/* Görünmez kalın tutma alanı (ince yayı yakalamak zor olmasın) */}
                 <path d={d} fill="none" stroke="transparent" strokeWidth={14} />
@@ -4892,13 +5267,13 @@ export function Canvas({
             return (
               <g
                 key={elp.id}
-                onMouseDown={(e) => handleObjectMouseDown(e, elp)}
+                onPointerDown={(e) => handleObjectMouseDown(e, elp)}
                 data-object-id={elp.id} onContextMenu={(e) => openContextMenu(e, elp)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, elp)}
                 onTouchMove={cancelLongPress}
                 onTouchEnd={() => cancelLongPress()}
                 onTouchCancel={() => cancelLongPress()}
-                className={activeTool === 'select' ? 'cursor-move select-none' : 'cursor-pointer'}
+                className={`select-none ${imlecSinifi(activeTool, 'nesne')}`}
                 transform={elp.rotation ? `rotate(${-elp.rotation}, ${cS.x}, ${cS.y})` : undefined}
               >
                 <ellipse
@@ -5009,13 +5384,13 @@ export function Canvas({
             return (
               <g
                 key={circ.id}
-                onMouseDown={(e) => handleObjectMouseDown(e, circ)}
+                onPointerDown={(e) => handleObjectMouseDown(e, circ)}
                 data-object-id={circ.id} onContextMenu={(e) => openContextMenu(e, circ)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, circ)}
                 onTouchMove={cancelLongPress}
                 onTouchEnd={() => cancelLongPress()}
                 onTouchCancel={() => cancelLongPress()}
-                className={activeTool === 'select' ? 'cursor-move select-none' : 'cursor-pointer'}
+                className={`select-none ${imlecSinifi(activeTool, 'nesne')}`}
               >
                 <circle
                   cx={centerScreen.x}
@@ -5049,7 +5424,7 @@ export function Canvas({
                       style={styleSettings.hideLabelBoxes ? { display: 'none' } : undefined}
                       stroke={circ.color || '#8b5cf6'}
                       strokeWidth="1.2"
-                      className="shadow-sm dark:fill-slate-900"
+                      className="shadow-sm dark:fill-card"
                     />
                     {hasCircArea && hasCircPerimeter ? (
                       <>
@@ -5057,7 +5432,7 @@ export function Canvas({
                           x="0"
                           y="-2"
                           textAnchor="middle"
-                          fontSize={fs(10, 'measure')} className="fill-purple-700 dark:fill-purple-400 font-bold font-sans"
+                          fontSize={fs(10, 'measure')} className="fill-ada-deniz dark:fill-ada-lavanta font-bold font-sans"
                         >
                           r = {formatTurkishNumber(radius)} br | A = {formatTurkishNumber(circArea)} br²
                         </text>
@@ -5065,7 +5440,7 @@ export function Canvas({
                           x="0"
                           y="15"
                           textAnchor="middle"
-                          fontSize={fs(10, 'measure')} className="fill-indigo-700 dark:fill-indigo-400 font-bold font-sans"
+                          fontSize={fs(10, 'measure')} className="fill-ada-murekkep-2 dark:fill-ada-kum font-bold font-sans"
                         >
                           Çevre (2πr) = {formatTurkishNumber(circPerimeter)} br
                         </text>
@@ -5075,7 +5450,7 @@ export function Canvas({
                         x="0"
                         y="5"
                         textAnchor="middle"
-                        fontSize={fs(10, 'measure')} className="fill-indigo-700 dark:fill-indigo-400 font-bold font-sans"
+                        fontSize={fs(10, 'measure')} className="fill-ada-murekkep-2 dark:fill-ada-kum font-bold font-sans"
                       >
                         Çevre (2πr) = {formatTurkishNumber(circPerimeter)} br
                       </text>
@@ -5084,7 +5459,7 @@ export function Canvas({
                         x="0"
                         y="5"
                         textAnchor="middle"
-                        fontSize={fs(10, 'measure')} className="fill-purple-700 dark:fill-purple-400 font-bold font-sans"
+                        fontSize={fs(10, 'measure')} className="fill-ada-deniz dark:fill-ada-lavanta font-bold font-sans"
                       >
                         r = {formatTurkishNumber(radius)} br | A = {formatTurkishNumber(circArea)} br²
                       </text>
@@ -5157,13 +5532,13 @@ export function Canvas({
             return (
               <g
                 key={ang.id}
-                onMouseDown={(e) => handleObjectMouseDown(e, ang)}
+                onPointerDown={(e) => handleObjectMouseDown(e, ang)}
                 data-object-id={ang.id} onContextMenu={(e) => openContextMenu(e, ang)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, ang)}
                 onTouchMove={cancelLongPress}
                 onTouchEnd={() => cancelLongPress()}
                 onTouchCancel={() => cancelLongPress()}
-                className={activeTool === 'select' ? 'cursor-move select-none' : 'cursor-pointer'}
+                className={`select-none ${imlecSinifi(activeTool, 'nesne')}`}
               >
                 {/* NOT: Burada eskiden r=22'lik DOLU görünmez bir disk vardı. Açı katmanı
                     çokgen ve çemberin ÜSTÜNDE çizildiği için bu disk, ölçülmüş köşenin
@@ -5236,13 +5611,13 @@ export function Canvas({
               return (
                 <g
                   key={seg.id}
-                  onMouseDown={(e) => handleObjectMouseDown(e, seg)}
+                  onPointerDown={(e) => handleObjectMouseDown(e, seg)}
                 data-object-id={seg.id} onContextMenu={(e) => openContextMenu(e, seg)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, seg)}
                 onTouchMove={cancelLongPress}
                 onTouchEnd={() => cancelLongPress()}
                 onTouchCancel={() => cancelLongPress()}
-                  className={activeTool === 'select' ? 'cursor-move select-none' : 'cursor-pointer'}
+                  className={`select-none ${imlecSinifi(activeTool, 'nesne')}`}
                 >
                   <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y} stroke="transparent" strokeWidth={14} />
                   <line
@@ -5264,7 +5639,7 @@ export function Canvas({
                     const boy = Math.hypot(dx, dy) || 1;
                     // Kısmi uzunluk ('distance') etiketleri ekranda yukarı bakan normale konur; parçanın kendi uzunluğu
                     // hep KARŞI tarafta durur. Eskiden çizim yönüne bağlıydı: sağdan sola ya da dikey çizilmiş parçada iki
-                    // etiket üst üste biniyordu. Dikey parçada kutu çizgiyi örtmesin diye biraz daha açılır.
+                    // etiket üst üste biniyordu.
                     let nx = -dy / boy;
                     let ny = dx / boy;
                     // Mesafe etiketleriyle AYNI kural (tam dikeyde onlar sağda, bu etiket solda)
@@ -5272,29 +5647,38 @@ export function Canvas({
                       nx = -nx;
                       ny = -ny;
                     }
-                    const aralik = 20 + Math.abs(nx) * 16;
+                    // Kutu ve yazı parçaya PARALEL döner (kullanıcı isteği: uzunluk, ölçtüğü çizgiye paralel dursun);
+                    // dik uzaklık bu yüzden her açıda aynıdır. Açı her karede uçlardan hesaplanır: parça ya da bir ucu
+                    // döndürülüp taşındığında etiket yeni doğrultuya kendiliğinden uyar.
+                    // Kalın çizgide eşitlik çentiği uzar: etiket çentiğin ucuna değmesin (ince çizgide pay ~0)
+                    const centik = esitlik.isaretHaritasi.get(esitlik.temsilci.get(`seg:${seg.id}`) ?? '');
+                    const aralik = 18 + (centik || esitlik.otomatik ? etiketPayi(centik?.kalinlik ?? (seg.thickness || 2.5), styleSettings.strokeScale, 8) : 0);
                     const ex = midpointScreen.x - nx * aralik;
                     const ey = midpointScreen.y - ny * aralik;
+                    const metin = `${formatTurkishNumber(length)} ${unit}`;
+                    const genislik = Math.max(52, metin.length * 6.6 + 10);
                     return (
                       <g {...olcumEtiketi(seg.id, 'length')}>
-                        <rect
-                          x={ex - 26}
-                          y={ey - 10}
-                          width={52}
-                          height={20}
-                          rx={6}
-                          className="fill-background/95 stroke-border/80 shadow-sm"
-                          style={styleSettings.hideLabelBoxes ? { display: 'none' } : undefined}
-                          strokeWidth={1}
-                        />
-                        <text
-                          x={ex}
-                          y={ey + 4}
-                          textAnchor="middle"
-                          fontSize={fs(11, 'measure')} className="fill-foreground font-bold"
-                        >
-                          {formatTurkishNumber(length)} {unit}
-                        </text>
+                        <g transform={etiketDondurme(dx, dy, ex, ey)}>
+                          <rect
+                            x={ex - genislik / 2}
+                            y={ey - 10}
+                            width={genislik}
+                            height={20}
+                            rx={6}
+                            className="fill-background/95 stroke-border/80 shadow-sm"
+                            style={styleSettings.hideLabelBoxes ? { display: 'none' } : undefined}
+                            strokeWidth={1}
+                          />
+                          <text
+                            x={ex}
+                            y={ey + 4}
+                            textAnchor="middle"
+                            fontSize={fs(11, 'measure')} className="fill-foreground font-bold"
+                          >
+                            {metin}
+                          </text>
+                        </g>
                       </g>
                     );
                   })()}
@@ -5334,13 +5718,13 @@ export function Canvas({
               return (
                 <g
                   key={line.id}
-                  onMouseDown={(e) => handleObjectMouseDown(e, line)}
+                  onPointerDown={(e) => handleObjectMouseDown(e, line)}
                 data-object-id={line.id} onContextMenu={(e) => openContextMenu(e, line)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, line)}
                 onTouchMove={cancelLongPress}
                 onTouchEnd={() => cancelLongPress()}
                 onTouchCancel={() => cancelLongPress()}
-                  className={activeTool === 'select' ? 'cursor-move select-none' : 'cursor-pointer'}
+                  className={`select-none ${imlecSinifi(activeTool, 'nesne')}`}
                 >
                   <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y} stroke="transparent" strokeWidth={14} />
                   <line
@@ -5360,15 +5744,31 @@ export function Canvas({
                       {eq.equationText}
                     </text>
                   )}
-                  {line.showLength && showDetails && (
-                    <g {...olcumEtiketi(line.id, 'length')} data-measurement="length">
-                      <text x={worldToScreen({ x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }, viewport).x}
-                        y={worldToScreen({ x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }, viewport).y - 18}
-                        textAnchor="middle" fontSize={fs(11)} stroke="hsl(var(--background))" strokeWidth={4} paintOrder="stroke" className="fill-foreground font-bold">
-                        {'|' + p1.label + p2.label + '| = ' + formatTurkishNumber(calculateDistance(p1, p2)) + ' br'}
-                      </text>
-                    </g>
-                  )}
+                  {line.showLength && showDetails && (() => {
+                    // |AB| yazısı doğruya PARALEL durur; ekranda üst (tam dikeyde sağ) tarafta 14 px açıkta.
+                    // Açı her karede uçlardan hesaplanır: doğru döndürülünce yazı da döner.
+                    const ekranA = worldToScreen(p1, viewport);
+                    const ekranB = worldToScreen(p2, viewport);
+                    const ddx = ekranB.x - ekranA.x;
+                    const ddy = ekranB.y - ekranA.y;
+                    const boy = Math.hypot(ddx, ddy) || 1;
+                    let nx = -ddy / boy;
+                    let ny = ddx / boy;
+                    if (ny > 1e-9 || (Math.abs(ny) <= 1e-9 && nx < 0)) {
+                      nx = -nx;
+                      ny = -ny;
+                    }
+                    const ex = (ekranA.x + ekranB.x) / 2 + nx * 14;
+                    const ey = (ekranA.y + ekranB.y) / 2 + ny * 14;
+                    return (
+                      <g {...olcumEtiketi(line.id, 'length')} data-measurement="length">
+                        <text x={ex} y={ey + 4} transform={etiketDondurme(ddx, ddy, ex, ey)}
+                          textAnchor="middle" fontSize={fs(11)} stroke="hsl(var(--background))" strokeWidth={4} paintOrder="stroke" className="fill-foreground font-bold">
+                          {'|' + p1.label + p2.label + '| = ' + formatTurkishNumber(calculateDistance(p1, p2)) + ' br'}
+                        </text>
+                      </g>
+                    );
+                  })()}
                 </g>
               );
             }
@@ -5392,13 +5792,13 @@ export function Canvas({
               return (
                 <g
                   key={ray.id}
-                  onMouseDown={(e) => handleObjectMouseDown(e, ray)}
+                  onPointerDown={(e) => handleObjectMouseDown(e, ray)}
                 data-object-id={ray.id} onContextMenu={(e) => openContextMenu(e, ray)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, ray)}
                 onTouchMove={cancelLongPress}
                 onTouchEnd={() => cancelLongPress()}
                 onTouchCancel={() => cancelLongPress()}
-                  className={activeTool === 'select' ? 'cursor-move select-none' : 'cursor-pointer'}
+                  className={`select-none ${imlecSinifi(activeTool, 'nesne')}`}
                 >
                   <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y} stroke="transparent" strokeWidth={14} />
                   <line
@@ -5409,21 +5809,196 @@ export function Canvas({
                     stroke={isSelected ? '#ec4899' : ray.color || '#0284c7'}
                     strokeWidth={isSelected ? 3 : 2}
                   />
-                  {ray.showLength && showDetails && (
-                    <g {...olcumEtiketi(ray.id, 'length')} data-measurement="length">
-                      <text x={worldToScreen({ x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }, viewport).x}
-                        y={worldToScreen({ x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }, viewport).y - 18}
-                        textAnchor="middle" fontSize={fs(11)} stroke="hsl(var(--background))" strokeWidth={4} paintOrder="stroke" className="fill-foreground font-bold">
-                        {'|' + p1.label + p2.label + '| = ' + formatTurkishNumber(calculateDistance(p1, p2)) + ' br'}
-                      </text>
-                    </g>
-                  )}
+                  {ray.showLength && showDetails && (() => {
+                    // |AB| yazısı doğruya PARALEL durur; ekranda üst (tam dikeyde sağ) tarafta 14 px açıkta.
+                    // Açı her karede uçlardan hesaplanır: doğru döndürülünce yazı da döner.
+                    const ekranA = worldToScreen(p1, viewport);
+                    const ekranB = worldToScreen(p2, viewport);
+                    const ddx = ekranB.x - ekranA.x;
+                    const ddy = ekranB.y - ekranA.y;
+                    const boy = Math.hypot(ddx, ddy) || 1;
+                    let nx = -ddy / boy;
+                    let ny = ddx / boy;
+                    if (ny > 1e-9 || (Math.abs(ny) <= 1e-9 && nx < 0)) {
+                      nx = -nx;
+                      ny = -ny;
+                    }
+                    const ex = (ekranA.x + ekranB.x) / 2 + nx * 14;
+                    const ey = (ekranA.y + ekranB.y) / 2 + ny * 14;
+                    return (
+                      <g {...olcumEtiketi(ray.id, 'length')} data-measurement="length">
+                        <text x={ex} y={ey + 4} transform={etiketDondurme(ddx, ddy, ex, ey)}
+                          textAnchor="middle" fontSize={fs(11)} stroke="hsl(var(--background))" strokeWidth={4} paintOrder="stroke" className="fill-foreground font-bold">
+                          {'|' + p1.label + p2.label + '| = ' + formatTurkishNumber(calculateDistance(p1, p2)) + ' br'}
+                        </text>
+                      </g>
+                    );
+                  })()}
                 </g>
               );
             }
 
             return null;
           })}
+
+        {/* 7.5 YAY ÖLÇÜMLERİ — iki nokta arasındaki yay, çember BÖLÜNMEDEN (src/math/arcMeasure.ts).
+            Vurgu noktaların altında; rozet çemberin DIŞINDA ve çemberin alan/çevre kutusuyla, diğer yay rozetleriyle çakışmaz. */}
+        {showDetails && objects.some(isArcMeasurement) && (() => {
+          type Kutu = { x0: number; y0: number; x1: number; y1: number };
+          const z = viewport.zoom || 1;
+          const dolu: Kutu[] = [];
+          // 5. katmandaki çember alan/çevre kutuları: merkezin r + 26 px altında, 160 px genişlik
+          for (const o of objects) {
+            if (o.type !== 'circle' || !o.visible || !(o.showArea || o.showPerimeter)) continue;
+            const g = circleGeometryOf(o, objects);
+            if (!g) continue;
+            const c = worldToScreen(g.center, viewport);
+            const off = o.labelOffsets?.[o.showArea ? 'area' : 'perimeter'];
+            const x = c.x + (off ? off.x * z : 0);
+            const y = c.y + g.radius * z + 26 + (off ? -off.y * z : 0);
+            dolu.push({ x0: x - 80, y0: y - 12, x1: x + 80, y1: y - 12 + (o.showArea && o.showPerimeter ? 40 : 24) });
+          }
+          const cakisir = (a: Kutu) => dolu.some((b) => a.x0 < b.x1 + 4 && b.x0 < a.x1 + 4 && a.y0 < b.y1 + 4 && b.y0 < a.y1 + 4);
+          return objects
+            .filter((o): o is ArcMeasurement => isArcMeasurement(o) && o.visible !== false && o.showValue !== false)
+            .map((m) => {
+              const yay = resolveArc(m, objects);
+              if (!yay) return null;
+              const cS = worldToScreen(yay.center, viewport);
+              const rPx = yay.radius * z;
+              const nokta = (a: number) => ({ x: cS.x + rPx * Math.cos(a), y: cS.y - rPx * Math.sin(a) }); // ekranda y ters
+              const p0 = nokta(yay.startAngle);
+              const p1 = nokta(yay.startAngle + yay.sweep);
+              // sweep-flag 0 = dünyada saat yönünün tersi
+              const d = `M ${p0.x} ${p0.y} A ${rPx} ${rPx} 0 ${yay.sweep > Math.PI ? 1 : 0} 0 ${p1.x} ${p1.y}`;
+              const kopuk = arcDetachedText(yay, objects);
+              const baslik = arcBadgeTitle(m, objects, yay);
+              const deger = kopuk ?? arcValueText(yay);
+              const yazi = fs(11, 'measure');
+              const satir = yazi * 1.3;
+              const genislik = Math.max(96, Math.max(baslik.length, deger.length) * fs(6.6) + 18);
+              const yukseklik = 2 * satir + 10;
+              // Rozet, yayın ortasında çemberin DIŞINDA: aci yönünde, çembere `ek` px daha uzak
+              const yer = (aci: number, ek: number): Point2D => {
+                const c = Math.cos(aci), s = Math.sin(aci);
+                const k = 12 + ek + (Math.abs(c) * genislik) / 2 + (Math.abs(s) * yukseklik) / 2;
+                return { x: cS.x + (rPx + k) * c, y: cS.y - (rPx + k) * s };
+              };
+              const kutusu = (p: Point2D): Kutu => ({ x0: p.x - genislik / 2, y0: p.y - yukseklik / 2, x1: p.x + genislik / 2, y1: p.y + yukseklik / 2 });
+              const ekranda = (k: Kutu) => k.x0 >= 4 && k.y0 >= 4 && k.x1 <= viewport.width - 4 && k.y1 <= viewport.height - 4;
+              let lp = yer(yay.midAngle, 0);
+              const surukle = m.labelOffsets?.measure;
+              // Elle taşınmamış rozet başka bir kutuya çarpıyor ya da ekrandan taşıyorsa: önce yay boyunca kaydırılır
+              // (yayın ortasından en çok taramanın 4/9'u kadar), sonra dışarı itilir; ikisi de olmazsa yalnızca dışarı itilir.
+              if (!surukle && (cakisir(kutusu(lp)) || !ekranda(kutusu(lp)))) {
+                const kaymalar = [0];
+                for (let i = 1; i <= 8; i++) kaymalar.push((i * Math.min(yay.sweep, Math.PI)) / 18, (-i * Math.min(yay.sweep, Math.PI)) / 18);
+                let bulunan: Point2D | null = null;
+                for (let ek = 0; ek <= 96 && !bulunan; ek += 12) {
+                  for (const kayma of kaymalar) {
+                    const p = yer(yay.midAngle + kayma, ek);
+                    if (!cakisir(kutusu(p)) && ekranda(kutusu(p))) { bulunan = p; break; }
+                  }
+                }
+                for (let ek = 0; ek <= 288 && !bulunan; ek += 12) {
+                  const p = yer(yay.midAngle, ek);
+                  if (!cakisir(kutusu(p))) bulunan = p;
+                }
+                if (bulunan) lp = bulunan;
+              }
+              const kutu = kutusu(lp);
+              dolu.push(surukle ? { x0: kutu.x0 + surukle.x * z, x1: kutu.x1 + surukle.x * z, y0: kutu.y0 - surukle.y * z, y1: kutu.y1 - surukle.y * z } : kutu);
+              const varsayilan = !m.color || m.color === YAY_OLCUMU_RENGI;
+              const secili = selectedObjectIds.includes(m.id);
+              // Sil aracında vurgu da tıklanabilir: altındaki ÇEMBER değil, yalnızca ölçüm silinir
+              const silAraci = activeTool === 'delete';
+              const ustSatir = lp.y - yukseklik / 2 + 5 + yazi * 0.95;
+              return (
+                <g
+                  key={m.id}
+                  data-object-id={m.id}
+                  data-yay-olcumu={m.id}
+                  data-yay-tarafi={yay.half ? 'yarim' : yay.major ? 'buyuk' : 'kucuk'}
+                  data-yay-derece={yay.degrees.toFixed(2)}
+                  data-yay-uzunluk={yay.length.toFixed(4)}
+                  data-yay-kopuk={kopuk ? '1' : undefined}
+                  className="select-none"
+                >
+                  <path
+                    d={d}
+                    fill="none"
+                    data-yay-vurgusu="1"
+                    strokeWidth={sw(secili ? 8 : 6)}
+                    strokeLinecap="round"
+                    strokeOpacity={kopuk ? 0.45 : 0.9}
+                    strokeDasharray={kopuk ? '6 8' : undefined}
+                    stroke={varsayilan ? undefined : m.color}
+                    className={varsayilan ? 'stroke-lime-600 dark:stroke-lime-400' : undefined}
+                    style={{ pointerEvents: silAraci ? 'stroke' : 'none', cursor: silAraci ? imlecDegeri(activeTool, 'etiket') : undefined }}
+                    /* el-araci-izinli: yalnızca Sil aracında bağlanır; El aracı etkinken bu işleyici hiç kurulmaz. */
+                    onPointerDown={silAraci ? (e) => e.stopPropagation() : undefined}
+                    onClick={
+                      silAraci
+                        ? (e) => {
+                            e.stopPropagation();
+                            deleteObjects([m.id]);
+                            setHintMessage(`${baslik} silindi. Geri almak için Geri Al'ı (Ctrl+Z) kullanın.`);
+                          }
+                        : undefined
+                    }
+                  />
+                  <g {...olcumEtiketi(m.id, 'measure')} data-yay-rozeti="1" data-measurement="arc" onContextMenu={(e) => openContextMenu(e, m)}>
+                    <rect
+                      x={lp.x - genislik / 2}
+                      y={lp.y - yukseklik / 2}
+                      width={genislik}
+                      height={yukseklik}
+                      rx={8}
+                      className="fill-background/95 stroke-border"
+                      strokeWidth={1}
+                      style={styleSettings.hideLabelBoxes ? { display: 'none' } : undefined}
+                    />
+                    <text
+                      x={lp.x}
+                      y={ustSatir}
+                      textAnchor="middle"
+                      fontSize={yazi}
+                      stroke="hsl(var(--background))"
+                      strokeWidth={3}
+                      paintOrder="stroke"
+                      fill={varsayilan ? undefined : m.color}
+                      className={`font-bold ${varsayilan ? 'fill-lime-700 dark:fill-lime-300' : ''}`}
+                    >
+                      {baslik}
+                    </text>
+                    <text
+                      x={lp.x}
+                      y={ustSatir + satir}
+                      textAnchor="middle"
+                      fontSize={yazi}
+                      stroke="hsl(var(--background))"
+                      strokeWidth={3}
+                      paintOrder="stroke"
+                      className={kopuk ? 'fill-red-600 dark:fill-red-400 font-semibold' : 'fill-foreground font-semibold'}
+                    >
+                      {deger}
+                    </text>
+                  </g>
+                </g>
+              );
+            });
+        })()}
+
+        {/* 7.8 EŞİTLİK ÇENTİKLERİ KATMANI: eşit uzunluk/yay işaretleri (|, ||, |||). Ölçü rozeti değil, Sade'de de çizilir;
+            tıklamayı engellemez; geçişsiz (kaydırırken geride kalmaz). Noktaların altında. */}
+        <EsitlikIsaretleriKatmani
+          isaretler={esitlik.isaretler}
+          viewport={viewport}
+          seciliIdler={selectedObjectIds}
+          cizgiOlcegi={styleSettings.strokeScale}
+          noktalar={pointsById.values()}
+          noktaYaricapi={styleSettings.pointRadius}
+        />
 
         {/* 8. NOKTALAR KATMANI */}
         {objects
@@ -5441,8 +6016,8 @@ export function Canvas({
             return (
               <g
                 key={pt.id}
-                className="cursor-grab active:cursor-grabbing group select-none"
-                onMouseDown={(e) => handleObjectMouseDown(e, pt)}
+                className={`group select-none ${imlecSinifi(activeTool, 'nokta')}`}
+                onPointerDown={(e) => handleObjectMouseDown(e, pt)}
                 data-object-id={pt.id} onContextMenu={(e) => openContextMenu(e, pt)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, pt)}
                 onTouchMove={cancelLongPress}
@@ -5455,7 +6030,7 @@ export function Canvas({
                   cy={sPos.y}
                   r={18}
                   fill="transparent"
-                  className="cursor-grab active:cursor-grabbing"
+                  className={imlecSinifi(activeTool, 'nokta')}
                 />
 
                 {/* Seçim veya Bekleme Halkası */}
@@ -5481,7 +6056,9 @@ export function Canvas({
                     fill={isPointLocked(pt, objects) ? '#94a3b8' : pt.color || '#2563eb'}
                     stroke="#ffffff"
                     strokeWidth={isSelected ? 3 : 2}
-                    className="transition-all pointer-events-none drop-shadow-sm"
+                    // Yalnızca boyut/renk yumuşak geçer. transition-all cx/cy'yi de (tarayıcıda CSS özelliği) 150 ms'de
+                    // kaydırıyordu: kaydırma ve yakınlaştırmada noktalar doğruların gerisinde kalıyordu.
+                    className="transition-[r,fill,stroke-width] pointer-events-none drop-shadow-sm"
                   />
                 )}
 
@@ -5491,15 +6068,26 @@ export function Canvas({
                   // biniyordu. Kayıklık nesnenin kendi labelOffsets alanında tutulur,
                   // yani nokta taşınınca ad da onunla birlikte gider.
                   const et = olcumEtiketi(pt.id, 'pointLabel', false);
+                  // Ad, noktadan çıkan ya da üzerinden geçen çizgilerin kesmediği ilk tercihli yöne konur
+                  // (sağ üst → sol üst → sağ alt → …). Kullanıcı isteği: nokta harfleri çizgilerin
+                  // üzerine gelmekten her zaman kaçsın. Kullanıcının elle sürüklediği kayıklık üstüne eklenir.
+                  const adBoyu = fs(12, 'label');
+                  const koordinat = viewport.showCoordinates && showDetails ? ` ${formatCoordinate(pt, 1)}` : '';
+                  const yer = noktaAdiYeri(sPos, noktaEngelHaritasi.get(pt.id) ?? [], {
+                    genislik: (pt.label || '').length * adBoyu * 0.66 + koordinat.length * fs(10, 'label') * 0.56,
+                    yukseklik: adBoyu,
+                  });
                   return (
                   <text
                     transform={et.transform}
                     style={et.style}
                     onPointerDown={et.onPointerDown}
                     onClick={et.onClick}
-                    x={sPos.x + 10}
-                    y={sPos.y - 10}
-                    fontSize={fs(12, 'label')} className="fill-foreground font-bold select-none drop-shadow"
+                    x={yer.x}
+                    y={yer.y}
+                    textAnchor={yer.textAnchor}
+                    data-ad-yonu={yer.yon}
+                    fontSize={adBoyu} className="fill-foreground font-bold select-none drop-shadow"
                   >
                     {pt.label}
                     {viewport.showCoordinates && showDetails && (
@@ -5528,13 +6116,13 @@ export function Canvas({
             return (
               <g
                 key={stroke.id}
-                onMouseDown={(e) => handleObjectMouseDown(e, stroke)}
+                onPointerDown={(e) => handleObjectMouseDown(e, stroke)}
                 data-object-id={stroke.id} onContextMenu={(e) => openContextMenu(e, stroke)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, stroke)}
                 onTouchMove={cancelLongPress}
                 onTouchEnd={() => cancelLongPress()}
                 onTouchCancel={() => cancelLongPress()}
-                className={activeTool === 'select' ? 'cursor-move select-none' : 'cursor-pointer'}
+                className={`select-none ${imlecSinifi(activeTool, 'nesne')}`}
               >
                 <path
                   d={pathData}
@@ -5543,7 +6131,7 @@ export function Canvas({
                   strokeWidth={stroke.thickness || 3}
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="cursor-pointer hover:opacity-80"
+                  className={`hover:opacity-80 ${imlecSinifi(activeTool, 'nesne')}`}
                 />
               </g>
             );
@@ -5694,13 +6282,13 @@ export function Canvas({
             return (
               <g
                 key={frac.id}
-                onMouseDown={(e) => handleObjectMouseDown(e, frac)}
+                onPointerDown={(e) => handleObjectMouseDown(e, frac)}
                 data-object-id={frac.id} onContextMenu={(e) => openContextMenu(e, frac)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, frac)}
                 onTouchMove={cancelLongPress}
                 onTouchEnd={() => cancelLongPress()}
                 onTouchCancel={() => cancelLongPress()}
-                className={activeTool === 'select' ? 'cursor-move select-none' : 'cursor-pointer select-none'}
+                className={`select-none ${imlecSinifi(activeTool, 'nesne')}`}
               >
                 {shapes}
                 {showDetails && (
@@ -5745,7 +6333,7 @@ export function Canvas({
             return (
               <g
                 key={txt.id}
-                onMouseDown={(e) => handleObjectMouseDown(e, txt)}
+                onPointerDown={(e) => handleObjectMouseDown(e, txt)}
                 data-object-id={txt.id} onContextMenu={(e) => openContextMenu(e, txt)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, txt)}
                 onTouchMove={cancelLongPress}
@@ -5757,7 +6345,7 @@ export function Canvas({
                   setPendingTextWorldPos({ x: txt.x, y: txt.y });
                   setIsTextDialogOpen(true);
                 }}
-                className={activeTool === 'select' ? 'cursor-move select-none group/txt' : 'cursor-pointer select-none group/txt'}
+                className={`select-none group/txt ${imlecSinifi(activeTool, 'nesne')}`}
               >
                 {/* Not Arka Plan Kartı */}
                 <rect
@@ -5769,7 +6357,7 @@ export function Canvas({
                   fill={isSelected ? '#eff6ff' : '#ffffff'}
                   stroke={isSelected ? '#2563eb' : '#cbd5e1'}
                   strokeWidth={isSelected ? 2 : 1.2}
-                  className="shadow-sm transition-all group-hover/txt:stroke-blue-400 dark:fill-slate-800 dark:stroke-slate-700"
+                  className="shadow-sm transition-colors group-hover/txt:stroke-primary dark:fill-card dark:stroke-border"
                 />
 
                 {/* Not Metni */}
@@ -5778,7 +6366,7 @@ export function Canvas({
                   y={sPos.y}
                   fill={txt.color || '#1e293b'}
                   fontSize={fontSize}
-                  className="font-bold font-sans dark:fill-slate-100"
+                  className="font-bold font-sans dark:fill-foreground"
                 >
                   {txt.text}
                 </text>
@@ -5794,10 +6382,9 @@ export function Canvas({
                     setIsTextDialogOpen(true);
                   }}
                 >
-                  <circle cx="6" cy="6" r="8" fill="#eff6ff" stroke="#3b82f6" strokeWidth="1" />
-                  <text x="6" y="9.5" textAnchor="middle" fontSize="9" className="font-sans">
-                    ✏️
-                  </text>
+                  <circle cx="6" cy="6" r="8" fill="#fbf7ee" stroke="#216a78" strokeWidth="1" />
+                  {/* Düzenle: küçük kalem (emoji yerine çizim) */}
+                  <path d="M2.6 9.4 3 7.2 7.6 2.6 9.4 4.4 4.8 9 2.6 9.4ZM6.8 3.4 8.6 5.2" fill="none" stroke="#216a78" strokeWidth="1.1" strokeLinejoin="round" strokeLinecap="round" />
                 </g>
               </g>
             );
@@ -5816,13 +6403,13 @@ export function Canvas({
             return (
               <g
                 key={img.id}
-                onMouseDown={(e) => handleObjectMouseDown(e, img)}
+                onPointerDown={(e) => handleObjectMouseDown(e, img)}
                 data-object-id={img.id} onContextMenu={(e) => openContextMenu(e, img)}
                 onTouchStart={(e) => handleTouchStartOnObject(e, img)}
                 onTouchMove={cancelLongPress}
                 onTouchEnd={() => cancelLongPress()}
                 onTouchCancel={() => cancelLongPress()}
-                className={activeTool === 'select' ? 'cursor-move select-none' : 'cursor-pointer select-none'}
+                className={`select-none ${imlecSinifi(activeTool, 'nesne')}`}
               >
                 <image
                   href={img.src}
@@ -6329,35 +6916,18 @@ export function Canvas({
                 y={boxY}
                 width={boxW}
                 height={boxH}
-                fill="#3b82f6"
-                fillOpacity={0.12}
-                stroke="#2563eb"
+                fill="#2a9d94"
+                fillOpacity={0.1}
+                stroke="#216a78"
                 strokeWidth={1.5}
                 strokeDasharray="5,4"
                 rx={4}
               />
               {selectedObjectIds.length > 0 && boxW > 40 && boxH > 40 && (
                 <g transform={`translate(${boxX + boxW / 2}, ${Math.max(16, boxY - 14)})`}>
-                  <rect
-                    x="-50"
-                    y="-11"
-                    width="100"
-                    height="22"
-                    rx="6"
-                    fill="#1e293b"
-                    fillOpacity="0.95"
-                    stroke="#3b82f6"
-                    strokeWidth="1"
-                    className="shadow-md"
-                  />
-                  <text
-                    x="0"
-                    y="4"
-                    textAnchor="middle"
-                    fill="#ffffff"
-                    className="font-bold text-[10px] font-sans"
-                  >
-                    ✨ {selectedObjectIds.length} nesne seçildi
+                  <rect x="-48" y="-11" width="96" height="22" rx="11" fill="#15302d" fillOpacity="0.92" />
+                  <text x="0" y="4" textAnchor="middle" fill="#fbf7ee" className="font-semibold text-[11px] font-sans">
+                    {selectedObjectIds.length} nesne seçildi
                   </text>
                 </g>
               )}
@@ -6409,7 +6979,7 @@ export function Canvas({
         />
       </svg>
 
-      {/* 🪞 YANSITMA VE SİMETRİ EKSENİ SEÇİM ÇUBUĞU */}
+      {/* YANSITMA VE SİMETRİ EKSENİ SEÇİM ÇUBUĞU */}
       {['reflect', 'symmetry'].includes(activeTool) && (() => {
         const reflectTargetId = reflectTargetPolyId || selectedObjectId;
         const targetPoly = objects.find((o) => o.id === reflectTargetId && o.type === 'polygon') as
@@ -6424,140 +6994,79 @@ export function Canvas({
         };
 
         return (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 bg-slate-900/95 dark:bg-card/95 backdrop-blur-md text-white border border-purple-500/40 shadow-2xl px-5 py-3 rounded-2xl flex flex-col md:flex-row items-center gap-3.5 z-30 select-none animate-in slide-in-from-top-3 duration-200">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-pulse" />
-              <span className="text-xs font-bold text-purple-200">
-                {targetPoly
-                  ? `🪞 "${targetPoly.label || 'Çokgen'}" için simetri ekseni seçin:`
-                  : '🪞 Yansıtılacak şekli veya simetri eksenini seçin:'}
-              </span>
-            </div>
-
-            {/* Hızlı Eksen Seçim Düğmeleri */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => reflectWithAxis({ x: 0, y: 0 }, { x: 1, y: 0 }, 'x Ekseni')}
-                className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
-              >
-                <span>↔</span>
-                <span>x Eksenine Göre</span>
-              </button>
-
-              <button
-                onClick={() => reflectWithAxis({ x: 0, y: 0 }, { x: 0, y: 1 }, 'y Ekseni')}
-                className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
-              >
-                <span>↕</span>
-                <span>y Eksenine Göre</span>
-              </button>
-
-              <button
-                onClick={() => reflectWithAxis({ x: 0, y: 0 }, { x: 1, y: 1 }, 'y = x Doğrusu')}
-                className="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
-              >
-                <span>↗</span>
-                <span>y = x Doğrusu</span>
-              </button>
-
-              <button
-                onClick={() => reflectWithAxis({ x: 0, y: 0 }, { x: 1, y: -1 }, 'y = -x Doğrusu')}
-                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
-              >
-                <span>↘</span>
-                <span>y = -x Doğrusu</span>
-              </button>
-            </div>
-          </div>
+          <KayanCubuk konum="ust" data-yansitma-cubugu>
+            <CubukMetni
+              vurgu="lavanta"
+              simge={<FlipHorizontal2 className="w-4 h-4" />}
+              baslik="Yansıtma"
+              aciklama={targetPoly ? `“${targetPoly.label || 'Çokgen'}” için ekseni seçin` : 'Şekli ya da ekseni seçin'}
+            />
+            <CubukAyirici />
+            {/* Hızlı eksen seçimi */}
+            <CubukDugmesi onClick={() => reflectWithAxis({ x: 0, y: 0 }, { x: 1, y: 0 }, 'x Ekseni')}>x ekseni</CubukDugmesi>
+            <CubukDugmesi onClick={() => reflectWithAxis({ x: 0, y: 0 }, { x: 0, y: 1 }, 'y Ekseni')}>y ekseni</CubukDugmesi>
+            <CubukDugmesi onClick={() => reflectWithAxis({ x: 0, y: 0 }, { x: 1, y: 1 }, 'y = x Doğrusu')}>y = x</CubukDugmesi>
+            <CubukDugmesi onClick={() => reflectWithAxis({ x: 0, y: 0 }, { x: 1, y: -1 }, 'y = -x Doğrusu')}>y = −x</CubukDugmesi>
+          </KayanCubuk>
         );
       })()}
 
-      {/* 4. AÇIÖLÇER VE ÖLÇÜM REHBER KAPSÜLÜ */}
-      {['measure_angle', 'angle', 'measure_distance', 'measure_area', 'measure_perimeter', 'unit_measure', 'area_model', 'ruler', 'setsquare', 'rotate', 'reflect', 'symmetry', 'circle_radius', 'circle_3points', 'arc', 'sector', 'ellipse',
-        'midpoint', 'divide_ratio', 'perp_bisector', 'angle_bisector', 'perpendicular', 'parallel',
-        'segment_length', 'compass', 'intersect', 'translate', 'measure_slope', 'trig_ratios',
-        'checkbox', 'button', 'input_box'].includes(activeTool) && (
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-slate-900/95 dark:bg-card/95 backdrop-blur-md text-white border border-border shadow-2xl px-4 py-2.5 rounded-2xl flex items-center gap-3 z-30 select-none animate-in slide-in-from-bottom-3 duration-200">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs font-black">
-              {activeTool === 'measure_angle' && '📐 Açıölçer: Açıyı ölçmek için gövdeyi taşıyın veya turuncu ibreyi sürükleyin.'}
-              {activeTool === 'angle' && `📐 Açı Oluştur: 3 nokta seçin${pendingPointIds.length > 0 ? ` (${pendingPointIds.length}/3 seçildi)` : ''}.`}
-              {activeTool === 'measure_distance' && `📏 Uzunluk Ölç (cm): 2 köşe/nokta veya doğru parçası seçin${pendingPointIds.length > 0 ? ` (${pendingPointIds.length}/2 seçildi)` : ''}.`}
-              {activeTool === 'measure_area' && '🟩 Alanı Bul: Alanını görmek istediğiniz çokgene veya şekle dokunun.'}
-              {activeTool === 'measure_perimeter' && '🔄 Çevre Hesapla: Çevresini görmek istediğiniz çokgene dokunun.'}
-              {activeTool === 'unit_measure' && `🔢 Birimle Ölç (br): 2 köşe/nokta veya doğru parçası seçin${pendingPointIds.length > 0 ? ` (${pendingPointIds.length}/2 seçildi)` : ''}.`}
-              {activeTool === 'area_model' && '🟩 Alanı Modelle: Mavi tutamaçtan çekerek satır ve sütunları boyutlandırın veya modeli sürükleyin.'}
-              {activeTool === 'ruler' && '📏 Cetvel: Gövdeden tutarak taşıyın, sağ kenardaki turuncu tutamaçtan çekerek uzunluğunu ayarlayın.'}
-              {activeTool === 'setsquare' && '📐 Gönye: Gövdeden tutarak taşıyın ve dik açıları inceleyin.'}
-              {activeTool === 'circle_radius' && '⭕ Yarıçapla Çember: Merkez olacak yere tıklayın; açılan pencereye yarıçapı yazın.'}
-              {activeTool === 'circle_3points' &&
-                `⭕ Üç Noktadan Çember: Üç noktaya tıklayın; bu üç noktadan geçen çember çizilir (${pendingPointIds.length}/3 seçildi).`}
-              {activeTool === 'arc' &&
-                `◠ Yay: Önce MERKEZ, sonra BAŞLANGIÇ, sonra BİTİŞ noktasına tıklayın; yay saat yönünün tersine çizilir (${pendingPointIds.length}/3 seçildi).`}
-              {activeTool === 'sector' &&
-                `🥧 Daire Dilimi: Önce MERKEZ, sonra BAŞLANGIÇ, sonra BİTİŞ noktasına tıklayın; içi dolu dilim çizilir (${pendingPointIds.length}/3 seçildi).`}
-              {activeTool === 'checkbox' &&
-                '☑️ İşaret Kutusu: Önce gösterip gizleyeceğiniz nesneleri seçin (Seç ve Taşı + Shift), sonra kutunun duracağı yere tıklayın. Kutuyu kapatmak nesneleri SİLMEZ, yalnızca gizler.'}
-              {activeTool === 'button' &&
-                '🔘 Düğme: Önce etkileyeceği nesneleri veya kaydırıcıları seçin, sonra düğmenin yerine tıklayın. Kaydırıcı seçtiyseniz düğme canlandırmayı başlatıp durdurur.'}
-              {activeTool === 'input_box' &&
-                '⌨️ Girdi Kutusu: Önce bir kaydırıcı veya fonksiyon seçin, sonra kutunun yerine tıklayın. Değeri yazıp Enter’a basın.'}
-              {activeTool === 'midpoint' && '📍 Orta Nokta: İki noktaya tıklayın; aralarındaki orta nokta oluşur.'}
-              {activeTool === 'divide_ratio' &&
-                '✂️ Oranda Böl: İki noktaya tıklayın, sonra m:n oranını girin (örn. 2:1). İlk tıkladığınız uç "m" tarafıdır.'}
-              {activeTool === 'perp_bisector' &&
-                '📏 Orta Dikme: İki noktaya tıklayın; orta noktalarından geçen dik doğru çizilir. Üzerindeki her nokta iki uca eşit uzaklıktadır.'}
-              {activeTool === 'angle_bisector' &&
-                '🔀 Açıortay: Sırayla bir kola, AÇININ KÖŞESİNE ve diğer kola tıklayın; açıyı iki eş parçaya bölen ışın çizilir.'}
-              {activeTool === 'perpendicular' &&
-                '⊥ Dik Doğru: İlk iki nokta doğrultuyu belirler, üçüncü nokta doğrunun geçtiği yerdir.'}
-              {activeTool === 'parallel' &&
-                '∥ Paralel Doğru: İlk iki nokta doğrultuyu belirler, üçüncü nokta doğrunun geçtiği yerdir.'}
-              {activeTool === 'segment_length' &&
-                '📐 Uzunluğu Verilen Doğru Parçası: Başlangıç noktasına tıklayın, sonra uzunluğu girin.'}
-              {activeTool === 'compass' &&
-                '🧭 Pergel: 1) İğneyi saplayın. 2) İmleci iğneden uzaklaştırıp açıklığı ayarlayın, tıklayın. 3) Yayın BAŞLANGICINI istediğiniz yere bırakın (imleç çemberin üstünde olmak zorunda değil, yönü yeter). 4) İSTEDİĞİNİZ YÖNE dönerek yayı çizin; tam tura getirirseniz çember olur. Esc ile vazgeçin.'}
-              {activeTool === 'intersect' &&
-                '✖️ Kesiştir: İki şekle sırayla tıklayın; ortak noktaları oluşturulur (doğru–çember, çember–çember…).'}
-              {activeTool === 'translate' &&
-                '➡️ Öteleme: Önce şekli "Seç ve Taşı" ile seçin; sonra öteleme vektörünün başlangıç ve bitiş noktasına tıklayın.'}
-              {activeTool === 'measure_slope' &&
-                '📈 Eğim: İki noktaya tıklayın; aradaki doğrunun eğimi m = Δy/Δx olarak gösterilir.'}
-              {activeTool === 'trig_ratios' &&
-                '📊 Trigonometrik Oranlar: Sırayla bir kola, AÇININ KÖŞESİNE ve diğer kola tıklayın. Üçgenin dik olması gerekmez; dikse kenar oranları da yazılır.'}
-              {activeTool === 'ellipse' &&
-                '🥚 Elips: Tuvalde bir köşeden diğerine sürükleyin; sürüklediğiniz kutuya içten teğet elips çizilir. Yarıçapları sonra sağ tık menüsünden değiştirebilirsiniz.'}
-              {activeTool === 'rotate' && '🔄 Şekli Döndür: Önce bir şekil seçin; üzerindeki serbest döndür ikonunu (🔄) basılı tutarak sürükleyin veya altındaki hazır derecelere (30°, 45°, 60°, 90°...) tıklayın.'}
-              {['reflect', 'symmetry'].includes(activeTool) && '🪞 Yansıtma: Yansıtılacak şekli seçin, ardından tuvaldeki bir doğruya veya yukarıdaki eksen düğmelerine (x / y / y=x) tıklayın.'}
-            </span>
-          </div>
+      {/* 4. ARAÇ YÖNERGE ÇUBUĞU: simge rozeti + başlık · açıklama (emoji yok; metinler aracYonergeleri.ts) */}
+      {(() => {
+        const yonerge = aracYonergesi(activeTool, pendingPointIds.length);
+        if (!yonerge) return null;
+        return (
+          <KayanCubuk konum="alt" data-yonerge-cubugu>
+            <CubukMetni simge={<Info className="w-4 h-4" />} baslik={yonerge.baslik} aciklama={yonerge.aciklama} />
+            {pendingPointIds.length > 0 && (
+              <>
+                <CubukAyirici />
+                <CubukDugmesi simge={<CarpiSimgesi className="w-4 h-4" />} onClick={cancelPendingAction}>
+                  Temizle
+                </CubukDugmesi>
+              </>
+            )}
+            {/* Ölçme aracı: sağ tık olmayan dokunmatik tahtada menüye ve Sil'e ulaşma yolu (MeasurementInstruments dinler) */}
+            {['ruler', 'measure_angle', 'setsquare', 'area_model'].includes(activeTool) && (
+              <>
+                <CubukAyirici />
+                <CubukDugmesi
+                  simge={<Settings className="w-4 h-4" />}
+                  aria-haspopup="menu"
+                  onClick={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect();
+                    e.currentTarget.dispatchEvent(new CustomEvent('geoeba:olcme-araci', { bubbles: true, detail: { islem: 'menu', x: r.left, y: r.top } }));
+                  }}
+                >
+                  Seçenekler
+                </CubukDugmesi>
+                <CubukDugmesi
+                  tur="tehlike"
+                  simge={<Trash2 className="w-4 h-4" />}
+                  onClick={(e) => e.currentTarget.dispatchEvent(new CustomEvent('geoeba:olcme-araci', { bubbles: true, detail: { islem: 'sil' } }))}
+                >
+                  Sil
+                </CubukDugmesi>
+              </>
+            )}
+          </KayanCubuk>
+        );
+      })()}
 
-          {pendingPointIds.length > 0 && (
-            <button
-              onClick={cancelPendingAction}
-              className="px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-white/90 font-bold text-xs cursor-pointer transition-all active:scale-95"
-            >
-              ✕ Temizle
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* 5. ÇOKGEN OLUŞTURMA YARDIMCI VE TAMAMLAMA KAPSÜLÜ */}
+      {/* 5. ÇOKGEN OLUŞTURMA ÇUBUĞU */}
       {activeTool === 'polygon' && pendingPointIds.length > 0 && (
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-slate-900/95 dark:bg-card/95 backdrop-blur-md text-white border border-border shadow-2xl px-4 py-2.5 rounded-2xl flex items-center gap-3 z-30 select-none animate-in slide-in-from-bottom-3 duration-200">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-            <span className="text-xs font-black">
-              🔷 Çokgen: {pendingPointIds.length} Köşe Belirlendi
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {pendingPointIds.length >= 3 && (
-              <button
-                onClick={() => {
+        <KayanCubuk konum="alt" data-cokgen-cubugu>
+          <CubukMetni
+            simge={<Pentagon className="w-4 h-4" />}
+            baslik="Çokgen"
+            aciklama={`${pendingPointIds.length} köşe belirlendi`}
+          />
+          <CubukAyirici />
+          {pendingPointIds.length >= 3 && (
+            <CubukDugmesi
+              tur="birincil"
+              simge={<Check className="w-4 h-4" />}
+              onClick={() => {
                   const names = pendingPointIds
                     .map((id) => pointsById.get(id)?.label)
                     .filter(Boolean)
@@ -6578,396 +7087,107 @@ export function Canvas({
                   };
                   addObject(newPolygon, `${newPolygon.label} oluşturuldu`);
                   cancelPendingAction();
-                }}
-                className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-              >
-                <Check className="w-4 h-4" />
-                <span>Çokgeni Kapat ve Tamamla</span>
-              </button>
-            )}
-
-            <button
-              onClick={cancelPendingAction}
-              className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/90 font-bold text-xs cursor-pointer transition-all active:scale-95"
+              }}
             >
-              ✕ İptal
-            </button>
-          </div>
-        </div>
+              Tamamla
+            </CubukDugmesi>
+          )}
+          <CubukDugmesi simge={<CarpiSimgesi className="w-4 h-4" />} onClick={cancelPendingAction}>
+            İptal
+          </CubukDugmesi>
+        </KayanCubuk>
       )}
 
-      {/* 6. ÇOKLU SEÇİM EYLEM KAPSÜLÜ (2D) */}
-      {selectedObjectIds.length > 0 && activeTool === 'select' && (
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-slate-900/95 dark:bg-card/95 backdrop-blur-md text-white border border-border shadow-2xl px-4 py-2.5 rounded-2xl flex items-center gap-3 z-30 select-none animate-in slide-in-from-bottom-3 duration-200">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-400 animate-pulse" />
-            <span className="text-xs font-black">
-              ✨ {selectedObjectIds.length} nesne seçildi (Taşımak için sürükleyin)
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
+      {/* 6. SEÇİM ÇUBUĞU (2D): alttaki komut çekmecesinin üstünde; düğmeler dokunmatik hedef (≥ 44 px) */}
+      {(selectedObjectIds.length > 0 || seciliCisimler.length > 0) && activeTool === 'select' && (
+        <KayanCubuk konum="alt-yuksek" data-secim-kapsulu>
+          <CubukMetni
+            simge={<MousePointer2 className="w-4 h-4" />}
+            baslik={secimBasligi(selectedObjectIds.length, seciliCisimler.length)}
+            aciklama="taşımak için sürükleyin"
+          />
+          <CubukAyirici />
+          <CubukDugmesi
+            tur="tehlike"
+            simge={<Trash2 className="w-4 h-4" />}
+            onClick={() => {
+              if (selectedObjectIds.length > 0) {
                 deleteObjects(
                   selectedObjectIds,
                   selectedObjectIds.length === 1 ? undefined : `${selectedObjectIds.length} seçili nesne silindi`
                 );
                 setSelectedObjectIds([]);
-              }}
-              className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Seçilenleri Sil</span>
-            </button>
-
-            <button
-              onClick={() => setSelectedObjectIds([])}
-              className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/90 font-bold text-xs cursor-pointer transition-all active:scale-95"
-            >
-              ✕ Seçimi Kaldır
-            </button>
-          </div>
-        </div>
+              }
+              // Seçili 3B cisimler de silinir (tek geçmiş adımı; geri al ile geri gelir)
+              if (seciliCisimler.length > 0) {
+                if (onDeleteSolids) onDeleteSolids(seciliCisimler);
+                else seciliCisimler.forEach((sid) => onDeleteSolid?.(sid));
+                onSelectSolid?.(null);
+                onSelectSolids?.([]);
+              }
+            }}
+          >
+            Sil
+          </CubukDugmesi>
+          <CubukDugmesi
+            simge={<CarpiSimgesi className="w-4 h-4" />}
+            onClick={() => {
+              setSelectedObjectIds([]);
+              if (seciliCisimler.length > 0) {
+                onSelectSolid?.(null);
+                onSelectSolids?.([]);
+              }
+            }}
+          >
+            Seçimi kaldır
+          </CubukDugmesi>
+        </KayanCubuk>
       )}
 
-      {/* Alt Bilgi / Telemetri Çubuğu (Canlı & Renkli Ortaokul Stili) */}
-      <div className="absolute bottom-3 left-3 bg-card/95 backdrop-blur-md border border-border/80 px-3.5 py-2 rounded-2xl text-xs shadow-md flex items-center gap-3 select-none pointer-events-none z-10">
-        <div className="flex items-center gap-2 font-bold text-foreground">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm" />
-          <span>📍 İmleç:</span>
-          <span className="font-mono text-primary bg-primary/10 px-2 py-0.5 rounded-lg font-black">{formatCoordinate(mouseWorldPos)}</span>
-        </div>
-        <div className="w-[1px] h-4 bg-border" />
-        <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
-          <span>🔍 Ölçek:</span>
-          <span className="font-mono font-bold text-foreground">%{Math.round((viewport.zoom / DEFAULT_ZOOM) * 100)}</span>
-        </div>
-        <div className="w-[1px] h-4 bg-border" />
-        <div className="flex items-center gap-1.5 text-muted-foreground font-semibold">
-          <span>🎨 Nesne Sayısı:</span>
-          <span className="font-bold text-foreground px-2 py-0.5 rounded-lg bg-muted">{objects.length}</span>
-        </div>
+      {/* Alt bilgi: köşede yalın metin — çubuk/kutu yok (kullanıcı isteği) */}
+      <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 text-[11px] font-medium leading-none text-muted-foreground select-none pointer-events-none">
+        <span>
+          İmleç <span className="font-mono text-foreground">{formatCoordinate(mouseWorldPos)}</span>
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          Ölçek <span className="font-mono text-foreground">%{Math.round((viewport.zoom / DEFAULT_ZOOM) * 100)}</span>
+        </span>
+        <span aria-hidden="true">·</span>
+        <span>
+          Nesne <span className="font-mono text-foreground">{objects.length}</span>
+        </span>
       </div>
 
-      {/* SÜRÜKLEME SIRASINDA KENAR KENETLEME KILAVUZLARI */}
-      {isDraggingDock && (
-        <div className="absolute inset-0 z-30 pointer-events-none p-2 grid grid-cols-3 grid-rows-3 gap-2">
-          {/* Üst Kılavuz */}
-          <div
-            className={`col-span-3 h-12 rounded-2xl border-2 border-dashed transition-all flex items-center justify-center text-xs font-bold ${
-              (dockPreview ?? dockPosition) === 'top'
-                ? 'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400 scale-[1.01]'
-                : 'border-slate-300 dark:border-slate-700 bg-slate-500/5 text-muted-foreground'
-            }`}
-          >
-            ⬆ Üst Kenara Sabitle
-          </div>
+      {/* 2. YAKINLAŞTIR / UZAKLAŞTIR — sağ alt köşe. (Yüzen hızlı araç çubuğu kaldırıldı: el, geri al ve
+          yinele sol üstteki imlecin yanında; ızgara, yapışma, bölge adları, sığdırma ve temizleme
+          Görünüm/Ayarlar menülerinde ve sağ tık menüsünde.) */}
+      <div className="absolute bottom-3 right-3 z-30 flex flex-col gap-1.5 pointer-events-auto">
+        <button
+          type="button"
+          onClick={zoomIn}
+          title="Yakınlaştır (+)"
+          aria-label="Yakınlaştır"
+          className="w-9 h-9 rounded-xl flex items-center justify-center border shadow-sm backdrop-blur-md transition-colors cursor-pointer bg-card/95 border-border text-foreground hover:bg-accent"
+        >
+          <ZoomIn className="w-5 h-5" />
+        </button>
+        <button
+          type="button"
+          onClick={zoomOut}
+          title="Uzaklaştır (-)"
+          aria-label="Uzaklaştır"
+          className="w-9 h-9 rounded-xl flex items-center justify-center border shadow-sm backdrop-blur-md transition-colors cursor-pointer bg-card/95 border-border text-foreground hover:bg-accent"
+        >
+          <ZoomOut className="w-5 h-5" />
+        </button>
+      </div>
 
-          {/* Sol Kılavuz */}
-          <div
-            className={`row-span-1 w-14 rounded-2xl border-2 border-dashed transition-all flex items-center justify-center text-xs font-bold [writing-mode:vertical-rl] rotate-180 self-center h-48 justify-self-start ${
-              (dockPreview ?? dockPosition) === 'left'
-                ? 'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400 scale-[1.01]'
-                : 'border-slate-300 dark:border-slate-700 bg-slate-500/5 text-muted-foreground'
-            }`}
-          >
-            ⬅ Sol Kenara Sabitle
-          </div>
-
-          <div />
-
-          {/* Sağ Kılavuz */}
-          <div
-            className={`row-span-1 w-14 rounded-2xl border-2 border-dashed transition-all flex items-center justify-center text-xs font-bold [writing-mode:vertical-rl] self-center h-48 justify-self-end ${
-              (dockPreview ?? dockPosition) === 'right'
-                ? 'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400 scale-[1.01]'
-                : 'border-slate-300 dark:border-slate-700 bg-slate-500/5 text-muted-foreground'
-            }`}
-          >
-            ➡ Sağ Kenara Sabitle
-          </div>
-
-          {/* Alt Kılavuz */}
-          <div
-            className={`col-span-3 h-12 rounded-2xl border-2 border-dashed transition-all flex items-center justify-center text-xs font-bold self-end ${
-              (dockPreview ?? dockPosition) === 'bottom'
-                ? 'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400 scale-[1.01]'
-                : 'border-slate-300 dark:border-slate-700 bg-slate-500/5 text-muted-foreground'
-            }`}
-          >
-            ⬇ Alt Kenara Sabitle
-          </div>
-        </div>
-      )}
-
-      {/* 2. DÖRT KENARA KENETLENEBİLİR / YÜZEN HIZLI ARAÇ ÇUBUĞU */}
-      {(() => {
-        const activeDock = dockPreview ?? dockPosition;
-        const isVert = activeDock === 'right' || activeDock === 'left';
-        const posClass =
-          activeDock === 'right'
-            ? 'right-3.5 top-1/2 -translate-y-1/2 flex-col'
-            : activeDock === 'left'
-            ? 'left-3.5 top-1/2 -translate-y-1/2 flex-col'
-            : activeDock === 'top'
-            ? 'top-14 left-1/2 -translate-x-1/2 flex-row'
-            : 'bottom-3.5 left-1/2 -translate-x-1/2 flex-row';
-
-        return (
-          <div
-            className={`absolute z-30 flex items-center gap-1.5 p-1.5 rounded-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 shadow-xl select-none transition-all duration-200 ${posClass} ${
-              isDraggingDock ? 'ring-2 ring-blue-500 shadow-2xl opacity-90 scale-105' : ''
-            }`}
-          >
-            {/* Tutma / Sürükleme ve Kenar Değiştirme Kolu */}
-            <div
-              onPointerDown={handleDockDragStart}
-              onDoubleClick={cycleDockPosition}
-              title="Sürükleyerek kenara taşıyın veya çift tıklayarak konumu değiştirin (Sağ / Alt / Sol / Üst)"
-              className={`p-1 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-grab active:cursor-grabbing transition-colors flex items-center justify-center ${
-                isVert ? 'w-8 h-4 my-0.5' : 'h-8 w-4 mx-0.5'
-              }`}
-            >
-              {isVert ? <GripHorizontal className="w-3.5 h-3.5" /> : <GripVertical className="w-3.5 h-3.5" />}
-            </div>
-
-            <div className={isVert ? 'w-5 h-px bg-slate-200 dark:bg-slate-700 my-0.5' : 'h-5 w-px bg-slate-200 dark:bg-slate-700 mx-0.5'} />
-
-            {/* 0. Kaydırıcı Oynat / Durdur — yalnızca sahnede kaydırıcı varken görünür */}
-            {sliders.length > 0 && (
-              <>
-                <button
-                  onClick={toggleSliderPlayback}
-                  title={
-                    sliderPlaying
-                      ? 'Kaydırıcı animasyonunu durdur'
-                      : 'Kaydırıcıları oynat (değerler uçtan uca gidip gelir)'
-                  }
-                  aria-pressed={sliderPlaying}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                    sliderPlaying
-                      ? 'bg-emerald-500 text-white shadow-sm'
-                      : 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
-                  }`}
-                >
-                  {sliderPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                </button>
-                <div className={isVert ? 'w-5 h-px bg-slate-200 dark:bg-slate-700 my-0.5' : 'h-5 w-px bg-slate-200 dark:bg-slate-700 mx-0.5'} />
-              </>
-            )}
-
-            {/* 1. Geri Al (Undo) */}
-            <button
-              onClick={undo}
-              disabled={!canUndo}
-              title="Geri Al (Ctrl+Z)"
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                canUndo
-                  ? 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  : 'text-slate-300 dark:text-slate-600 opacity-40 cursor-not-allowed'
-              }`}
-            >
-              <RotateCcw className="w-4 h-4" />
-            </button>
-
-            {/* 2. Yinele (Redo) */}
-            <button
-              onClick={redo}
-              disabled={!canRedo}
-              title="Yinele (Ctrl+Y)"
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                canRedo
-                  ? 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  : 'text-slate-300 dark:text-slate-600 opacity-40 cursor-not-allowed'
-              }`}
-            >
-              <RotateCw className="w-4 h-4" />
-            </button>
-
-            {/* 3. Görünümü Kaydır / Pan */}
-            <button
-              onClick={() => setActiveTool(activeTool === 'pan' ? 'select' : 'pan')}
-              title="Görünümü Kaydır (El Aracı)"
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                activeTool === 'pan'
-                  ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-400/30'
-                  : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Hand className="w-4 h-4" />
-            </button>
-
-            {/* 4. Izgaraya Yapış (Magnet - Aktifken Canlı Sarı Rozet) */}
-            <button
-              onClick={() => setViewport((prev) => ({ ...prev, snapToGrid: !prev.snapToGrid }))}
-              title={viewport.snapToGrid ? 'Izgaraya Yapışmayı Kapat' : 'Izgaraya Yapışmayı Aç'}
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                viewport.snapToGrid
-                  ? 'bg-[#fde047] text-slate-950 shadow-md ring-2 ring-yellow-400/40 font-bold'
-                  : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Magnet className="w-4 h-4" />
-            </button>
-
-            {/* 5. Merkeze Dön / Sıfırla (Home) */}
-            <button
-              onClick={centerOrigin}
-              title="Orijini Ortala / Sıfırla (0, 0)"
-              className="w-9 h-9 rounded-full text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-all cursor-pointer"
-            >
-              <Home className="w-4 h-4" />
-            </button>
-
-            {/* 6. Yakınlaştır (+) */}
-            <button
-              onClick={zoomIn}
-              title="Yakınlaştır (+)"
-              className="w-9 h-9 rounded-full text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-all cursor-pointer"
-            >
-              <ZoomIn className="w-4 h-4" />
-            </button>
-
-            {/* 7. Uzaklaştır (-) */}
-            <button
-              onClick={zoomOut}
-              title="Uzaklaştır (-)"
-              className="w-9 h-9 rounded-full text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-all cursor-pointer"
-            >
-              <ZoomOut className="w-4 h-4" />
-            </button>
-
-            {/* 8. Ekrana Sığdır / Tam Görünüm */}
-            <button
-              onClick={fitToObjects}
-              title="Görünümü Ekrana Sığdır"
-              className="w-9 h-9 rounded-full text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center transition-all cursor-pointer"
-            >
-              <Maximize2 className="w-4 h-4" />
-            </button>
-
-            {/* 9. Katmanlar / Izgara Geçişi */}
-            <button
-              onClick={() => setViewport((prev) => ({ ...prev, showGrid: !prev.showGrid }))}
-              title={viewport.showGrid ? 'Izgarayı Gizle' : 'Izgarayı Göster'}
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                viewport.showGrid
-                  ? 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  : 'text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              <Layers className="w-4 h-4" />
-            </button>
-
-            {/* 10. Ölçüm ve Ayrıntıları Göster/Gizle (Alan, Uzunluk, Açı vb.) */}
-            <button
-              onClick={() =>
-                setViewport((prev) => ({
-                  ...prev,
-                  showMeasurements: prev.showMeasurements === false ? true : false,
-                }))
-              }
-              title={
-                viewport.showMeasurements !== false
-                  ? 'Ayrıntıları Gizle (Alan, Uzunluk, Açı vb.)'
-                  : 'Ayrıntıları Göster (Alan, Uzunluk, Açı vb.)'
-              }
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                viewport.showMeasurements !== false
-                  ? 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  : 'text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 ring-1 ring-amber-400/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 font-bold'
-              }`}
-            >
-              {viewport.showMeasurements !== false ? (
-                <Eye className="w-4 h-4" />
-              ) : (
-                <EyeOff className="w-4 h-4" />
-              )}
-            </button>
-
-            {/* 11. Bölge İsimleri Göster/Gizle (I, II, III, IV) */}
-            <button
-              onClick={() =>
-                setViewport((prev) => ({
-                  ...prev,
-                  showQuadrants: !prev.showQuadrants,
-                }))
-              }
-              title={
-                viewport.showQuadrants
-                  ? 'Bölge İsimlerini Gizle (1, 2, 3, 4. Bölge)'
-                  : 'Bölge İsimlerini Göster (1, 2, 3, 4. Bölge)'
-              }
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                viewport.showQuadrants
-                  ? 'bg-amber-500 text-white shadow-md ring-2 ring-amber-400/40 font-black text-[10px]'
-                  : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 font-black text-[10px]'
-              }`}
-            >
-              <span>I-IV</span>
-            </button>
-
-            {/* 10. Düzenle / Seçilen Nesne Ayarları */}
-            <button
-              onClick={() => {
-                if (selectedObjectId) setActiveTool('select');
-              }}
-              title="Seçilen Nesneyi Düzenle"
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                selectedObjectId
-                  ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40'
-                  : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              <FileEdit className="w-4 h-4" />
-            </button>
-
-            {/* 11. Seçiliyi Sil (Kırmızı Çöp Kutusu) */}
-            <button
-              onClick={() => {
-                if (selectedObjectIds.length > 0) {
-                  deleteObjects(
-                    selectedObjectIds,
-                    selectedObjectIds.length === 1 ? undefined : `${selectedObjectIds.length} seçili nesne silindi`
-                  );
-                  setSelectedObjectIds([]);
-                }
-              }}
-              title={
-                selectedObjectIds.length > 0
-                  ? `${selectedObjectIds.length} seçili nesneyi sil`
-                  : 'Silmek için önce nesne seçin'
-              }
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer ${
-                selectedObjectIds.length > 0
-                  ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30'
-                  : 'text-red-400/60 hover:bg-red-50/50'
-              }`}
-            >
-              <Trash2 className="w-4 h-4 text-red-500" />
-            </button>
-
-            <div className={isVert ? 'w-6 h-px bg-slate-200 dark:bg-slate-700 my-0.5' : 'h-6 w-px bg-slate-200 dark:bg-slate-700 mx-0.5'} />
-
-            {/* 12. Tümünü Sil (Tüm Ekranı Temizle) */}
-            <button
-              onClick={() => requestClearAll('2D')}
-              title="Tümünü Sil (Tüm ekranı ve şekilleri temizle)"
-              className="w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer text-rose-600 hover:text-white hover:bg-rose-600 dark:hover:bg-rose-600 hover:shadow-md hover:shadow-rose-500/30 group"
-            >
-              <Eraser className="w-4 h-4 transition-transform group-hover:scale-110" />
-            </button>
-          </div>
-        );
-      })()}
-
-      {/* İPUCU MESAJI KAPSÜLÜ (Örn: "Önce bir şekil seçin") */}
+      {/* İPUCU ÇUBUĞU (Örn: "Önce bir şekil seçin"): yalnız bilgi verir, tıklamaları engellemez */}
       {hintMessage && (
-        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 bg-amber-500 text-slate-950 border border-amber-300 shadow-2xl px-4 py-2 rounded-2xl flex items-center gap-2 text-xs font-black select-none animate-in fade-in slide-in-from-top-2 duration-200 pointer-events-none">
-          <span>💡</span>
-          <span>{hintMessage}</span>
-        </div>
+        <KayanCubuk konum="ust" etkilesimsiz className="z-40" role="status" aria-live="polite">
+          <CubukMetni vurgu="altin" simge={<Lightbulb className="w-4 h-4" />} baslik={hintMessage} />
+        </KayanCubuk>
       )}
 
       {/* Görsel Ekle aracı için gizli dosya seçici */}
@@ -7028,12 +7248,39 @@ export function Canvas({
         x={contextTarget?.x ?? 0}
         y={contextTarget?.y ?? 0}
         title={
-          contextTarget
-            ? contextTarget.obj ? contextTarget.obj.label || TYPE_LABELS[contextTarget.obj.type] || 'Nesne' : 'Çizim alanı'
+          contextTarget?.obj
+            ? isArcMeasurement(contextTarget.obj)
+              ? arcBadgeTitle(contextTarget.obj, objects) // yay ölçümü: noktaların GÜNCEL adlarıyla
+              : contextTarget.obj.label || TYPE_LABELS[contextTarget.obj.type] || 'Nesne'
             : ''
         }
+        ariaLabel="Çizim alanı"
         items={contextMenuItems}
         onClose={() => setContextTarget(null)}
+      />
+
+      {/* 3B CİSİM SAĞ TIK MENÜSÜ */}
+      <ContextMenu
+        open={cisimMenusu !== null}
+        x={cisimMenusu?.x ?? 0}
+        y={cisimMenusu?.y ?? 0}
+        title={cisimMenusu?.ad || 'Cisim'}
+        ariaLabel="Cisim"
+        items={[
+          {
+            id: 'cismi-sil',
+            label: 'Sil',
+            danger: true,
+            icon: <Trash2 className="w-4 h-4" />,
+            onSelect: () => {
+              if (!cisimMenusu) return;
+              if (onDeleteSolids) onDeleteSolids([cisimMenusu.solidId]);
+              else onDeleteSolid?.(cisimMenusu.solidId);
+              onSelectSolids?.(selectedSolidIds.filter((id) => id !== cisimMenusu.solidId));
+            },
+          },
+        ]}
+        onClose={() => setCisimMenusu(null)}
       />
     </div>
   );

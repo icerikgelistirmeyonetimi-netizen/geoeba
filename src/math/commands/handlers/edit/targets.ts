@@ -1,5 +1,6 @@
 import type { MathObject, ObjectType, PointObject } from '@/types/math';
-import { constructionDependencies } from '@/math/commandBindings';
+import { objectDependencies } from '@/state/WorkspaceContext';
+import { describe, describeList, joinTr } from '@/math/nesneAdlari';
 import { type Clause, type LabelRef, STOPWORDS, fold, labelKey } from '../../text';
 import { type CommandScene, fail } from '../../scene';
 import { type NounSpec, type NounWord, QUANTIFIER, HIDDEN_WORDS, clauseNouns, labelNoun, labelRole, labelWordIndex } from './words';
@@ -11,80 +12,16 @@ export function functionName(label: string): string | undefined {
   return label.match(/^\s*([A-Za-zÇĞİÖŞÜçğıöşü][\w']*)\s*(?:\(\s*x\s*\))?\s*=/)?.[1];
 }
 
-/** Bir nesnenin bağlı olduğu kimlikler (WorkspaceContext.objectDependencies ile aynı kurallar). */
+/**
+ * Bir nesnenin bağlı olduğu kimlikler: WorkspaceContext.objectDependencies'in KENDİSİ (elle tutulan bir kopya değil),
+ * böylece yeni bir bağımlılık (ör. yay ölçümü) komut yolunda da hemen geçerli olur.
+ */
 export function depsOf(o: MathObject): string[] {
-  switch (o.type) {
-    case 'segment': return [o.startPointId, o.endPointId];
-    case 'line': return [o.point1Id, o.point2Id];
-    case 'ray': return [o.startPointId, o.throughPointId];
-    case 'circle': return o.throughPointIds?.length ? [...o.throughPointIds, ...(o.radiusPointId ? [o.radiusPointId] : [])] : [o.centerPointId, ...(o.radiusPointId ? [o.radiusPointId] : [])];
-    case 'ellipse': return [o.centerPointId];
-    case 'arc': case 'sector': return [o.centerPointId, o.startPointId, o.directionPointId];
-    case 'angle': return [o.point1Id, o.vertexPointId, o.point3Id];
-    case 'polygon': case 'measurement': return o.pointIds;
-    case 'checkbox': return o.targetIds;
-    case 'button': {
-      const act = o.action;
-      if (act.kind === 'toggle') return act.targetIds;
-      if (act.kind === 'animate') return [...(act.sliderIds ?? []), ...(act.targetIds ?? [])];
-      if (act.kind === 'setSlider') return [act.sliderId];
-      if (act.kind === 'setValue') return [act.targetId];
-      return [];
-    }
-    case 'input_box': return [o.targetId];
-    case 'point': return [...(o.onObjectId ? [o.onObjectId] : []), ...constructionDependencies(o)];
-    default: return [];
-  }
+  return objectDependencies(o);
 }
 
-/** Mesajlarda nesnenin Türkçe adı: "ABC üçgeni", "A noktası", "[AB] doğru parçası". */
-export function describe(o: MathObject): string {
-  const f = fold(o.label ?? '');
-  switch (o.type) {
-    case 'point': return `${o.label} noktası`;
-    case 'segment': return /dogru parca/.test(f) ? o.label : `${o.label} doğru parçası`;
-    case 'line': return /dogru/.test(f) ? o.label : `${o.label} doğrusu`;
-    case 'ray': return /isin/.test(f) ? o.label : `${o.label} ışını`;
-    case 'circle': return /cember|daire/.test(f) ? o.label : `${o.label} çemberi`;
-    case 'ellipse': return /elips/.test(f) ? o.label : `${o.label} elipsi`;
-    case 'arc': return /yay/.test(f) ? o.label : `${o.label} yayı`;
-    case 'sector': return /dilim/.test(f) ? o.label : `${o.label} daire dilimi`;
-    case 'angle': return /aci/.test(f) ? o.label : `${o.label} açısı`;
-    case 'polygon': {
-      if (/ucgen|kare|dikdortgen|cokgen|dortgen|gen\b|paralelkenar|yamuk|deltoid/.test(f)) return o.label;
-      const n = o.pointIds.length;
-      return `${o.label} ${n === 3 ? 'üçgeni' : n === 4 ? 'dörtgeni' : 'çokgeni'}`;
-    }
-    case 'function': return `${o.label} fonksiyonu`;
-    case 'slider': return `${o.variableName} kaydırıcısı`;
-    case 'text': return `“${o.text.length > 24 ? `${o.text.slice(0, 24)}…` : o.text}” yazısı`;
-    case 'fraction': return `${o.numerator}/${o.denominator} kesir modeli`;
-    case 'checkbox': return `“${o.label}” onay kutusu`;
-    case 'button': return `“${o.label}” düğmesi`;
-    case 'input_box': return `${o.label} girdi kutusu`;
-    case 'image': return 'görsel';
-    case 'pen': return 'kalem çizimi';
-    case 'measurement': return o.label;
-    default: return 'nesne';
-  }
-}
-
-export function joinTr(parts: string[]): string {
-  if (parts.length <= 1) return parts[0] ?? '';
-  return `${parts.slice(0, -1).join(', ')} ve ${parts[parts.length - 1]}`;
-}
-
-export function describeList(list: MathObject[]): string {
-  if (list.length > 5) {
-    const types = new Set(list.map(o => o.type));
-    if (types.size === 1 && list[0].type === 'point') return `${list.length} nokta`;
-    return `${list.length} nesne`;
-  }
-  const points = list.filter(o => o.type === 'point');
-  const others = list.filter(o => o.type !== 'point').map(describe);
-  const pointText = points.length > 1 ? `${joinTr(points.map(p => p.label))} noktaları` : points.map(describe);
-  return joinTr([...others, ...(Array.isArray(pointText) ? pointText : [pointText])]);
-}
+/** Mesajlardaki Türkçe adlar tek yerde (src/math/nesneAdlari.ts): ekrandan silme ipucu da aynı adları kullanır. */
+export { describe, describeList, joinTr };
 
 export const cleanLabel = (text: string) => text.trim().replace(/[’′]/g, "'");
 

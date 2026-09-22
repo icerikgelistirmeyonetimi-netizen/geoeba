@@ -29,12 +29,12 @@ export function ConfirmClearModal({
       onClose={onClose}
       labelledBy="confirm-clear-title"
       initialFocusRef={cancelButtonRef}
-      overlayClassName="bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+      overlayClassName="bg-ada-murekkep/60 backdrop-blur-sm animate-in fade-in duration-200"
       className="bg-card text-card-foreground border border-border w-full max-w-md rounded-3xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200 relative overflow-hidden"
     >
       {/* Arka Plan Dekoratif Işıma */}
-      <div className="absolute -top-16 -right-16 w-36 h-36 rounded-full bg-rose-500/10 blur-2xl pointer-events-none" />
-      <div className="absolute -bottom-16 -left-16 w-36 h-36 rounded-full bg-red-500/10 blur-2xl pointer-events-none" />
+      <div className="absolute -top-16 -right-16 w-36 h-36 rounded-full bg-destructive/10 blur-2xl pointer-events-none" />
+      <div className="absolute -bottom-16 -left-16 w-36 h-36 rounded-full bg-ada-altin/10 blur-2xl pointer-events-none" />
 
       {/* Kapat Butonu */}
       <button
@@ -50,17 +50,17 @@ export function ConfirmClearModal({
       {/* Üst İkon & Başlık */}
       <div className="flex items-start gap-4">
         <div className="relative shrink-0">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-red-500 to-rose-600 text-white flex items-center justify-center shadow-lg shadow-rose-500/25">
+          <div className="w-12 h-12 rounded-2xl bg-destructive text-destructive-foreground flex items-center justify-center shadow-lg shadow-destructive/25">
             <Trash2 className="w-6 h-6" />
           </div>
-          <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center ring-2 ring-card shadow-sm">
+          <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-ada-altin text-ada-murekkep flex items-center justify-center ring-2 ring-card shadow-sm">
             <AlertTriangle className="w-3 h-3" />
           </span>
         </div>
 
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center gap-1">
+            <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-1">
               {is2D ? <Shapes className="w-3 h-3" /> : <Box className="w-3 h-3" />}
               {is2D ? '2D Çizim Alanı' : '3D Katı Cisim Alanı'}
             </span>
@@ -91,7 +91,7 @@ export function ConfirmClearModal({
         </span>
         <span className="font-bold px-2.5 py-1 rounded-xl bg-card border border-border text-foreground">
           {objectCount > 0 ? (
-            <span className="text-rose-600 dark:text-rose-400 font-black">
+            <span className="text-destructive font-black">
               {objectCount} {is2D ? 'nesne / şekil' : 'katı cisim'}
             </span>
           ) : (
@@ -113,7 +113,7 @@ export function ConfirmClearModal({
         <button
           type="button"
           onClick={onConfirm}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white text-xs font-black shadow-lg shadow-rose-600/30 transition-all cursor-pointer active:scale-95 focus-visible:ring-2 focus-visible:ring-rose-300 outline-none"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs font-black shadow-lg shadow-destructive/30 transition-all cursor-pointer active:scale-95 focus-visible:ring-2 focus-visible:ring-ring outline-none"
         >
           <Trash2 className="w-3.5 h-3.5" />
           <span>Evet, Tümünü Sil</span>

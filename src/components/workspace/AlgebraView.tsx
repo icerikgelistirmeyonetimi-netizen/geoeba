@@ -439,7 +439,7 @@ export function AlgebraView({
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               <span
-                                className="w-3 h-3 rounded-full shrink-0 shadow-xs border border-white/20"
+                                className="w-3 h-3 rounded-full shrink-0 shadow-xs border border-ada-fildisi/30"
                                 style={{ backgroundColor: solid.color || '#3b82f6' }}
                               />
                               <div className="truncate">

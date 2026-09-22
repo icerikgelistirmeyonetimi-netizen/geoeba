@@ -7,6 +7,7 @@ import type { Ctx } from './angles';
 import {
   P, SLOPE_ANGLE, areaOf, arcGeometry, br, br2, coord, corner, deg, distance, edgeIndex, fmt, nameOf, nounFilter, onlyPoint, perimeterOf, pick, setFlags, wantsMany,
 } from './common';
+import { resolveArc } from '@/math/arcMeasure';
 
 const AREA_TYPES: ObjectType[] = ['polygon', 'circle', 'ellipse', 'sector'];
 const LINEAR: ObjectType[] = ['segment', 'line', 'ray'];
@@ -706,10 +707,13 @@ export function allMeasures(x: Ctx) {
         parts.push(`değer = ${deg(a.reflex ? 360 - inner : inner)}`);
         break;
       }
-      case 'measurement':
+      case 'measurement': {
         setFlags(scene, o, { showValue: true });
-        parts.push('değer gösterildi');
+        const yay = o.kind === 'arc' && o.circleId ? resolveArc({ circleId: o.circleId, pointIds: o.pointIds, throughPointId: o.throughPointId, major: o.major }, scene.objects) : null;
+        if (yay) parts.push(`uzunluk = ${br(yay.length)}`, `ölçü = ${deg(yay.degrees)}`);
+        else parts.push('değer gösterildi');
         break;
+      }
       default:
         fail(`${nameOf(o)} için ölçü yok.`);
     }
@@ -728,7 +732,8 @@ const HIDE_WORD: Record<string, string> = {
 function attachedLabels(scene: CommandScene, o: MathObject): MathObject[] {
   const ids = new Set(scene.definingPointIds(o));
   if (!ids.size) return [];
-  return scene.objects.filter(a => a.id !== o.id && (a.type === 'angle' || a.type === 'measurement') && scene.definingPointIds(a).every(id => ids.has(id)));
+  // Yay ölçümü çembere aittir; aynı iki noktayı kullanan çokgenle birlikte gizlenmez.
+  return scene.objects.filter(a => a.id !== o.id && (a.type === 'angle' || (a.type === 'measurement' && a.kind !== 'arc')) && scene.definingPointIds(a).every(id => ids.has(id)));
 }
 
 export function hideMeasures(x: Ctx) {

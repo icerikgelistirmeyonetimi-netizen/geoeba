@@ -93,12 +93,12 @@ export function CircleRadiusDialog({ isOpen, onClose, targetPos = { x: 0, y: 0 }
       isOpen={isOpen}
       onClose={onClose}
       labelledBy="cember-yaricap-basligi"
-      overlayClassName="bg-black/60 backdrop-blur-sm select-none"
+      overlayClassName="bg-ada-murekkep/60 backdrop-blur-sm select-none"
       className="bg-card border border-border w-full max-w-sm rounded-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150"
     >
       <div className="p-5 space-y-4">
         <div className="flex items-start gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-violet-500/15 text-violet-600 dark:text-violet-400 flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 rounded-2xl bg-ada-lavanta/20 text-ada-deniz-koyu dark:text-ada-lavanta flex items-center justify-center shrink-0">
             <CircleIcon className="w-5 h-5" />
           </div>
           <div className="min-w-0">
@@ -159,7 +159,7 @@ export function CircleRadiusDialog({ isOpen, onClose, targetPos = { x: 0, y: 0 }
                 }}
                 className={`px-2.5 py-1 rounded-xl text-[11px] font-bold border transition-colors cursor-pointer ${
                   radius === p
-                    ? 'bg-violet-600 text-white border-violet-700'
+                    ? 'bg-primary text-primary-foreground border-primary'
                     : 'bg-card text-foreground border-border hover:bg-muted'
                 }`}
               >
@@ -170,7 +170,7 @@ export function CircleRadiusDialog({ isOpen, onClose, targetPos = { x: 0, y: 0 }
 
           {/* Canlı matematiksel bilgi */}
           {gecerli && radius !== null && (
-            <div className="p-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20 text-[11px] font-mono text-violet-700 dark:text-violet-300 space-y-0.5">
+            <div className="p-2.5 rounded-xl bg-ada-lavanta/15 border border-ada-lavanta/30 text-[11px] font-mono text-ada-deniz-koyu dark:text-ada-kum space-y-0.5">
               <div>Çevre = 2πr = {formatTurkishNumber(2 * Math.PI * radius)} br</div>
               <div>Alan = πr² = {formatTurkishNumber(Math.PI * radius * radius)} br²</div>
             </div>
@@ -180,7 +180,7 @@ export function CircleRadiusDialog({ isOpen, onClose, targetPos = { x: 0, y: 0 }
             <button
               type="submit"
               disabled={!gecerli}
-              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-violet-600 text-white text-xs font-black hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-black hover:bg-ada-deniz-koyu dark:hover:bg-ada-deniz disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
             >
               <Check className="w-4 h-4" />
               <span>Çemberi Çiz</span>

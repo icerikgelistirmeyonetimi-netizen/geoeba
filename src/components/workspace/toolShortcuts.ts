@@ -1,4 +1,5 @@
 import { ToolMode } from '@/types/workspace';
+import { isAnyModalOpen } from '@/components/ui/modalState';
 
 // Ctrl/Cmd ve Alt tarayıcıya/metin düzenlemeye ayrılır. Shift ayrı araçları seçer.
 export const TOOL_SHORTCUTS: Record<ToolMode, string> = {
@@ -9,7 +10,7 @@ export const TOOL_SHORTCUTS: Record<ToolMode, string> = {
   midpoint: 'O', divide_ratio: 'Shift+B', perp_bisector: 'Shift+M',
   angle_bisector: 'Shift+A', perpendicular: 'Shift+H', parallel: 'Shift+J',
   segment_length: 'Shift+L', compass: 'G', intersect: 'X', translate: 'Shift+V',
-  measure_slope: 'Shift+E', trig_ratios: 'Shift+T', checkbox: 'Q',
+  measure_slope: 'Shift+E', trig_ratios: 'Shift+T', measure_arc: 'Shift+K', checkbox: 'Q',
   button: 'B', input_box: 'Shift+I', pen: 'F', measure_distance: 'U',
   measure_angle: 'Shift+G', measure_area: 'M', measure_perimeter: 'Shift+U',
   unit_measure: 'J', area_model: 'Shift+Q', ruler: 'Z', setsquare: 'Shift+Z',
@@ -25,7 +26,19 @@ export function toolForShortcut(event: Pick<KeyboardEvent, 'code' | 'shiftKey' |
 }
 
 export function isEditingOrInDialog(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && (
-    target.isContentEditable || !!target.closest('input, textarea, select, [role="textbox"], [role="dialog"], [role="menu"]')
+  return target instanceof Element && (
+    (target instanceof HTMLElement && target.isContentEditable) || !!target.closest('input, textarea, select, [role="textbox"], [role="dialog"]:not([data-pencere]), [role="menu"]')
   );
+}
+
+/** Kısayol yalnız görünür, öndeki çizim penceresine aittir; uygulama penceresi modal değildir. */
+export function workspaceOwnsKeyboard(event: KeyboardEvent, surface: Element | null): boolean {
+  if (!surface || event.defaultPrevented || event.isComposing || isAnyModalOpen() || isEditingOrInDialog(event.target)) return false;
+  const windowElement = surface.closest('[data-pencere]');
+  if (windowElement) {
+    if (windowElement.getAttribute('data-pencere') !== 'acik' || windowElement.getAttribute('data-pencere-onde') !== '1') return false;
+    const targetWindow = event.target instanceof Element ? event.target.closest('[data-pencere]') : null;
+    if (targetWindow && targetWindow !== windowElement) return false;
+  }
+  return surface.getClientRects().length > 0;
 }

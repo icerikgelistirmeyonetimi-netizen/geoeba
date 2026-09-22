@@ -122,12 +122,22 @@ function kazanimListesi(): Promise<Record<string, KazanimIcerigi>> {
   return kazanimListesiSozu;
 }
 
+// WebGL2 sondası: sonuç önbelleğe alınır ve sonda bağlamı hemen bırakılır (StrictMode'da her
+// bağlanışta iki bağlam sızıyor, #/home ↔ #/studyo gidiş gelişlerinde tarayıcı sınırına ulaşılıyordu)
+let webgl2Sonucu: boolean | null = null;
 function webgl2Var(): boolean {
+  if (webgl2Sonucu !== null) return webgl2Sonucu;
   try {
-    return !!document.createElement('canvas').getContext('webgl2');
+    const kanvas = document.createElement('canvas');
+    kanvas.width = 1;
+    kanvas.height = 1;
+    const gl = kanvas.getContext('webgl2');
+    webgl2Sonucu = !!gl;
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
   } catch {
-    return false;
+    webgl2Sonucu = false;
   }
+  return webgl2Sonucu;
 }
 
 // Statik dışa aktarımda bileşen sunucuda da çizilir; layout effect yalnız tarayıcıda kullanılır

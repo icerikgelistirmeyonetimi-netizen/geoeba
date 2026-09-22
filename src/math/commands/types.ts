@@ -46,6 +46,8 @@ export interface EngineOptions {
   viewport?: ViewportTransform;
   /** Göreli stil komutları ("yazıları büyüt") için güncel stil ayarları. */
   styleSettings?: StyleSettings;
+  /** Yarım kalmış bir araç işleminin (çokgen, doğru parçası…) tıklanmış noktaları: tuvaldeki gibi KULLANIMDA sayılır. */
+  pendingPointIds?: string[];
 }
 
 /**

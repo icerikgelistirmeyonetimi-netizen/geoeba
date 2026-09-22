@@ -1,6 +1,7 @@
 import type { AppAction } from '../../types';
 import { fail } from '../../scene';
 import type { Clause } from '../../text';
+import { NOUNS, type NounKind } from '../../text';
 import type { CommandHandler } from '../../types';
 import { actOnce, plainOf } from './shared';
 import { type ToolInfo, TOOLS, findTool } from './tools';
@@ -15,14 +16,40 @@ const DIALOG_WORD = /\b(?:pencere|diyalog|dialog)\w*|\b(?:fonksiyon|grafik|kaydi
 /** "kalem aracını kapat", "pergeli bırak", "araçtan çık": etkin araç bırakılır, Seç ve Taşı aracına dönülür. */
 const CLOSE_VERB = /\b(?:kapat\w*|birak\w*|cik(?!ar)\w*|vazgec\w*)/;
 
-interface ToolHit { tool?: ToolInfo; score: number; close?: boolean }
+interface ToolHit { tool?: ToolInfo; score: number; close?: boolean; removed?: boolean }
 
 const SELECT_TOOL = () => TOOLS.find(t => t.id === 'select')!;
+
+/**
+ * Ölçme araçları çizim nesnesi değildir: "cetveli sil", "iletkiyi kaldır", "alan modelini gizle" aracı tuvalden
+ * kaldırır (Seç ve Taşı'ya dönülür); seçili çizim SİLİNMEZ. Silme ailesinin (90) önüne geçsin diye 94.
+ */
+const INSTRUMENTS: [RegExp, string][] = [
+  [/\bcetvel\w*/g, 'ruler'],
+  [/\bgonye\w*/g, 'setsquare'],
+  [/\baci ?olcer\w*|\biletki\w*|\bminkale\w*/g, 'measure_angle'],
+  [/\balani? model\w*/g, 'area_model'],
+];
+const REMOVE_VERB = /\b(?:sil(?!gi)\w*|kaldir\w*|gizle\w*|kapat\w*|yok et\w*)/;
+const OTHER_NOUNS: NounKind[] = ['point', 'segment', 'line', 'ray', 'circle', 'arc', 'sector', 'angle', 'triangle', 'square', 'rectangle', 'polygon', 'text'];
+
+function instrumentRemoval(c: Clause, text: string): ToolHit | null {
+  if (c.labels.length || !REMOVE_VERB.test(text)) return null;
+  const hit = INSTRUMENTS.find(([re]) => text.search(re) >= 0);
+  if (!hit) return null;
+  // "cetvelden eklenen parçayı sil": başka bir nesne adı varsa silme ailesinindir
+  const rest = INSTRUMENTS.reduce((t, [re]) => t.replace(re, ' '), text);
+  if (OTHER_NOUNS.some(k => NOUNS[k].test(rest))) return null;
+  const tool = TOOLS.find(t => t.id === hit[1]);
+  return tool ? { tool, score: 94, close: true, removed: true } : null;
+}
 
 function detect(c: Clause): ToolHit {
   const text = plainOf(c);
   if (DIALOG_WORD.test(text)) return { score: 0 };
   if (TOOL_WITH.test(text)) return { score: 0 };
+  const removal = instrumentRemoval(c, text);
+  if (removal) return removal;
   const explicit = text.match(TOOL_WORD);
   if (explicit) {
     const before = text.slice(0, explicit.index).trim();
@@ -64,17 +91,23 @@ export function toolActions(tool: ToolInfo): AppAction[] {
 export const toolSelect: CommandHandler = {
   id: 'app.tool',
   examples: ['Elips aracını seç', 'Uzunluk Ölç (cm) aracını seç', 'trig oranlar aracını aç', 'açıölçer aracını seç', 'açı ölçeri aç', 'pergeli aç', 'kalemi aç',
-    'cetveli getir', 'gönyeyi getir', 'silgiyi seç', 'Seç ve Taşı aracını seç', 'Düzgün Çokgen aracını seç', 'Fonksiyon aracını seç', 'orta dikme aracına geç'],
+    'cetveli getir', 'gönyeyi getir', 'cetveli kaldır', 'silgiyi seç', 'Seç ve Taşı aracını seç', 'Düzgün Çokgen aracını seç', 'Fonksiyon aracını seç', 'orta dikme aracına geç'],
   match(c) { return detect(c).score; },
   run(c, scene) {
-    const { tool, close } = detect(c);
+    const { tool, close, removed } = detect(c);
     if (!tool) {
       const names = TOOLS.slice(0, 8).map(t => t.name).join(', ');
       fail(`Bu adda bir araç bulamadım. Araç adını yazın; örneğin “Elips aracını seç” ya da “Pergel aracını aç” (araçlar: ${names}…).`);
     }
     if (close) {
       actOnce(scene, { kind: 'selectTool', tool: 'select' });
-      scene.say(tool.id === 'select' ? 'Seç ve Taşı aracına geçildi.' : `${tool.name} aracı bırakıldı; Seç ve Taşı aracına geçildi.`);
+      scene.say(
+        tool.id === 'select'
+          ? 'Seç ve Taşı aracına geçildi.'
+          : removed
+          ? `${tool.name} tuvalden kaldırıldı; Seç ve Taşı aracına geçildi.`
+          : `${tool.name} aracı bırakıldı; Seç ve Taşı aracına geçildi.`
+      );
       return;
     }
     const added = toolActions(tool).map(a => actOnce(scene, a)).some(Boolean);

@@ -67,7 +67,7 @@ export function FunctionDialog({ isOpen, onClose }: FunctionDialogProps) {
       isOpen={isOpen}
       onClose={onClose}
       labelledBy="function-dialog-title"
-      overlayClassName="bg-black/60 backdrop-blur-sm"
+      overlayClassName="bg-ada-murekkep/60 backdrop-blur-sm"
       className="bg-card border border-border w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150"
     >
       <div className="flex items-center justify-between border-b border-border pb-3">

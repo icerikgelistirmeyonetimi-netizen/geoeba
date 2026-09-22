@@ -211,7 +211,7 @@ export function ViewCube3D({ camera, setCamera }: ViewCube3DProps) {
       onMouseLeave={handleMouseUp}
     >
       {/* Üst Hızlı Kontrol Düğmeleri (Ev & Döndürme) */}
-      <div className="flex items-center gap-1 mb-1.5 p-1 rounded-xl bg-card/90 dark:bg-slate-900/90 backdrop-blur-md border border-border/80 shadow-md">
+      <div className="flex items-center gap-1 mb-1.5 p-1 rounded-xl bg-card/90 backdrop-blur-md border border-border/80 shadow-md">
         <button
           onClick={() => handleSetView({ rotX: 25, rotY: -40 })}
           title="İzometrik Başlangıç Görünümü"
@@ -239,7 +239,7 @@ export function ViewCube3D({ camera, setCamera }: ViewCube3DProps) {
 
       {/* Tinkercad Stili 3D Navigasyon Küpü */}
       <div
-        className="w-[90px] h-[90px] rounded-2xl bg-card/90 dark:bg-slate-900/90 backdrop-blur-md border border-border shadow-lg p-0.5 cursor-grab active:cursor-grabbing flex items-center justify-center relative overflow-hidden"
+        className="w-[90px] h-[90px] rounded-2xl bg-card/90 backdrop-blur-md border border-border shadow-lg p-0.5 cursor-grab active:cursor-grabbing flex items-center justify-center relative overflow-hidden"
         onMouseDown={handleMouseDown}
       >
         <svg width="90" height="90" className="overflow-visible">
@@ -261,12 +261,11 @@ export function ViewCube3D({ camera, setCamera }: ViewCube3DProps) {
                 {/* Yüzey Çokgeni */}
                 <polygon
                   points={face.points}
-                  fill={isHovered ? '#0ea5e9' : '#f1f5f9'}
-                  stroke="#475569"
                   strokeWidth={1.2}
                   strokeLinejoin="round"
-                  className="transition-colors dark:fill-slate-800"
-                  style={{ fill: isHovered ? '#0ea5e9' : undefined }}
+                  className={`transition-colors stroke-ada-murekkep-2 dark:stroke-ada-fildisi/40 ${
+                    isHovered ? 'fill-primary' : 'fill-ada-kum dark:fill-ada-murekkep-2'
+                  }`}
                 />
 
                 {/* Yüzey Düzlemine 3D Yapışık Yazı (Affine Transform) */}
@@ -280,8 +279,9 @@ export function ViewCube3D({ camera, setCamera }: ViewCube3DProps) {
                       fontSize="32"
                       fontWeight="900"
                       letterSpacing="2"
-                      fill={isHovered ? '#ffffff' : '#0f172a'}
-                      className="font-sans select-none pointer-events-none dark:fill-slate-100"
+                      className={`font-sans select-none pointer-events-none ${
+                        isHovered ? 'fill-primary-foreground' : 'fill-ada-murekkep dark:fill-ada-fildisi'
+                      }`}
                     >
                       {face.name}
                     </text>

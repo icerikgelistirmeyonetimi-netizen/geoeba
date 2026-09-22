@@ -5,8 +5,14 @@ import { useWorkspace } from '@/state/WorkspaceContext';
 import { useTheme } from '@/state/ThemeContext';
 import { ToolMode } from '@/types/workspace';
 import { LayoutMode } from './PropertiesPanel';
-import { exportPng, exportSvg, exportPdf, exportWord } from '@/utils/exportCanvas';
+import { exportPng, exportSvg, exportPdf, exportWord, printSvg } from '@/utils/exportCanvas';
+import { parseProjectFile } from '@/math/projectFile';
+import { formatTurkishNumber, visibleGridStep } from '@/math/coordinates';
+import { workspaceOwnsKeyboard, TOOL_SHORTCUTS } from './toolShortcuts';
+import { TOOL_GROUPS } from './toolDefinitions';
+import { isAnyModalOpen, registerModalOpen, registerModalClose } from '@/components/ui/modalState';
 import { StylePanel } from './StylePanel';
+import { EsitUzunluklarSimgesi } from './EsitlikSimgeleri';
 import {
   FileText,
   FolderOpen,
@@ -55,9 +61,9 @@ import {
   ExternalLink,
   Contrast,
   Sliders,
-  Maximize2,
-  Moon,
-  Sun,
+  Magnet,
+  FileCode2,
+  Grid2x2,
 } from 'lucide-react';
 
 export interface WorkspaceMenuBarProps {
@@ -79,6 +85,25 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const [infoModalType, setInfoModalType] = useState<'shortcuts' | 'about' | 'guide' | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'stil' | 'duzlem' | 'genel'>('stil');
+  // Ayarlar > Düzlem > Izgara aralığı: özel değer kutusu
+  const [ozelAralik, setOzelAralik] = useState('');
+  const [ozelAralikHata, setOzelAralikHata] = useState<string | null>(null);
+  useEffect(() => {
+    if (!infoModalType && !isSettingsModalOpen) return;
+    registerModalOpen();
+    return registerModalClose;
+  }, [infoModalType, isSettingsModalOpen]);
+  // Tuvalin sağ tık menüsündeki "Ayarlar" maddesi çalışma alanı ayarlarını açar (varsayılan: Düzlem sekmesi)
+  useEffect(() => {
+    const ac = (event: Event) => {
+      const sekme = (event as CustomEvent<unknown>).detail;
+      setSettingsTab(sekme === 'stil' || sekme === 'genel' ? sekme : 'duzlem');
+      setActiveMenu(null);
+      setIsSettingsModalOpen(true);
+    };
+    window.addEventListener('geoeba:calisma-ayarlari', ac);
+    return () => window.removeEventListener('geoeba:calisma-ayarlari', ac);
+  }, []);
   const menuBarRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -95,14 +120,16 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
 
   const { theme, setTheme } = useTheme();
   const {
+    getProject, loadProject, copySelection, cutSelection, pasteSelection, deleteSelection, selectAll,
+    canPaste, sceneBridge, selectedObjectIds,
     objects,
     selectedObjectId,
     viewport,
     setViewport,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
+    undoWorkspace: undo,
+    redoWorkspace: redo,
+    canUndoWorkspace: canUndo,
+    canRedoWorkspace: canRedo,
     deleteObject,
     setSelectedObjectId,
     addObject,
@@ -130,6 +157,9 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const onOpenRegularPolygonDialog = props.onOpenRegularPolygonDialog ?? openRegularPolygonDialog;
   const onClearAll = props.onClearAll ?? (() => requestClearAll(studioDimension));
   const onResetView = props.onResetView ?? resetViewport;
+  const hasSelection = studioDimension === '3D' ? !!sceneBridge?.selectedIds.length : selectedObjectIds.length > 0;
+  // Silme her iki görünümde de seçili 2B nesneleri ve 3B cisimleri birlikte kapsar (deleteSelection)
+  const hasDeletable = !!sceneBridge?.selectedIds.length || selectedObjectIds.length > 0;
 
   // Menü dışına tıklanınca kapat
   useEffect(() => {
@@ -142,6 +172,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
       if (e.key === 'Escape') {
         setActiveMenu(null);
         setInfoModalType(null);
+        setIsSettingsModalOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -166,11 +197,8 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
 
   // Tuvali bulma (Dışa aktarma ve yazdırma için)
   const getCanvasSvg = (): SVGSVGElement | null => {
-    const svgs = Array.from(document.querySelectorAll('svg'));
-    if (svgs.length === 0) return null;
-    return svgs.reduce((largest, cur) =>
-      cur.getBoundingClientRect().width > largest.getBoundingClientRect().width ? cur : largest
-    ) as SVGSVGElement;
+    const root = menuBarRef.current?.closest('[data-pencere]') ?? document;
+    return root.querySelector<SVGSVGElement>(`svg[data-workspace-canvas="${studioDimension.toLowerCase()}"]`);
   };
 
   // Dışa aktarma eylemi
@@ -188,19 +216,14 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
       else if (format === 'pdf') await exportPdf(svg, title);
       else await exportWord(svg, title);
     } catch (err) {
-      console.error('Dışa aktarma hatası:', err);
+      alert('Çizim dışa aktarılamadı. Lütfen tekrar deneyin.');
     }
   };
 
   // Proje kaydetme (.geoeba JSON)
   const handleSaveProject = () => {
     closeMenu();
-    const projectData = {
-      version: '1.0',
-      timestamp: Date.now(),
-      viewport,
-      objects,
-    };
+    const projectData = { ...getProject(), timestamp: Date.now() };
     const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -209,7 +232,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
   };
 
   // Proje dosyası açma (.geoeba JSON)
@@ -219,15 +242,12 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const data = JSON.parse(event.target?.result as string);
-        if (data && Array.isArray(data.objects)) {
-          if (data.viewport) setViewport(data.viewport);
-          data.objects.forEach((obj: any) => addObject(obj));
-        }
+        loadProject(parseProjectFile(JSON.parse(event.target?.result as string)));
       } catch (err) {
-        alert('Dosya açılamadı. Lütfen geçerli bir .geoeba veya JSON dosyası seçin.');
+        alert(err instanceof Error ? err.message : 'Dosya açılamadı. Mevcut çalışma korundu.');
       }
     };
+    reader.onerror = () => alert('Dosya okunamadı. Mevcut çalışma korundu.');
     reader.readAsText(file);
     e.target.value = '';
     closeMenu();
@@ -236,58 +256,34 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   // Yazdır
   const handlePrint = () => {
     closeMenu();
-    window.print();
+    const svg = getCanvasSvg();
+    if (svg) printSvg(svg);
   };
 
   // Kopyala / Kes / Yapıştır
   const handleCopy = () => {
     closeMenu();
-    const obj = objects.find((o) => o.id === selectedObjectId);
-    if (obj) {
-      sessionStorage.setItem('geoeba_clipboard', JSON.stringify(obj));
-    }
+    copySelection();
   };
 
   const handleCut = () => {
     closeMenu();
-    const obj = objects.find((o) => o.id === selectedObjectId);
-    if (obj) {
-      sessionStorage.setItem('geoeba_clipboard', JSON.stringify(obj));
-      deleteObject(obj.id);
-    }
+    cutSelection();
   };
 
   const handlePaste = () => {
     closeMenu();
-    const raw = sessionStorage.getItem('geoeba_clipboard');
-    if (raw) {
-      try {
-        const obj = JSON.parse(raw);
-        const newId = `${obj.type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-        if (obj.x !== undefined && obj.y !== undefined) {
-          addObject({ ...obj, id: newId, x: obj.x + 1, y: obj.y + 1, createdAt: Date.now() });
-        } else {
-          addObject({ ...obj, id: newId, createdAt: Date.now() });
-        }
-      } catch (e) {
-        console.error('Yapıştırma hatası:', e);
-      }
-    }
+    pasteSelection();
   };
 
   const handleDelete = () => {
     closeMenu();
-    if (selectedObjectId) {
-      deleteObject(selectedObjectId);
-      setSelectedObjectId(null);
-    }
+    deleteSelection();
   };
 
   const handleSelectAll = () => {
     closeMenu();
-    if (objects.length > 0) {
-      setSelectedObjectId(objects[0].id);
-    }
+    selectAll();
   };
 
   const handleResetView = () => {
@@ -295,6 +291,26 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
     if (onResetView) onResetView();
     else resetViewport();
   };
+
+  const shortcutRef = useRef({ handleSaveProject, handlePrint, handleCopy, handleCut, handlePaste, handleDelete, handleSelectAll, undo, redo, canUndo, canRedo, onClearAll });
+  shortcutRef.current = { handleSaveProject, handlePrint, handleCopy, handleCut, handlePaste, handleDelete, handleSelectAll, undo, redo, canUndo, canRedo, onClearAll };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!workspaceOwnsKeyboard(event, menuBarRef.current) || isAnyModalOpen() || event.altKey) return;
+      const k = shortcutRef.current;
+      const mod = event.ctrlKey || event.metaKey;
+      let action: (() => void) | undefined;
+      if (mod) {
+        if (event.code === 'KeyZ') action = event.shiftKey ? () => { if (k.canRedo) k.redo(); } : () => { if (k.canUndo) k.undo(); };
+        else if (!event.shiftKey) action = ({ KeyA: k.handleSelectAll, KeyC: k.handleCopy, KeyX: k.handleCut, KeyV: k.handlePaste,
+          KeyS: k.handleSaveProject, KeyO: () => fileInputRef.current?.click(), KeyN: k.onClearAll, KeyP: k.handlePrint,
+          KeyY: () => { if (k.canRedo) k.redo(); } } as Record<string, () => void>)[event.code];
+      } else if (event.key === 'Delete' || event.key === 'Backspace') action = k.handleDelete;
+      if (action) { event.preventDefault(); action(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   return (
     <>
@@ -313,31 +329,31 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
         className="flex-1 flex items-center justify-between z-30 select-none min-w-0 relative"
       >
         {/* SOL: 7 ANA MENÜ LİSTESİ */}
-        <div className="flex items-center gap-0.5 sm:gap-1 text-xs font-medium">
+        <div className="flex items-center gap-0.5 sm:gap-1 text-[13px] font-medium">
           {/* 1. DOSYA MENÜSÜ */}
           <div className="relative">
             <button
               onClick={() => handleMenuHeaderClick('dosya')}
               onMouseEnter={() => handleMenuHeaderHover('dosya')}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+              className={`min-h-[44px] px-3 py-1 rounded-md transition-colors cursor-pointer ${
                 activeMenu === 'dosya'
-                  ? 'bg-primary/15 text-primary font-bold shadow-2xs'
-                  : 'text-slate-700 dark:text-slate-300 hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-primary/15 text-primary shadow-2xs'
+                  : 'text-foreground/80 hover:text-foreground hover:bg-muted'
               }`}
             >
               Dosya
             </button>
             {activeMenu === 'dosya' && (
-              <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
+              <div className="absolute top-full left-0 mt-1 w-56 bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
                 <button
                   onClick={() => {
                     closeMenu();
                     onClearAll();
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <FileText className="w-3.5 h-3.5 text-blue-500" />
+                    <FileText className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Yeni</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">Ctrl+N</span>
@@ -348,10 +364,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     fileInputRef.current?.click();
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <FolderOpen className="w-3.5 h-3.5 text-amber-500" />
+                    <FolderOpen className="w-3.5 h-3.5 text-ada-altin" />
                     <span>Aç...</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">Ctrl+O</span>
@@ -359,10 +375,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
 
                 <button
                   onClick={handleSaveProject}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Save className="w-3.5 h-3.5 text-emerald-500" />
+                    <Save className="w-3.5 h-3.5 text-ada-vurgu" />
                     <span>Kaydet</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">Ctrl+S</span>
@@ -370,10 +386,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
 
                 <button
                   onClick={handleSaveProject}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Save className="w-3.5 h-3.5 text-emerald-600" />
+                    <Save className="w-3.5 h-3.5 text-ada-vurgu" />
                     <span>Farklı Kaydet...</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">.geoeba</span>
@@ -386,10 +402,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     fileInputRef.current?.click();
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Upload className="w-3.5 h-3.5 text-indigo-500" />
+                    <Upload className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>İçe Aktar</span>
                   </div>
                 </button>
@@ -400,34 +416,43 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                 </div>
                 <button
                   onClick={() => handleExport('png')}
-                  className="w-full px-4 py-1 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer pl-6"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
-                  <span>Görsel (PNG)</span>
-                  <Download className="w-3 h-3 text-muted-foreground" />
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span>Görsel (PNG)</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">.png</span>
                 </button>
                 <button
                   onClick={() => handleExport('svg')}
-                  className="w-full px-4 py-1 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer pl-6"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
-                  <span>Vektör (SVG)</span>
-                  <Download className="w-3 h-3 text-muted-foreground" />
+                  <div className="flex items-center gap-2">
+                    <FileCode2 className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span>Vektör (SVG)</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">.svg</span>
                 </button>
                 <button
                   onClick={() => handleExport('pdf')}
-                  className="w-full px-4 py-1 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer pl-6"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
-                  <span>Belge (PDF)</span>
-                  <Download className="w-3 h-3 text-muted-foreground" />
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span>Belge (PDF)</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">.pdf</span>
                 </button>
 
                 <div className="my-1 border-t border-border/60" />
 
                 <button
                   onClick={handlePrint}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Printer className="w-3.5 h-3.5 text-slate-500" />
+                    <Printer className="w-3.5 h-3.5 text-muted-foreground" />
                     <span>Yazdır...</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">Ctrl+P</span>
@@ -441,26 +466,26 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
             <button
               onClick={() => handleMenuHeaderClick('duzenle')}
               onMouseEnter={() => handleMenuHeaderHover('duzenle')}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+              className={`min-h-[44px] px-3 py-1 rounded-md transition-colors cursor-pointer ${
                 activeMenu === 'duzenle'
-                  ? 'bg-primary/15 text-primary font-bold shadow-2xs'
-                  : 'text-slate-700 dark:text-slate-300 hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-primary/15 text-primary shadow-2xs'
+                  : 'text-foreground/80 hover:text-foreground hover:bg-muted'
               }`}
             >
               Düzenle
             </button>
             {activeMenu === 'duzenle' && (
-              <div className="absolute top-full left-0 mt-1 w-52 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
+              <div className="absolute top-full left-0 mt-1 w-52 bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
                 <button
                   disabled={!canUndo}
                   onClick={() => {
                     closeMenu();
                     undo();
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Undo2 className="w-3.5 h-3.5 text-blue-500" />
+                    <Undo2 className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Geri Al</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">Ctrl+Z</span>
@@ -472,10 +497,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     redo();
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Redo2 className="w-3.5 h-3.5 text-blue-500" />
+                    <Redo2 className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Yinele</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">Ctrl+Y</span>
@@ -484,24 +509,24 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                 <div className="my-1 border-t border-border/60" />
 
                 <button
-                  disabled={!selectedObjectId}
+                  disabled={!hasSelection}
                   onClick={handleCut}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Scissors className="w-3.5 h-3.5 text-amber-500" />
+                    <Scissors className="w-3.5 h-3.5 text-ada-altin" />
                     <span>Kes</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">Ctrl+X</span>
                 </button>
 
                 <button
-                  disabled={!selectedObjectId}
+                  disabled={!hasSelection}
                   onClick={handleCopy}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Copy className="w-3.5 h-3.5 text-indigo-500" />
+                    <Copy className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Kopyala</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">Ctrl+C</span>
@@ -509,19 +534,20 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
 
                 <button
                   onClick={handlePaste}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  disabled={!canPaste}
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Clipboard className="w-3.5 h-3.5 text-emerald-500" />
+                    <Clipboard className="w-3.5 h-3.5 text-ada-vurgu" />
                     <span>Yapıştır</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">Ctrl+V</span>
                 </button>
 
                 <button
-                  disabled={!selectedObjectId}
+                  disabled={!hasDeletable}
                   onClick={handleDelete}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-destructive hover:bg-destructive/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
                     <Trash2 className="w-3.5 h-3.5" />
@@ -534,10 +560,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
 
                 <button
                   onClick={handleSelectAll}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <CheckSquare className="w-3.5 h-3.5 text-purple-500" />
+                    <CheckSquare className="w-3.5 h-3.5 text-ada-lavanta" />
                     <span>Tümünü Seç</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">Ctrl+A</span>
@@ -551,16 +577,16 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
             <button
               onClick={() => handleMenuHeaderClick('gorunum')}
               onMouseEnter={() => handleMenuHeaderHover('gorunum')}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+              className={`min-h-[44px] px-3 py-1 rounded-md transition-colors cursor-pointer ${
                 activeMenu === 'gorunum'
-                  ? 'bg-primary/15 text-primary font-bold shadow-2xs'
-                  : 'text-slate-700 dark:text-slate-300 hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-primary/15 text-primary shadow-2xs'
+                  : 'text-foreground/80 hover:text-foreground hover:bg-muted'
               }`}
             >
               Görünüm
             </button>
             {activeMenu === 'gorunum' && (
-              <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
+              <div className="absolute top-full left-0 mt-1 w-56 bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
                 <div className="px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                   Çalışma Alanı Düzenleri
                 </div>
@@ -570,10 +596,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onLayoutModeChange('2d_only');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Maximize className="w-3.5 h-3.5 text-blue-500" />
+                    <Maximize className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Grafik Paneli (2D)</span>
                   </div>
                   {layoutMode === '2d_only' && <Check className="w-3.5 h-3.5 text-primary" />}
@@ -584,10 +610,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onLayoutModeChange('3d_only');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Box className="w-3.5 h-3.5 text-violet-500" />
+                    <Box className="w-3.5 h-3.5 text-ada-lavanta" />
                     <span>3B Görünüm</span>
                   </div>
                   {layoutMode === '3d_only' && <Check className="w-3.5 h-3.5 text-primary" />}
@@ -598,10 +624,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onLayoutModeChange('2d_3d');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Columns2 className="w-3.5 h-3.5 text-indigo-500" />
+                    <Columns2 className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>2D + 3D Çift Görünüm</span>
                   </div>
                   {layoutMode === '2d_3d' && <Check className="w-3.5 h-3.5 text-primary" />}
@@ -612,10 +638,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onLayoutModeChange('algebra_2d');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <LayoutGrid className="w-3.5 h-3.5 text-emerald-500" />
+                    <LayoutGrid className="w-3.5 h-3.5 text-ada-vurgu" />
                     <span>Cebir Paneli + 2D</span>
                   </div>
                   {layoutMode === 'algebra_2d' && <Check className="w-3.5 h-3.5 text-primary" />}
@@ -626,10 +652,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onLayoutModeChange('three_col');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Columns2 className="w-3.5 h-3.5 text-amber-500" />
+                    <Columns2 className="w-3.5 h-3.5 text-ada-altin" />
                     <span>Hesap / 3 Sütun (Cebir+2D+3D)</span>
                   </div>
                   {layoutMode === 'three_col' && <Check className="w-3.5 h-3.5 text-primary" />}
@@ -645,10 +671,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   onClick={() => {
                     setViewport((prev) => ({ ...prev, showGrid: !prev.showGrid }));
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Grid className="w-3.5 h-3.5 text-blue-600" />
+                    <Grid className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Izgara</span>
                   </div>
                   {viewport.showGrid && <Check className="w-3.5 h-3.5 text-primary" />}
@@ -658,10 +684,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   onClick={() => {
                     setViewport((prev) => ({ ...prev, showAxes: !prev.showAxes }));
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Compass className="w-3.5 h-3.5 text-teal-600" />
+                    <Compass className="w-3.5 h-3.5 text-ada-vurgu" />
                     <span>Eksenler</span>
                   </div>
                   {viewport.showAxes && <Check className="w-3.5 h-3.5 text-primary" />}
@@ -671,10 +697,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
 
                 <button
                   onClick={handleResetView}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                    <RotateCcw className="w-3.5 h-3.5 text-muted-foreground" />
                     <span>Görünümü Sıfırla (Yakınlaştır)</span>
                   </div>
                 </button>
@@ -687,25 +713,25 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
             <button
               onClick={() => handleMenuHeaderClick('araclar')}
               onMouseEnter={() => handleMenuHeaderHover('araclar')}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+              className={`min-h-[44px] px-3 py-1 rounded-md transition-colors cursor-pointer ${
                 activeMenu === 'araclar'
-                  ? 'bg-primary/15 text-primary font-bold shadow-2xs'
-                  : 'text-slate-700 dark:text-slate-300 hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-primary/15 text-primary shadow-2xs'
+                  : 'text-foreground/80 hover:text-foreground hover:bg-muted'
               }`}
             >
               Araçlar
             </button>
             {activeMenu === 'araclar' && (
-              <div className="absolute top-full left-0 mt-1 w-52 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
+              <div className="absolute top-full left-0 mt-1 w-52 bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
                 <button
                   onClick={() => {
                     closeMenu();
                     onSelectTool('select');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <MousePointer className="w-3.5 h-3.5 text-blue-500" />
+                    <MousePointer className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Seçim</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">V</span>
@@ -716,10 +742,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onSelectTool('point');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Dot className="w-3.5 h-3.5 text-indigo-500" />
+                    <Dot className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Nokta</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">P</span>
@@ -730,10 +756,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onSelectTool('segment');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Minus className="w-3.5 h-3.5 text-emerald-500" />
+                    <Minus className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Doğru / Parça</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">S</span>
@@ -744,10 +770,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onSelectTool('circle');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Circle className="w-3.5 h-3.5 text-cyan-500" />
+                    <Circle className="w-3.5 h-3.5 text-ada-lavanta" />
                     <span>Çember</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">C</span>
@@ -758,10 +784,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onSelectTool('polygon');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Shapes className="w-3.5 h-3.5 text-purple-500" />
+                    <Shapes className="w-3.5 h-3.5 text-ada-vurgu" />
                     <span>Çokgen</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">G</span>
@@ -774,10 +800,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onSelectTool('measure_distance');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Ruler className="w-3.5 h-3.5 text-amber-500" />
+                    <Ruler className="w-3.5 h-3.5 text-ada-altin" />
                     <span>Ölçüm (Uzunluk / Açı)</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">M</span>
@@ -788,10 +814,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onSelectTool('reflect');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <FlipHorizontal className="w-3.5 h-3.5 text-rose-500" />
+                    <FlipHorizontal className="w-3.5 h-3.5 text-ada-mercan" />
                     <span>Dönüşüm (Simetri / Öteleme)</span>
                   </div>
                 </button>
@@ -801,10 +827,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onSelectTool('perpendicular');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Wrench className="w-3.5 h-3.5 text-teal-500" />
+                    <Wrench className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Geometri Araçları (Dikme/Teğet)</span>
                   </div>
                 </button>
@@ -817,25 +843,25 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
             <button
               onClick={() => handleMenuHeaderClick('ekle')}
               onMouseEnter={() => handleMenuHeaderHover('ekle')}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+              className={`min-h-[44px] px-3 py-1 rounded-md transition-colors cursor-pointer ${
                 activeMenu === 'ekle'
-                  ? 'bg-primary/15 text-primary font-bold shadow-2xs'
-                  : 'text-slate-700 dark:text-slate-300 hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-primary/15 text-primary shadow-2xs'
+                  : 'text-foreground/80 hover:text-foreground hover:bg-muted'
               }`}
             >
               Ekle
             </button>
             {activeMenu === 'ekle' && (
-              <div className="absolute top-full left-0 mt-1 w-52 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
+              <div className="absolute top-full left-0 mt-1 w-52 bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
                 <button
                   onClick={() => {
                     closeMenu();
                     onSelectTool('text');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Type className="w-3.5 h-3.5 text-blue-500" />
+                    <Type className="w-3.5 h-3.5 text-ada-murekkep-2 dark:text-ada-kum" />
                     <span>Metin</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">T</span>
@@ -846,10 +872,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     fileInputRef.current?.click();
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <ImageIcon className="w-3.5 h-3.5 text-emerald-500" />
+                    <ImageIcon className="w-3.5 h-3.5 text-ada-murekkep-2 dark:text-ada-kum" />
                     <span>Görsel</span>
                   </div>
                 </button>
@@ -859,10 +885,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onOpenFunctionDialog();
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <FunctionSquare className="w-3.5 h-3.5 text-violet-500" />
+                    <FunctionSquare className="w-3.5 h-3.5 text-ada-deniz-koyu dark:text-ada-vurgu" />
                     <span>Denklem / Fonksiyon</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">F</span>
@@ -873,10 +899,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onOpenSliderDialog();
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-amber-500" />
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-ada-deniz-koyu dark:text-ada-vurgu" />
                     <span>Etkileşimli Sürgü</span>
                   </div>
                 </button>
@@ -886,10 +912,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     onOpenAddObjectDialog();
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Box className="w-3.5 h-3.5 text-purple-500" />
+                    <Box className="w-3.5 h-3.5 text-ada-lavanta" />
                     <span>Medya & 3D Cisim</span>
                   </div>
                 </button>
@@ -900,10 +926,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                       closeMenu();
                       onOpenRegularPolygonDialog();
                     }}
-                    className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center gap-2">
-                      <Shapes className="w-3.5 h-3.5 text-indigo-500" />
+                      <Shapes className="w-3.5 h-3.5 text-ada-vurgu" />
                       <span>Düzgün Çokgen</span>
                     </div>
                   </button>
@@ -912,14 +938,14 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                 <div className="my-1 border-t border-border/60" />
 
                 <a
-                  href="https://ogmmateryal.eba.gov.tr"
+                  href="https://www.eba.gov.tr"
                   target="_blank"
                   rel="noreferrer"
                   onClick={closeMenu}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Link2 className="w-3.5 h-3.5 text-slate-500" />
+                    <Link2 className="w-3.5 h-3.5 text-muted-foreground" />
                     <span>EBA Bağlantısı</span>
                   </div>
                   <ExternalLink className="w-3 h-3 text-muted-foreground" />
@@ -933,26 +959,26 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
             <button
               onClick={() => handleMenuHeaderClick('ayarlar')}
               onMouseEnter={() => handleMenuHeaderHover('ayarlar')}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+              className={`min-h-[44px] px-3 py-1 rounded-md transition-colors cursor-pointer ${
                 activeMenu === 'ayarlar'
-                  ? 'bg-primary/15 text-primary font-bold shadow-2xs'
-                  : 'text-slate-700 dark:text-slate-300 hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-primary/15 text-primary shadow-2xs'
+                  : 'text-foreground/80 hover:text-foreground hover:bg-muted'
               }`}
             >
               Ayarlar
             </button>
             {activeMenu === 'ayarlar' && (
-              <div className="absolute top-full left-0 mt-1 w-64 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
+              <div className="absolute top-full left-0 mt-1 w-64 bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
                 {/* 1. Çalışma Alanı Ayarları Ana Butonu */}
                 <button
                   onClick={() => {
                     closeMenu();
                     setIsSettingsModalOpen(true);
                   }}
-                  className="w-[calc(100%-8px)] mx-1 px-3 py-2 flex items-center justify-between text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer rounded-lg"
+                  className="w-[calc(100%-8px)] mx-1 min-h-[44px] px-2 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors cursor-pointer rounded-lg [&_svg]:shrink-0"
                 >
                   <div className="flex items-center gap-2">
-                    <Sliders className="w-4 h-4 text-primary" />
+                    <Sliders className="w-3.5 h-3.5 text-primary" />
                     <span>Çalışma Alanı Ayarları...</span>
                   </div>
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -968,10 +994,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   onClick={() => {
                     setViewport((prev) => ({ ...prev, showGrid: !prev.showGrid }));
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Grid className="w-3.5 h-3.5 text-blue-500" />
+                    <Grid className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Izgara Çizgileri</span>
                   </div>
                   {viewport.showGrid && <Check className="w-3.5 h-3.5 text-primary" />}
@@ -981,10 +1007,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   onClick={() => {
                     setViewport((prev) => ({ ...prev, showAxes: !prev.showAxes }));
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Compass className="w-3.5 h-3.5 text-cyan-500" />
+                    <Compass className="w-3.5 h-3.5 text-ada-vurgu" />
                     <span>Koordinat Eksenleri (x, y)</span>
                   </div>
                   {viewport.showAxes && <Check className="w-3.5 h-3.5 text-primary" />}
@@ -994,10 +1020,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   onClick={() => {
                     setViewport((prev) => ({ ...prev, showCoordinates: !prev.showCoordinates }));
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Maximize className="w-3.5 h-3.5 text-indigo-500" />
+                    <Maximize className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Nokta Koordinatları</span>
                   </div>
                   {viewport.showCoordinates && <Check className="w-3.5 h-3.5 text-primary" />}
@@ -1007,10 +1033,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   onClick={() => {
                     setViewport((prev) => ({ ...prev, showQuadrants: !prev.showQuadrants }));
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold bg-amber-500/20 text-amber-600 px-1 rounded">I-IV</span>
+                    <Grid2x2 className="w-3.5 h-3.5 text-ada-altin" />
                     <span>Bölge İsimleri (1-4)</span>
                   </div>
                   {viewport.showQuadrants && <Check className="w-3.5 h-3.5 text-primary" />}
@@ -1020,11 +1046,11 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   onClick={() => {
                     setViewport((prev) => ({ ...prev, snapToGrid: !prev.snapToGrid }));
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-sm">🧲</span>
-                    <span>Izgaraya Yapış (Snap)</span>
+                    <Magnet className="w-3.5 h-3.5 text-ada-deniz" aria-hidden="true" />
+                    <span>Izgaraya Sıçra</span>
                   </div>
                   {viewport.snapToGrid && <Check className="w-3.5 h-3.5 text-primary" />}
                 </button>
@@ -1043,13 +1069,13 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                         type="button"
                         onClick={() => setViewport((prev) => ({ ...prev, backgroundColor: bg.color }))}
                         title={bg.name}
-                        className={`w-5 h-5 rounded-full border border-black/15 shadow-2xs flex items-center justify-center transition-transform hover:scale-115 cursor-pointer ${
+                        className={`w-7 h-7 rounded-full border border-ada-murekkep/20 shadow-2xs flex items-center justify-center transition-transform hover:scale-115 cursor-pointer ${
                           (viewport.backgroundColor || '#ffffff') === bg.color ? 'ring-2 ring-primary ring-offset-1 scale-110' : ''
                         }`}
                         style={{ backgroundColor: bg.color }}
                       >
                         {(viewport.backgroundColor || '#ffffff') === bg.color && (
-                          <Check className="w-2.5 h-2.5 text-slate-800" />
+                          <Check className="w-2.5 h-2.5 text-ada-murekkep" />
                         )}
                       </button>
                     ))}
@@ -1063,10 +1089,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     setTheme(theme === 'dark' ? 'light' : 'dark');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Palette className="w-3.5 h-3.5 text-pink-500" />
+                    <Palette className="w-3.5 h-3.5 text-ada-mercan" />
                     <span>Tema: {theme === 'dark' ? 'Koyu' : 'Açık'}</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground">Değiştir</span>
@@ -1077,10 +1103,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     setInfoModalType('shortcuts');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Keyboard className="w-3.5 h-3.5 text-slate-500" />
+                    <Keyboard className="w-3.5 h-3.5 text-muted-foreground" />
                     <span>Kısayollar...</span>
                   </div>
                 </button>
@@ -1093,25 +1119,25 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
             <button
               onClick={() => handleMenuHeaderClick('yardim')}
               onMouseEnter={() => handleMenuHeaderHover('yardim')}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+              className={`min-h-[44px] px-3 py-1 rounded-md transition-colors cursor-pointer ${
                 activeMenu === 'yardim'
-                  ? 'bg-primary/15 text-primary font-bold shadow-2xs'
-                  : 'text-slate-700 dark:text-slate-300 hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800'
+                  ? 'bg-primary/15 text-primary shadow-2xs'
+                  : 'text-foreground/80 hover:text-foreground hover:bg-muted'
               }`}
             >
               Yardım
             </button>
             {activeMenu === 'yardim' && (
-              <div className="absolute top-full left-0 mt-1 w-52 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
+              <div className="absolute top-full left-0 mt-1 w-52 bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
                 <button
                   onClick={() => {
                     closeMenu();
                     setInfoModalType('guide');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <BookOpen className="w-3.5 h-3.5 text-blue-500" />
+                    <BookOpen className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Kullanım Kılavuzu</span>
                   </div>
                 </button>
@@ -1121,10 +1147,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     setInfoModalType('shortcuts');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Keyboard className="w-3.5 h-3.5 text-amber-500" />
+                    <Keyboard className="w-3.5 h-3.5 text-ada-altin" />
                     <span>Klavye Kısayolları</span>
                   </div>
                 </button>
@@ -1136,87 +1162,32 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     closeMenu();
                     setInfoModalType('about');
                   }}
-                  className="w-full px-3 py-1.5 flex items-center justify-between text-xs text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Info className="w-3.5 h-3.5 text-indigo-500" />
+                    <Info className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>GeoEBA Hakkında</span>
                   </div>
                 </button>
               </div>
             )}
           </div>
-        </div>
-
-        {/* SAĞ: HIZLI İŞLEM VE TEMA BUTONLARI (SAĞA DAYALI) */}
-        <div className="flex items-center gap-2 ml-auto shrink-0">
-          {/* Geri Al / Yinele / Sığdır / Temizle Kapsülü */}
-          <div className="flex items-center gap-0.5 bg-white/90 dark:bg-slate-800/90 p-0.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/90 shadow-2xs">
-            <button
-              onClick={undo}
-              disabled={!canUndo}
-              className="p-1.5 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
-              title="Geri Al (Ctrl+Z)"
-              aria-label="Geri Al"
-            >
-              <Undo2 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={redo}
-              disabled={!canRedo}
-              className="p-1.5 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all cursor-pointer"
-              title="Yinele (Ctrl+Y)"
-              aria-label="Yinele"
-            >
-              <Redo2 className="w-3.5 h-3.5" />
-            </button>
-            <div className="w-[1px] h-3.5 bg-slate-300 dark:bg-slate-700 mx-0.5" />
-            <button
-              onClick={resetViewport}
-              className="p-1.5 rounded-xl text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all cursor-pointer"
-              title="Görünümü Sıfırla (Merkeze Odaklan)"
-              aria-label="Görünümü Sıfırla"
-            >
-              <Maximize2 className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={onClearAll}
-              className="p-1.5 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 transition-all cursor-pointer"
-              title="Tümünü Sil / Temizle"
-              aria-label="Tümünü Sil"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Tema Değiştirici Kapsülü */}
-          <div className="flex items-center bg-white/90 dark:bg-slate-800/90 p-0.5 rounded-2xl border border-slate-200/90 dark:border-slate-700/90 shadow-2xs">
-            <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="p-1.5 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
-              title={theme === 'dark' ? 'Açık Temaya Geç' : 'Koyu Temaya Geç'}
-              aria-label={theme === 'dark' ? 'Açık Temaya Geç' : 'Koyu Temaya Geç'}
-            >
-              {theme === 'dark' ? (
-                <Sun className="w-3.5 h-3.5 text-amber-400" />
-              ) : (
-                <Moon className="w-3.5 h-3.5 text-indigo-600" />
-              )}
-            </button>
-          </div>
+          {/* Sağ üstteki hızlı işlem ve tema kapsülleri kullanıcı isteğiyle kaldırıldı: geri al / yinele tuvalin
+              sol üstünde, sığdırma Görünüm menüsünde ve tuvalin sağ tık menüsünde, temizleme Dosya > Yeni'de;
+              açık/koyu tema düğmesi masaüstü görev çubuğunun sağ köşesinde (Masaustu.tsx). */}
         </div>
       </div>
 
       {/* BİLGİLENDİRME MODALLARI (Kısayollar, Hakkında, Kılavuz) */}
       {infoModalType && (
-        <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-card border border-border/80 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4 animate-in fade-in-0 zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-[1000] bg-ada-murekkep/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div role="dialog" aria-modal="true" aria-label="Stüdyo yardımı" className="bg-card border border-border/80 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4 animate-in fade-in-0 zoom-in-95 duration-150">
             {/* Modal Başlık */}
             <div className="flex items-center justify-between border-b border-border/70 pb-3">
               <div className="flex items-center gap-2">
-                {infoModalType === 'shortcuts' && <Keyboard className="w-5 h-5 text-indigo-500" />}
-                {infoModalType === 'about' && <Info className="w-5 h-5 text-blue-500" />}
-                {infoModalType === 'guide' && <BookOpen className="w-5 h-5 text-emerald-500" />}
+                {infoModalType === 'shortcuts' && <Keyboard className="w-5 h-5 text-ada-deniz" />}
+                {infoModalType === 'about' && <Info className="w-5 h-5 text-ada-deniz" />}
+                {infoModalType === 'guide' && <BookOpen className="w-5 h-5 text-ada-vurgu" />}
                 <h3 className="font-bold text-base text-foreground">
                   {infoModalType === 'shortcuts' && 'Klavye Kısayolları'}
                   {infoModalType === 'about' && 'GeoEBA Hakkında'}
@@ -1242,14 +1213,13 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     { key: 'Ctrl + A', desc: 'Tümünü Seç' },
                     { key: 'Del / Backspace', desc: 'Seçiliyi Sil' },
                     { key: 'Esc', desc: 'İptal / Seçim Aracı' },
-                    { key: 'P', desc: 'Nokta Aracı' },
-                    { key: 'S', desc: 'Doğru Parçası' },
-                    { key: 'L', desc: 'Doğru' },
-                    { key: 'C', desc: 'Çember' },
-                    { key: 'G', desc: 'Çokgen' },
-                    { key: 'M', desc: 'Ölçüm' },
-                    { key: 'T', desc: 'Metin' },
-                    { key: 'F', desc: 'Fonksiyon' },
+                    { key: 'Ctrl + C / X / V', desc: 'Kopyala / Kes / Yapıştır' },
+                    { key: 'Ctrl + O', desc: 'Proje Aç' },
+                    { key: 'Ctrl + N', desc: 'Yeni Çalışma' },
+                    { key: 'Ctrl + P', desc: 'Çizimi Yazdır' },
+                    { key: 'Ctrl + K', desc: 'Türkçe Komutlar' },
+                    ...TOOL_GROUPS.flatMap(group => group.tools.map(tool => ({ key: TOOL_SHORTCUTS[tool.id], desc: tool.name }))),
+                    { key: TOOL_SHORTCUTS.pan, desc: 'Görünümü Kaydır' },
                   ].map((s) => (
                     <div
                       key={s.key}
@@ -1309,7 +1279,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
 
       {/* ÇALIŞMA ALANI VE DÜZLEM AYARLARI MODALI */}
       {isSettingsModalOpen && (
-        <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[1000] bg-ada-murekkep/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-card border border-border/80 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in-0 zoom-in-95 duration-150">
             {/* Modal Başlık */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-border/70 shrink-0">
@@ -1324,7 +1294,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
               </div>
               <button
                 onClick={() => setIsSettingsModalOpen(false)}
-                className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
+                className="grid h-11 w-11 place-items-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
                 title="Kapat"
               >
                 <X className="w-4 h-4" />
@@ -1389,12 +1359,12 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                             type="button"
                             onClick={() => setViewport((prev) => ({ ...prev, backgroundColor: bg.color }))}
                             title={bg.name}
-                            className={`w-7 h-7 rounded-full border border-black/10 shadow-xs flex items-center justify-center transition-transform hover:scale-110 cursor-pointer ${
+                            className={`w-7 h-7 rounded-full border border-ada-murekkep/15 shadow-xs flex items-center justify-center transition-transform hover:scale-110 cursor-pointer ${
                               isSelected ? 'ring-2 ring-primary ring-offset-2 scale-105' : ''
                             }`}
                             style={{ backgroundColor: bg.color }}
                           >
-                            {isSelected && <Check className="w-3.5 h-3.5 text-slate-700 dark:text-slate-800" />}
+                            {isSelected && <Check className="w-3.5 h-3.5 text-ada-murekkep" />}
                           </button>
                         );
                       })}
@@ -1449,7 +1419,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   {/* Çizim ve Metin Stili (StylePanel) */}
                   <div className="space-y-2.5 p-3.5 rounded-2xl bg-muted/40 border border-border/70">
                     <h4 className="text-[11px] font-black text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                      <Sliders className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400" />
+                      <Sliders className="w-3.5 h-3.5 text-ada-mercan" />
                       <span>Çizim, Metin ve Sadeleştirme</span>
                     </h4>
                     <div className="pt-1">
@@ -1499,8 +1469,8 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                       {/* Izgara */}
                       <label className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                         <div className="flex items-center gap-2.5">
-                          <Grid className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                          <span className="text-foreground font-bold">Izgara Çizgileri</span>
+                          <Grid className="w-4 h-4 text-ada-deniz dark:text-ada-vurgu" />
+                          <span className="text-foreground font-bold">Izgara</span>
                         </div>
                         <input
                           type="checkbox"
@@ -1509,18 +1479,165 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                           className="sr-only"
                         />
                         {viewport.showGrid ? (
-                          <div className="w-5 h-5 rounded-md bg-blue-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                          <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                             <Check className="w-3.5 h-3.5 stroke-[3]" />
                           </div>
                         ) : (
-                          <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-card shrink-0" />
+                          <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                         )}
                       </label>
+
+                      {/* Izgara biçimi: kareli çizgiler ya da noktalı zemin (sağ tık menüsündeki seçimle aynı) */}
+                      {viewport.showGrid && (
+                        <div role="radiogroup" aria-label="Izgara biçimi" className="grid grid-cols-3 gap-1.5 pl-2">
+                          {([['kareli', 'Kareli'], ['noktali', 'Noktalı'], ['izometrik', 'İzometrik']] as const).map(([bicim, ad]) => {
+                            const secili = (viewport.gridStyle ?? 'kareli') === bicim;
+                            return (
+                              <button
+                                key={bicim}
+                                type="button"
+                                role="radio"
+                                aria-checked={secili}
+                                onClick={() => setViewport((prev) => ({ ...prev, gridStyle: bicim }))}
+                                className={`min-h-[40px] rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                                  secili
+                                    ? 'bg-primary border-primary text-primary-foreground shadow-xs'
+                                    : 'bg-card border-border text-foreground hover:border-primary/50'
+                                }`}
+                              >
+                                {ad}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Izgara aralığı: Otomatik (yakınlaştırmaya göre) ya da sabit değer; çizim ve nokta yakalama birlikte kullanır */}
+                      {(() => {
+                        const otomatik = viewport.gridStepAuto !== false;
+                        const simdiki = visibleGridStep(viewport).step;
+                        const aralikSec = (deger: number | 'oto') => {
+                          setOzelAralikHata(null);
+                          setViewport((prev) =>
+                            deger === 'oto' ? { ...prev, gridStepAuto: true } : { ...prev, gridStepAuto: false, gridStep: deger }
+                          );
+                        };
+                        const ozelUygula = () => {
+                          const deger = Number(ozelAralik.trim().replace(',', '.'));
+                          if (!(deger > 0) || deger > 100) {
+                            setOzelAralikHata('0 ile 100 arasında bir sayı girin (örn. 0,25).');
+                            return;
+                          }
+                          aralikSec(deger);
+                          setOzelAralik('');
+                        };
+                        return (
+                          <div className="space-y-2 p-2.5 rounded-xl bg-card border border-border" data-izgara-araligi>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-foreground font-bold">Izgara aralığı</span>
+                              <span className="text-[11px] text-muted-foreground">
+                                {otomatik
+                                  ? `Otomatik · şu an ${formatTurkishNumber(simdiki)} br`
+                                  : `${formatTurkishNumber(viewport.gridStep)} br${simdiki !== viewport.gridStep ? ` (uzakta ${formatTurkishNumber(simdiki)} br)` : ''}`}
+                              </span>
+                            </div>
+                            <div role="radiogroup" aria-label="Izgara aralığı" className="grid grid-cols-5 gap-1.5">
+                              {([['oto', 'Otomatik'], [0.5, '0,5'], [1, '1'], [2, '2'], [5, '5']] as const).map(([deger, ad]) => {
+                                const secili = deger === 'oto' ? otomatik : !otomatik && viewport.gridStep === deger;
+                                return (
+                                  <button
+                                    key={String(deger)}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={secili}
+                                    onClick={() => aralikSec(deger)}
+                                    className={`min-h-[40px] rounded-xl border text-xs font-bold transition-all cursor-pointer ${
+                                      secili
+                                        ? 'bg-primary border-primary text-primary-foreground shadow-xs'
+                                        : 'bg-card border-border text-foreground hover:border-primary/50'
+                                    }`}
+                                  >
+                                    {ad}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <form
+                              className="flex items-center gap-1.5"
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                ozelUygula();
+                              }}
+                            >
+                              <label htmlFor="izgara-ozel-aralik" className="text-[11px] font-semibold text-muted-foreground shrink-0">
+                                Özel aralık
+                              </label>
+                              <input
+                                id="izgara-ozel-aralik"
+                                type="text"
+                                inputMode="decimal"
+                                placeholder="örn. 0,25"
+                                value={ozelAralik}
+                                onChange={(e) => {
+                                  setOzelAralik(e.target.value);
+                                  setOzelAralikHata(null);
+                                }}
+                                aria-invalid={ozelAralikHata !== null}
+                                className={`min-w-0 flex-1 min-h-[40px] px-2.5 rounded-xl bg-background border text-xs font-mono text-foreground outline-none focus:border-primary ${
+                                  ozelAralikHata ? 'border-destructive' : 'border-border'
+                                }`}
+                              />
+                              <span className="text-[11px] font-bold text-muted-foreground">br</span>
+                              <button
+                                type="submit"
+                                className="min-h-[40px] px-3 rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 transition-colors cursor-pointer"
+                              >
+                                Uygula
+                              </button>
+                            </form>
+                            {ozelAralikHata && (
+                              <p role="alert" className="text-[11px] font-semibold text-destructive">
+                                {ozelAralikHata}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Izgara saydamlığı: kareli, noktalı ve izometrik ızgaranın ne kadar belirgin çizileceği */}
+                      <div className="space-y-1.5 p-2.5 rounded-xl bg-card border border-border" data-izgara-saydamligi>
+                        <div className="flex items-center justify-between gap-2">
+                          <label htmlFor="izgara-saydamligi" className="text-foreground font-bold">
+                            Izgara saydamlığı
+                          </label>
+                          <span className="font-mono text-[11px] font-bold text-muted-foreground">
+                            %{Math.round((viewport.gridOpacity ?? 1) * 100)} görünür
+                          </span>
+                        </div>
+                        <input
+                          id="izgara-saydamligi"
+                          type="range"
+                          min={0.1}
+                          max={1}
+                          step={0.05}
+                          value={viewport.gridOpacity ?? 1}
+                          onChange={(e) => {
+                            const deger = parseFloat(e.target.value);
+                            setViewport((prev) => ({ ...prev, gridOpacity: deger }));
+                          }}
+                          aria-valuetext={`Yüzde ${Math.round((viewport.gridOpacity ?? 1) * 100)} görünür`}
+                          className="w-full min-h-[32px] accent-primary cursor-pointer"
+                        />
+                        <div className="flex justify-between text-[10px] font-semibold text-muted-foreground">
+                          <span>Silik</span>
+                          <span>Tam belirgin</span>
+                        </div>
+                      </div>
 
                       {/* Eksenler */}
                       <label className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                         <div className="flex items-center gap-2.5">
-                          <Compass className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                          <Compass className="w-4 h-4 text-ada-vurgu" />
                           <span className="text-foreground font-bold">Koordinat Eksenleri (x, y)</span>
                         </div>
                         <input
@@ -1530,18 +1647,18 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                           className="sr-only"
                         />
                         {viewport.showAxes ? (
-                          <div className="w-5 h-5 rounded-md bg-teal-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                          <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                             <Check className="w-3.5 h-3.5 stroke-[3]" />
                           </div>
                         ) : (
-                          <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-card shrink-0" />
+                          <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                         )}
                       </label>
 
                       {/* Nokta Koordinatları */}
                       <label className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                         <div className="flex items-center gap-2.5">
-                          <Maximize className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                          <Maximize className="w-4 h-4 text-ada-deniz dark:text-ada-vurgu" />
                           <span className="text-foreground font-bold">Nokta Koordinatları</span>
                         </div>
                         <input
@@ -1551,20 +1668,18 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                           className="sr-only"
                         />
                         {viewport.showCoordinates ? (
-                          <div className="w-5 h-5 rounded-md bg-indigo-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                          <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                             <Check className="w-3.5 h-3.5 stroke-[3]" />
                           </div>
                         ) : (
-                          <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-card shrink-0" />
+                          <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                         )}
                       </label>
 
                       {/* Bölge İsimleri */}
                       <label className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                         <div className="flex items-center gap-2.5">
-                          <div className="px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/50 border border-amber-300 text-amber-700 dark:text-amber-400 text-[10px] font-black">
-                            I-IV
-                          </div>
+                          <Grid2x2 className="w-4 h-4 text-ada-altin" />
                           <span className="text-foreground font-bold">Bölge İsimleri (1, 2, 3, 4. Bölge)</span>
                         </div>
                         <input
@@ -1574,18 +1689,18 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                           className="sr-only"
                         />
                         {viewport.showQuadrants ? (
-                          <div className="w-5 h-5 rounded-md bg-amber-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                          <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                             <Check className="w-3.5 h-3.5 stroke-[3]" />
                           </div>
                         ) : (
-                          <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-card shrink-0" />
+                          <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                         )}
                       </label>
 
                       {/* Siyah-Beyaz Mod */}
                       <label className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                         <div className="flex items-center gap-2.5">
-                          <Contrast className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+                          <Contrast className="w-4 h-4 text-foreground" />
                           <span className="text-foreground font-bold">Siyah–Beyaz Mod</span>
                         </div>
                         <input
@@ -1595,11 +1710,32 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                           className="sr-only"
                         />
                         {viewport.blackWhite ? (
-                          <div className="w-5 h-5 rounded-md bg-slate-700 flex items-center justify-center text-white shadow-xs shrink-0">
+                          <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                             <Check className="w-3.5 h-3.5 stroke-[3]" />
                           </div>
                         ) : (
-                          <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-card shrink-0" />
+                          <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
+                        )}
+                      </label>
+
+                      {/* Eşit Uzunlukları İşaretle: birbirine değen şekillerde eşit kenar/yay çentikleri (|, ||, |||) */}
+                      <label className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-ada-vurgu"><EsitUzunluklarSimgesi /></span>
+                          <span className="text-foreground font-bold">Eşit Uzunlukları İşaretle</span>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={viewport.showEqualityMarks !== false}
+                          onChange={(e) => setViewport((prev) => ({ ...prev, showEqualityMarks: e.target.checked }))}
+                          className="sr-only"
+                        />
+                        {viewport.showEqualityMarks !== false ? (
+                          <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                          </div>
+                        ) : (
+                          <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                         )}
                       </label>
                     </div>
@@ -1619,7 +1755,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                       onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
                       className="px-3 py-1.5 rounded-xl bg-card border border-border text-xs font-bold text-foreground hover:bg-muted transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
                     >
-                      <Palette className="w-3.5 h-3.5 text-pink-500" />
+                      <Palette className="w-3.5 h-3.5 text-ada-mercan" />
                       <span>{theme === 'dark' ? 'Koyu Tema' : 'Açık Tema'}</span>
                     </button>
                   </div>
@@ -1656,7 +1792,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                       }}
                       className="px-3 py-1.5 rounded-xl bg-card border border-border text-xs font-bold text-foreground hover:bg-muted transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
                     >
-                      <Keyboard className="w-3.5 h-3.5 text-indigo-500" />
+                      <Keyboard className="w-3.5 h-3.5 text-ada-deniz" />
                       <span>Görüntüle</span>
                     </button>
                   </div>

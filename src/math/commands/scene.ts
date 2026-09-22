@@ -4,7 +4,7 @@ import type {
   SliderObject, TextObject,
 } from '@/types/math';
 import { createId } from '@/state/ids';
-import { collectDependentIds } from '@/state/WorkspaceContext';
+import { applyDeletionPlan, collectDependentIds, planDeletion, type DeletionOptions, type DeletionPlan } from '@/state/WorkspaceContext';
 import { commandCircleGeometry, resolveCommandBindings } from '../commandBindings';
 import { generateNextPointLabel } from '../geometry';
 import { formatTurkishNumber, getVisibleWorldBounds } from '../coordinates';
@@ -254,7 +254,8 @@ export class CommandScene {
         case 'arc':
         case 'sector':
           return ids.length === 1 ? o.centerPointId === ids[0] : ids.length === 2 ? same([o.startPointId, o.directionPointId]) : same([o.centerPointId, o.startPointId, o.directionPointId]);
-        case 'measurement': return same(o.pointIds);
+        // Yay ölçümü çembere aittir: "BD'yi ölç / sil" onu değil kirişi/parçayı bulsun. Yalnızca ölçüm türü açıkça istenirse.
+        case 'measurement': return o.kind === 'arc' ? !!types?.includes('measurement') && same(o.pointIds) : same(o.pointIds);
         default: return false;
       }
     });
@@ -329,7 +330,7 @@ export class CommandScene {
       case 'ellipse': return [obj.centerPointId];
       case 'arc': case 'sector': return [obj.centerPointId, obj.startPointId, obj.directionPointId];
       case 'angle': return [obj.point1Id, obj.vertexPointId, obj.point3Id];
-      case 'measurement': return obj.pointIds;
+      case 'measurement': return obj.kind === 'arc' && obj.throughPointId ? [...obj.pointIds, obj.throughPointId] : obj.pointIds;
       default: return [];
     }
   }
@@ -415,13 +416,28 @@ export class CommandScene {
     const removal = collectDependentIds(this.objects, ids);
     if (!removal.size) return [];
     this.objects = this.objects.filter(o => !removal.has(o.id));
+    this.dropIds(removal);
+    return [...removal];
+  }
+  /**
+   * Şekli KENDİ kullanılmayan noktalarıyla siler: ekrandaki Delete tuşu, sağ tık "Sil" ve Sil aracıyla AYNI kural
+   * (WorkspaceContext.planDeletion). `keepPoints` verilirse yalnızca şekil gider, noktalar kalır.
+   */
+  removeWithOwnPoints(ids: string[], options: DeletionOptions = {}): DeletionPlan {
+    const plan = planDeletion(this.objects, ids, options);
+    if (!plan.removal.size && !plan.unbindIds.length) return plan;
+    this.objects = applyDeletionPlan(this.objects, plan);
+    this.dropIds(plan.removal);
+    return plan;
+  }
+  /** Silinen kimlikleri seçim, odak ve oluşturulanlar listelerinden düşürür. */
+  private dropIds(removal: Set<string>) {
     const alive = (list: string[]) => list.filter(id => !removal.has(id));
     this.selection = alive(this.selection);
     this.focus = alive(this.focus);
     this.created = alive(this.created);
     this.clauseCreated = alive(this.clauseCreated);
     this.dirty = true;
-    return [...removal];
   }
   /** Nesneden alanları tamamen kaldırır (değerini undefined yapmak yerine; ör. onObjectId, construction). */
   unset(id: string, keys: string[]): MathObject {
@@ -559,14 +575,16 @@ export class CommandScene {
     const existing = this.objects.find((a): a is AngleObject => a.type === 'angle' && a.vertexPointId === vertexId
       && ((a.point1Id === point1Id && a.point3Id === point3Id) || (a.point1Id === point3Id && a.point3Id === point1Id)));
     if (existing) return this.update(existing.id, { showValue: true, visible: true, ...(o.reflex !== undefined ? { reflex: o.reflex } : {}) });
+    // Kollar açının kimliğini taşır: açı silinince (başka nesne kullanmıyorsa) kolları da gider (collectDependentIds 4. kural)
+    const angleId = createId('ang');
     if (o.withArms) {
       for (const arm of [p1, p3]) if (!this.shapesWithPoints([vertexId, arm.id], ['segment', 'line', 'ray']).length) {
         this.add({ id: createId('seg'), type: 'segment', label: `[${v.label}${arm.label}]`, showLabel: false, startPointId: vertexId, endPointId: arm.id,
-          color: o.color ?? COLORS.angle, visible: true, thickness: 2, createdAt: Date.now() } as SegmentObject);
+          color: o.color ?? COLORS.angle, visible: true, thickness: 2, armOfAngleId: angleId, createdAt: Date.now() } as SegmentObject);
       }
     }
     return this.add({
-      id: createId('ang'), type: 'angle', label: o.label ?? `∠${p1.label}${v.label}${p3.label}`, showLabel: true, point1Id, vertexPointId: vertexId, point3Id,
+      id: angleId, type: 'angle', label: o.label ?? `∠${p1.label}${v.label}${p3.label}`, showLabel: true, point1Id, vertexPointId: vertexId, point3Id,
       color: o.color ?? COLORS.angle, visible: true, showValue: true, ...(o.reflex ? { reflex: true } : {}), createdAt: Date.now(),
     } as AngleObject);
   }

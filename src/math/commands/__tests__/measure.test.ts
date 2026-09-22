@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AngleObject, ArcObject, CircleObject, LineObject, MathObject, MeasurementObject, PointObject, PolygonObject, SectorObject, SegmentObject } from '@/types/math';
 import { resolveCommandBindings } from '../../commandBindings';
 import { collectDependentIds } from '@/state/WorkspaceContext';
-import { rankHandlers } from '../engine';
+import { rankHandlers, runCommand } from '../engine';
 import { CommandScene } from '../scene';
 import { parseClause } from '../text';
 import { handlers } from '../handlers/measure';
@@ -596,6 +596,123 @@ describe('ownership', () => {
   });
 });
 
+// ---------------------------------------------------------------------------------------------------------------- iki nokta arasındaki yay
+
+/** M(0,0) merkez, B(3,0) yarıçap noktası; C(0,3) ve D(0,-3) serbest ama çemberin üzerinde; E(5,5) dışarıda. */
+const circlePoints = () => build(s => {
+  const M = s.addPoint({ x: 0, y: 0 }, { label: 'M' });
+  const B = s.addPoint({ x: 3, y: 0 }, { label: 'B' });
+  s.addCircle({ centerId: M.id, radiusPointId: B.id });
+  s.addPoint({ x: 0, y: 3 }, { label: 'C' });
+  s.addPoint({ x: 0, y: -3 }, { label: 'D' });
+  s.addPoint({ x: 5, y: 5 }, { label: 'E' });
+});
+const arcMeasures = (objects: MathObject[]) => byType(objects, 'measurement').filter(m => m.kind === 'arc');
+const measuredArc = () => expectOk(handlers, 'BD yayını ölç', circlePoints()).objects;
+
+describe('arc between two points (circle is not split)', () => {
+  it('BD yayını ölç: one live arc measurement on the circle, nothing else changes', () => {
+    const scene = circlePoints();
+    const r = expectOk(handlers, 'BD yayını ölç', scene);
+    const [m] = arcMeasures(r.objects);
+    expect(arcMeasures(r.objects)).toHaveLength(1);
+    expect(m).toMatchObject({ kind: 'arc', circleId: byType(scene, 'circle')[0].id, pointIds: [point(scene, 'B').id, point(scene, 'D').id], label: 'BD yayı', showValue: true, visible: true });
+    expect(byType(r.objects, 'segment')).toEqual([]);
+    expect(byType(r.objects, 'circle')).toEqual(byType(scene, 'circle'));
+    expect(r.message).toBe('BD yayı: uzunluk 4,71 br, ölçü 90°.');
+    expect(r.selectedIds).toEqual([m.id]);
+  });
+
+  it('BCD yayı (ara nokta), büyük yay, "B ile D arasındaki yay" ve küçük harfli yazım', () => {
+    const through = expectOk(handlers, 'BCD yayını ölç', circlePoints());
+    expect(arcMeasures(through.objects)[0]).toMatchObject({ throughPointId: point(through.objects, 'C').id, label: 'BCD yayı' });
+    expect(through.message).toBe('BCD yayı: uzunluk 14,14 br, ölçü 270°.');
+    const major = expectOk(handlers, 'BD büyük yayını ölç', circlePoints());
+    expect(arcMeasures(major.objects)[0]).toMatchObject({ major: true, label: 'BCD yayı' });
+    expect(major.message).toBe('BCD yayı: uzunluk 14,14 br, ölçü 270°.');
+    expect(expectOk(handlers, 'B ile D arasındaki yayı ölç', circlePoints()).message).toBe('BD yayı: uzunluk 4,71 br, ölçü 90°.');
+    expect(expectOk(handlers, 'bd yayını ölç', circlePoints()).message).toBe('BD yayı: uzunluk 4,71 br, ölçü 90°.');
+    expect(expectOk(handlers, 'B D yayını ölç', circlePoints()).message).toBe('BD yayı: uzunluk 4,71 br, ölçü 90°.');
+  });
+
+  it('"ölçüsü", "uzunluğu", "uzunluğunu bul" oluşturur; soru yalnızca yanıtlar; ikinci kez ölçmek kopya üretmez', () => {
+    for (const text of ['BD yayının ölçüsü', 'BD yayının uzunluğu', 'BD yayının uzunluğunu bul']) {
+      expect(arcMeasures(expectOk(handlers, text, circlePoints()).objects)).toHaveLength(1);
+    }
+    const q = unchanged(circlePoints(), 'BD yayı kaç derece');
+    expect(q.message).toBe('BD yayı: uzunluk 4,71 br, ölçü 90°.');
+    const again = expectOk(handlers, 'BD yayını ölç', measuredArc());
+    expect(again.sceneChanged).toBe(false);
+    expect(arcMeasures(again.objects)).toHaveLength(1);
+    expect(again.actions).toContainEqual({ kind: 'styleMode', mode: 'Ayrıntılı' });
+    const hidden = measuredArc().map(o => o.type === 'measurement' ? { ...o, visible: false } as MathObject : o);
+    expect(arcMeasures(expectOk(handlers, 'DB yayını ölç', hidden).objects)[0].visible).toBe(true);
+  });
+
+  it('ortak çember yoksa açık hata; ara nokta başka çemberdeyse açıklar', () => {
+    expect(expectFail(handlers, 'BE yayını ölç', circlePoints())).toContain('B ile E aynı çemberin üzerinde değil');
+    expect(expectFail(handlers, 'BED yayını ölç', circlePoints())).toContain('E noktası B ve D ile aynı çemberin üzerinde değil');
+  });
+
+  it('üç noktadan geçen çember ve iki çemberin iki kesişim noktası', () => {
+    const three = build(s => {
+      const [A, B, C] = ([[1, 0], [0, 1], [-1, 0]] as const).map(([x, y], i) => s.addPoint({ x, y }, { label: 'ABC'[i] }));
+      s.addCircle({ throughIds: [A.id, B.id, C.id] });
+    });
+    expect(expectOk(handlers, 'AB yayını ölç', three).message).toBe('AB yayı: uzunluk 1,57 br, ölçü 90°.');
+    const two = build(s => {
+      const O1 = s.addPoint({ x: 0, y: 0 }, { label: 'M' });
+      const O2 = s.addPoint({ x: 6, y: 0 }, { label: 'N' });
+      s.addCircle({ centerId: O1.id, radius: 5 }, { label: 'c1' });
+      s.addCircle({ centerId: O2.id, radius: 5 }, { label: 'c2' });
+      s.addPoint({ x: 3, y: 4 }, { label: 'P' });
+      s.addPoint({ x: 3, y: -4 }, { label: 'Q' });
+    });
+    const r = expectOk(handlers, 'PQ yayını ölç', two);
+    expect(r.message).toMatch(/^PQ yayı \(c[12] üzerinde\): uzunluk/);
+  });
+
+  it('gerçek yay nesneleri ve diğer ölçüler eskisi gibi kalır (tüm aileler)', () => {
+    const withArc = measuredArc();
+    const all = (text: string, scene: MathObject[]) => {
+      const r = runCommand(text, scene);
+      if (!r.ok) throw new Error(`${text}: ${r.message}`);
+      return r;
+    };
+    expect(all("BD'yi ölç", withArc).message).toContain('|BD|');
+    expect(all('SD kirişinin uzunluğu nedir', arc()).message).toContain('≈ 2,83 br');
+    expect(byType(all('SD yayının uzunluğunu hesapla', arc()).objects, 'arc')[0].showArcLength).toBe(true);
+    expect(byType(all('ABC açısını ölç', pointsOnly()).objects, 'angle')).toHaveLength(1);
+    const state = new CommandScene(circlePoints());
+    const top = (text: string) => rankHandlers(parseClause(text, state.known()), state)[0]?.handler.id;
+    for (const text of ['BD yayını ölç', 'BD yayının uzunluğu', 'BD yayının uzunluğunu bul', 'BD yayının ölçüsü', 'BCD yayını ölç', 'BD büyük yayını ölç', 'B ile D arasındaki yayı ölç', 'BD yayı kaç derece']) {
+      expect(top(text)).toBe('measure.arcBetween');
+    }
+    const arcScore = (text: string) => rankHandlers(parseClause(text, state.known()), state).find(x => x.handler.id.startsWith('measure.arc'))?.score ?? 0;
+    for (const text of ['yay ölç aracını seç', 'BD yayını çiz', 'ST yayını x eksenine göre yansıt', 'BD kirişinin uzunluğu']) expect(arcScore(text)).toBe(0);
+  });
+
+  it('yay ölçümünü yazıyla siler, gizler, gösterir; "BD’yi sil" yalnızca parçayı siler', () => {
+    const scene = measuredArc();
+    const m = arcMeasures(scene)[0];
+    const hidden = expectOk(handlers, 'BD yayı ölçümünü gizle', scene);
+    expect(arcMeasures(hidden.objects)[0].visible).toBe(false);
+    const shown = expectOk(handlers, 'BD yayını göster', hidden.objects);
+    expect(arcMeasures(shown.objects)[0].visible).toBe(true);
+    const removed = expectOk(handlers, 'BD yayını sil', scene);
+    expect(arcMeasures(removed.objects)).toEqual([]);
+    expect(removed.objects.length).toBe(scene.length - 1);
+    expect(expectFail(handlers, 'BD yayını sil', circlePoints())).toContain('BD yayı ölçülmemiş');
+    const withSegment = build(s => { s.addSegment(point(scene, 'B').id, point(scene, 'D').id); }, scene);
+    const r = runCommand("BD'yi sil", withSegment);
+    if (!r.ok) throw new Error(r.message);
+    expect(byType(r.objects, 'segment')).toEqual([]);
+    expect(arcMeasures(r.objects).map(x => x.id)).toEqual([m.id]);
+    const state = new CommandScene(withSegment);
+    expect(rankHandlers(parseClause('BD yayını sil', state.known()), state)[0].handler.id).toBe('measure.arcEdit');
+  });
+});
+
 // ---------------------------------------------------------------------------------------------------------------- örnekler
 
 describe('every example works', () => {
@@ -651,6 +768,17 @@ describe('every example works', () => {
     "ABC'nin ölçülerini göster": () => ({ scene: triangle() }),
     'Yayın tüm ölçülerini göster': () => ({ scene: arc() }),
     'Seçili şeklin ölçülerini göster': () => { const scene = triangle(); return { scene, selection: [poly(scene).id] }; },
+    'BD yayını ölç': () => ({ scene: circlePoints() }),
+    'BD yayının uzunluğu': () => ({ scene: circlePoints() }),
+    'BD yayının uzunluğunu bul': () => ({ scene: circlePoints() }),
+    'BD yayının ölçüsü': () => ({ scene: circlePoints() }),
+    'BCD yayını ölç': () => ({ scene: circlePoints() }),
+    'BD büyük yayını ölç': () => ({ scene: circlePoints() }),
+    'B ile D arasındaki yayı ölç': () => ({ scene: circlePoints() }),
+    'BD yayı kaç derece': () => ({ scene: circlePoints() }),
+    'BD yayını sil': () => { const scene = measuredArc(); return { scene, selection: [point(scene, 'B').id] }; },
+    'BD yayı ölçümünü gizle': () => ({ scene: measuredArc() }),
+    'BD yayını göster': () => ({ scene: circlePoints() }),
   };
   const examples = [...new Set(handlers.flatMap(h => h.examples))];
   it('has a scenario for each example', () => {

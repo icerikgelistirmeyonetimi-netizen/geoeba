@@ -9,9 +9,10 @@ import { GradeSelector } from '@/components/navigation/GradeSelector';
 import { TopicSelector } from '@/components/navigation/TopicSelector';
 import { WorkspaceView } from '@/components/workspace/WorkspaceView';
 import { AdaEkrani } from '@/components/adalar/AdaEkrani';
+import { SinifEkrani } from '@/components/sinif/SinifEkrani';
 
 export default function HomePage() {
-  const { currentScreen, selectedLevel, selectLevel, startFreeSandbox, goHome } = useCurriculum();
+  const { currentScreen, selectedLevel, selectLevel, startFreeSandbox, goHome, isFreeSandbox } = useCurriculum();
   // 3B ada ekranı açılamazsa (WebGL2 yok, sahne yüklenemedi) 2B giriş ekranları kullanılır
   const [adaYedek, setAdaYedek] = useState(false);
 
@@ -39,8 +40,10 @@ export default function HomePage() {
     case 'topics':
       return <TopicSelector />;
     case 'mission':
-    case 'workspace':
       return <WorkspaceView />;
+    case 'workspace':
+      // Serbest stüdyo (#/studyo) 3B sınıftaki akıllı tahtada açılır; görev çalışması (#/calisma/:id) eski gibi
+      return isFreeSandbox ? <SinifEkrani onAnaSayfa={goHome} /> : <WorkspaceView />;
     default:
       return adaYedek ? <WelcomeScreen /> : adaEkrani('ana-sayfa');
   }

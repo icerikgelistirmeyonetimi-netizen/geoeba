@@ -1,14 +1,15 @@
 import { MathObject, Point2D } from '@/types/math';
 import { createId } from '@/state/ids';
 import { generateNextPointLabel } from './geometry';
-import { functionLabel, functionNameOf, nextFunctionName } from './functionNames';
+import { calledNames, functionLabel, functionNameOf, nextFunctionName } from './functionNames';
 
 export type ObjectClipboard = { objects: MathObject[]; selectedIds: string[] };
 
 function references(value: unknown, key = ''): string[] {
   // releasedRadiusPointId yalnızca "kilit çözülünce yarıçapı geri ver" hatırlatmasıdır, bağımlılık değildir:
   // izlenseydi çemberi (ya da dönüşüm görüntüsünü) kopyalamak başka noktaları da panoya taşırdı.
-  if (key === 'releasedRadiusPointId') return [];
+  // armOfAngleId de bağımlılık değildir: tek bir kolu kopyalamak açının tamamını panoya çekmemeli.
+  if (key === 'releasedRadiusPointId' || key === 'armOfAngleId') return [];
   if (typeof value === 'string') return /Ids?$/.test(key) ? [value] : [];
   if (Array.isArray(value)) return value.flatMap(v => references(v, key));
   if (value && typeof value === 'object') return Object.entries(value).flatMap(([k, v]) => references(v, k));
@@ -25,6 +26,7 @@ export function copyObjects(scene: MathObject[], selectedIds: string[]): ObjectC
       if (object.type === 'function') for (const slider of scene) {
         const tokens: string[] = object.expression.match(/[a-zA-Z_][a-zA-Z_0-9]*/g) ?? [];
         if (slider.type === 'slider' && tokens.includes(slider.variableName)) deps.push(slider.id);
+        if (slider.type === 'function' && calledNames(object.expression).includes(functionNameOf(slider) ?? '')) deps.push(slider.id);
       }
       for (const id of deps) if (!ids.has(id) && scene.some(o => o.id === id)) { ids.add(id); changed = true; }
     }
@@ -38,10 +40,20 @@ export function pasteObjects(clipboard: ObjectClipboard, scene: MathObject[], lo
   const names = scene.map(o => o.label);
   const variables = new Set(scene.flatMap(o => o.type === 'slider' ? [o.variableName] : []));
   const variableMap = new Map<string, string>();
+  // Bütün adları ifadeleri çevirmeden ayır: sahne sırası bağımlılık sırası olmayabilir.
+  const functionMap = new Map<string, string>();
   for (const object of clipboard.objects) if (object.type === 'slider') {
     let name = object.variableName, suffix = 2;
     while (variables.has(name)) name = object.variableName + suffix++;
     variables.add(name); variableMap.set(object.variableName, name);
+  }
+  const reserved = [...variables];
+  for (const object of clipboard.objects) if (object.type === 'function') {
+    const oldName = functionNameOf(object);
+    if (!oldName) continue;
+    const taken = scene.some(o => o.type === 'function' && functionNameOf(o) === oldName) || reserved.includes(oldName);
+    const name = taken ? nextFunctionName(scene, reserved) : oldName;
+    functionMap.set(oldName, name); reserved.push(name);
   }
   const positions = clipboard.objects.flatMap(o => 'x' in o && 'y' in o && typeof o.x === 'number' && typeof o.y === 'number' ? [{ x: o.x, y: o.y }] : o.type === 'pen' ? o.points : []);
   const center = positions.length ? { x: positions.reduce((sum, p) => sum + p.x, 0) / positions.length, y: positions.reduce((sum, p) => sum + p.y, 0) / positions.length } : location;
@@ -56,6 +68,8 @@ export function pasteObjects(clipboard: ObjectClipboard, scene: MathObject[], lo
     const object = remap(source) as MathObject;
     // Yarıçapı bırakan nokta panoda yoksa hatırlatma yeni çemberde anlamsızdır
     if (object.type === 'circle' && source.type === 'circle' && source.releasedRadiusPointId && !idMap.has(source.releasedRadiusPointId)) delete object.releasedRadiusPointId;
+    // Açısı panoda yoksa kopya parça artık o açının kolu değildir (eski açının silinmesi kopyayı götürmesin)
+    if (object.type === 'segment' && source.type === 'segment' && source.armOfAngleId && !idMap.has(source.armOfAngleId)) delete object.armOfAngleId;
     let label = object.type === 'point' ? generateNextPointLabel(names) : object.label;
     while (names.includes(label)) label += '′';
     object.label = label; names.push(label); object.createdAt = Date.now();
@@ -63,10 +77,10 @@ export function pasteObjects(clipboard: ObjectClipboard, scene: MathObject[], lo
     if (object.type === 'pen') object.points = object.points.map(p => ({ x: p.x + offset.x, y: p.y + offset.y }));
     if (object.type === 'slider') object.variableName = variableMap.get(object.variableName)!;
     if (object.type === 'function') {
+      const oldName = functionNameOf(source as typeof object);
+      object.expression = object.expression.replace(/(?<![\p{L}\p{N}_])(\p{L}[\p{L}\p{N}]?)\s*(?=\()/gu, (token, name: string) => functionMap.get(name.toLowerCase()) ?? token);
       object.expression = object.expression.replace(/[a-zA-Z_][a-zA-Z_0-9]*/g, token => variableMap.get(token) ?? token);
-      // Yapıştırılan fonksiyon aynı adı taşımasın: f(x) = … → g(x) = … ("f(2)" çağrıları karışmasın).
-      const name = functionNameOf(object), taken = [...scene, ...pasted];
-      if (name && taken.some(o => o.type === 'function' && functionNameOf(o) === name)) object.label = functionLabel(nextFunctionName(taken), object.expression);
+      if (oldName) object.label = functionLabel(functionMap.get(oldName)!, object.expression);
     }
     pasted.push(object);
     return object;

@@ -79,6 +79,8 @@ const EXAMPLES: Record<string, ExampleCase> = {
   'f fonksiyonunu sil': { scene: world, check: r => { expect(byType(r.objects, 'function')).toHaveLength(0); expect(byType(r.objects, 'slider')).toHaveLength(1); } },
   'a kaydırıcısını sil': { scene: world, check: r => { expect(byType(r.objects, 'slider')).toHaveLength(0); expect(point(r.objects, 'A')).toBeTruthy(); } },
   'ABC üçgenini noktalarıyla birlikte sil': { scene: triangle, check: r => expect(r.objects).toHaveLength(0) },
+  'yalnızca ABC üçgenini sil': { scene: triangle, check: r => { expect(byType(r.objects, 'polygon')).toHaveLength(0); expect(byType(r.objects, 'point')).toHaveLength(3); } },
+  'ABC üçgenini sil, noktalar kalsın': { scene: triangle, check: r => { expect(byType(r.objects, 'polygon')).toHaveLength(0); expect(byType(r.objects, 'point')).toHaveLength(3); } },
   // seçme
   'ABC seç': { scene: world, check: r => expect(r.selectedIds).toEqual(byType(r.objects, 'polygon').map(o => o.id)) },
   "ABC'yi seç": { scene: world, check: r => expect(r.sceneChanged).toBe(false) },
@@ -218,10 +220,32 @@ describe('delete', () => {
     expect(r.message).toContain('Bağlı 1 nesne');
     expect(r.selectedIds).toEqual([]);
   });
-  it.each(["ABC'yi sil", 'ABC üçgenini sil', 'abc yi sil', 'lütfen ABC üçgenini siler misin', 'ABC kaldır'])('%s removes only the polygon', text => {
+  // ŞEKLİN KENDİ NOKTALARI: üçgen hangi yoldan silinirse silinsin, başka hiçbir nesnenin kullanmadığı köşeleri de gider.
+  it.each(["ABC'yi sil", 'ABC üçgenini sil', 'abc yi sil', 'lütfen ABC üçgenini siler misin', 'ABC kaldır'])('%s removes the polygon and its unused vertices', text => {
     const r = ok(text, triangle());
     expect(byType(r.objects, 'polygon')).toHaveLength(0);
-    expect(byType(r.objects, 'point')).toHaveLength(3);
+    expect(byType(r.objects, 'point')).toHaveLength(0);
+    expect(r.message).toBe('ABC üçgeni (A, B ve C noktalarıyla birlikte) silindi.');
+  });
+  it.each(['yalnızca ABC üçgenini sil', 'sadece ABC üçgenini sil', 'ABC üçgenini sil, noktalar kalsın',
+    'ABC üçgenini sil, noktaları yerinde kalsın', 'ABC üçgenini sil, köşeleri dursun', 'ABC üçgenini sil, noktalara dokunma'])(
+    '%s keeps the vertices', text => {
+      const r = ok(text, triangle());
+      expect(byType(r.objects, 'polygon')).toHaveLength(0);
+      expect(byType(r.objects, 'point').map(p => p.label)).toEqual(['A', 'B', 'C']);
+      expect(r.message).toBe('ABC üçgeni silindi (A, B ve C noktaları yerinde kaldı).');
+    });
+  it('keeps a vertex that another shape still uses', () => {
+    const shared = build(s => { const d = s.addPoint({ x: 4, y: 3 }, { label: 'D' }); s.addPolygon([s.findPoint('B')!.id, s.findPoint('C')!.id, d.id], { kind: 'triangle', label: 'BCD' }); }, triangle());
+    const r = ok('ABC üçgenini sil', shared);
+    expect(byType(r.objects, 'point').map(p => p.label)).toEqual(['B', 'C', 'D']);
+    expect(r.message).toBe('ABC üçgeni (A noktasıyla birlikte) silindi.');
+  });
+  it('keeps a vertex of an unfinished drawing (pendingPointIds)', () => {
+    const scene = triangle();
+    const a = byType(scene, 'point').find(p => p.label === 'A')!;
+    const r = expectOk(handlers, 'ABC üçgenini sil', scene, [], { pendingPointIds: [a.id] });
+    expect(byType(r.objects, 'point').map(p => p.label)).toEqual(['A']);
   });
   it('distinguishes point A from slider a by letter case', () => {
     expect(byType(ok("A'yı sil", world()).objects, 'slider')).toHaveLength(1);

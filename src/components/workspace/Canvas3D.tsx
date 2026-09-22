@@ -20,10 +20,18 @@ import {
   LineObject,
   RayObject,
   CircleObject,
+  EllipseObject,
+  ArcObject,
+  SectorObject,
+  AngleObject,
   PolygonObject,
   FunctionObject,
   SliderObject,
 } from '@/types/math';
+import { commandCircleGeometry } from '@/math/commandBindings';
+import { getArcGeometry } from '@/math/geometry';
+import { noktaZ, tabanZ, nesnelerin3BMerkezi } from '@/math/zEkseni';
+import { secimBasligi } from './secimBasligi';
 import { compileMathExpression } from '@/math/parser';
 import { useWorkspace } from '@/state/WorkspaceContext';
 import {
@@ -34,6 +42,9 @@ import {
 } from '@/math/geometry3d';
 import { formatTurkishNumber } from '@/math/coordinates';
 import { isAnyModalOpen } from '@/components/ui/modalState';
+import { workspaceOwnsKeyboard } from './toolShortcuts';
+import { KayanCubuk, CubukMetni, CubukAyirici, CubukDugmesi } from './KayanCubuk';
+import { BookOpen, MousePointer2, X as CarpiSimgesi } from 'lucide-react';
 import { RotateCw, Focus, Plus, Minus, Grid, Trash2, Box, Sparkles, ScanSearch, Search } from 'lucide-react';
 import { ViewCube3D } from './ViewCube3D';
 
@@ -50,6 +61,9 @@ const ORBIT_SPEED = 0.45;
 const DEFAULT_SOLID_COLOR = '#3b82f6';
 
 const AXIS_COLORS = { x: '#ef4444', y: '#10b981', z: '#3b82f6' } as const;
+/** 2B nesneler için taşıma gizmosunun ok uzunluğu (dünya birimi) */
+const MATH_GIZMO_LEN = 1.8;
+const yuvarla2 = (n: number) => Number(n.toFixed(2));
 
 type Axis = 'x' | 'y' | 'z';
 
@@ -546,6 +560,20 @@ function buildGizmo(center: THREE.Vector3, len: number): THREE.Group {
   return group;
 }
 
+/** 3B'de taşınabilecek seçili 2B nesneler: kilitliler ve fonksiyon grafikleri hariç. */
+function tasinabilir2B(objects: MathObject[], ids: string[]): string[] {
+  return ids.filter((id) => {
+    const o = objects.find((x) => x.id === id);
+    return !!o && !o.locked && o.type !== 'function';
+  });
+}
+
+/** Seçili 2B nesnelerin ortak gizmosunun merkezi; taşınabilir nesne yoksa null. */
+function mathGizmoMerkezi(objects: MathObject[], ids: string[]) {
+  const movable = tasinabilir2B(objects, ids);
+  return movable.length > 0 ? nesnelerin3BMerkezi(objects, movable) : null;
+}
+
 /* -------------------------------------------------------------------------- */
 /*  2D Matematik Nesnelerini 3D Uzayda Çizme (Ortak Matematiksel Model)       */
 /* -------------------------------------------------------------------------- */
@@ -559,6 +587,20 @@ function buildMathObjects3D(
   const pointsById = new Map(
     objects.filter((o) => o.type === 'point').map((p) => [p.id, p as PointObject])
   );
+  const zOf = (id: string) => noktaZ(pointsById.get(id));
+  const v3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const nv = (p: PointObject) => new THREE.Vector3(p.x, p.y, noktaZ(p));
+  const cizgi = (pts: THREE.Vector3[], color: string) =>
+    new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color }));
+  const yuzey = (konumlar: number[], color: string, opacity: number) => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(konumlar, 3));
+    geo.computeVertexNormals();
+    return new THREE.Mesh(
+      geo,
+      new THREE.MeshStandardMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, roughness: 0.5, depthWrite: false })
+    );
+  };
 
   const sliderScope: Record<string, number> = {};
   objects.forEach((o) => {
@@ -572,10 +614,12 @@ function buildMathObjects3D(
     if (obj.visible === false) continue;
     const isSelected = selectedObjectIds.includes(obj.id);
     const colorHex = obj.color || (isDark ? '#60a5fa' : '#2563eb');
+    const ilkCocuk = group.children.length;
 
     switch (obj.type) {
       case 'point': {
         const pt = obj as PointObject;
+        const pz = noktaZ(pt);
         const ptGroup = new THREE.Group();
         const r = isSelected ? 0.35 : 0.25;
         const geo = new THREE.SphereGeometry(r, 16, 16);
@@ -587,13 +631,23 @@ function buildMathObjects3D(
           emissiveIntensity: isSelected ? 0.5 : 0,
         });
         const mesh = new THREE.Mesh(geo, mat);
-        mesh.position.set(pt.x, pt.y, 0);
+        mesh.position.set(pt.x, pt.y, pz);
         ptGroup.add(mesh);
 
         if (pt.label) {
           const sprite = makeLabelSprite(pt.label, isDark ? '#f8fafc' : '#0f172a', 0.9, true);
-          sprite.position.set(pt.x + 0.35, pt.y + 0.35, 0.15);
+          sprite.position.set(pt.x + 0.35, pt.y + 0.35, pz + 0.15);
           ptGroup.add(sprite);
+        }
+        // Havadaki noktadan zemine kesikli dikme: yüksekliği okumayı kolaylaştırır (tıklanmaz)
+        if (Math.abs(pz) > 1e-6) {
+          const dikme = new THREE.Line(
+            new THREE.BufferGeometry().setFromPoints([v3(pt.x, pt.y, 0), v3(pt.x, pt.y, pz)]),
+            new THREE.LineDashedMaterial({ color: colorHex, dashSize: 0.18, gapSize: 0.12, transparent: true, opacity: 0.55 })
+          );
+          dikme.computeLineDistances();
+          dikme.raycast = () => {};
+          ptGroup.add(dikme);
         }
         group.add(ptGroup);
         break;
@@ -603,53 +657,112 @@ function buildMathObjects3D(
         const p1 = pointsById.get(seg.startPointId);
         const p2 = pointsById.get(seg.endPointId);
         if (!p1 || !p2) break;
-        const points = [new THREE.Vector3(p1.x, p1.y, 0), new THREE.Vector3(p2.x, p2.y, 0)];
-        const geo = new THREE.BufferGeometry().setFromPoints(points);
-        const mat = new THREE.LineBasicMaterial({
-          color: colorHex,
-        });
-        const line = new THREE.Line(geo, mat);
-        group.add(line);
+        group.add(cizgi([nv(p1), nv(p2)], colorHex));
         break;
       }
-      case 'line': {
-        const l = obj as LineObject;
-        const p1 = pointsById.get(l.point1Id);
-        const p2 = pointsById.get(l.point2Id);
+      case 'line':
+      case 'ray': {
+        const l = obj as LineObject | RayObject;
+        const p1 = pointsById.get(l.type === 'line' ? l.point1Id : l.startPointId);
+        const p2 = pointsById.get(l.type === 'line' ? l.point2Id : l.throughPointId);
         if (!p1 || !p2) break;
-        const dx = p2.x - p1.x;
-        const dy = p2.y - p1.y;
-        const len = Math.hypot(dx, dy);
+        const a = nv(p1);
+        const b = nv(p2);
+        const yon = b.clone().sub(a);
+        const len = yon.length();
         if (len < 1e-6) break;
-        const extend = 30 / len;
-        const points = [
-          new THREE.Vector3(p1.x - dx * extend, p1.y - dy * extend, 0),
-          new THREE.Vector3(p2.x + dx * extend, p2.y + dy * extend, 0),
-        ];
-        const geo = new THREE.BufferGeometry().setFromPoints(points);
-        const mat = new THREE.LineBasicMaterial({
-          color: colorHex,
-        });
-        const line = new THREE.Line(geo, mat);
-        group.add(line);
+        yon.divideScalar(len);
+        const bas = l.type === 'line' ? a.clone().addScaledVector(yon, -30) : a;
+        group.add(cizgi([bas, b.clone().addScaledVector(yon, 30)], colorHex));
         break;
       }
       case 'circle': {
         const circ = obj as CircleObject;
-        const c = pointsById.get(circ.centerPointId);
-        if (!c) break;
-        const rp = circ.radiusPointId ? pointsById.get(circ.radiusPointId) : undefined;
-        const r = c && rp ? Math.hypot(c.x - rp.x, c.y - rp.y) : circ.fixedRadius ?? 0;
-        if (r <= 0) break;
-
-        const curve = new THREE.EllipseCurve(c.x, c.y, r, r, 0, 2 * Math.PI, false, 0);
-        const pts = curve.getPoints(64).map((p) => new THREE.Vector3(p.x, p.y, 0));
-        const geo = new THREE.BufferGeometry().setFromPoints(pts);
-        const mat = new THREE.LineBasicMaterial({
-          color: colorHex,
-        });
-        const circleLine = new THREE.Line(geo, mat);
-        group.add(circleLine);
+        let geo2: { center: Point2D; radius: number } | null = null;
+        try {
+          geo2 = commandCircleGeometry(circ, (id) => {
+            const p = pointsById.get(id);
+            if (!p) throw new Error('eksik nokta');
+            return p;
+          });
+        } catch {
+          geo2 = null;
+        }
+        if (!geo2 || !(geo2.radius > 0)) break;
+        const cz = tabanZ(circ, zOf);
+        const curve = new THREE.EllipseCurve(geo2.center.x, geo2.center.y, geo2.radius, geo2.radius, 0, 2 * Math.PI, false, 0);
+        group.add(cizgi(curve.getPoints(64).map((p) => v3(p.x, p.y, cz)), colorHex));
+        break;
+      }
+      case 'ellipse': {
+        const el = obj as EllipseObject;
+        const c = pointsById.get(el.centerPointId);
+        if (!c || !(el.radiusX > 0) || !(el.radiusY > 0)) break;
+        const cz = noktaZ(c);
+        const rot = ((el.rotation ?? 0) * Math.PI) / 180;
+        const curve = new THREE.EllipseCurve(c.x, c.y, el.radiusX, el.radiusY, 0, 2 * Math.PI, false, rot);
+        group.add(cizgi(curve.getPoints(72).map((p) => v3(p.x, p.y, cz)), colorHex));
+        break;
+      }
+      case 'arc':
+      case 'sector': {
+        const a = obj as ArcObject | SectorObject;
+        const c = pointsById.get(a.centerPointId);
+        const s = pointsById.get(a.startPointId);
+        const d = pointsById.get(a.directionPointId);
+        if (!c || !s || !d) break;
+        const g = getArcGeometry(c, s, d);
+        if (!g) break;
+        const cz = noktaZ(c);
+        const yay: THREE.Vector3[] = [];
+        const adim = Math.max(8, Math.ceil((g.sweep / (2 * Math.PI)) * 64));
+        for (let i = 0; i <= adim; i++) {
+          const t = g.startAngle + (g.sweep * i) / adim;
+          yay.push(v3(c.x + g.radius * Math.cos(t), c.y + g.radius * Math.sin(t), cz));
+        }
+        if (a.type === 'arc') {
+          group.add(cizgi(yay, colorHex));
+          break;
+        }
+        const merkez = v3(c.x, c.y, cz);
+        group.add(cizgi([merkez, ...yay, merkez], colorHex));
+        const konumlar: number[] = [];
+        for (let i = 0; i < yay.length - 1; i++) {
+          konumlar.push(merkez.x, merkez.y, merkez.z, yay[i].x, yay[i].y, yay[i].z, yay[i + 1].x, yay[i + 1].y, yay[i + 1].z);
+        }
+        group.add(yuzey(konumlar, a.fillColor || colorHex, a.fillOpacity ?? 0.3));
+        break;
+      }
+      case 'angle': {
+        const an = obj as AngleObject;
+        const p1 = pointsById.get(an.point1Id);
+        const v = pointsById.get(an.vertexPointId);
+        const p3 = pointsById.get(an.point3Id);
+        if (!p1 || !v || !p3) break;
+        const o = nv(v);
+        const u1 = nv(p1).sub(o);
+        const u3 = nv(p3).sub(o);
+        if (u1.lengthSq() < 1e-12 || u3.lengthSq() < 1e-12) break;
+        u1.normalize();
+        u3.normalize();
+        const aci = u1.angleTo(u3);
+        if (!(aci > 1e-6) || aci > Math.PI - 1e-6) break;
+        const r = 0.8;
+        const yay: THREE.Vector3[] = [];
+        // Kollar arasındaki açı yayı; kollar farklı yüksekliklerde olsa da kendi düzlemlerinde çizilir
+        for (let i = 0; i <= 24; i++) {
+          const t = i / 24;
+          const w = new THREE.Vector3()
+            .addScaledVector(u1, Math.sin((1 - t) * aci) / Math.sin(aci))
+            .addScaledVector(u3, Math.sin(t * aci) / Math.sin(aci));
+          yay.push(o.clone().addScaledVector(w.normalize(), r));
+        }
+        group.add(cizgi(yay, colorHex));
+        const konumlar: number[] = [];
+        for (let i = 0; i < yay.length - 1; i++) {
+          konumlar.push(o.x, o.y, o.z, yay[i].x, yay[i].y, yay[i].z, yay[i + 1].x, yay[i + 1].y, yay[i + 1].z);
+        }
+        group.add(yuzey(konumlar, colorHex, 0.25));
         break;
       }
       case 'polygon': {
@@ -657,30 +770,16 @@ function buildMathObjects3D(
         const pts = poly.pointIds.map((id) => pointsById.get(id)).filter(Boolean) as PointObject[];
         if (pts.length < 3) break;
 
-        // Kenarlar
-        const edgePts = pts.map((p) => new THREE.Vector3(p.x, p.y, 0));
-        edgePts.push(edgePts[0]);
-        const edgeGeo = new THREE.BufferGeometry().setFromPoints(edgePts);
-        const edgeMat = new THREE.LineBasicMaterial({
-          color: colorHex,
-        });
-        group.add(new THREE.Line(edgeGeo, edgeMat));
+        // Kenarlar (köşeler kendi z'lerinde)
+        const edgePts = pts.map(nv);
+        group.add(cizgi([...edgePts, edgePts[0]], colorHex));
 
-        // Yüzey
-        const shape = new THREE.Shape();
-        shape.moveTo(pts[0].x, pts[0].y);
-        for (let i = 1; i < pts.length; i++) shape.lineTo(pts[i].x, pts[i].y);
-        shape.closePath();
-
-        const faceGeo = new THREE.ShapeGeometry(shape);
-        const faceMat = new THREE.MeshStandardMaterial({
-          color: poly.fillColor || colorHex,
-          transparent: true,
-          opacity: poly.fillOpacity ?? 0.3,
-          side: THREE.DoubleSide,
-          roughness: 0.5,
-        });
-        group.add(new THREE.Mesh(faceGeo, faceMat));
+        // Yüzey: xy izdüşümünde üçgenlenir, köşeler 3B konumlarıyla yerleştirilir
+        const kontur = pts.map((p) => new THREE.Vector2(p.x, p.y));
+        const ucgenler = THREE.ShapeUtils.triangulateShape(kontur, []);
+        const konumlar: number[] = [];
+        ucgenler.forEach((tri) => tri.forEach((i) => konumlar.push(edgePts[i].x, edgePts[i].y, edgePts[i].z)));
+        if (konumlar.length > 0) group.add(yuzey(konumlar, poly.fillColor || colorHex, poly.fillOpacity ?? 0.3));
         break;
       }
       case 'function': {
@@ -708,6 +807,20 @@ function buildMathObjects3D(
           group.add(new THREE.Line(geo, mat));
         }
         break;
+      }
+    }
+
+    // 3B'de "Cismi Seç / Taşı" ile tıklanıp sürüklenebilsin diye 2B nesnenin
+    // parçalarına kimliği yazılır (fonksiyon grafiği öteleme ile taşınmaz).
+    if (obj.type !== 'function') {
+      for (let i = ilkCocuk; i < group.children.length; i++) {
+        group.children[i].traverse((o) => {
+          o.userData = { ...o.userData, mathObjectId: obj.id };
+          // Seçili çizgisel nesne (doğru parçası, çokgen kenarı, çember…) 2B'deki gibi pembe vurgulanır
+          if (isSelected && o instanceof THREE.Line && o.material instanceof THREE.LineBasicMaterial) {
+            o.material.color.set('#ec4899');
+          }
+        });
       }
     }
   }
@@ -769,6 +882,29 @@ type Interaction =
       moved: boolean;
       /** Sürükleme boyunca cisimlere UYGULANMIŞ toplam öteleme (toplu güncelleme için) */
       applied: Point3D;
+    }
+  | {
+      /**
+       * 2B çizimden gelen nesneleri (nokta, çokgen, doğru…) taşıma. 'free': nesnenin yüksekliğindeki
+       * yatay düzlemde serbest; 'x' / 'y' / 'z': gizmonun okuyla eksen boyunca (z oku yukarı/aşağı).
+       */
+      type: 'moveMath';
+      axis: Axis | 'free';
+      objectIds: string[];
+      startClient: Point2D;
+      /** Serbest sürüklemenin yatay düzleminin z'si */
+      planeZ: number;
+      startHit: Point2D;
+      /** Gizmo merkezinin sürükleme başındaki konumu (eksen izdüşümü buradan alınır) */
+      origin: { x: number; y: number; z: number };
+      moved: boolean;
+      /** Nesnelere şimdiye dek UYGULANMIŞ toplam öteleme (geçmiş kaydı kararı için) */
+      applied: { x: number; y: number; z: number };
+      /**
+       * Sürükleme başındaki nesne dizisi: Esc bunu geçmişe yazmadan BİREBİR geri yükler
+       * (ters öteleme, nesneye bağlı noktaları başladıkları yere döndürmüyordu).
+       */
+      baslangicNesneleri: MathObject[];
     };
 
 const CREATE_TYPE_MAP: Partial<Record<Tool3DMode, Solid3DType>> = {
@@ -863,6 +999,7 @@ export function Canvas3D(props: Canvas3DProps) {
     onRedo,
     onDragEnd,
     onDragCancel,
+    workspace,
   });
   latest.current = {
     solids,
@@ -885,6 +1022,7 @@ export function Canvas3D(props: Canvas3DProps) {
     onRedo,
     onDragEnd,
     onDragCancel,
+    workspace,
   };
 
   const setInteractionBoth = useCallback((next: Interaction | null) => {
@@ -910,6 +1048,23 @@ export function Canvas3D(props: Canvas3DProps) {
       const orig = it.startPositions[id];
       if (orig) l.onUpdateSolidPosition(id, { ...orig });
     });
+  }, []);
+
+  /**
+   * Seçili 2B nesneleri (2B'deki silme kuralıyla: bağımlılarıyla birlikte) ve seçili cisimleri siler.
+   * Her ikisi de kendi geçmişine yazılır; ortak geri alma aynı eylemin iki adımını birlikte geri getirir.
+   */
+  const seciliyiSil = useCallback(() => {
+    const l = latest.current;
+    const nesneler = l.workspace.selectedObjectIds;
+    if (nesneler.length > 0) {
+      l.workspace.deleteObjects(nesneler, nesneler.length === 1 ? undefined : `${nesneler.length} seçili nesne silindi`);
+      l.workspace.setSelectedObjectIds([]);
+    }
+    if (l.effectiveSelectedIds.length > 0) {
+      if (l.onDeleteSolids) l.onDeleteSolids();
+      else if (l.onDeleteSolid && l.effectiveSelectedIds[0]) l.onDeleteSolid(l.effectiveSelectedIds[0]);
+    }
   }, []);
 
   const requestRender = useCallback(() => {
@@ -1100,9 +1255,16 @@ export function Canvas3D(props: Canvas3DProps) {
         gizmo.userData = { solidId: solid.id };
         t.gizmoGroup.add(gizmo);
       });
+      // Seçili 2B nesneler için ORTAK gizmo: tanım noktalarının ortasında x, y, z okları + merkez tutamacı
+      const merkez = mathGizmoMerkezi(objects, selectedObjectIds);
+      if (merkez) {
+        const gizmo = buildGizmo(new THREE.Vector3(merkez.x, merkez.y, merkez.z), MATH_GIZMO_LEN);
+        gizmo.userData = { mathGizmo: true };
+        t.gizmoGroup.add(gizmo);
+      }
     }
     requestRender();
-  }, [solids, effectiveSelectedIds, activeTool, requestRender]);
+  }, [solids, effectiveSelectedIds, activeTool, objects, selectedObjectIds, requestRender]);
 
   /* --------------------------- Yardımcılar ----------------------------- */
   const getPointerNdc = useCallback((clientX: number, clientY: number): THREE.Vector2 => {
@@ -1113,7 +1275,8 @@ export function Canvas3D(props: Canvas3DProps) {
     return new THREE.Vector2((x / width) * 2 - 1, -(y / height) * 2 + 1);
   }, []);
 
-  const pickGizmo = useCallback((ndc: THREE.Vector2): { solidId: string; axis: Axis | 'free' } | null => {
+  /** Gizmo isabeti: cismin gizmosuysa solidId, seçili 2B nesnelerin ortak gizmosuysa solidId = null. */
+  const pickGizmo = useCallback((ndc: THREE.Vector2): { solidId: string | null; axis: Axis | 'free' } | null => {
     const t = threeRef.current;
     if (!t) return null;
     t.raycaster.setFromCamera(ndc, latest.current.basis.camera);
@@ -1122,8 +1285,9 @@ export function Canvas3D(props: Canvas3DProps) {
       const axis = hit.object.userData?.gizmoAxis as Axis | 'free' | undefined;
       if (!axis) continue;
       let parent: THREE.Object3D | null = hit.object;
-      while (parent && !parent.userData?.solidId) parent = parent.parent;
+      while (parent && !parent.userData?.solidId && !parent.userData?.mathGizmo) parent = parent.parent;
       if (parent?.userData?.solidId) return { solidId: parent.userData.solidId as string, axis };
+      if (parent?.userData?.mathGizmo) return { solidId: null, axis };
     }
     return null;
   }, []);
@@ -1148,6 +1312,22 @@ export function Canvas3D(props: Canvas3DProps) {
     },
     []
   );
+
+  /** 2B çizimden gelen nesneye (nokta, doğru, çember, çokgen…) isabet; ışın uzaklığıyla birlikte döner. */
+  const pickMathObject = useCallback((ndc: THREE.Vector2): { objectId: string; distance: number; point: THREE.Vector3 } | null => {
+    const t = threeRef.current;
+    if (!t) return null;
+    t.raycaster.setFromCamera(ndc, latest.current.basis.camera);
+    const eskiEsik = t.raycaster.params.Line?.threshold ?? 1;
+    t.raycaster.params.Line = { ...t.raycaster.params.Line, threshold: 0.25 };
+    const hits = t.raycaster.intersectObjects(t.mathObjectsGroup.children, true);
+    t.raycaster.params.Line = { ...t.raycaster.params.Line, threshold: eskiEsik };
+    for (const hit of hits) {
+      const objectId = hit.object.userData?.mathObjectId as string | undefined;
+      if (objectId) return { objectId, distance: hit.distance, point: hit.point.clone() };
+    }
+    return null;
+  }, []);
 
   const intersectPlane = useCallback((ndc: THREE.Vector2, plane: THREE.Plane): THREE.Vector3 | null => {
     const t = threeRef.current;
@@ -1182,19 +1362,42 @@ export function Canvas3D(props: Canvas3DProps) {
     // 1. Gizmo (eksen okları / merkez tutamacı)
     if (tool === 'select_move') {
       const g = pickGizmo(ndc);
-      if (g) {
-        const ids = effectiveSelectedIds.includes(g.solidId) ? effectiveSelectedIds : [g.solidId];
+      if (g && g.solidId === null) {
+        // Seçili 2B nesnelerin gizmosu: ok ekseni boyunca ya da merkez tutamacıyla yatay düzlemde taşıma
+        const movable = tasinabilir2B(objects, selectedObjectIds);
+        const merkez = nesnelerin3BMerkezi(objects, movable);
+        if (movable.length > 0 && merkez) {
+          const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -merkez.z);
+          const startHit = intersectPlane(ndc, plane);
+          setInteractionBoth({
+            type: 'moveMath',
+            axis: g.axis,
+            objectIds: movable,
+            startClient: { x: e.clientX, y: e.clientY },
+            planeZ: merkez.z,
+            startHit: startHit ? { x: startHit.x, y: startHit.y } : { x: merkez.x, y: merkez.y },
+            origin: merkez,
+            moved: false,
+            applied: { x: 0, y: 0, z: 0 },
+            baslangicNesneleri: workspace.objects,
+          });
+        }
+        return;
+      }
+      if (g && g.solidId !== null) {
+        const gizmoSolidId = g.solidId;
+        const ids = effectiveSelectedIds.includes(gizmoSolidId) ? effectiveSelectedIds : [gizmoSolidId];
         const startPositions: Record<string, Point3D> = {};
         solids.forEach((s) => {
           if (ids.includes(s.id)) startPositions[s.id] = { ...s.position };
         });
-        const anchor = solids.find((s) => s.id === g.solidId);
+        const anchor = solids.find((s) => s.id === gizmoSolidId);
         const plane = anchor ? new THREE.Plane(new THREE.Vector3(0, 0, 1), -anchor.position.z) : null;
         const startHit = plane ? intersectPlane(ndc, plane) : null;
         setInteractionBoth({
           type: 'move',
           axis: g.axis,
-          anchorId: g.solidId,
+          anchorId: gizmoSolidId,
           solidIds: ids,
           startPositions,
           startClient: { x: e.clientX, y: e.clientY },
@@ -1211,7 +1414,49 @@ export function Canvas3D(props: Canvas3DProps) {
 
     // 2. Cisim
     const hit = pickSolid(ndc);
+    const solidDistance = hit && threeRef.current ? threeRef.current.raycaster.ray.origin.distanceTo(hit.point) : Infinity;
+
+    // 2a. 2B çizimden gelen nesne (nokta, doğru parçası, çokgen…): ondan daha yakın bir cisim yoksa
+    // "Cismi Seç / Taşı" onu seçer ve tıklanan yüksekliğin yatay düzleminde sürükler
+    // (yukarı/aşağı taşımak için gizmonun mavi z oku kullanılır).
+    if (tool === 'select_move') {
+      const mathHit = pickMathObject(ndc);
+      const planeZ = mathHit ? mathHit.point.z : 0;
+      const ground = mathHit ? intersectPlane(ndc, new THREE.Plane(new THREE.Vector3(0, 0, 1), -planeZ)) : null;
+      if (mathHit && ground && mathHit.distance <= solidDistance) {
+        const current = workspace.selectedObjectIds;
+        const already = current.includes(mathHit.objectId);
+        let ids: string[];
+        if (e.shiftKey || e.ctrlKey) {
+          ids = already ? current.filter((id) => id !== mathHit.objectId) : [...current, mathHit.objectId];
+        } else {
+          ids = already ? current : [mathHit.objectId];
+          selectIds([]);
+        }
+        workspace.setSelectedObjectIds(ids);
+        if (!ids.includes(mathHit.objectId)) return;
+        const movable = tasinabilir2B(objects, ids);
+        if (movable.length === 0) return;
+        setInteractionBoth({
+          type: 'moveMath',
+          axis: 'free',
+          objectIds: movable,
+          startClient: { x: e.clientX, y: e.clientY },
+          planeZ,
+          startHit: { x: ground.x, y: ground.y },
+          origin: nesnelerin3BMerkezi(objects, movable) ?? { x: ground.x, y: ground.y, z: planeZ },
+          moved: false,
+          applied: { x: 0, y: 0, z: 0 },
+          baslangicNesneleri: workspace.objects,
+        });
+        return;
+      }
+    }
+
     if (hit) {
+      if (tool === 'select_move' && !e.shiftKey && !e.ctrlKey && selectedObjectIds.length > 0) {
+        workspace.setSelectedObjectIds([]);
+      }
       if (tool === 'delete') {
         if (onDeleteSolid) onDeleteSolid(hit.solidId);
         return;
@@ -1280,7 +1525,10 @@ export function Canvas3D(props: Canvas3DProps) {
     }
 
     if (tool === 'select_move' || tool === 'inspect') {
-      if (!e.shiftKey && !e.ctrlKey) selectIds([]);
+      if (!e.shiftKey && !e.ctrlKey) {
+        selectIds([]);
+        if (tool === 'select_move' && selectedObjectIds.length > 0) workspace.setSelectedObjectIds([]);
+      }
       if (tool === 'select_move') {
         setInteractionBoth({ type: 'marquee', start: screen, current: screen });
       } else {
@@ -1346,6 +1594,39 @@ export function Canvas3D(props: Canvas3DProps) {
         const next = { ...it, currentScreen: screen };
         interactionRef.current = next;
         setInteraction(next);
+        return;
+      }
+
+      if (it.type === 'moveMath') {
+        if (!it.moved && Math.hypot(e.clientX - it.startClient.x, e.clientY - it.startClient.y) < 3) return;
+        let target: { x: number; y: number; z: number };
+        if (it.axis === 'free') {
+          // Serbest: nesnenin bulunduğu yükseklikteki yatay düzlemde (z değişmez)
+          const hit = intersectPlane(ndc, new THREE.Plane(new THREE.Vector3(0, 0, 1), -it.planeZ));
+          if (!hit) return;
+          target = { x: yuvarla2(hit.x - it.startHit.x), y: yuvarla2(hit.y - it.startHit.y), z: 0 };
+        } else {
+          // Eksen oku: fare hareketi okun ekrandaki izdüşümüne yansıtılır (cisim gizmosuyla aynı kural)
+          const { width, height } = l.dimensions;
+          const o = new THREE.Vector3(it.origin.x, it.origin.y, it.origin.z);
+          const tip = o.clone();
+          tip[it.axis] += MATH_GIZMO_LEN;
+          const c = projectToScreen(o, l.basis.camera, width, height);
+          const tp = projectToScreen(tip, l.basis.camera, width, height);
+          if (c.behind || tp.behind) return;
+          const vx = tp.x - c.x;
+          const vy = tp.y - c.y;
+          const lenSq = vx * vx + vy * vy;
+          if (lenSq < 64) return;
+          const tParam = ((e.clientX - it.startClient.x) * vx + (e.clientY - it.startClient.y) * vy) / lenSq;
+          // Ok boyunca 0,1 birimlik adımlar: "2 birim yukarı" gibi tam değerlere kolayca ulaşılır
+          const d = Math.round(tParam * MATH_GIZMO_LEN * 10) / 10;
+          target = { x: it.axis === 'x' ? d : 0, y: it.axis === 'y' ? d : 0, z: it.axis === 'z' ? d : 0 };
+        }
+        const step = { x: target.x - it.applied.x, y: target.y - it.applied.y, z: yuvarla2(target.z - it.applied.z) };
+        interactionRef.current = { ...it, moved: true, applied: target };
+        if (step.x !== 0 || step.y !== 0) l.workspace.moveObjects(it.objectIds, { x: step.x, y: step.y }, false);
+        if (step.z !== 0) l.workspace.moveObjectsZ(it.objectIds, step.z, false);
         return;
       }
 
@@ -1454,6 +1735,16 @@ export function Canvas3D(props: Canvas3DProps) {
 
       if (it.type === 'move' && it.moved && l.onDragEnd) l.onDragEnd();
 
+      if (it.type === 'moveMath' && it.moved && it.applied.x === 0 && it.applied.y === 0 && it.applied.z === 0) {
+        // Sürüklenip başladığı yere geri bırakıldı: kaydedilmemiş ara durum kalmasın
+        l.workspace.setObjects(it.baslangicNesneleri);
+      } else if (it.type === 'moveMath' && it.moved) {
+        const moved = it.objectIds.map((id) => l.workspace.objects.find((o) => o.id === id)).filter(Boolean);
+        l.workspace.recordHistory(
+          moved.length === 1 ? `${moved[0]!.label || 'Nesne'} taşındı` : `${it.objectIds.length} nesne taşındı`
+        );
+      }
+
       interactionRef.current = null;
       setInteraction(null);
     };
@@ -1464,7 +1755,7 @@ export function Canvas3D(props: Canvas3DProps) {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [getPointerNdc, intersectPlane]);
+  }, [getPointerNdc, intersectPlane, groundPlane]);
 
   /* ------------------------------ Tekerlek ----------------------------- */
   useEffect(() => {
@@ -1482,6 +1773,7 @@ export function Canvas3D(props: Canvas3DProps) {
   /* ------------------------------ Klavye ------------------------------- */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!workspaceOwnsKeyboard(e, containerRef.current)) return;
       // Bir dialog/modal açıkken (ör. "Nesne Ekle") tuval kısayolları çalışmamalı:
       // aksi hâlde modaldaki bir düğme odaklıyken Delete/Backspace arkadaki seçili
       // cismi siler, Ctrl+Z ise 3D geçmişini geri alır.
@@ -1515,7 +1807,11 @@ export function Canvas3D(props: Canvas3DProps) {
           interactionRef.current = null;
           setInteraction(null);
           const wasMove = active.type === 'move' && active.moved;
-          if (wasMove && l.onDragCancel) {
+          if (active.type === 'moveMath') {
+            // Sürükleme öncesi nesne dizisini geçmişe yazmadan birebir geri yükle: nesneye bağlı
+            // noktalar da başladıkları yere döner, durum geçmişin başıyla yine aynı referanstır.
+            if (active.moved) l.workspace.setObjects(active.baslangicNesneleri);
+          } else if (wasMove && l.onDragCancel) {
             // Üst bileşen sürükleme öncesi anlık görüntüyü birebir geri yükler:
             // konumlar tam olarak eski değerine döner ve geçmişte boş bir adım kalmaz.
             l.onDragCancel();
@@ -1531,15 +1827,14 @@ export function Canvas3D(props: Canvas3DProps) {
         }
         return;
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && l.effectiveSelectedIds.length > 0) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && (l.effectiveSelectedIds.length > 0 || l.workspace.selectedObjectIds.length > 0)) {
         e.preventDefault();
-        if (l.onDeleteSolids) l.onDeleteSolids();
-        else if (l.onDeleteSolid && l.effectiveSelectedIds[0]) l.onDeleteSolid(l.effectiveSelectedIds[0]);
+        seciliyiSil();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [revertMove]);
+  }, [revertMove, seciliyiSil]);
 
   /* ------------------------- Ekran üstü bindirmeler -------------------- */
   const overlays = useMemo(() => {
@@ -1573,6 +1868,31 @@ export function Canvas3D(props: Canvas3DProps) {
       });
     }
 
+    // Seçili 2B nesnelerin ortak gizmosu: eksen rozetleri ve yükseklik etiketi
+    const mathMerkez = activeTool === 'select_move' ? mathGizmoMerkezi(objects, selectedObjectIds) : null;
+    if (mathMerkez) {
+      const center = new THREE.Vector3(mathMerkez.x, mathMerkez.y, mathMerkez.z);
+      (['x', 'y', 'z'] as Axis[]).forEach((axis) => {
+        const tip = center.clone();
+        tip[axis] += MATH_GIZMO_LEN * 1.12;
+        const p = projectToScreen(tip, cam, width, height);
+        if (!p.behind) gizmoLabels.push({ id: 'nesne', axis, x: p.x, y: p.y });
+      });
+      const c = projectToScreen(center, cam, width, height);
+      const tek = selectedObjectIds.length === 1 ? objects.find((o) => o.id === selectedObjectIds[0]) : undefined;
+      if (!c.behind) {
+        coordBadges.push({
+          id: 'nesne',
+          x: c.x,
+          y: c.y - 34,
+          text:
+            tek && tek.type === 'point'
+              ? `X: ${formatTurkishNumber(tek.x)}  Y: ${formatTurkishNumber(tek.y)}  Z: ${formatTurkishNumber(noktaZ(tek))}`
+              : `Z: ${formatTurkishNumber(mathMerkez.z)}`,
+        });
+      }
+    }
+
     let faceBadge: { x: number; y: number; label: string; area: string } | null = null;
     const inspected = solids.find((s) => s.selectedFaceIndex !== null && s.selectedFaceIndex !== undefined);
     if (inspected && inspected.selectedFaceIndex !== null) {
@@ -1598,7 +1918,7 @@ export function Canvas3D(props: Canvas3DProps) {
     }
 
     return { gizmoLabels, coordBadges, faceBadge };
-  }, [solids, effectiveSelectedIds, activeTool, basis, dimensions]);
+  }, [solids, effectiveSelectedIds, activeTool, basis, dimensions, objects, selectedObjectIds]);
 
   /**
    * Ekran üstü bindirmeler (ipucu şeritleri, kapsüller, araç çubukları) kök
@@ -1647,7 +1967,7 @@ export function Canvas3D(props: Canvas3DProps) {
         {/* Salt bilgilendirici: tıklamayı yutmaz, üzerinden sürükleyerek sahne döndürülebilir */}
         <div className="flex items-center gap-2 pointer-events-none">
           <div className="px-3 py-1.5 rounded-2xl bg-card/90 backdrop-blur-md border border-border shadow-sm text-xs font-black text-foreground flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+            <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
             <span>3D Katı Cisim &amp; Uzay</span>
           </div>
           <div className="hidden sm:flex items-center gap-1 px-3 py-1.5 rounded-2xl bg-card/90 backdrop-blur-md border border-border shadow-sm text-xs font-bold text-muted-foreground">
@@ -1663,11 +1983,11 @@ export function Canvas3D(props: Canvas3DProps) {
             onClick={onSwitchTo2D}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-extrabold text-muted-foreground hover:text-foreground hover:bg-muted transition-all cursor-pointer"
           >
-            <span>📐</span>
+            <Grid className="w-3.5 h-3.5" aria-hidden="true" />
             <span>2D</span>
           </button>
-          <button className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm cursor-pointer">
-            <span>🧊</span>
+          <button className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-ada-deniz to-ada-vurgu text-primary-foreground shadow-sm cursor-pointer">
+            <Box className="w-3.5 h-3.5" aria-hidden="true" />
             <span>3D</span>
           </button>
         </div>
@@ -1682,7 +2002,7 @@ export function Canvas3D(props: Canvas3DProps) {
       {overlays.gizmoLabels.map((g) => (
         <div
           key={`gl-${g.id}-${g.axis}`}
-          className="absolute z-10 w-5 h-5 -ml-2.5 -mt-2.5 rounded-full text-white text-[9px] font-black font-mono flex items-center justify-center border-2 border-white shadow-md pointer-events-none"
+          className="absolute z-10 w-5 h-5 -ml-2.5 -mt-2.5 rounded-full text-ada-fildisi text-[9px] font-black font-mono flex items-center justify-center border-2 border-ada-fildisi shadow-md pointer-events-none"
           style={{ left: g.x, top: g.y, backgroundColor: AXIS_COLORS[g.axis] }}
         >
           {g.axis.toUpperCase()}
@@ -1691,7 +2011,7 @@ export function Canvas3D(props: Canvas3DProps) {
       {overlays.coordBadges.map((b) => (
         <div
           key={`cb-${b.id}`}
-          className="absolute z-10 -translate-x-1/2 -translate-y-1/2 px-2.5 py-1 rounded-full bg-slate-900/90 text-white text-[10px] font-mono font-black border border-sky-400 shadow-md whitespace-nowrap pointer-events-none"
+          className="absolute z-10 -translate-x-1/2 -translate-y-1/2 px-2.5 py-1 rounded-full bg-ada-murekkep/90 text-ada-fildisi text-[10px] font-mono font-black border border-ada-vurgu shadow-md whitespace-nowrap pointer-events-none"
           style={{ left: b.x, top: b.y }}
         >
           {b.text}
@@ -1699,7 +2019,7 @@ export function Canvas3D(props: Canvas3DProps) {
       ))}
       {overlays.faceBadge && (
         <div
-          className="absolute z-10 -translate-x-1/2 -translate-y-1/2 px-2.5 py-1 rounded-xl bg-sky-600/95 text-white text-[10px] font-black border border-white/60 shadow-md whitespace-nowrap pointer-events-none flex items-center gap-1.5"
+          className="absolute z-10 -translate-x-1/2 -translate-y-1/2 px-2.5 py-1 rounded-xl bg-ada-deniz/95 text-primary-foreground text-[10px] font-black border border-ada-fildisi/60 shadow-md whitespace-nowrap pointer-events-none flex items-center gap-1.5"
           style={{ left: overlays.faceBadge.x, top: overlays.faceBadge.y }}
         >
           <ScanSearch className="w-3 h-3" />
@@ -1711,7 +2031,7 @@ export function Canvas3D(props: Canvas3DProps) {
       {/* Kutuyla seçim */}
       {interaction?.type === 'marquee' && (
         <div
-          className="absolute z-10 rounded border border-dashed border-blue-600 bg-blue-500/15 pointer-events-none"
+          className="absolute z-10 rounded border border-dashed border-primary bg-primary/15 pointer-events-none"
           style={{
             left: Math.min(interaction.start.x, interaction.current.x),
             top: Math.min(interaction.start.y, interaction.current.y),
@@ -1720,8 +2040,8 @@ export function Canvas3D(props: Canvas3DProps) {
           }}
         >
           {effectiveSelectedIds.length > 0 && (
-            <span className="absolute -top-6 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-md bg-slate-800 text-white text-[10px] font-bold whitespace-nowrap">
-              ✨ {effectiveSelectedIds.length} cisim seçildi
+            <span className="absolute -top-6 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-md bg-ada-murekkep text-ada-fildisi text-[10px] font-bold whitespace-nowrap">
+              {effectiveSelectedIds.length} cisim seçildi
             </span>
           )}
         </div>
@@ -1736,7 +2056,7 @@ export function Canvas3D(props: Canvas3DProps) {
         const size = Math.max(2, Math.min(8, distPx / 20));
         return (
           <div
-            className="absolute z-10 rounded-full border-2 border-dashed border-indigo-500 bg-indigo-500/10 pointer-events-none flex items-center justify-center"
+            className="absolute z-10 rounded-full border-2 border-dashed border-ada-lavanta bg-ada-lavanta/10 pointer-events-none flex items-center justify-center"
             style={{
               left: interaction.startScreen.x - distPx,
               top: interaction.startScreen.y - distPx,
@@ -1744,118 +2064,99 @@ export function Canvas3D(props: Canvas3DProps) {
               height: distPx * 2,
             }}
           >
-            <span className="px-2 py-0.5 rounded-md bg-indigo-600 text-white text-[10px] font-black whitespace-nowrap">
+            <span className="px-2 py-0.5 rounded-md bg-ada-murekkep text-ada-fildisi text-[10px] font-black whitespace-nowrap">
               ≈ {formatTurkishNumber(size, 1)} br
             </span>
           </div>
         );
       })()}
 
-      {/* Açınım kontrol çubuğu */}
+      {/* Açınım kontrol çubuğu (sade kayan çubuk) */}
       {unfoldTarget && unfoldTarget.type !== 'sphere' && (() => {
         const progress = unfoldTarget.unfoldProgress || 0;
         const setProgress = (v: number) => {
           if (onUpdateSolid) onUpdateSolid(unfoldTarget.id, { unfoldProgress: v });
         };
         return (
-          <div
-            className="absolute top-16 left-1/2 -translate-x-1/2 bg-slate-900/95 dark:bg-card/95 backdrop-blur-md text-white border border-amber-500/40 shadow-2xl px-5 py-3 rounded-2xl flex flex-col md:flex-row items-center gap-4 z-30 select-none animate-in slide-in-from-top-3 duration-200"
-            onMouseDown={stopMouseDown}
-          >
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-              <span className="text-xs font-bold text-amber-200">📖 {unfoldTarget.name || 'Cismin'} Açınımı:</span>
-              <span className="font-mono font-black text-amber-300 text-xs px-2 py-0.5 rounded-md bg-amber-500/20">
-                %{Math.round(progress * 100)}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 w-48 sm:w-64">
-              <button
-                onClick={() => setProgress(Math.max(0, Number((progress - 0.1).toFixed(2))))}
-                className="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-black cursor-pointer transition-colors"
-                title="%10 Kapat"
-              >
-                -
-              </button>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
-                value={progress}
-                onChange={(e) => setProgress(parseFloat(e.target.value))}
-                onMouseDown={(e) => e.stopPropagation()}
-                className="flex-1 h-2 bg-amber-950/80 rounded-lg appearance-none cursor-pointer accent-amber-500"
-              />
-              <button
-                onClick={() => setProgress(Math.min(1, Number((progress + 0.1).toFixed(2))))}
-                className="w-6 h-6 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-900 flex items-center justify-center text-xs font-black cursor-pointer transition-colors"
-                title="%10 Aç"
-              >
-                +
-              </button>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setProgress(0)}
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  progress === 0 ? 'bg-amber-500 text-slate-900 shadow-sm' : 'bg-white/10 hover:bg-white/20 text-white/90'
-                }`}
-              >
-                🔒 Kapalı (%0)
-              </button>
-              <button
-                onClick={() => setProgress(1)}
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  progress >= 0.99 ? 'bg-amber-500 text-slate-900 shadow-sm' : 'bg-white/10 hover:bg-white/20 text-white/90'
-                }`}
-              >
-                📖 Tam Açık (%100)
-              </button>
-            </div>
-          </div>
+          <KayanCubuk konum="ust" onMouseDown={stopMouseDown} data-acinim-cubugu>
+            <CubukMetni
+              vurgu="altin"
+              simge={<BookOpen className="w-4 h-4" />}
+              baslik={`${unfoldTarget.name || 'Cisim'} açınımı`}
+              aciklama={`%${Math.round(progress * 100)}`}
+            />
+            <CubukAyirici />
+            <CubukDugmesi
+              aria-label="%10 kapat"
+              title="%10 kapat"
+              simge={<Minus className="w-4 h-4" />}
+              onClick={() => setProgress(Math.max(0, Number((progress - 0.1).toFixed(2))))}
+            >
+              <span className="sr-only">%10 kapat</span>
+            </CubukDugmesi>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={progress}
+              aria-label="Açınım oranı"
+              onChange={(e) => setProgress(parseFloat(e.target.value))}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="w-36 sm:w-52 h-2 rounded-lg cursor-pointer accent-primary"
+            />
+            <CubukDugmesi
+              aria-label="%10 aç"
+              title="%10 aç"
+              simge={<Plus className="w-4 h-4" />}
+              onClick={() => setProgress(Math.min(1, Number((progress + 0.1).toFixed(2))))}
+            >
+              <span className="sr-only">%10 aç</span>
+            </CubukDugmesi>
+            <CubukAyirici />
+            <CubukDugmesi tur={progress === 0 ? 'birincil' : 'normal'} aria-pressed={progress === 0} onClick={() => setProgress(0)}>
+              Kapalı
+            </CubukDugmesi>
+            <CubukDugmesi tur={progress >= 0.99 ? 'birincil' : 'normal'} aria-pressed={progress >= 0.99} onClick={() => setProgress(1)}>
+              Tam açık
+            </CubukDugmesi>
+          </KayanCubuk>
         );
       })()}
 
-      {/* Çoklu seçim kapsülü */}
-      {effectiveSelectedIds.length > 0 && activeTool === 'select_move' && (
-        <div
-          className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-slate-900/95 dark:bg-card/95 backdrop-blur-md text-white border border-border shadow-2xl px-4 py-2.5 rounded-2xl flex items-center gap-3 z-30 select-none animate-in slide-in-from-bottom-3 duration-200"
-          onMouseDown={stopMouseDown}
-        >
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse" />
-            <span className="text-xs font-black">
-              ✨ {effectiveSelectedIds.length} cisim seçildi (Sürükleyerek taşıyın • Mavi Z oku ile yükseltin)
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                if (onDeleteSolids) onDeleteSolids();
-                else if (onDeleteSolid && selectedSolidId) onDeleteSolid(selectedSolidId);
-              }}
-              className="px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Seçilenleri Sil</span>
-            </button>
-            <button
-              onClick={() => selectIds([])}
-              className="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white/90 font-bold text-xs cursor-pointer transition-all active:scale-95"
-            >
-              ✕ Seçimi Kaldır
-            </button>
-          </div>
-        </div>
+      {/* Seçim çubuğu (sade kayan çubuk) */}
+      {(effectiveSelectedIds.length > 0 || selectedObjectIds.length > 0) && activeTool === 'select_move' && (
+        <KayanCubuk konum="alt" onMouseDown={stopMouseDown} data-secim-kapsulu>
+          <CubukMetni
+            simge={<MousePointer2 className="w-4 h-4" />}
+            baslik={secimBasligi(selectedObjectIds.length, effectiveSelectedIds.length)}
+            aciklama="sürükleyerek taşıyın, mavi Z okuyla yükseltin"
+          />
+          <CubukAyirici />
+          <CubukDugmesi tur="tehlike" simge={<Trash2 className="w-4 h-4" />} onClick={seciliyiSil}>
+            Sil
+          </CubukDugmesi>
+          <CubukDugmesi
+            simge={<CarpiSimgesi className="w-4 h-4" />}
+            onClick={() => {
+              selectIds([]);
+              if (selectedObjectIds.length > 0) workspace.setSelectedObjectIds([]);
+            }}
+          >
+            Seçimi kaldır
+          </CubukDugmesi>
+        </KayanCubuk>
       )}
 
       {/* İnceleme modu ipucu */}
       {activeTool === 'inspect' && (
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-sky-700/95 text-white shadow-xl px-4 py-2 rounded-2xl flex items-center gap-2 text-xs font-bold z-30 select-none pointer-events-none animate-in slide-in-from-bottom-3">
-          <ScanSearch className="w-4 h-4" />
-          <span>Yüz seçmek için cismin bir yüzüne tıklayın; alanı ve adı gösterilir. Boşlukta sürükleyerek döndürün.</span>
-        </div>
+        <KayanCubuk konum="alt" etkilesimsiz role="status">
+          <CubukMetni
+            simge={<ScanSearch className="w-4 h-4" />}
+            baslik="İnceleme"
+            aciklama="Yüz seçmek için cismin bir yüzüne tıklayın; alanı ve adı gösterilir. Boşlukta sürükleyerek döndürün."
+          />
+        </KayanCubuk>
       )}
 
       {/* Sağ dikey hızlı araç çubuğu */}
@@ -1906,7 +2207,7 @@ export function Canvas3D(props: Canvas3DProps) {
         <div className="w-6 h-px bg-border my-0.5" />
         <button
           onClick={onClearAll}
-          className="p-2.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:text-rose-700 transition-all cursor-pointer group"
+          className="p-2.5 rounded-xl hover:bg-destructive/10 text-destructive transition-all cursor-pointer group"
           title="Tüm 3D Cisimleri Sil (Sahneyi Temizle)"
         >
           <Trash2 className="w-4 h-4 transition-transform group-hover:scale-110" />
@@ -1915,21 +2216,21 @@ export function Canvas3D(props: Canvas3DProps) {
 
       {/* Oluşturma modu ipucu */}
       {isCreationMode && (
-        <div
-          className="absolute top-4 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-2xl bg-indigo-600/95 text-white shadow-xl flex items-center gap-2.5 text-xs font-black animate-in slide-in-from-top-3"
-          onMouseDown={stopMouseDown}
-        >
-          <Sparkles className="w-4 h-4 text-yellow-300" />
-          <span>Zemine basıp sürükleyerek cismi istediğiniz boyutta ve konumda oluşturun!</span>
+        <KayanCubuk konum="ust" className="!top-4" onMouseDown={stopMouseDown}>
+          <CubukMetni
+            simge={<Sparkles className="w-4 h-4" />}
+            baslik="Cisim oluştur"
+            aciklama="zemine basıp sürükleyerek cismi istediğiniz boyutta ve konumda oluşturun"
+          />
           {setActive3DTool && (
-            <button
-              onClick={() => setActive3DTool('select_move')}
-              className="ml-2 px-2 py-0.5 rounded-lg bg-white/20 hover:bg-white/30 text-white font-bold text-[11px] cursor-pointer"
-            >
-              ✕ İptal
-            </button>
+            <>
+              <CubukAyirici />
+              <CubukDugmesi simge={<CarpiSimgesi className="w-4 h-4" />} onClick={() => setActive3DTool('select_move')}>
+                İptal
+              </CubukDugmesi>
+            </>
           )}
-        </div>
+        </KayanCubuk>
       )}
 
       {/* Sol alt ipucu */}

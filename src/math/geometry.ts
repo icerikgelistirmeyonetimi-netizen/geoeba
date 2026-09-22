@@ -772,7 +772,8 @@ export type HostShape =
   | { kind: 'line'; a: Point2D; b: Point2D }
   | { kind: 'ray'; a: Point2D; b: Point2D }
   | { kind: 'circle'; center: Point2D; radius: number }
-  | { kind: 'ellipse'; center: Point2D; radiusX: number; radiusY: number }
+  | { kind: 'arc'; center: Point2D; radius: number; startAngle: number; sweep: number; sector?: boolean }
+  | { kind: 'ellipse'; center: Point2D; radiusX: number; radiusY: number; rotation?: number }
   | { kind: 'polygon'; vertices: Point2D[] };
 
 /**
@@ -798,8 +799,24 @@ export function projectOntoHost(p: Point2D, host: HostShape): Point2D | null {
     }
     case 'circle':
       return host.radius > 0 ? closestPointOnCircle(host.center, host.radius, p) : null;
-    case 'ellipse':
-      return closestPointOnEllipse(host.center, host.radiusX, host.radiusY, p);
+    case 'arc': {
+      if (!(host.radius > 0)) return null;
+      const tau = 2 * Math.PI;
+      const at = (angle: number) => ({ x: host.center.x + host.radius * Math.cos(angle), y: host.center.y + host.radius * Math.sin(angle) });
+      const angle = Math.atan2(p.y - host.center.y, p.x - host.center.x);
+      const offset = ((angle - host.startAngle) % tau + tau) % tau;
+      const start = at(host.startAngle), end = at(host.startAngle + host.sweep);
+      const candidates = offset <= host.sweep ? [at(angle)] : [start, end];
+      if (host.sector) candidates.push(distanceToSegment(p, host.center, start).projection, distanceToSegment(p, host.center, end).projection);
+      return candidates.reduce((a, b) => Math.hypot(p.x - a.x, p.y - a.y) <= Math.hypot(p.x - b.x, p.y - b.y) ? a : b);
+    }
+    case 'ellipse': {
+      const angle = (host.rotation ?? 0) * Math.PI / 180;
+      const c = Math.cos(angle), s = Math.sin(angle);
+      const dx = p.x - host.center.x, dy = p.y - host.center.y;
+      const local = closestPointOnEllipse({ x: 0, y: 0 }, host.radiusX, host.radiusY, { x: c * dx + s * dy, y: -s * dx + c * dy });
+      return local ? { x: host.center.x + c * local.x - s * local.y, y: host.center.y + s * local.x + c * local.y } : null;
+    }
     case 'polygon': {
       const r = closestPointOnPolygonEdge(host.vertices, p);
       return r ? r.point : null;

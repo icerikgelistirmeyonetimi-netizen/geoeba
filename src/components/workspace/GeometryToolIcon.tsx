@@ -10,6 +10,8 @@ const glyphs = {
   protractor: <><path d="M3 19a9 9 0 0 1 18 0ZM12 10v3M6 13l2 2M18 13l-2 2M12 19l4-5" /></>,
   ellipse: <ellipse cx="12" cy="12" rx="9" ry="6" />,
   arc: <><path d="M4 18A9 9 0 0 1 20 7" /><circle cx="4" cy="18" r="1.5" fill="currentColor" /><circle cx="20" cy="7" r="1.5" fill="currentColor" /></>,
+  // Yay Ölç: kesikli çember, iki nokta arasındaki kalın yay
+  arcMeasure: <><circle cx="12" cy="12" r="8" strokeDasharray="2 3" strokeWidth="1.2" /><path d="M4.5 9.3A8 8 0 0 1 14.7 4.5" strokeWidth="3" /><circle cx="4.5" cy="9.3" r="1.6" fill="currentColor" /><circle cx="14.7" cy="4.5" r="1.6" fill="currentColor" /></>,
   polygon: <path d="m3 10 7-7 11 5-3 13-13-3Z" />,
   rectangle: <rect x="3" y="6" width="18" height="12" rx="1" />,
   area: <><rect x="4" y="4" width="16" height="16" fill="currentColor" fillOpacity=".2" /><path d="M4 12 12 4M4 18 18 4M10 20 20 10" /></>,

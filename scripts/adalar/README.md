@@ -10,6 +10,11 @@
 Akış: ana sayfa → adaya tıkla (`selectLevel`) → kademe adası → sınıf binası (`selectGrade`)
 → ünite listesi (TeachingPortal). Matematik Feneri → Serbest Çizim Stüdyosu (`startFreeSandbox`).
 
+Ana sayfada fener ve adacığı `deniz-feneri/deniz-feneri.blend` dosyasından dışa aktarma sırasında
+eklenir; `web_aktar.py` fenerin önüne ada tabelalarıyla aynı parçalardan (koyu taş levha, renkli
+arkalık, fildişi yazı, iki altın ayak) "UYGULAMALAR" tabelasını kurar (`FENER_TABELA_*` sabitleri).
+Tabela yazıları `data/ana-sayfa.json` içinde her grubun `tabela` alanına yazılır.
+
 ## Modelleri yeniden üretme (Blender 4.4)
 
 Kaynak sahneler depoda tutulmaz; `matematik-kademe-sayfalari/*.blend` ve

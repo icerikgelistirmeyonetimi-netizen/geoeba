@@ -48,6 +48,8 @@ export interface SahneGrubu {
   center?: Uclu;
   /** Fener lambası; dönen huzme buradan çıkar */
   lamp?: Uclu;
+  /** Ada ya da fener tabelasındaki yazı (3B modelin içinde; ör. "İLKOKUL", "UYGULAMALAR") */
+  tabela?: string;
   /** Sınıf binası: 1–12 ya da 'hazirlik' */
   grade?: number | string;
   description?: string;
@@ -177,7 +179,7 @@ export type AdaSahnesiOlayHaritasi = {
   hata: { mesaj: string; yenile?: boolean };
 };
 
-type Kalite = 'dusuk' | 'yuksek';
+export type Kalite = 'dusuk' | 'yuksek';
 
 interface KameraDurumu {
   hedef: THREE.Vector3;
@@ -228,7 +230,7 @@ type BellekBilgiliGezgin = Navigator & { deviceMemory?: number };
 // ---------------------------------------------------------------------------
 
 /** AgX sonrası hafif doygunluk/kontrast ve kenar kararması (Blender "Medium High Contrast" görünümüne yakın). */
-const RenkDuzeltme = {
+export const RenkDuzeltme = {
   uniforms: {
     tDiffuse: { value: null },
     uDoygunluk: { value: 1.2 },
@@ -296,32 +298,32 @@ function isikParcasiniYamala(shader: { fragmentShader: string }): void {
 }
 
 /** Standart/fiziksel malzemeye dolgu yamasını bağlar. clone() onBeforeCompile'ı kopyalamaz; kopyalara yeniden uygulanır. */
-function dolguYamasiBagla<T extends THREE.Material>(m: T): T {
+export function dolguYamasiBagla<T extends THREE.Material>(m: T): T {
   if (!(m as THREE.Material & { isMeshStandardMaterial?: boolean }).isMeshStandardMaterial) return m;
   m.onBeforeCompile = (shader) => isikParcasiniYamala(shader);
   m.customProgramCacheKey = () => ADA_PROGRAM_ANAHTARI;
   return m;
 }
 
-function iptalHatasi(): DOMException {
+export function iptalHatasi(): DOMException {
   return new DOMException('Yükleme iptal edildi', 'AbortError');
 }
 
 /** Sinyal iptal edilince AbortError ile reddedilen söz; yüklemeyi yarışta erken keser. */
-function iptalBeklemesi(sinyal: AbortSignal): Promise<never> {
+export function iptalBeklemesi(sinyal: AbortSignal): Promise<never> {
   return new Promise((_, reddet) => {
     if (sinyal.aborted) reddet(iptalHatasi());
     else sinyal.addEventListener('abort', () => reddet(iptalHatasi()), { once: true });
   });
 }
 
-const yumusak = {
+export const yumusak = {
   cikis: (t: number) => 1 - Math.pow(1 - t, 3),
   gecis: (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
 };
 
 /** Cam ve vurgu halkaları ortam kapatmasına (AO) katılmaz. */
-class SeciciGTAOPass extends GTAOPass {
+export class SeciciGTAOPass extends GTAOPass {
   override overrideVisibility(): void {
     super.overrideVisibility();
     this.scene.traverse((o) => {
@@ -330,12 +332,12 @@ class SeciciGTAOPass extends GTAOPass {
   }
 }
 
-function grupAdi(o: THREE.Object3D): string {
+export function grupAdi(o: THREE.Object3D): string {
   const grup: unknown = o.userData.group;
   return typeof grup === 'string' ? grup : '';
 }
 
-function kaliteSec(): Kalite {
+export function kaliteSec(): Kalite {
   const istek = new URLSearchParams(window.location.search).get('kalite');
   if (istek === 'dusuk' || istek === 'yuksek') return istek;
   const dokunmatik = window.matchMedia('(pointer: coarse)').matches;
@@ -349,7 +351,7 @@ function kaliteSec(): Kalite {
  * parıltısı. Metal, cam ve su yansımaları için; RoomEnvironment'ın beyaz iç mekân
  * ışığı denizi fazla açıyordu. Dokusu `.texture` alanındadır; hedef dispose ile bırakılır.
  */
-function gokOrtami(renderer: THREE.WebGLRenderer, gunesYonu: THREE.Vector3): THREE.WebGLRenderTarget {
+export function gokOrtami(renderer: THREE.WebGLRenderer, gunesYonu: THREE.Vector3): THREE.WebGLRenderTarget {
   const sahne = new THREE.Scene();
   const malzeme = new THREE.ShaderMaterial({
     side: THREE.BackSide,

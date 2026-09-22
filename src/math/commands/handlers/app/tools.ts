@@ -33,6 +33,7 @@ export const TOOLS: ToolInfo[] = [
   { id: 'measure_perimeter', name: 'Çevre Hesapla', description: 'Şeklin çevre uzunluğunu hesaplayın.', aliases: [/\bcevre\w* (?:hesapla|olc|bul)\w*/, /\bcevre\b/] },
   { id: 'measure_slope', name: 'Eğim Ölç', description: 'İki noktaya tıklayın; aradaki doğrunun eğimini gösterir.', aliases: [/\begim\w* (?:olc|hesapla|bul)\w*/, /\begim\b/] },
   { id: 'trig_ratios', name: 'Trig. Oranlar', description: 'Bir kola, AÇININ KÖŞESİNE ve diğer kola tıklayın; sin, cos, tan değerlerini gösterir. Üçgen dikse kenar oranları da yazılır.', aliases: [/\btrig(?:onometri(?:k)?)?(?: oran(?:lar|lari)?)?\b/, /\bsin cos tan\b/, /\boranlar\b/] },
+  { id: 'measure_arc', name: 'Yay Ölç', description: 'Aynı çemberin üzerindeki iki noktaya tıklayın; aralarındaki yayın uzunluğunu ve ölçüsünü gösterir.', aliases: [/\byay\w* olc\w*/, /\byay olcme\b/] },
   { id: 'area_model', name: 'Alanı Modelle', description: 'Alan modelleme ızgarası.', aliases: [/\balani modelle\b/, /\balan model(?:i|leme)?\b/] },
   { id: 'ruler', name: 'Cetvel', description: 'İnteraktif cetvel aracı.', aliases: [/\bcetvel\b/], bare: /\bcetvel(?:i|e|le|imi)?\b/ },
   { id: 'setsquare', name: 'Gönye', description: 'Dik açı ve gönye aracı.', aliases: [/\bgonye\b/], bare: /\bgonye(?:yi|ye|yle)?\b/ },

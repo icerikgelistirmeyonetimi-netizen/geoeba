@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MathObject, PointObject } from '@/types/math';
-import { angleNeighbourIds, pointAngleAction } from '../pointAngles';
+import { angleNeighbourIds, pointAngleAction, providesAngleArm } from '../pointAngles';
 
 const base = { showLabel: true, color: 'blue', visible: true, createdAt: 0 };
 const point = (id: string, x: number, y: number): PointObject => ({ ...base, id, label: id, type: 'point', x, y, isIndependent: true });
@@ -46,5 +46,39 @@ describe('pointAngleAction (sağ tık "Açısını ölç")', () => {
     const sector = { ...arc, id: 'sec', type: 'sector' } as MathObject;
     expect(pointAngleAction('A', [A, B, C, circle('c', 'A'), sector])?.kind).toBe('central');
     expect(pointAngleAction('B', [A, B, C, arc])).toBeNull();
+  });
+});
+
+describe('providesAngleArm (silme zincirinde açının kolu)', () => {
+  it('doğru parçası iki yönde de kolu çizer', () => {
+    expect(providesAngleArm(seg('s', 'A', 'B'), 'A', 'B')).toBe(true);
+    expect(providesAngleArm(seg('s', 'B', 'A'), 'A', 'B')).toBe(true);
+    expect(providesAngleArm(seg('s', 'A', 'C'), 'A', 'B')).toBe(false);
+  });
+
+  it('doğru tanım noktalarıyla, ışın her iki yönde kolu çizer', () => {
+    const line: MathObject = { ...base, id: 'l', label: 'l', type: 'line', point1Id: 'Q', point2Id: 'A' };
+    expect(providesAngleArm(line, 'A', 'Q')).toBe(true);
+    expect(providesAngleArm(line, 'A', 'B')).toBe(false);
+    const ray: MathObject = { ...base, id: 'r', label: 'r', type: 'ray', startPointId: 'A', throughPointId: 'C' };
+    expect(providesAngleArm(ray, 'A', 'C')).toBe(true);
+    expect(providesAngleArm(ray, 'C', 'A')).toBe(true);
+  });
+
+  it('çokgende yalnızca KOMŞU köşeler (son->ilk kenar dâhil); köşegen kol değildir', () => {
+    const kare: MathObject = { ...base, id: 'k', label: 'k', type: 'polygon', pointIds: ['A', 'B', 'C', 'D'] };
+    expect(providesAngleArm(kare, 'A', 'B')).toBe(true);
+    expect(providesAngleArm(kare, 'C', 'B')).toBe(true);
+    expect(providesAngleArm(kare, 'A', 'D')).toBe(true);
+    expect(providesAngleArm(kare, 'A', 'C')).toBe(false);
+    expect(providesAngleArm(kare, 'B', 'D')).toBe(false);
+  });
+
+  it('köşe ile uç aynıysa ya da şekil kol çizmiyorsa false', () => {
+    expect(providesAngleArm(seg('s0', 'A', 'A'), 'A', 'A')).toBe(false);
+    expect(providesAngleArm(circle('c', 'A', 'B'), 'A', 'B')).toBe(false);
+    expect(providesAngleArm(A, 'A', 'B')).toBe(false);
+    const arc: MathObject = { ...base, id: 'arc', label: 'arc', type: 'arc', centerPointId: 'A', startPointId: 'B', directionPointId: 'C' };
+    expect(providesAngleArm(arc, 'A', 'B')).toBe(false);
   });
 });

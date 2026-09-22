@@ -32,7 +32,7 @@ export function CanvasCheckbox({
   return (
     <g
       transform={`translate(${ekran.x}, ${ekran.y})`}
-      onMouseDown={onMouseDown}
+      onPointerDown={onMouseDown}
       data-object-id={obj.id} onContextMenu={onContextMenu}
       className="select-none cursor-pointer"
     >
@@ -101,7 +101,7 @@ export function CanvasButton({
   return (
     <g
       transform={`translate(${ekran.x}, ${ekran.y})`}
-      onMouseDown={onMouseDown}
+      onPointerDown={onMouseDown}
       data-object-id={obj.id} onContextMenu={onContextMenu}
       className="select-none cursor-pointer group/dugme"
     >
@@ -179,7 +179,7 @@ export function CanvasInputBox({
   return (
     <g
       transform={`translate(${ekran.x}, ${ekran.y})`}
-      onMouseDown={onMouseDown}
+      onPointerDown={onMouseDown}
       data-object-id={obj.id} onContextMenu={onContextMenu}
       className="select-none"
     >
@@ -215,7 +215,9 @@ export function CanvasInputBox({
               (e.target as HTMLInputElement).blur();
             }
           }}
-          onMouseDown={(e) => e.stopPropagation()}
+          /* el-araci-izinli: El aracı etkinken kök SVG koruması (gorunumKaydirma.ts) basışı
+             zaten yakalama aşamasında alır; buraya yalnız olağan araçlarda ulaşılır. */
+          onPointerDown={(e) => e.stopPropagation()}
           style={{
             width: '100%',
             height: '26px',

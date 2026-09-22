@@ -5,6 +5,7 @@ import { prepareExpression } from './algebra/shared';
 import { type Ctx, angles, trig } from './measure/angles';
 import { type Intent, type Kind, YES_NO, intent, isForeign, nounFilter, view } from './measure/common';
 import { allMeasures, areaPerimeter, circleParts, coordinates, diagonals, equations, hideMeasures, lengths, slopes } from './measure/shapes';
+import { arcBetweenHandler, arcEditHandler } from './measure/arcs';
 
 /**
  * ÖLÇME ailesi: alan, çevre, uzunluk, kenar uzunlukları, mesafe, açı, yarıçap/çap/kiriş/yay/merkez açı,
@@ -150,6 +151,9 @@ export const handlers: CommandHandler[] = [
   handler('measure.hide', 'hide', 63, [
     "ABC'nin alanını gizle", "ABC'nin ölçülerini gizle", 'AB doğrusunun denklemini gizle', 'Kenar uzunluklarını gizle', 'B açısının değerini gizle', 'Merkez açısını gizle',
   ]),
+  // İki nokta arasındaki yay (çember bölünmeden): ölçme 62, yay ölçümünü silme/gizleme/gösterme 91 (düzenleme bandı)
+  arcEditHandler,
+  arcBetweenHandler,
   handler('measure.trig', ['trig'], 62, [
     'ABC açısının trigonometrik oranları', 'sin cos tan değerleri', 'B açısının sinüsünü hesapla', 'ABC açısının sin cos tan değerlerini göster',
   ]),

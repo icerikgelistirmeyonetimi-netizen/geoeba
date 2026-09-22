@@ -148,49 +148,49 @@ export function Toolbar3D({
       name: '2D Düzlem',
       badge: '2D',
       description: 'Yalnızca 2 boyutlu geometri çizim alanı',
-      icon: <Square className="w-5 h-5 text-blue-500" />,
+      icon: <Square className="w-5 h-5 text-ada-deniz dark:text-ada-vurgu" />,
     },
     {
       mode: '3d_only',
       name: '3D Uzay',
       badge: '3D',
       description: 'Yalnızca 3 boyutlu katı cisim ve uzay stüdyosu',
-      icon: <Box className="w-5 h-5 text-purple-500" />,
+      icon: <Box className="w-5 h-5 text-ada-lavanta" />,
     },
     {
       mode: '2d_3d',
       name: '2D + 3D',
       badge: '2D + 3D',
       description: 'Sol tarafta 2D çizim, sağ tarafta 3D uzay yan yana',
-      icon: <Columns2 className="w-5 h-5 text-indigo-500" />,
+      icon: <Columns2 className="w-5 h-5 text-ada-vurgu" />,
     },
     {
       mode: 'default',
       name: 'Cebir',
       badge: 'Cebir',
       description: 'Cebirsel ifadeler ve fonksiyonlar çalışma alanı',
-      icon: <Calculator className="w-5 h-5 text-emerald-500" />,
+      icon: <Calculator className="w-5 h-5 text-ada-deniz-koyu dark:text-ada-vurgu" />,
     },
     {
       mode: 'algebra_2d',
       name: '2D + Cebir',
       badge: '2D + Cebir',
       description: '2D geometri düzlemi ile cebir giriş paneli',
-      icon: <PanelLeft className="w-5 h-5 text-cyan-500" />,
+      icon: <PanelLeft className="w-5 h-5 text-ada-altin dark:text-ada-fener" />,
     },
     {
       mode: 'algebra_3d',
       name: '3D + Cebir',
       badge: '3D + Cebir',
       description: '3D uzay stüdyosu ile cebir giriş paneli',
-      icon: <PanelRight className="w-5 h-5 text-violet-500" />,
+      icon: <PanelRight className="w-5 h-5 text-ada-mercan" />,
     },
     {
       mode: 'three_col',
       name: '2D + 3D + Cebir',
       badge: 'Üçü Bir Arada',
       description: 'Cebir listesi, 2D geometri ve 3D uzay üç sütun halinde',
-      icon: <Columns3 className="w-5 h-5 text-rose-500" />,
+      icon: <Columns3 className="w-5 h-5 text-ada-murekkep-2 dark:text-ada-kum" />,
     },
   ];
 
@@ -214,35 +214,35 @@ export function Toolbar3D({
       id: 'select_move',
       name: 'Cismi Seç / Taşı',
       description: 'Cismin konumunu 3D sahnede taşır',
-      icon: <MousePointer className="w-4 h-4 text-blue-500" />,
+      icon: <MousePointer className="w-4 h-4 text-ada-deniz dark:text-ada-vurgu" />,
       action: () => setActiveTool('select_move'),
     },
     {
       id: 'orbit',
       name: 'Görünümü Döndür',
       description: 'Fareyle sürükleyerek 3D sahneyi serbestçe çevirir',
-      icon: <RotateCw className="w-4 h-4 text-purple-500" />,
+      icon: <RotateCw className="w-4 h-4 text-ada-mercan" />,
       action: () => setActiveTool('orbit'),
     },
     {
       id: 'pan',
       name: 'Görünümü Kaydır',
       description: 'Kamera bakış noktasını kaydırır',
-      icon: <Hand className="w-4 h-4 text-amber-500" />,
+      icon: <Hand className="w-4 h-4 text-ada-mercan" />,
       action: () => setActiveTool('pan'),
     },
     {
       id: 'inspect',
       name: 'Yüz Seç ve İncele',
       description: 'Yüz alanlarını, ayrıt uzunluklarını ve açıları inceler',
-      icon: <ScanSearch className="w-4 h-4 text-cyan-500" />,
+      icon: <ScanSearch className="w-4 h-4 text-ada-altin dark:text-ada-fener" />,
       action: () => setActiveTool('inspect'),
     },
     ...SOLID_DEFINITIONS.map((s) => ({
       id: `create_${s.type}`,
       name: `${s.label} Ekle`,
       description: s.description,
-      icon: <s.Icon className="w-4 h-4 text-emerald-500" />,
+      icon: <s.Icon className="w-4 h-4 text-ada-vurgu" />,
       action: () => {
         if (creationMethod === 'draw') {
           setActiveTool(`create_${s.type}` as Tool3DMode);
@@ -255,14 +255,14 @@ export function Toolbar3D({
       id: 'arrange',
       name: 'Cisimleri Otomatik Hizala',
       description: 'Cisimleri zeminde düzenli aralıklarla hizalar',
-      icon: <LayoutGrid className="w-4 h-4 text-indigo-500" />,
+      icon: <LayoutGrid className="w-4 h-4 text-ada-deniz dark:text-ada-vurgu" />,
       action: onAutoArrange,
     },
     {
       id: 'clear',
       name: 'Sahneyi Temizle',
       description: 'Sahnede bulunan tüm 3D cisimleri siler',
-      icon: <Trash2 className="w-4 h-4 text-rose-500" />,
+      icon: <Trash2 className="w-4 h-4 text-destructive" />,
       action: () => onClearAll?.(),
     },
   ];
@@ -270,7 +270,7 @@ export function Toolbar3D({
   return (
     <div className="flex h-full min-h-0 bg-card/95 backdrop-blur-md border-r border-border select-none z-30 shadow-sm shrink-0 relative">
       {/* 1. SOL DİKEY MENÜ SEÇİCİ (2D İLE BİREBİR AYNI 68px SABİT ŞERİT) */}
-      <div className="w-[68px] shrink-0 h-full border-r border-border flex flex-col items-center py-4 justify-between bg-slate-50/70 dark:bg-slate-900/60">
+      <div className="w-[68px] shrink-0 h-full border-r border-border flex flex-col items-center py-4 justify-between bg-muted/60">
         {/* Üst Kısım: Araçlar, Nesneler, Bağlamlar, Görünümler Butonları */}
         <div className="flex flex-col items-center gap-3 w-full px-1">
           {/* 1. Araçlar Sekmesi */}
@@ -317,7 +317,7 @@ export function Toolbar3D({
               <span
                 className={`absolute -top-1 -right-1 text-[9px] font-bold px-1.5 py-0.2 rounded-full border shadow-xs ${
                   sidebarTab === 'nesneler' && !isPanelCollapsed
-                    ? 'bg-white text-primary border-primary/30 dark:bg-slate-950 dark:text-primary'
+                    ? 'bg-card text-primary border-primary/30'
                     : 'bg-primary text-primary-foreground border-border'
                 }`}
               >
@@ -346,7 +346,7 @@ export function Toolbar3D({
             <Sparkles className="w-5 h-5 shrink-0" />
             <span className="text-[9.5px] font-bold leading-none">Bağlamlar</span>
             {selectedSolid && (
-              <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-background animate-pulse" />
+              <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-ada-vurgu ring-2 ring-background animate-pulse" />
             )}
           </button>
 
@@ -509,12 +509,12 @@ export function Toolbar3D({
                         }}
                         className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-left transition-all cursor-pointer select-none text-xs mt-1 ${
                           activeTool === 'delete'
-                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 font-bold ring-1 ring-rose-500/30'
-                            : 'text-foreground/80 hover:bg-rose-500/10 hover:text-rose-600 font-medium'
+                            ? 'bg-destructive/15 text-destructive font-bold ring-1 ring-destructive/30'
+                            : 'text-foreground/80 hover:bg-destructive/10 hover:text-destructive font-medium'
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-6 h-6 rounded-lg bg-rose-500/10 text-rose-600 flex items-center justify-center shrink-0">
+                          <div className="w-6 h-6 rounded-lg bg-destructive/10 text-destructive flex items-center justify-center shrink-0">
                             <Trash2 className="w-3.5 h-3.5" />
                           </div>
                           <div className="min-w-0">
@@ -589,7 +589,7 @@ export function Toolbar3D({
                             }}
                             className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-left transition-all cursor-pointer select-none text-xs ${
                               isDrawingActive
-                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold ring-1 ring-emerald-500/30'
+                                ? 'bg-accent text-foreground font-bold ring-1 ring-primary/30'
                                 : 'text-foreground/80 hover:bg-muted/70 hover:text-foreground font-medium'
                             }`}
                           >
@@ -684,7 +684,7 @@ export function Toolbar3D({
                       <button
                         type="button"
                         onClick={onClearAll}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-left text-xs font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all cursor-pointer"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-left text-xs font-medium text-destructive hover:bg-destructive/10 transition-all cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         <span>Sahneyi Temizle</span>
@@ -760,7 +760,7 @@ export function Toolbar3D({
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div
-                            className="w-4 h-4 rounded-full shrink-0 border border-black/15 shadow-2xs"
+                            className="w-4 h-4 rounded-full shrink-0 border border-foreground/15 shadow-2xs"
                             style={{ backgroundColor: s.color }}
                           />
                           <div className="min-w-0">
@@ -777,7 +777,7 @@ export function Toolbar3D({
                             e.stopPropagation();
                             onDeleteSolidById?.(s.id);
                           }}
-                          className="p-1 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                          className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
                           title="Cismi Sil"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -814,7 +814,7 @@ export function Toolbar3D({
                     <div className="p-3 rounded-2xl bg-muted/40 border border-border/70 flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <div
-                          className="w-5 h-5 rounded-full border border-black/15 shadow-xs"
+                          className="w-5 h-5 rounded-full border border-foreground/15 shadow-xs"
                           style={{ backgroundColor: selectedSolid.color }}
                         />
                         <div>
@@ -825,7 +825,7 @@ export function Toolbar3D({
                       <button
                         type="button"
                         onClick={onDeleteSelected}
-                        className="p-1.5 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-xl text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
                         title="Seçiliyi Sil"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -842,7 +842,7 @@ export function Toolbar3D({
                             type="button"
                             onClick={() => onUpdateSolid?.({ color: c.hex })}
                             title={c.name}
-                            className={`w-6 h-6 rounded-full border border-black/15 transition-transform hover:scale-110 cursor-pointer ${
+                            className={`w-6 h-6 rounded-full border border-foreground/15 transition-transform hover:scale-110 cursor-pointer ${
                               selectedSolid.color === c.hex ? 'ring-2 ring-primary ring-offset-2 scale-110' : ''
                             }`}
                             style={{ backgroundColor: c.hex }}
@@ -862,7 +862,7 @@ export function Toolbar3D({
                         }`}
                       >
                         <div
-                          className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                          className={`w-5 h-5 rounded-full bg-card shadow-xs transition-transform ${
                             selectedSolid.showWireframe ? 'translate-x-4' : 'translate-x-0'
                           }`}
                         />
@@ -1005,7 +1005,7 @@ export function Toolbar3D({
               {layoutTooltip && (
                 <div
                   style={{ left: layoutTooltip.x, top: layoutTooltip.y }}
-                  className="fixed z-[1000] pointer-events-none px-3 py-1.5 rounded-xl bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 text-xs font-medium shadow-2xl border border-border/50 backdrop-blur-md max-w-xs animate-in fade-in-0 zoom-in-95 duration-100 select-none leading-tight"
+                  className="fixed z-[1000] pointer-events-none px-3 py-1.5 rounded-xl bg-ada-murekkep/95 text-ada-fildisi dark:bg-ada-fildisi/95 dark:text-ada-murekkep text-xs font-medium shadow-2xl border border-border/50 backdrop-blur-md max-w-xs animate-in fade-in-0 zoom-in-95 duration-100 select-none leading-tight"
                 >
                   {layoutTooltip.text}
                 </div>

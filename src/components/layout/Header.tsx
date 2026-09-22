@@ -168,9 +168,9 @@ function searchCurriculum(rawQuery: string): SearchHit[] {
 }
 
 function HitIcon({ kind }: { kind: SearchHitKind }) {
-  if (kind === 'tema') return <Layers className="w-4 h-4 text-purple-500 shrink-0" />;
-  if (kind === 'etkinlik') return <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />;
-  return <Compass className="w-4 h-4 text-blue-600 shrink-0" />;
+  if (kind === 'tema') return <Layers className="w-4 h-4 text-ada-lavanta shrink-0" />;
+  if (kind === 'etkinlik') return <Sparkles className="w-4 h-4 text-ada-altin shrink-0" />;
+  return <Compass className="w-4 h-4 text-ada-deniz shrink-0" />;
 }
 
 // ============================================================
@@ -178,6 +178,7 @@ function HitIcon({ kind }: { kind: SearchHitKind }) {
 export function Header() {
   const {
     currentScreen,
+    isFreeSandbox,
     goHome,
     startFreeSandbox,
     selectLevel,
@@ -250,13 +251,13 @@ export function Header() {
 
   return (
     <>
-      <header data-uygulama-basligi className="h-14 bg-white/95 dark:bg-[#15171c]/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-4 flex items-center justify-between z-[100] sticky top-0 shadow-xs select-none">
+      <header data-uygulama-basligi className="h-14 bg-card/95 backdrop-blur-md border-b border-border px-3 sm:px-4 flex items-center justify-between z-[100] sticky top-0 shadow-xs select-none">
         {/* ================= SOL: LOGO + KADEME BUTONLARI ================= */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0 mr-2">
           {/* Menü Hamburger Butonu */}
           <button
             onClick={() => setShowMenuDrawer((prev) => !prev)}
-            className="p-1.5 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
             title="Menü"
             aria-label="Menüyü Aç"
             aria-haspopup="dialog"
@@ -276,19 +277,21 @@ export function Header() {
           </button>
 
           {currentScreen === 'workspace' && (
-            <div className="w-[1px] h-4 bg-slate-200 dark:bg-slate-800 mx-0.5 hidden sm:block" />
+            <div className="w-[1px] h-4 bg-border mx-0.5 hidden sm:block" />
           )}
         </div>
 
         {currentScreen === 'workspace' ? (
           /* ================= ÇALIŞMA ALANI MENÜ ÇUBUĞU ================= */
-          <WorkspaceMenuBar />
+          /* Serbest stüdyo (#/studyo) 3B sınıftaki pencerede kendi menü çubuğunu taşır; gizli başlıkta
+             ikinci bir kopya (çift document dinleyicisi, çift context aboneliği) bağlanmaz */
+          isFreeSandbox ? null : <WorkspaceMenuBar />
         ) : (
           <>
             {/* ================= ORTA: ARAMA BARI ================= */}
             <div className="flex-1 max-w-lg mx-3 sm:mx-6 relative">
               <div className="relative flex items-center">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3.5 pointer-events-none" />
                 <input
                   ref={searchInputRef}
                   type="text"
@@ -316,7 +319,7 @@ export function Header() {
                       setIsSearchFocused(false);
                     }
                   }}
-                  className="w-full pl-9 pr-10 py-2 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/90 dark:border-slate-700/90 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                  className="w-full pl-9 pr-10 py-2 rounded-2xl bg-muted border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-primary transition-all shadow-sm"
                 />
                 {/* Mor Parlama / Akıllı Arama Butonu */}
                 <button
@@ -326,7 +329,7 @@ export function Header() {
                     e.preventDefault();
                     runSmartSearch();
                   }}
-                  className="absolute right-1.5 w-7 h-7 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-500 hover:from-purple-700 hover:to-indigo-600 text-white flex items-center justify-center shadow-sm transition-transform active:scale-95 cursor-pointer"
+                  className="absolute right-1.5 w-7 h-7 rounded-xl bg-gradient-to-tr from-ada-deniz to-ada-vurgu hover:from-ada-deniz-koyu hover:to-ada-deniz text-primary-foreground flex items-center justify-center shadow-sm transition-transform active:scale-95 cursor-pointer"
                   title="Akıllı Arama (En iyi sonuca git)"
                   aria-label="Akıllı Arama"
                 >
@@ -337,21 +340,21 @@ export function Header() {
               {/* Hızlı Arama Sonuçları Açılır Paneli */}
               {isSearchFocused && trimmedQuery.length > 0 && (
                 <div
-                  className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-2 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-150 max-h-72 overflow-y-auto"
+                  className="absolute top-full left-0 right-0 mt-2 bg-popover text-popover-foreground border border-border rounded-2xl shadow-2xl p-2 z-50 space-y-1 animate-in fade-in zoom-in-95 duration-150 max-h-72 overflow-y-auto"
                   aria-label="Hızlı arama sonuçları"
                 >
-                  <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <div className="px-3 py-1.5 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
                     Hızlı Sonuçlar
                   </div>
 
                   {trimmedQuery.length < MIN_SEARCH_LENGTH && (
-                    <div className="px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <div className="px-3 py-2 text-xs font-semibold text-muted-foreground">
                       Aramak için en az {MIN_SEARCH_LENGTH} karakter yazın.
                     </div>
                   )}
 
                   {trimmedQuery.length >= MIN_SEARCH_LENGTH && searchResults.length === 0 && (
-                    <div className="px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <div className="px-3 py-2 text-xs font-semibold text-muted-foreground">
                       &quot;{trimmedQuery}&quot; ile eşleşen konu veya etkinlik bulunamadı.
                     </div>
                   )}
@@ -361,12 +364,12 @@ export function Header() {
                       key={hit.key}
                       type="button"
                       onMouseDown={() => openSearchHit(hit)}
-                      className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 cursor-pointer"
+                      className="w-full text-left px-3 py-2 rounded-xl hover:bg-accent text-xs font-semibold text-foreground flex items-center gap-2 cursor-pointer"
                     >
                       <HitIcon kind={hit.kind} />
                       <span className="flex flex-col min-w-0 flex-1">
                         <span className="truncate">{hit.title}</span>
-                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 truncate">
+                        <span className="text-[10px] font-bold text-muted-foreground truncate">
                           {KIND_LABEL[hit.kind]} · {hit.context}
                         </span>
                       </span>
@@ -376,9 +379,9 @@ export function Header() {
                   <button
                     type="button"
                     onMouseDown={openSandboxFromSearch}
-                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-2 cursor-pointer"
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-accent text-xs font-semibold text-ada-vurgu flex items-center gap-2 cursor-pointer"
                   >
-                    <Shapes className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <Shapes className="w-4 h-4 text-ada-vurgu shrink-0" />
                     <span>Serbest Çizim Stüdyosunda Aç</span>
                   </button>
                 </div>
@@ -387,14 +390,14 @@ export function Header() {
 
             {/* ================= SAĞ: TEMA (Workspace dışında) ================= */}
             <div className="flex items-center gap-2">
-              <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-xl border border-slate-200 dark:border-slate-700">
+              <div className="flex items-center bg-muted p-0.5 rounded-xl border border-border">
                 <button
                   onClick={() => setTheme(isDark ? 'light' : 'dark')}
-                  className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer"
+                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground transition-all cursor-pointer"
                   title={isDark ? 'Açık Temaya Geç' : 'Koyu Temaya Geç'}
                   aria-label={isDark ? 'Açık Temaya Geç' : 'Koyu Temaya Geç'}
                 >
-                  {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
+                  {isDark ? <Sun className="w-4 h-4 text-ada-altin" /> : <Moon className="w-4 h-4 text-ada-deniz" />}
                 </button>
               </div>
             </div>
@@ -407,14 +410,14 @@ export function Header() {
         isOpen={showMenuDrawer}
         onClose={closeMenuDrawer}
         labelledBy="menu-drawer-title"
-        overlayClassName="bg-black/40 backdrop-blur-sm !p-0 !items-stretch !justify-start"
-        className="w-72 bg-white dark:bg-slate-900 h-full p-5 shadow-2xl border-r border-slate-200 dark:border-slate-800 space-y-4 overflow-y-auto animate-in slide-in-from-left duration-200"
+        overlayClassName="bg-ada-murekkep/50 backdrop-blur-sm !p-0 !items-stretch !justify-start"
+        className="w-72 bg-card text-card-foreground h-full p-5 shadow-2xl border-r border-border space-y-4 overflow-y-auto animate-in slide-in-from-left duration-200"
       >
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between pb-3 border-b border-border">
           <div id="menu-drawer-title"><Brand /></div>
           <button
             onClick={closeMenuDrawer}
-            className="p-1 rounded-xl text-slate-400 hover:text-slate-700 dark:hover:text-white"
+            className="p-1 rounded-xl text-muted-foreground hover:text-foreground"
             title="Menüyü Kapat"
             aria-label="Menüyü Kapat"
           >
@@ -428,9 +431,9 @@ export function Header() {
               goHome();
               closeMenuDrawer();
             }}
-            className="w-full text-left px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-white hover:bg-slate-100 flex items-center gap-2.5"
+            className="w-full text-left px-3.5 py-2.5 rounded-xl bg-accent text-foreground hover:bg-muted flex items-center gap-2.5"
           >
-            <Compass className="w-4 h-4 text-blue-600" />
+            <Compass className="w-4 h-4 text-ada-deniz" />
             <span>Ana Sayfa (Kademe Seçimi)</span>
           </button>
           <button
@@ -438,9 +441,9 @@ export function Header() {
               selectLevel('ilkokul');
               closeMenuDrawer();
             }}
-            className="w-full text-left px-3.5 py-2.5 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5"
+            className="w-full text-left px-3.5 py-2.5 rounded-xl text-foreground hover:bg-muted flex items-center gap-2.5"
           >
-            <Shapes className="w-4 h-4 text-amber-500" />
+            <Shapes className="w-4 h-4 text-ada-altin" />
             <span>İlkokul Matematik (1-4. Sınıf)</span>
           </button>
           <button
@@ -448,9 +451,9 @@ export function Header() {
               selectLevel('ortaokul');
               closeMenuDrawer();
             }}
-            className="w-full text-left px-3.5 py-2.5 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5"
+            className="w-full text-left px-3.5 py-2.5 rounded-xl text-foreground hover:bg-muted flex items-center gap-2.5"
           >
-            <Compass className="w-4 h-4 text-blue-600" />
+            <Compass className="w-4 h-4 text-ada-deniz" />
             <span>Ortaokul Matematik (5-8. Sınıf)</span>
           </button>
           <button
@@ -458,9 +461,9 @@ export function Header() {
               selectLevel('lise');
               closeMenuDrawer();
             }}
-            className="w-full text-left px-3.5 py-2.5 rounded-xl text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-2.5"
+            className="w-full text-left px-3.5 py-2.5 rounded-xl text-foreground hover:bg-muted flex items-center gap-2.5"
           >
-            <Box className="w-4 h-4 text-purple-600" />
+            <Box className="w-4 h-4 text-ada-lavanta" />
             <span>Lise Matematik (9-12. Sınıf)</span>
           </button>
           <button
@@ -468,9 +471,9 @@ export function Header() {
               startFreeSandbox();
               closeMenuDrawer();
             }}
-            className="w-full text-left px-3.5 py-2.5 rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 flex items-center gap-2.5"
+            className="w-full text-left px-3.5 py-2.5 rounded-xl text-ada-vurgu hover:bg-accent flex items-center gap-2.5"
           >
-            <Layers className="w-4 h-4 text-emerald-500" />
+            <Layers className="w-4 h-4 text-ada-vurgu" />
             <span>Serbest Çizim Stüdyosu</span>
           </button>
         </div>

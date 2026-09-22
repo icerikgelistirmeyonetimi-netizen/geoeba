@@ -35,7 +35,7 @@ interface CommandPanelProps {
 
 export function CommandPanel({ onSelectTool, variant = 'bar', incoming, onIncomingHandled, onClose, headerExtra }: CommandPanelProps) {
   const {
-    objects, selectedObjectIds, setSelectedObjectIds, setActiveTool, commit, viewport, setViewport, resetViewport,
+    objects, selectedObjectIds, setSelectedObjectIds, setActiveTool, commit, viewport, setViewport, resetViewport, pendingPointIds,
     undo, redo, history, historyIndex, requestClearAll, styleSettings, setStyleSettings, openRegularPolygonDialog, openCircleRadiusDialog,
     constraintError,
   } = useWorkspace();
@@ -96,7 +96,8 @@ export function CommandPanel({ onSelectTool, variant = 'bar', incoming, onIncomi
     setDismissed(true);
     const raw = input.trim();
     if (!raw) return;
-    const plan = executeTurkishCommand(raw, objects, selectedObjectIds, { viewport, styleSettings });
+    // pendingPointIds: yarım kalmış çokgen/parça çiziminin tıklanmış noktaları komut yolunda da KULLANIMDA sayılır.
+    const plan = executeTurkishCommand(raw, objects, selectedObjectIds, { viewport, styleSettings, pendingPointIds });
     if (!plan.ok) {
       setText(raw);
       setResult({ ok: false, message: plan.message, suggestions: plan.suggestions?.length ? plan.suggestions : suggestions.map(s => s.text) });
@@ -193,7 +194,7 @@ export function CommandPanel({ onSelectTool, variant = 'bar', incoming, onIncomi
 
   return <section aria-label="Türkçe çizim komutları" className={sectionClass}>
     <div className="flex items-center justify-between mb-1.5 gap-2">
-      <span className="flex min-w-0 items-center gap-2 text-xs font-bold text-foreground"><MessageSquareText className="w-4 h-4 shrink-0 text-indigo-500" />Yazarak oluştur <span data-semantic-status={meaning.status} className="truncate text-[10px] font-normal text-muted-foreground">{meaning.status === 'loading' ? 'Anlam araması hazırlanıyor…' : meaning.status === 'ready' ? 'Anlamsal arama · Çevrimdışı' : meaning.status === 'error' ? 'Anlam modeli açılamadı · Kelime araması aktif' : 'Çevrimdışı'}</span></span>
+      <span className="flex min-w-0 items-center gap-2 text-xs font-bold text-foreground"><MessageSquareText className="w-4 h-4 shrink-0 text-ada-deniz" />Yazarak oluştur <span data-semantic-status={meaning.status} className="truncate text-[10px] font-normal text-muted-foreground">{meaning.status === 'loading' ? 'Anlam araması hazırlanıyor…' : meaning.status === 'ready' ? 'Anlamsal arama · Çevrimdışı' : meaning.status === 'error' ? 'Anlam modeli açılamadı · Kelime araması aktif' : 'Çevrimdışı'}</span></span>
       <span className="flex shrink-0 items-center gap-1.5">
         {headerExtra}
         <button type="button" onClick={() => setHelp(!help)} aria-expanded={help} aria-controls={help ? helpId : undefined} className="flex items-center gap-1 text-[11px] text-primary">Komut örnekleri <ChevronDown className="w-3 h-3" /></button>
@@ -257,7 +258,7 @@ export function CommandPanel({ onSelectTool, variant = 'bar', incoming, onIncomi
       <button type="submit" disabled={!text.trim()} aria-label="Komutu uygula" className="h-9 rounded-xl bg-primary text-primary-foreground px-3 disabled:opacity-40"><ArrowUp className="w-4 h-4" /></button>
     </form>
     {focused && interpretations[0]?.clarification && <p className="mt-1.5 text-xs text-primary">{interpretations[0].clarification}</p>}
-    {(result || constraintError) && <p role="status" className={`mt-1.5 text-xs ${constraintError || !result?.ok ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground'}`}>
+    {(result || constraintError) && <p role="status" className={`mt-1.5 text-xs ${constraintError || !result?.ok ? 'text-destructive' : 'text-muted-foreground'}`}>
       {constraintError ? `${constraintError} Son geçerli çizim korundu.` : result?.message}
     </p>}
     {result && !result.ok && result.suggestions && result.suggestions.length > 0 && <div className="flex gap-2 overflow-x-auto mt-1">{result.suggestions.slice(0, 3).map(s => <button type="button" key={s} onClick={() => chooseSuggestion(s)} className="text-[11px] shrink-0 text-primary underline">{s}</button>)}</div>}

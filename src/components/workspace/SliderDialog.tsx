@@ -152,7 +152,7 @@ export function SliderDialog({ isOpen, onClose }: SliderDialogProps) {
       isOpen={isOpen}
       onClose={onClose}
       labelledBy="slider-dialog-title"
-      overlayClassName="bg-black/60 backdrop-blur-sm"
+      overlayClassName="bg-ada-murekkep/60 backdrop-blur-sm"
       className="bg-card border border-border w-full max-w-sm rounded-2xl p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150"
     >
       <div className="flex items-center justify-between border-b border-border pb-3">
@@ -181,7 +181,7 @@ export function SliderDialog({ isOpen, onClose }: SliderDialogProps) {
             type="button"
             onClick={() => handleTypeChange(t)}
             className={`flex-1 py-1.5 rounded-lg transition-colors text-center ${
-              sliderType === t ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
+              sliderType === t ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             {t === 'number' ? 'Sayı' : t === 'angle' ? 'Açı' : 'Tam Sayı'}

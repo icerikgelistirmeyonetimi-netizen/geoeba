@@ -97,6 +97,11 @@ export interface PointObject extends BaseMathObject {
   type: 'point';
   x: number;
   y: number;
+  /**
+   * 3B görünümdeki yükseklik (varsayılan 0). 2B görünüm üstten bakıştır ve z'yi yok sayar.
+   * Kurulumlu ve nesne üzerindeki noktalarda z, `zEkseni.bagimliZleriHesapla` ile kaynaklardan türetilir.
+   */
+  z?: number;
   size?: number; // Nokta yarıçapı (piksel)
   isIndependent: boolean; // Bağımsız sürüklenebilir mi yoksa kesişim/bağımlı nokta mı
   /**
@@ -123,6 +128,13 @@ export interface SegmentObject extends BaseMathObject {
   style?: 'solid' | 'dashed' | 'dotted';
   showLength?: boolean;
   unit?: 'cm' | 'br';
+  /**
+   * Bu parça bir açıyla BİRLİKTE, o açının kolu olarak çizildiyse açının kimliği (Açı aracı, "ABC açısını çiz").
+   * Açının kendisi silinince, başka hiçbir nesnenin kullanmadığı bu kollar da gider (collectDependentIds).
+   */
+  armOfAngleId?: string;
+  /** Elle konmuş eşitlik çentiği: 0 = işaretsiz, 1–4 = çizgi sayısı; yoksa otomatik (esitlikIsaretleri.ts). */
+  equalityMark?: number;
 }
 
 export interface LineObject extends BaseMathObject {
@@ -198,6 +210,8 @@ export interface ArcObject extends BaseMathObject {
   showArcLength?: boolean;
   /** Merkez açı yazısı görünür mü? (varsayılan: evet) */
   showCentralAngle?: boolean;
+  /** Elle konmuş eşitlik çentiği: 0 = işaretsiz, 1–4 = çizgi sayısı; yoksa otomatik (esitlikIsaretleri.ts). */
+  equalityMark?: number;
 }
 
 /** Daire dilimi (sektör): yay ile aynı üç nokta, ama içi dolu. */
@@ -215,6 +229,8 @@ export interface SectorObject extends BaseMathObject {
   showPerimeter?: boolean;
   /** Merkez açı yazısı görünür mü? (varsayılan: evet) */
   showCentralAngle?: boolean;
+  /** Elle konmuş eşitlik çentiği: 0 = işaretsiz, 1–4 = çizgi sayısı; yoksa otomatik (esitlikIsaretleri.ts). */
+  equalityMark?: number;
 }
 
 export interface AngleObject extends BaseMathObject {
@@ -239,6 +255,8 @@ export interface PolygonObject extends BaseMathObject {
    * arasındaki kenardır (son kenar pointIds[n-1] -> pointIds[0]).
    */
   edgeLabels?: number[];
+  /** Kenar dizini ('0', '1', …; i. kenar pointIds[i] → pointIds[i+1]) → elle eşitlik çentiği (0 = işaretsiz, 1–4 çizgi). */
+  edgeEqualityMarks?: Record<string, number>;
   fillColor?: string;
   fillOpacity?: number;
   showArea?: boolean;
@@ -361,12 +379,21 @@ export interface InputBoxObject extends BaseMathObject {
  */
 export interface MeasurementObject extends BaseMathObject {
   type: 'measurement';
-  /** slope: iki nokta arası eğim · trig: dik üçgende sin/cos/tan · distance: iki nokta arası CANLI uzunluk (ör. parça üzerindeki P için |AP|) */
-  kind: 'slope' | 'trig' | 'distance';
-  /** slope / distance: [A, B] · trig: [açı köşesi, DİK köşe, üçüncü köşe] */
+  /**
+   * slope: iki nokta arası eğim · trig: dik üçgende sin/cos/tan · distance: iki nokta arası CANLI uzunluk (ör. parça üzerindeki P için |AP|)
+   * · arc: çember üzerindeki iki nokta arasındaki yay (çember BÖLÜNMEDEN; uzunluk ve derece)
+   */
+  kind: 'slope' | 'trig' | 'distance' | 'arc';
+  /** slope / distance / arc: [A, B] · trig: [açı köşesi, DİK köşe, üçüncü köşe] */
   pointIds: string[];
   /** Değer yazısı görünür mü? (tıklayınca kapanır) */
   showValue?: boolean;
+  /** arc: yayın üzerinde durduğu çember. Çember silinince ölçüm de silinir. */
+  circleId?: string;
+  /** arc: bu noktayı İÇEREN taraf ölçülür ("BCD yayı"). Verildiğinde `major` yok sayılır. */
+  throughPointId?: string;
+  /** arc: true ise büyük yay; yoksa ya da false ise küçük yay. */
+  major?: boolean;
 }
 
 export type MathObject =
@@ -407,8 +434,26 @@ export interface ViewportTransform {
    * PNG/SVG/PDF/Word çıktıları renksiz üretilir; fotokopi ve baskı için uygundur.
    */
   blackWhite?: boolean;
+  /**
+   * Eşitlik çentikleri: birbirine değen şekillerde eşit uzunluklar/yaylar otomatik işaretlenir (|, ||, |||).
+   * undefined/true = açık (varsayılan), false = kapalı (elle konan işaretler yine çizilir).
+   */
+  showEqualityMarks?: boolean;
   snapToGrid: boolean;
+  /** Sabit ızgara aralığı (dünya birimi); yalnız gridStepAuto === false iken kullanılır */
   gridStep: number;
+  /**
+   * Izgara aralığı otomatik mi? Varsayılan (undefined/true): yakınlaştırmaya göre seçilir.
+   * false: Ayarlar > Izgara aralığı'nda girilen gridStep kullanılır (çizim ve yakalama birlikte).
+   */
+  gridStepAuto?: boolean;
+  /** Izgaranın (kareli, noktalı, izometrik) opaklığı 0,1–1; varsayılan 1. Ayarlar'da "saydamlık" olarak gösterilir. */
+  gridOpacity?: number;
+  /**
+   * Izgara biçimi: kareli (çizgiler, varsayılan), noktalı (kesişimlerde noktalar; "noktalı zemin") ya da
+   * izometrik (dikey ve ±30° eğik çizgiler; eşkenar üçgen örgü — izometrik kâğıt)
+   */
+  gridStyle?: 'kareli' | 'noktali' | 'izometrik';
   backgroundColor?: string;
   rightAngleStyle?: 'arc_dot' | 'square' | 'arc_fill' | 'l_shape';
   pointSnapMode?: 'automatic' | 'snapToGrid' | 'fixedToGrid' | 'off';

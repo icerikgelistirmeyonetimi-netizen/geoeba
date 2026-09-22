@@ -1,9 +1,88 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Point2D, ViewportTransform } from '@/types/math';
-import { worldToScreen, formatTurkishNumber } from '@/math/coordinates';
+/**
+ * Tuvaldeki etkileşimli ölçme araçları: açıölçer (iletki), cetvel, gönye, alan modeli.
+ *
+ * - Araç yalnızca kendisini ve doğrudan tutamaçlarını çizer; ayar düğmeleri sağ tık menüsündedir
+ *   (dokunmatikte basılı tutma; yönerge çubuğundaki "Seçenekler" düğmesi de aynı menüyü açar).
+ * - Araç etkinleşince (araç çubuğu, kısayol, yazılı/sesli komut, "Ortaya getir") görsel merkezi
+ *   görünen tuvalin tam ortasına yerleşir ve boyu o anki yakınlaştırmaya sığdırılır.
+ * - Tutamaç sürüklenirken yanında kısa bir okuma ("12 br", "35°") belirir, bırakınca kaybolur.
+ * - Renkler ada paletinden, yalnız sınıf adlarıyla (koyu tema ve zemin-acik kendiliğinden işler).
+ * - Saf hesaplar olcmeAraclari.ts içinde (testli).
+ */
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  LayoutGrid,
+  LocateFixed,
+  Minus,
+  MoveHorizontal,
+  MoveVertical,
+  Plus,
+  RotateCcw,
+  Ruler,
+  Trash2,
+} from 'lucide-react';
+import { Point2D, PointObject, ViewportTransform } from '@/types/math';
+import { worldToScreen } from '@/math/coordinates';
 import { ToolMode } from '@/types/workspace';
+import { useWorkspace } from '@/state/WorkspaceContext';
+import { createId } from '@/state/ids';
+import { ContextMenu, ContextMenuItem } from './ContextMenu';
+import { GeometryToolIcon } from './GeometryToolIcon';
+import { workspaceOwnsKeyboard } from './toolShortcuts';
+import {
+  ARAC_ADLARI,
+  ARAC_SECILDI_OLAYI,
+  CETVEL_BOY_MAX,
+  CETVEL_BOY_MIN,
+  CETVEL_KALINLIK,
+  CETVEL_UC_BOSLUK,
+  ALAN_MAX,
+  ALAN_MIN,
+  OLCME_ARACI_ISLEM_OLAYI,
+  UZUN_BASIS_MS,
+  UZUN_BASIS_TOLERANS_PX,
+  VARSAYILANLAR,
+  alanBoyutuTutamactan,
+  alanBoyutunuDegistir,
+  alanKoseKaymasi,
+  alanModeliMenusu,
+  alanModeliniYerlestir,
+  alanOkumasi,
+  cetvelBoyuSuruklemeden,
+  cetvelBoyunuDegistir,
+  cetvelCentikYollari,
+  cetvelEtiketleri,
+  cetvelMenusu,
+  cetvelOkumasi,
+  cetveldenParcaNesneleri,
+  cetveliYerlestir,
+  cevreOkumasi,
+  donusOkumasi,
+  donusYakala,
+  gonyeMenusu,
+  gonyeyiYerlestir,
+  iletkiCentikYollari,
+  iletkiEtiketleri,
+  iletkiKolAcisi,
+  iletkiMenusu,
+  iletkiOkumasi,
+  iletkidenAciNesneleri,
+  iletkiyiYerlestir,
+  normalizeDeg,
+  okumaGenisligi,
+  okumaKonumu,
+  olcmeAraciMi,
+  tabanOkumasi,
+  yereldenEkrana,
+  type GosterimAnahtari,
+  type OlcmeAraci,
+  type OlcmeEylemi,
+  type OlcmeIkonu,
+  type OlcmeMenuMaddesi,
+} from './olcmeAraclari';
 
 interface MeasurementInstrumentsProps {
   activeTool: ToolMode;
@@ -14,8 +93,117 @@ interface MeasurementInstrumentsProps {
   onAddPolygonFromAreaModel?: (pos: Point2D, cols: number, rows: number) => void;
 }
 
-/** Dereceyi [0, 360) aralığına indirger. */
-const normalizeDeg = (deg: number) => ((Math.round(deg) % 360) + 360) % 360;
+type TutamacTuru = 'govde' | 'boy' | 'don' | 'kol' | 'taban' | 'kose';
+
+/** Sürükleme sırasında tutamaç hareketçisine verilen bilgiler (x, y: SVG'ye göre piksel) */
+interface SuruklemeAni {
+  dx: number;
+  dy: number;
+  x: number;
+  y: number;
+  x0: number;
+  y0: number;
+  shift: boolean;
+}
+
+interface AktifSurukleme {
+  bitir: (geriAl: boolean) => void;
+}
+
+/** Delete koruması: yok · yalnız yut (araç yeni açıldı) · araç kaldırılabilir (araçla etkileşildi) */
+type Koruma = 'yok' | 'yut' | 'sil';
+
+const ikonCiz = (ikon?: OlcmeIkonu): React.ReactNode => {
+  const c = 'w-4 h-4';
+  switch (ikon) {
+    case 'Ruler':
+      return <Ruler className={c} />;
+    case 'Plus':
+      return <Plus className={c} />;
+    case 'Minus':
+      return <Minus className={c} />;
+    case 'MoveHorizontal':
+      return <MoveHorizontal className={c} />;
+    case 'MoveVertical':
+      return <MoveVertical className={c} />;
+    case 'RotateCcw':
+      return <RotateCcw className={c} />;
+    case 'LayoutGrid':
+      return <LayoutGrid className={c} />;
+    case 'LocateFixed':
+      return <LocateFixed className={c} />;
+    case 'Trash2':
+      return <Trash2 className="w-4 h-4 text-destructive" />;
+    case 'geo:segment':
+      return <GeometryToolIcon kind="segment" className={c} />;
+    case 'geo:angle':
+      return <GeometryToolIcon kind="angle" className={c} />;
+    case 'geo:protractor':
+      return <GeometryToolIcon kind="protractor" className={c} />;
+    case 'geo:rectangle':
+      return <GeometryToolIcon kind="rectangle" className={c} />;
+    default:
+      return undefined;
+  }
+};
+
+// ─── Ortak görünüm parçaları (sınıf adları JIT görsün diye tam ve sabit yazılır) ──
+
+const GOVDE_KENAR = 'stroke-ada-deniz/80 dark:stroke-ada-vurgu/80';
+const SAHTE_GOLGE = 'stroke-ada-murekkep/10 dark:stroke-ada-murekkep/50 pointer-events-none';
+const OLCU_CIZGISI = 'stroke-ada-deniz dark:stroke-ada-fener pointer-events-none';
+const CENTIK_ANA = 'stroke-ada-murekkep dark:stroke-ada-fildisi pointer-events-none';
+const CENTIK_ORTA = 'stroke-ada-murekkep/70 dark:stroke-ada-fildisi/70 pointer-events-none';
+const CENTIK_INCE = 'stroke-ada-murekkep/45 dark:stroke-ada-fildisi/45 pointer-events-none';
+const SAYI = 'fill-ada-murekkep dark:fill-ada-fildisi font-sans font-semibold tabular-nums pointer-events-none select-none';
+/** Zeminden bağımsız okunur kalsın diye yazının arkasında zemin renginde hale */
+const HALE: React.CSSProperties = { paintOrder: 'stroke', strokeLinejoin: 'round' };
+const BILGI_YAZISI =
+  'fill-ada-deniz-koyu dark:fill-ada-vurgu stroke-ada-fildisi dark:stroke-ada-deniz-koyu font-sans font-semibold tabular-nums pointer-events-none select-none';
+
+type TutamacRengi = 'mercan' | 'vurgu';
+
+const HALE_SINIFI: Record<TutamacRengi, { bos: string; aktif: string; disk: string; sap: string }> = {
+  mercan: {
+    bos: 'fill-ada-mercan/0 group-hover/tutamac:fill-ada-mercan/15 transition-colors',
+    aktif: 'fill-ada-mercan/25 transition-colors',
+    disk: 'fill-ada-mercan stroke-ada-fildisi pointer-events-none',
+    sap: 'stroke-ada-mercan pointer-events-none',
+  },
+  vurgu: {
+    bos: 'fill-ada-vurgu/0 group-hover/tutamac:fill-ada-vurgu/15 transition-colors',
+    aktif: 'fill-ada-vurgu/25 transition-colors',
+    disk: 'fill-ada-vurgu stroke-ada-fildisi pointer-events-none',
+    sap: 'stroke-ada-vurgu pointer-events-none',
+  },
+};
+
+type Glif = 'boy' | 'don' | 'kose' | 'kol';
+
+function glifCiz(glif: Glif): React.ReactNode {
+  const ortak = {
+    fill: 'none',
+    strokeWidth: 1.75,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    className: 'stroke-ada-fildisi pointer-events-none',
+  };
+  switch (glif) {
+    case 'boy':
+      return <path d="M-5.5 0H5.5M-3-2.5-5.5 0-3 2.5M3-2.5 5.5 0 3 2.5" {...ortak} />;
+    case 'kose':
+      return <path d="M-4 4 4-4M0-4H4V0M-4 0V4H0" {...ortak} />;
+    case 'don':
+      return (
+        <g transform="scale(0.8)">
+          <path d="M -5 3 A 6 6 0 1 1 4 3" {...ortak} />
+          <path d="M 4 6 L 4 0 L 8 3 Z" className="fill-ada-fildisi pointer-events-none" />
+        </g>
+      );
+    case 'kol':
+      return <circle r={3} className="fill-ada-fildisi pointer-events-none" />;
+  }
+}
 
 export function MeasurementInstruments({
   activeTool,
@@ -24,1405 +212,1041 @@ export function MeasurementInstruments({
   onAddSegmentFromRuler,
   onAddPolygonFromAreaModel,
 }: MeasurementInstrumentsProps) {
-  // Açıölçer (İletki) Durumu
+  // Açıölçer (İletki) Durumu — taban matematik derecesi (saat yönünün tersi +)
   const [protractorPos, setProtractorPos] = useState<Point2D>({ x: 0, y: 0 });
-  const [protractorAngle, setProtractorAngle] = useState<number>(60);
-  const [protractorBaseAngle, setProtractorBaseAngle] = useState<number>(0);
+  const [protractorAngle, setProtractorAngle] = useState<number>(VARSAYILANLAR.iletkiAci);
+  const [protractorBaseAngle, setProtractorBaseAngle] = useState<number>(VARSAYILANLAR.iletkiTaban);
+  const [protractorRadius, setProtractorRadius] = useState<number>(VARSAYILANLAR.iletkiYaricap);
 
-  // Cetvel Durumu
+  // Cetvel Durumu — konum 0 çentiği (ölçü kenarı üzerinde), dönüş SVG derecesi (saat yönü +)
   const [rulerPos, setRulerPos] = useState<Point2D>({ x: -4, y: 2 });
-  const [rulerRotation, setRulerRotation] = useState<number>(0); // Derece
-  const [rulerLength, setRulerLength] = useState<number>(8); // Birim
+  const [rulerRotation, setRulerRotation] = useState<number>(VARSAYILANLAR.cetvelDonus);
+  const [rulerLength, setRulerLength] = useState<number>(VARSAYILANLAR.cetvelBoy);
 
-  // Gönye Durumu
+  // Gönye Durumu — konum dik köşe, boy dik kenar (br)
   const [setsquarePos, setSetsquarePos] = useState<Point2D>({ x: 2, y: -2 });
-  const [setsquareRotation, setSetsquareRotation] = useState<number>(0);
+  const [setsquareRotation, setSetsquareRotation] = useState<number>(VARSAYILANLAR.gonyeDonus);
+  const [setsquareSize, setSetsquareSize] = useState<number>(VARSAYILANLAR.gonyeBoy);
 
-  // Alan Modeli Durumu
-  const [areaCols, setAreaCols] = useState(4);
-  const [areaRows, setAreaRows] = useState(3);
+  // Alan Modeli Durumu — konum sol alt köşe
+  const [areaCols, setAreaCols] = useState<number>(VARSAYILANLAR.sutun);
+  const [areaRows, setAreaRows] = useState<number>(VARSAYILANLAR.satir);
   const [areaModelPos, setAreaModelPos] = useState<Point2D>({ x: -2, y: -1 });
 
-  const isVisible = ['measure_angle', 'setsquare', 'area_model', 'ruler'].includes(activeTool);
-  if (!isVisible) return null;
+  /** Araç üstündeki kalıcı bilgi yazıları (menüden aç/kapat) */
+  const [gosterim, setGosterim] = useState<Record<GosterimAnahtari, boolean>>({
+    olcu: VARSAYILANLAR.olcuGoster,
+    alan: VARSAYILANLAR.alanGoster,
+    cevre: VARSAYILANLAR.cevreGoster,
+  });
+  /** Şu an sürüklenen tutamaç (anlık okuma ve hale için) */
+  const [aktifTutamac, setAktifTutamac] = useState<TutamacTuru | null>(null);
+  /**
+   * Açık sağ tık menüsü: konum ve menünün taşınacağı kap (tuvalin kendi menüleriyle aynı yer).
+   * `yukari`: yönerge çubuğundaki düğmeden açıldı; menü ölçülüp düğmenin ÜSTÜNE taşınacak.
+   */
+  const [menu, setMenu] = useState<{ x: number; y: number; hedef: HTMLElement; yukari?: boolean } | null>(null);
+  /** Aynı aracın yeniden seçilmesi (yeniden ortalama tetikleyicisi) */
+  const [yenidenSecim, setYenidenSecim] = useState(0);
 
-  // Ekran Koordinatları
-  const protScreen = worldToScreen(protractorPos, viewport);
-  const rulerScreen = worldToScreen(rulerPos, viewport);
-  const setsquareScreen = worldToScreen(setsquarePos, viewport);
-  const areaScreen = worldToScreen(areaModelPos, viewport);
+  const kokRef = useRef<SVGGElement>(null);
+  const viewportRef = useRef(viewport);
+  const korumaRef = useRef<Koruma>('yok');
+  const aktifSuruklemeRef = useRef<AktifSurukleme | null>(null);
+  /** Kullanıcının son tercih ettiği boylar: yakın plandaki bir etkinleşme cetveli kısaltsa da tercih kaybolmaz. */
+  const tercihRef = useRef({
+    cetvelBoy: VARSAYILANLAR.cetvelBoy as number,
+    gonyeBoy: VARSAYILANLAR.gonyeBoy as number,
+    sutun: VARSAYILANLAR.sutun as number,
+    satir: VARSAYILANLAR.satir as number,
+  });
+  /** Dokunmatik basılı tutmayla açılan menü: parmak kalkana (+400 ms) kadar gelen yerel contextmenu yutulur. */
+  const uzunBasisRef = useRef<{ pointerId: number; kalkti: boolean; zaman: number } | null>(null);
+  /** Pencere dinleyicilerinin güncel işlevlere ulaşması için */
+  const islemRef = useRef<{ sil: () => void; menuyuAc: (x: number, y: number, yukari?: boolean) => void }>({
+    sil: () => undefined,
+    menuyuAc: () => undefined,
+  });
 
-  const protRadius = 140; // piksel
+  const { setActiveTool, addObjects, objects } = useWorkspace();
+  const gorunur = olcmeAraciMi(activeTool);
 
-  // Cetvel Ekseni (ekran uzayı): gövde rotate(rulerRotation) ile döndürülüyor
-  const rulerRad = (rulerRotation * Math.PI) / 180;
-  const rulerPixelLength = rulerLength * viewport.zoom;
-  // Cetvelin orta noktası ve çentikli yüzeyine dik (yukarı bakan) yön
-  const rulerMidX = rulerScreen.x + Math.cos(rulerRad) * (rulerPixelLength / 2);
-  const rulerMidY = rulerScreen.y + Math.sin(rulerRad) * (rulerPixelLength / 2);
-  const rulerPerpX = Math.sin(rulerRad);
-  const rulerPerpY = -Math.cos(rulerRad);
+  const menuyuKapat = useCallback(() => setMenu(null), []);
 
-  // Gönye arayüz paneli: üçgenin ağırlık merkezinin TERS yönüne çapalanır,
-  // böylece gönye hangi açıya döndürülürse döndürülsün panel gövdeyi kapatmaz.
-  const ssRad = (setsquareRotation * Math.PI) / 180;
-  const ssPanelX = setsquareScreen.x - ((Math.cos(ssRad) + Math.sin(ssRad)) / Math.SQRT2) * 58;
-  const ssPanelY = setsquareScreen.y - ((Math.sin(ssRad) - Math.cos(ssRad)) / Math.SQRT2) * 58;
+  // ─── Yardımcı işlevler (hook değil; her çizimde güncel durumu görürler) ──────
 
-  // Açıölçer Derece Çentikleri (0° - 180°)
-  // NOT: Çentikler iletkinin YEREL çerçevesinde üretilir; taban açısı gövde
-  // grubuna uygulanan rotate() ile verildiği için burada eklenmez.
-  const ticks = [];
-  for (let d = 0; d <= 180; d += 5) {
-    const isMajor = d % 10 === 0;
-    const isSpecial = d === 90 || d === 45 || d === 135 || d === 0 || d === 180;
-    const rad = (d * Math.PI) / 180;
-    const r1 = protRadius;
-    const r2 = isSpecial ? protRadius - 16 : isMajor ? protRadius - 12 : protRadius - 7;
-    const x1 = Math.cos(rad) * r1;
-    const y1 = -Math.sin(rad) * r1;
-    const x2 = Math.cos(rad) * r2;
-    const y2 = -Math.sin(rad) * r2;
+  const menuyuAc = (x: number, y: number, yukari = false) => {
+    const hedef = kokRef.current?.ownerSVGElement?.parentElement;
+    if (!hedef) return;
+    korumaRef.current = 'sil';
+    setMenu({ x, y, hedef, yukari });
+  };
 
-    const labelR = protRadius - 26;
-    const lx = Math.cos(rad) * labelR;
-    const ly = -Math.sin(rad) * labelR;
+  /** Aracı görünen tuvalin ortasına yerleştirir, boyunu yakınlaştırmaya sığdırır. */
+  const ortala = (arac: OlcmeAraci, vp: ViewportTransform) => {
+    const t = tercihRef.current;
+    if (arac === 'ruler') {
+      const { konum, boy } = cetveliYerlestir(t.cetvelBoy, rulerRotation, vp);
+      setRulerLength(boy);
+      setRulerPos(konum);
+    } else if (arac === 'measure_angle') {
+      const { konum, yaricap } = iletkiyiYerlestir(protractorBaseAngle, vp);
+      setProtractorRadius(yaricap);
+      setProtractorPos(konum);
+    } else if (arac === 'setsquare') {
+      const { konum, boy } = gonyeyiYerlestir(t.gonyeBoy, setsquareRotation, vp);
+      setSetsquareSize(boy);
+      setSetsquarePos(konum);
+    } else {
+      const { konum, sutun, satir } = alanModeliniYerlestir(t.sutun, t.satir, vp);
+      setAreaCols(sutun);
+      setAreaRows(satir);
+      setAreaModelPos(konum);
+    }
+  };
 
-    ticks.push({
-      d,
-      x1,
-      y1,
-      x2,
-      y2,
-      isMajor,
-      isSpecial,
-      labelPos: isMajor ? { x: lx, y: ly } : null,
+  /** "Sil": araç tuvalden kalkar, durumu varsayılana döner, Seç ve Taşı aracına geçilir. */
+  const sil = () => {
+    const arac = activeTool;
+    aktifSuruklemeRef.current?.bitir(false);
+    setMenu(null);
+    const t = tercihRef.current;
+    if (arac === 'ruler') {
+      setRulerLength(VARSAYILANLAR.cetvelBoy);
+      setRulerRotation(VARSAYILANLAR.cetvelDonus);
+      t.cetvelBoy = VARSAYILANLAR.cetvelBoy;
+    } else if (arac === 'measure_angle') {
+      setProtractorAngle(VARSAYILANLAR.iletkiAci);
+      setProtractorBaseAngle(VARSAYILANLAR.iletkiTaban);
+      setGosterim((g) => ({ ...g, olcu: VARSAYILANLAR.olcuGoster }));
+    } else if (arac === 'setsquare') {
+      setSetsquareRotation(VARSAYILANLAR.gonyeDonus);
+      setSetsquareSize(VARSAYILANLAR.gonyeBoy);
+      t.gonyeBoy = VARSAYILANLAR.gonyeBoy;
+    } else if (arac === 'area_model') {
+      setAreaCols(VARSAYILANLAR.sutun);
+      setAreaRows(VARSAYILANLAR.satir);
+      t.sutun = VARSAYILANLAR.sutun;
+      t.satir = VARSAYILANLAR.satir;
+      setGosterim((g) => ({ ...g, alan: VARSAYILANLAR.alanGoster, cevre: VARSAYILANLAR.cevreGoster }));
+    }
+    korumaRef.current = 'yok';
+    setActiveTool('select');
+  };
+
+  const noktaEtiketleri = () => (objects.filter((o) => o.type === 'point') as PointObject[]).map((p) => p.label);
+
+  /** Menü eylemlerini uygular (tüm sınırlar olcmeAraclari.ts'teki menü kurucularında). */
+  const uygula = (eylem: OlcmeEylemi) => {
+    const vp = viewportRef.current;
+    const t = tercihRef.current;
+    switch (eylem.tur) {
+      case 'cetvelBoy': {
+        const yeni = Math.min(CETVEL_BOY_MAX, Math.max(CETVEL_BOY_MIN, Math.round(eylem.boy)));
+        setRulerPos(cetvelBoyunuDegistir(rulerPos, rulerRotation, rulerLength, yeni, vp));
+        setRulerLength(yeni);
+        t.cetvelBoy = yeni;
+        break;
+      }
+      case 'cetvelDonus':
+        setRulerRotation(normalizeDeg(eylem.donusSvg));
+        break;
+      case 'cetvelParcaEkle': {
+        const { nesneler, aciklama, bas, son } = cetveldenParcaNesneleri(
+          rulerPos,
+          rulerRotation,
+          rulerLength,
+          noktaEtiketleri(),
+          createId
+        );
+        if (onAddSegmentFromRuler) onAddSegmentFromRuler(bas, son);
+        else addObjects(nesneler, aciklama);
+        break;
+      }
+      case 'iletkiAci':
+        setProtractorAngle(Math.min(180, Math.max(0, Math.round(eylem.aci))));
+        break;
+      case 'iletkiTaban':
+        setProtractorBaseAngle(normalizeDeg(eylem.taban));
+        break;
+      case 'iletkiAciEkle': {
+        if (protractorAngle === 0) break;
+        if (onAddAngleFromProtractor) {
+          onAddAngleFromProtractor(protractorPos, protractorAngle, protractorBaseAngle);
+        } else {
+          const { nesneler, aciklama } = iletkidenAciNesneleri(
+            protractorPos,
+            protractorAngle,
+            protractorBaseAngle,
+            protractorRadius / vp.zoom,
+            noktaEtiketleri(),
+            createId
+          );
+          addObjects(nesneler, aciklama);
+        }
+        break;
+      }
+      case 'gonyeDonus':
+        setSetsquareRotation(normalizeDeg(eylem.donusSvg));
+        break;
+      case 'alanBoyut': {
+        const sutun = Math.min(ALAN_MAX, Math.max(ALAN_MIN, Math.round(eylem.sutun)));
+        const satir = Math.min(ALAN_MAX, Math.max(ALAN_MIN, Math.round(eylem.satir)));
+        setAreaModelPos(alanBoyutunuDegistir(areaModelPos, { sutun: areaCols, satir: areaRows }, { sutun, satir }, vp));
+        setAreaCols(sutun);
+        setAreaRows(satir);
+        t.sutun = sutun;
+        t.satir = satir;
+        break;
+      }
+      case 'alanCokgenEkle':
+        onAddPolygonFromAreaModel?.(areaModelPos, areaCols, areaRows);
+        break;
+      case 'gosterim':
+        setGosterim((g) => ({ ...g, [eylem.anahtar]: eylem.acik }));
+        break;
+      case 'ortala':
+        if (olcmeAraciMi(activeTool)) ortala(activeTool, vp);
+        break;
+      case 'sil':
+        sil();
+        break;
+    }
+  };
+
+  // ─── Hook'lar (hepsi erken dönüşten ÖNCE) ────────────────────────────────────
+
+  useLayoutEffect(() => {
+    viewportRef.current = viewport;
+    islemRef.current = { sil, menuyuAc };
+  });
+
+  // Aynı araç yeniden seçildi (araç çubuğu, kısayol, komut): yeniden ortala
+  useEffect(() => {
+    const dinle = (e: Event) => {
+      const arac = (e as CustomEvent<{ tool?: string }>).detail?.tool;
+      if (!olcmeAraciMi(arac)) return;
+      const svg = kokRef.current?.ownerSVGElement;
+      if (!svg || !(e.target instanceof Node) || !e.target.contains(svg)) return;
+      setYenidenSecim((n) => n + 1);
+    };
+    window.addEventListener(ARAC_SECILDI_OLAYI, dinle);
+    return () => window.removeEventListener(ARAC_SECILDI_OLAYI, dinle);
+  }, []);
+
+  // Yönerge çubuğundaki "Seçenekler" / "Sil" düğmeleri
+  useEffect(() => {
+    const dinle = (e: Event) => {
+      const kap = kokRef.current?.ownerSVGElement?.parentElement;
+      if (!kap || !(e.target instanceof Node) || !kap.contains(e.target)) return;
+      const detay = (e as CustomEvent<{ islem?: string; x?: number; y?: number }>).detail ?? {};
+      if (detay.islem === 'sil') islemRef.current.sil();
+      else if (detay.islem === 'menu') islemRef.current.menuyuAc(detay.x ?? 0, detay.y ?? 0, true);
+    };
+    window.addEventListener(OLCME_ARACI_ISLEM_OLAYI, dinle);
+    return () => window.removeEventListener(OLCME_ARACI_ISLEM_OLAYI, dinle);
+  }, []);
+
+  // Etkinleşme ve yeniden seçim: boyanmadan önce ortala (eski yerde tek kare bile görünmesin).
+  // Kaydırma/yakınlaştırmada yeniden ortalanmaz: bağımlılıklarda viewport YOK.
+  useLayoutEffect(() => {
+    aktifSuruklemeRef.current?.bitir(false);
+    setMenu(null);
+    if (!olcmeAraciMi(activeTool)) {
+      korumaRef.current = 'yok';
+      return;
+    }
+    ortala(activeTool, viewport);
+    korumaRef.current = 'yut';
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTool, yenidenSecim]);
+
+  // Çubuk düğmesinden açılan menü düğmenin üstünde açılır: imleç menünün üstünde kalıp alt menüyü açmasın,
+  // düğme örtülmesin. Boyanmadan önce ölçülür (ContextMenu kendi konumunu ekrana kıstırır).
+  useLayoutEffect(() => {
+    if (!menu?.yukari) return;
+    const el = menu.hedef.querySelector<HTMLElement>('[data-olcme-menusu] > [role="menu"]');
+    const h = el?.offsetHeight ?? 0;
+    setMenu((m) => (m && m.yukari ? { ...m, y: Math.max(8, m.y - h - 8), yukari: false } : m));
+  }, [menu]);
+
+  // Delete/Backspace koruması: araç odaktayken tuvaldeki seçili nesneler yanlışlıkla silinmesin
+  useEffect(() => {
+    if (!gorunur) return;
+    const tus = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const koruma = korumaRef.current;
+      if (koruma === 'yok') return;
+      if (!workspaceOwnsKeyboard(e, kokRef.current?.ownerSVGElement ?? null)) return;
+      // Tuvalin ve menü çubuğunun Delete işleyicileri defaultPrevented görünce çekilir
+      e.preventDefault();
+      if (koruma === 'sil' && !aktifSuruklemeRef.current && !e.repeat) islemRef.current.sil();
+    };
+    const bas = (e: PointerEvent) => {
+      const hedef = e.target instanceof Element ? e.target : null;
+      if (hedef?.closest('[data-olcme-araci], [data-olcme-menusu]')) return;
+      korumaRef.current = 'yok';
+    };
+    window.addEventListener('keydown', tus, true);
+    window.addEventListener('pointerdown', bas, true);
+    return () => {
+      window.removeEventListener('keydown', tus, true);
+      window.removeEventListener('pointerdown', bas, true);
+    };
+  }, [gorunur]);
+
+  useEffect(() => () => aktifSuruklemeRef.current?.bitir(false), []);
+
+  if (!gorunur) return null;
+
+  // ─── Sürükleme altyapısı ─────────────────────────────────────────────────────
+
+  /**
+   * Ortak sürükleme başlangıcı. Sağ tuş aracı oynatmaz; orta tuş ve Alt+sürükle tuvale geçer (kaydırma).
+   * Dokunmatikte parmak 600 ms kıpırdamazsa sürükleme geri alınır ve menü açılır.
+   */
+  const suruklemeyiBaslat = (
+    e: React.PointerEvent<SVGElement>,
+    tur: TutamacTuru,
+    hareket: (an: SuruklemeAni) => void,
+    geriAl: () => void
+  ) => {
+    if (e.button !== 0 || e.altKey) {
+      if (e.button === 2) e.stopPropagation();
+      return;
+    }
+    e.stopPropagation();
+    e.preventDefault();
+    aktifSuruklemeRef.current?.bitir(false);
+    korumaRef.current = 'sil';
+    setMenu(null);
+    setAktifTutamac(tur);
+
+    const hedefEl = e.currentTarget as SVGElement;
+    const svg = hedefEl.ownerSVGElement;
+    const kutu = svg?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    const pointerId = e.pointerId;
+    const cx0 = e.clientX;
+    const cy0 = e.clientY;
+    const x0 = cx0 - kutu.left;
+    const y0 = cy0 - kutu.top;
+    let kipirdadi = false;
+    let zamanlayici: number | null = null;
+
+    const hareketEt = (ev: PointerEvent) => {
+      if (ev.pointerId !== pointerId) return;
+      const dx = ev.clientX - cx0;
+      const dy = ev.clientY - cy0;
+      if (!kipirdadi && Math.hypot(dx, dy) > UZUN_BASIS_TOLERANS_PX) {
+        kipirdadi = true;
+        if (zamanlayici !== null) {
+          window.clearTimeout(zamanlayici);
+          zamanlayici = null;
+        }
+      }
+      hareket({ dx, dy, x: ev.clientX - kutu.left, y: ev.clientY - kutu.top, x0, y0, shift: ev.shiftKey });
+    };
+    const birak = (ev: PointerEvent) => {
+      if (ev.pointerId === pointerId) kayit.bitir(false);
+    };
+    const kayit: AktifSurukleme = {
+      bitir: (geriAlinsin: boolean) => {
+        window.removeEventListener('pointermove', hareketEt);
+        window.removeEventListener('pointerup', birak);
+        window.removeEventListener('pointercancel', birak);
+        if (zamanlayici !== null) {
+          window.clearTimeout(zamanlayici);
+          zamanlayici = null;
+        }
+        if (geriAlinsin) geriAl();
+        if (aktifSuruklemeRef.current === kayit) aktifSuruklemeRef.current = null;
+        setAktifTutamac(null);
+      },
+    };
+    aktifSuruklemeRef.current = kayit;
+    window.addEventListener('pointermove', hareketEt);
+    window.addEventListener('pointerup', birak);
+    window.addEventListener('pointercancel', birak);
+
+    if (e.pointerType !== 'mouse') {
+      zamanlayici = window.setTimeout(() => {
+        zamanlayici = null;
+        if (kipirdadi) return;
+        kayit.bitir(true);
+        try {
+          hedefEl.releasePointerCapture(pointerId);
+        } catch {
+          /* yakalama yoksa sorun değil */
+        }
+        uzunBasisRef.current = { pointerId, kalkti: false, zaman: performance.now() };
+        const kalk = (ev: PointerEvent) => {
+          if (ev.pointerId !== pointerId) return;
+          window.removeEventListener('pointerup', kalk, true);
+          window.removeEventListener('pointercancel', kalk, true);
+          if (uzunBasisRef.current?.pointerId === pointerId) {
+            uzunBasisRef.current = { pointerId, kalkti: true, zaman: performance.now() };
+          }
+        };
+        window.addEventListener('pointerup', kalk, true);
+        window.addEventListener('pointercancel', kalk, true);
+        // Menü parmağın altında değil, biraz sağ üstünde açılır (el menüyü örtmesin)
+        islemRef.current.menuyuAc(cx0 + 24, cy0 - 8);
+      }, UZUN_BASIS_MS);
+    }
+  };
+
+  /** Gövdeyi taşır: basılan noktadan beri dünya birimi kadar */
+  const govdeyiSurukle = (e: React.PointerEvent<SVGElement>, konum: Point2D, ayarla: (p: Point2D) => void) => {
+    const z = viewport.zoom;
+    const bas = { ...konum };
+    suruklemeyiBaslat(
+      e,
+      'govde',
+      ({ dx, dy }) => ayarla({ x: Number((bas.x + dx / z).toFixed(2)), y: Number((bas.y - dy / z).toFixed(2)) }),
+      () => ayarla(bas)
+    );
+  };
+
+  /** Pivot etrafında döndürme: kavrama ofseti korunur (basınca sıçrama yok) */
+  const donusuSurukle = (
+    e: React.PointerEvent<SVGElement>,
+    tur: TutamacTuru,
+    pivot: Point2D,
+    baslangic: number,
+    ayarla: (d: number) => void,
+    matematik: boolean,
+    adim: number
+  ) => {
+    const isaret = matematik ? -1 : 1;
+    const aci = (x: number, y: number) => (Math.atan2(isaret * (y - pivot.y), x - pivot.x) * 180) / Math.PI;
+    let kavrama: number | null = null;
+    suruklemeyiBaslat(
+      e,
+      tur,
+      ({ x, y, x0, y0, shift }) => {
+        if (kavrama === null) kavrama = aci(x0, y0);
+        ayarla(donusYakala(baslangic + (aci(x, y) - kavrama), shift, adim));
+      },
+      () => ayarla(baslangic)
+    );
+  };
+
+  const onContextMenuArac = (e: React.MouseEvent<SVGGElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const u = uzunBasisRef.current;
+    // Basılı tutmanın ardından gelen yerel contextmenu: menü zaten açık, yerinde kalsın
+    if (menu && u && (!u.kalkti || performance.now() - u.zaman < 400)) return;
+    aktifSuruklemeRef.current?.bitir(true);
+    menuyuAc(e.clientX, e.clientY);
+  };
+
+  // ─── Çizim ───────────────────────────────────────────────────────────────────
+
+  const z = viewport.zoom;
+
+  /** Tutamaç topuzu: 44 px dokunma alanı + hale, kontrast halkası, disk, glif */
+  const tutamacCiz = (o: {
+    tur: TutamacTuru;
+    x: number;
+    y: number;
+    renk: TutamacRengi;
+    glif: Glif;
+    baslik: string;
+    imlec?: string;
+    onPointerDown: (e: React.PointerEvent<SVGElement>) => void;
+  }) => {
+    const s = HALE_SINIFI[o.renk];
+    return (
+      <g
+        data-tutamac={o.tur}
+        transform={`translate(${o.x} ${o.y})`}
+        className={`group/tutamac ${o.imlec ?? 'cursor-grab active:cursor-grabbing'}`}
+        onPointerDown={o.onPointerDown}
+      >
+        <title>{o.baslik}</title>
+        <circle r={22} className={aktifTutamac === o.tur ? s.aktif : s.bos} />
+        <circle r={13} className="fill-ada-murekkep/45 dark:fill-ada-murekkep/60 pointer-events-none" />
+        <circle r={10} strokeWidth={2} className={s.disk} />
+        {glifCiz(o.glif)}
+      </g>
+    );
+  };
+
+  /** Sürüklenen tutamacın anlık okuması (döndürülmemiş katmanda; hep dik ve en üstte) */
+  const okumaHapi = (metin: string, tutamacEkran: Point2D) => {
+    const w = okumaGenisligi(metin);
+    const p = okumaKonumu(tutamacEkran, w, viewport);
+    return (
+      <g data-anlik-okuma="" className="pointer-events-none" transform={`translate(${p.x} ${p.y})`}>
+        <rect x={-w / 2} y={-14} width={w} height={28} rx={14} className="fill-ada-murekkep/90 dark:fill-ada-fildisi/95" />
+        <text
+          y={4.5}
+          textAnchor="middle"
+          className="fill-ada-fildisi dark:fill-ada-murekkep text-[13px] font-semibold font-sans tabular-nums select-none"
+        >
+          {metin}
+        </text>
+      </g>
+    );
+  };
+
+  // 1) AÇIÖLÇER ------------------------------------------------------------------
+  const iletkiCiz = () => {
+    const R = protractorRadius;
+    const a = protractorAngle;
+    const taban = protractorBaseAngle;
+    const koken = worldToScreen(protractorPos, viewport);
+    const donus = -taban; // SVG rotate() saat yönünde pozitif
+    const yon = (deg: number, r: number) => ({
+      x: Math.cos((deg * Math.PI) / 180) * r,
+      y: -Math.sin((deg * Math.PI) / 180) * r,
     });
-  }
-
-  // Açı Sınıflandırması (Türkçe MEB Müfredatı)
-  const getAngleType = (deg: number) => {
-    if (deg === 0) return 'Sıfır Açı';
-    if (deg < 90) return 'Dar Açı';
-    if (deg === 90) return 'Dik Açı';
-    if (deg < 180) return 'Geniş Açı';
-    if (deg === 180) return 'Doğru Açı';
-    return 'Tam Açı';
-  };
-
-  // Açıölçer Sürükleme Başlat
-  const handleProtractorMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const startClientX = e.clientX;
-    const startClientY = e.clientY;
-    const startPos = { ...protractorPos };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const dxScreen = moveEvent.clientX - startClientX;
-      const dyScreen = moveEvent.clientY - startClientY;
-      const dxWorld = dxScreen / viewport.zoom;
-      const dyWorld = -dyScreen / viewport.zoom;
-
-      setProtractorPos({
-        x: Number((startPos.x + dxWorld).toFixed(2)),
-        y: Number((startPos.y + dyWorld).toFixed(2)),
-      });
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // İbre Döndürme Başlat
-  const handleNeedleMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const svgEl = (e.target as SVGElement).closest('svg');
-    const rect = svgEl?.getBoundingClientRect() || { left: 0, top: 0 };
-    const pivot = worldToScreen(protractorPos, viewport);
-
-    const updateAngle = (moveEvent: MouseEvent) => {
-      const dx = moveEvent.clientX - rect.left - pivot.x;
-      const dy = -(moveEvent.clientY - rect.top - pivot.y); // SVG y ekseni ters
-
-      // Ekran açısını iletkinin TABAN açısına göre yerel açıya çevir
-      const rel = normalizeDeg(Math.round((Math.atan2(dy, dx) * 180) / Math.PI) - protractorBaseAngle);
-
-      // Alt yarı düzlemde (180° - 360°) en yakın uca kilitle
-      const clamped = rel <= 180 ? rel : rel > 270 ? 0 : 180;
-      setProtractorAngle(clamped);
-    };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      updateAngle(moveEvent);
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // İletki Taban Açısını Döndürme Başlat (Taban Çizgisini Işınla Hizalama)
-  const handleProtractorRotateMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const svgEl = (e.target as SVGElement).closest('svg');
-    const rect = svgEl?.getBoundingClientRect() || { left: 0, top: 0 };
-    const pivot = worldToScreen(protractorPos, viewport);
-
-    // Kavrama anındaki ofseti koru: tutamağa basıldığı an sıçrama olmasın
-    const startBase = protractorBaseAngle;
-    const grabDeg =
-      (Math.atan2(-(e.clientY - rect.top - pivot.y), e.clientX - rect.left - pivot.x) * 180) / Math.PI;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const curDeg =
-        (Math.atan2(-(moveEvent.clientY - rect.top - pivot.y), moveEvent.clientX - rect.left - pivot.x) * 180) /
-        Math.PI;
-
-      let deg = startBase + (curDeg - grabDeg);
-      if (moveEvent.shiftKey) {
-        deg = Math.round(deg / 5) * 5;
-      }
-      setProtractorBaseAngle(normalizeDeg(deg));
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // Gönye Sürükleme Başlat
-  const handleSetsquareMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const startClientX = e.clientX;
-    const startClientY = e.clientY;
-    const startPos = { ...setsquarePos };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const dxScreen = moveEvent.clientX - startClientX;
-      const dyScreen = moveEvent.clientY - startClientY;
-      const dxWorld = dxScreen / viewport.zoom;
-      const dyWorld = -dyScreen / viewport.zoom;
-
-      setSetsquarePos({
-        x: Number((startPos.x + dxWorld).toFixed(2)),
-        y: Number((startPos.y + dyWorld).toFixed(2)),
-      });
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // Gönye Döndürme Başlat (Hipotenüs Üzerindeki Tutamaç)
-  const handleSetsquareRotateMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const svgEl = (e.target as SVGElement).closest('svg');
-    const rect = svgEl?.getBoundingClientRect() || { left: 0, top: 0 };
-    const pivot = worldToScreen(setsquarePos, viewport);
-
-    // SVG rotate() saat yönünde pozitif ve y ekseni aşağı olduğu için işaret çevrimi YOK
-    const startRotation = setsquareRotation;
-    const grabDeg =
-      (Math.atan2(e.clientY - rect.top - pivot.y, e.clientX - rect.left - pivot.x) * 180) / Math.PI;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const curDeg =
-        (Math.atan2(moveEvent.clientY - rect.top - pivot.y, moveEvent.clientX - rect.left - pivot.x) * 180) /
-        Math.PI;
-
-      let deg = startRotation + (curDeg - grabDeg);
-      if (moveEvent.shiftKey) {
-        deg = Math.round(deg / 15) * 15;
-      }
-      setSetsquareRotation(normalizeDeg(deg));
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // Cetvel Sürükleme Başlat
-  const handleRulerMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const startClientX = e.clientX;
-    const startClientY = e.clientY;
-    const startPos = { ...rulerPos };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const dxScreen = moveEvent.clientX - startClientX;
-      const dyScreen = moveEvent.clientY - startClientY;
-      const dxWorld = dxScreen / viewport.zoom;
-      const dyWorld = -dyScreen / viewport.zoom;
-
-      setRulerPos({
-        x: Number((startPos.x + dxWorld).toFixed(2)),
-        y: Number((startPos.y + dyWorld).toFixed(2)),
-      });
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // Cetvel Uzunluğu Boyutlandırma (Sağ Kenar Tutamaç)
-  const handleRulerResizeMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const svgEl = (e.target as SVGElement).closest('svg');
-    const rect = svgEl?.getBoundingClientRect() || { left: 0, top: 0 };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const currentRulerScreen = worldToScreen(rulerPos, viewport);
-      const curScreenX = moveEvent.clientX - rect.left;
-      const curScreenY = moveEvent.clientY - rect.top;
-
-      const dx = curScreenX - currentRulerScreen.x;
-      const dy = curScreenY - currentRulerScreen.y;
-
-      const rad = (rulerRotation * Math.PI) / 180;
-      // Cetvel ekseni üzerindeki izdüşüm
-      const distAlongRuler = (dx * Math.cos(rad) + dy * Math.sin(rad)) / viewport.zoom;
-
-      const computedLength = Math.max(2, Math.min(35, Math.round(distAlongRuler * 2) / 2));
-      setRulerLength(computedLength);
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // Cetvel Döndürme Tutamacı
-  const handleRulerRotateMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const svgEl = (e.target as SVGElement).closest('svg');
-    const rect = svgEl?.getBoundingClientRect() || { left: 0, top: 0 };
-    const pivot = worldToScreen(rulerPos, viewport);
-
-    // Kavrama anındaki ofseti koru: topuz cetvel ekseninin dışında durduğu için
-    // doğrudan atan2 atanırsa cetvel tutulur tutulmaz birkaç derece sıçrıyordu.
-    const startRotation = rulerRotation;
-    const grabDeg =
-      (Math.atan2(e.clientY - rect.top - pivot.y, e.clientX - rect.left - pivot.x) * 180) / Math.PI;
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const curDeg =
-        (Math.atan2(moveEvent.clientY - rect.top - pivot.y, moveEvent.clientX - rect.left - pivot.x) * 180) /
-        Math.PI;
-
-      let deg = startRotation + (curDeg - grabDeg);
-      if (moveEvent.shiftKey) {
-        deg = Math.round(deg / 15) * 15;
-      }
-      setRulerRotation(normalizeDeg(deg));
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // Alan Modeli Sürükleme Başlat
-  const handleAreaModelMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const startClientX = e.clientX;
-    const startClientY = e.clientY;
-    const startPos = { ...areaModelPos };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const dxScreen = moveEvent.clientX - startClientX;
-      const dyScreen = moveEvent.clientY - startClientY;
-      const dxWorld = dxScreen / viewport.zoom;
-      const dyWorld = -dyScreen / viewport.zoom;
-
-      setAreaModelPos({
-        x: Number((startPos.x + dxWorld).toFixed(2)),
-        y: Number((startPos.y + dyWorld).toFixed(2)),
-      });
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  // Alan Modeli Boyutlandırma Başlat (Köşe Tutamaç)
-  const handleAreaResizeMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-
-    const svgEl = (e.target as SVGElement).closest('svg');
-    const rect = svgEl?.getBoundingClientRect() || { left: 0, top: 0 };
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const currentAreaScreen = worldToScreen(areaModelPos, viewport);
-      const curScreenX = moveEvent.clientX - rect.left;
-      const curScreenY = moveEvent.clientY - rect.top;
-
-      const dxPx = curScreenX - currentAreaScreen.x;
-      const dyPx = currentAreaScreen.y - curScreenY; // SVG Y ekseni ters
-
-      const computedCols = Math.max(1, Math.min(15, Math.round(dxPx / viewport.zoom)));
-      const computedRows = Math.max(1, Math.min(15, Math.round(dyPx / viewport.zoom)));
-
-      setAreaCols(computedCols);
-      setAreaRows(computedRows);
-    };
-
-    const handleMouseUp = () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  };
-
-  return (
-    <g className="measurement-instruments select-none">
-      {/* Ölçü çizgisi ok başı: id bu bileşene özel (global "arrow" çakışmasını önler) */}
-      <defs>
-        <marker
-          id="mi-arrow"
-          viewBox="0 0 10 10"
-          refX="9"
-          refY="5"
-          markerWidth="6"
-          markerHeight="6"
-          orient="auto-start-reverse"
-        >
-          <path d="M 0 0 L 10 5 L 0 10 z" fill="#047857" />
-        </marker>
-      </defs>
-
-      {/* 1. İNTERAKTİF AÇIÖLÇER (İLETKİ) */}
-      {activeTool === 'measure_angle' && (
-        <>
-        {/* 1.A DÖNEN GÖVDE: taban açısı tüm iletkiye uygulanır.
-            SVG'de rotate() saat yönünde pozitif olduğu için matematiksel
-            taban açısı EKSİ işaretle veriliyor. */}
-        <g transform={`translate(${protScreen.x}, ${protScreen.y}) rotate(${-protractorBaseAngle})`}>
-          {/* İletki Gövdesi (Yarı Saydam Akrilik - Sürüklenebilir) */}
-          <path
-            d={`M ${-protRadius} 0 A ${protRadius} ${protRadius} 0 0 1 ${protRadius} 0 Z`}
-            fill="#38bdf8"
-            fillOpacity="0.22"
-            stroke="#0284c7"
-            strokeWidth="2.5"
-            onMouseDown={handleProtractorMouseDown}
-            className="cursor-grab active:cursor-grabbing drop-shadow-xl hover:[fill-opacity:0.3] transition-colors"
-          />
-
-          {/* İç Boşluk / Yay */}
-          <path
-            d={`M ${-protRadius * 0.45} 0 A ${protRadius * 0.45} ${protRadius * 0.45} 0 0 1 ${protRadius * 0.45} 0 Z`}
-            fill="none"
-            stroke="#0284c7"
-            strokeWidth="1.5"
-            strokeDasharray="4,3"
-            opacity="0.6"
-            onMouseDown={handleProtractorMouseDown}
-            className="cursor-grab active:cursor-grabbing"
-          />
-
-          {/* Taban Çizgisi */}
-          <line
-            x1={-protRadius}
-            y1={0}
-            x2={protRadius}
-            y2={0}
-            stroke="#0284c7"
-            strokeWidth="2.5"
-            onMouseDown={handleProtractorMouseDown}
-            className="cursor-grab active:cursor-grabbing"
-          />
-
-          {/* Merkez Artı / Odak Noktası */}
-          <circle
-            cx="0"
-            cy="0"
-            r="12"
-            fill="#ffffff"
-            stroke="#0284c7"
-            strokeWidth="2"
-            onMouseDown={handleProtractorMouseDown}
-            className="cursor-grab active:cursor-grabbing shadow-sm"
-          />
-          <line x1="-8" y1="0" x2="8" y2="0" stroke="#0284c7" strokeWidth="1.5" className="pointer-events-none" />
-          <line x1="0" y1="-8" x2="0" y2="8" stroke="#0284c7" strokeWidth="1.5" className="pointer-events-none" />
-
-          {/* Çentikler ve Derece Yazıları */}
-          {ticks.map((t) => (
-            <g key={`tick-${t.d}`} className="pointer-events-none">
-              <line
-                x1={t.x1}
-                y1={t.y1}
-                x2={t.x2}
-                y2={t.y2}
-                stroke="#0369a1"
-                strokeWidth={t.isSpecial ? 2 : t.isMajor ? 1.5 : 0.8}
-              />
-              {t.labelPos && (
-                <text
-                  x={t.labelPos.x}
-                  y={t.labelPos.y + 3}
-                  textAnchor="middle"
-                  fill="#0c4a6e"
-                  className="text-[9px] font-black font-sans"
-                >
-                  {t.d}°
-                </text>
-              )}
-            </g>
-          ))}
-
-          {/* Ölçülen Açı Sektörü (Renkli Dolgu)
-              Yay, açı ucundan (protractorAngle) taban ucuna (0°) doğru çizilir.
-              SVG y ekseni aşağı olduğu için bu yön EKRANDA saat yönüdür => sweep-flag = 1.
-              Açı [0, 180] aralığında kısıtlı olduğundan large-arc-flag daima 0. */}
-          {protractorAngle > 0 && (
-            <path
-              d={`M 0 0 L ${Math.cos((protractorAngle * Math.PI) / 180) * (protRadius - 5)} ${-Math.sin((protractorAngle * Math.PI) / 180) * (protRadius - 5)} A ${protRadius - 5} ${protRadius - 5} 0 0 1 ${protRadius - 5} 0 Z`}
-              fill="#f59e0b"
-              fillOpacity="0.32"
-              stroke="#d97706"
-              strokeWidth="2"
-              onMouseDown={handleProtractorMouseDown}
-              className="cursor-grab active:cursor-grabbing"
-            />
-          )}
-
-          {/* İbre Geniş Tıklama/Tutma Alanı */}
-          <line
-            x1="0"
-            y1="0"
-            x2={Math.cos((protractorAngle * Math.PI) / 180) * (protRadius + 22)}
-            y2={-Math.sin((protractorAngle * Math.PI) / 180) * (protRadius + 22)}
-            stroke="transparent"
-            strokeWidth="28"
-            onMouseDown={handleNeedleMouseDown}
-            className="cursor-pointer"
-          />
-
-          {/* İnteraktif Açı İbresi (Kol) */}
-          <line
-            x1="0"
-            y1="0"
-            x2={Math.cos((protractorAngle * Math.PI) / 180) * (protRadius + 18)}
-            y2={-Math.sin((protractorAngle * Math.PI) / 180) * (protRadius + 18)}
-            stroke="#ea580c"
-            strokeWidth="4"
-            strokeLinecap="round"
-            onMouseDown={handleNeedleMouseDown}
-            className="cursor-pointer pointer-events-none drop-shadow-md"
-          />
-
-          {/* İbre Tutamağı (Döner İbre Başlığı) */}
+    const centik = iletkiCentikYollari(R);
+    const bant = R - 30;
+    const kolUcu = yon(a, R + 12);
+    const kolTopuz = yon(a, R + 22);
+    const kolIc = yon(a, 0.3 * R);
+    const tabanTopuz = { x: -0.55 * R, y: 34 };
+    const sektorUc = yon(a, bant);
+    const yayUc = yon(a, 0.3 * R);
+    // Kalıcı ölçü yazısı: ölçülen açının (dar açıda tümlerinin) ortasında, dik yazılır
+    const yaziYonu = a >= 40 ? a / 2 : (a + 180) / 2;
+    const yazi = yereldenEkrana(koken, donus, yon(yaziYonu, 0.62 * R));
+    const yarimDaire = `M ${-R} 0 A ${R} ${R} 0 0 1 ${R} 0 Z`;
+
+    return (
+      <g
+        data-olcme-araci="measure_angle"
+        data-aci={a}
+        data-taban={normalizeDeg(taban)}
+        data-yaricap={R}
+        className="select-none"
+        onContextMenu={onContextMenuArac}
+      >
+        <g transform={`translate(${koken.x} ${koken.y}) rotate(${donus})`}>
           <g
-            transform={`translate(${Math.cos((protractorAngle * Math.PI) / 180) * (protRadius + 18)}, ${-Math.sin((protractorAngle * Math.PI) / 180) * (protRadius + 18)})`}
-            onMouseDown={handleNeedleMouseDown}
-            className="cursor-grab active:cursor-grabbing group/knob"
+            data-tutamac="govde"
+            className="cursor-grab active:cursor-grabbing"
+            onPointerDown={(e) => govdeyiSurukle(e, protractorPos, setProtractorPos)}
           >
-            <circle
-              cx="0"
-              cy="0"
-              r="12"
-              fill="#ea580c"
-              stroke="#ffffff"
-              strokeWidth="2.5"
-              className="shadow-xl group-hover/knob:scale-125 transition-transform"
-            />
-            <circle cx="0" cy="0" r="4" fill="#ffffff" />
-          </g>
-
-          {/* TABAN DÖNDÜRME TUTAMACI (Sol Uç - Mavi Topuz)
-              Cetveldeki döndürme tutamacıyla aynı kalıp: kavrama ofseti korunur,
-              Shift ile 5° adımlara yuvarlanır. */}
-          <g
-            transform={`translate(${-protRadius - 26}, 0)`}
-            onMouseDown={handleProtractorRotateMouseDown}
-            className="cursor-grab active:cursor-grabbing group/prot-rotate"
-          >
-            <title>Açıölçeri Döndür - Tabanı ışınla hizala (Shift ile 5° adımlarla)</title>
-            {/* Tutamağı taban çizgisine bağlayan sap */}
-            <line x1="26" y1="0" x2="0" y2="0" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
-            <circle
-              cx="0"
-              cy="0"
-              r="13"
-              fill="#2563eb"
-              stroke="#ffffff"
-              strokeWidth="2.5"
-              className="drop-shadow-lg group-hover/prot-rotate:scale-125 transition-transform"
-            />
-            {/* Dönme yönünü anlatan ok işareti */}
+            <path d={yarimDaire} fill="none" strokeWidth={3} className={SAHTE_GOLGE} />
+            <path d={yarimDaire} strokeWidth={1.5} className={`fill-ada-fildisi/35 dark:fill-ada-deniz-koyu/40 ${GOVDE_KENAR}`} />
+            {/* Ölçek bandı: çentik ve sayılar okunur kalsın diye daha opak */}
             <path
-              d="M -5 3 A 6 6 0 1 1 4 3"
+              d={`M ${R} 0 A ${R} ${R} 0 0 0 ${-R} 0 L ${-bant} 0 A ${bant} ${bant} 0 0 1 ${bant} 0 Z`}
+              className="fill-ada-fildisi/85 dark:fill-ada-deniz-koyu/80"
+            />
+            <path
+              d={`M ${-bant} 0 A ${bant} ${bant} 0 0 1 ${bant} 0`}
               fill="none"
-              stroke="#ffffff"
-              strokeWidth="2"
-              strokeLinecap="round"
-              className="pointer-events-none"
+              strokeWidth={1}
+              className="stroke-ada-deniz/35 dark:stroke-ada-vurgu/35 pointer-events-none"
             />
-            <path d="M 4 6 L 4 0 L 8 3 Z" fill="#ffffff" className="pointer-events-none" />
-          </g>
-        </g>
-
-        {/* 1.B SABİT ARAYÜZ KATMANI: paneller ve düğmeler taban açısıyla birlikte
-            dönerse baş aşağı okunur; bu yüzden döndürülmemiş grupta duruyorlar. */}
-        <g transform={`translate(${protScreen.x}, ${protScreen.y})`}>
-          {/* Canlı Açı Değer Paneli */}
-          <g transform={`translate(0, ${-protRadius - 32})`}>
-            <rect
-              x="-85"
-              y="-15"
-              width="170"
-              height="30"
-              rx="12"
-              fill="#0f172a"
-              fillOpacity="0.95"
-              stroke="#38bdf8"
-              strokeWidth="1.5"
-              className="shadow-2xl"
-              onMouseDown={handleProtractorMouseDown}
+            <path
+              d={`M ${-0.42 * R} 0 A ${0.42 * R} ${0.42 * R} 0 0 1 ${0.42 * R} 0`}
+              fill="none"
+              strokeWidth={1}
+              className="stroke-ada-deniz/25 dark:stroke-ada-vurgu/25 pointer-events-none"
             />
-            <text x="0" y="5" textAnchor="middle" fill="#ffffff" className="font-sans font-black text-xs pointer-events-none">
-              📐 {protractorAngle}° • {getAngleType(protractorAngle)}
-            </text>
-          </g>
-
-          {/* Hızlı Açı Seçim Düğmeleri (0°, 30°, 45°, 60°, 90°, 120°, 135°, 150°, 180°) */}
-          <g transform={`translate(-130, 24)`}>
-            {[0, 30, 45, 60, 90, 120, 135, 150, 180].map((deg, i) => (
-              <g
-                key={`deg-btn-${deg}`}
-                transform={`translate(${i * 29}, 0)`}
-                className="cursor-pointer"
-                onClick={() => setProtractorAngle(deg)}
-              >
-                <rect
-                  width="26"
-                  height="20"
-                  rx="6"
-                  fill={protractorAngle === deg ? '#0284c7' : '#ffffff'}
-                  stroke="#0284c7"
-                  strokeWidth="1.2"
-                  className="shadow-sm hover:opacity-90"
+            {/* Ölçülen açı dilimi */}
+            {a > 0 && (
+              <>
+                <path
+                  d={`M 0 0 L ${sektorUc.x} ${sektorUc.y} A ${bant} ${bant} 0 0 1 ${bant} 0 Z`}
+                  className="fill-ada-altin/20 dark:fill-ada-fener/20 pointer-events-none"
                 />
-                <text
-                  x="13"
-                  y="14"
-                  textAnchor="middle"
-                  fill={protractorAngle === deg ? '#ffffff' : '#0369a1'}
-                  className="text-[9px] font-black font-sans"
-                >
-                  {deg}°
-                </text>
-              </g>
-            ))}
-          </g>
-
-          {/* Taban Açısı Bilgi Çubuğu + Sıfırlama + Tuvale Aktarma */}
-          <g transform={`translate(-130, 50)`}>
-            <rect
-              width="118"
-              height="22"
-              rx="7"
-              fill="#0f172a"
-              fillOpacity="0.95"
-              stroke="#38bdf8"
-              strokeWidth="1"
-              className="shadow-lg"
-            />
-            <text
-              x="59"
-              y="15"
-              textAnchor="middle"
-              fill="#e0f2fe"
-              className="text-[9px] font-bold font-sans pointer-events-none"
-            >
-              Taban: {protractorBaseAngle}°
-            </text>
-
-            <g
-              transform="translate(124, 0)"
-              className="cursor-pointer"
-              onClick={() => setProtractorBaseAngle(0)}
-            >
-              <title>Tabanı Yatay Yap (0°)</title>
-              <rect width="58" height="22" rx="7" fill="#1e293b" stroke="#64748b" strokeWidth="0.8" />
-              <text x="29" y="15" textAnchor="middle" fill="#94a3b8" className="font-bold text-[9px] font-sans">
-                0° Yatay
-              </text>
-            </g>
-
-            {onAddAngleFromProtractor && (
-              <g
-                transform="translate(188, 0)"
-                className="cursor-pointer group/prot-add"
-                onClick={() => onAddAngleFromProtractor(protractorPos, protractorAngle, protractorBaseAngle)}
-              >
-                <title>Ölçülen açıyı tuvale nesne olarak ekle</title>
-                <rect
-                  width="90"
-                  height="22"
-                  rx="7"
-                  fill="#0284c7"
-                  className="group-hover/prot-add:fill-sky-400 transition-colors shadow-sm"
+                <path
+                  d={`M ${yayUc.x} ${yayUc.y} A ${0.3 * R} ${0.3 * R} 0 0 1 ${0.3 * R} 0`}
+                  fill="none"
+                  strokeWidth={2}
+                  className="stroke-ada-altin dark:stroke-ada-fener pointer-events-none"
                 />
-                <text x="45" y="15" textAnchor="middle" fill="#ffffff" className="font-black text-[9px] font-sans">
-                  ✨ Tuvale Ekle
-                </text>
-              </g>
+              </>
             )}
+            <path d={centik.on} strokeWidth={1.25} strokeLinecap="butt" className={CENTIK_ANA} />
+            <path d={centik.bes} strokeWidth={0.9} strokeLinecap="butt" className={CENTIK_ORTA} />
+            {centik.bir && <path d={centik.bir} strokeWidth={0.6} strokeLinecap="butt" className={CENTIK_INCE} />}
+            {iletkiEtiketleri(R).map((t) => (
+              <text
+                key={t.derece}
+                x={t.x}
+                y={t.derece % 180 === 0 ? t.y - 5 : t.y + 3.5 /* 0 ve 180 taban çizgisinin üstünde */}
+                textAnchor="middle"
+                className={`text-[10px] ${t.derece % 90 === 0 ? 'font-bold' : ''} ${SAYI}`}
+              >
+                {t.derece}
+              </text>
+            ))}
+            <line x1={-R} y1={0} x2={R} y2={0} strokeWidth={2} className={OLCU_CIZGISI} />
+            <circle
+              r={4}
+              strokeWidth={1.25}
+              className="fill-ada-fildisi dark:fill-ada-deniz-koyu stroke-ada-murekkep dark:stroke-ada-fildisi pointer-events-none"
+            />
+            <path d="M-9 0H9M0-9V9" strokeWidth={1} className={CENTIK_ANA} />
           </g>
-        </g>
-        </>
-      )}
 
-      {/* 2. İNTERAKTİF CETVEL (RULER) */}
-      {activeTool === 'ruler' && (
-        <>
-        {/* 2.A DÖNEN CETVEL GÖVDESİ */}
-        <g
-          transform={`translate(${rulerScreen.x}, ${rulerScreen.y}) rotate(${rulerRotation})`}
-          className="ruler-instrument select-none"
-        >
-          {/* A) Cetvel Gövdesi (Sürüklenebilir) */}
-          <rect
-            x="0"
-            y="-22"
-            width={rulerLength * viewport.zoom}
-            height="44"
-            rx="6"
-            fill="#fef08a"
-            fillOpacity="0.92"
-            stroke="#ca8a04"
-            strokeWidth="2.5"
-            onMouseDown={handleRulerMouseDown}
-            className="cursor-grab active:cursor-grabbing shadow-2xl backdrop-blur-sm hover:[fill-opacity:0.98] transition-colors"
+          {/* Kol (ibre): görünen çizgi + geniş tutma şeridi + topuz */}
+          <line x1={0} y1={0} x2={kolUcu.x} y2={kolUcu.y} strokeWidth={3} strokeLinecap="round" className="stroke-ada-mercan pointer-events-none" />
+          <line
+            data-tutamac="kol"
+            x1={kolIc.x}
+            y1={kolIc.y}
+            x2={kolTopuz.x}
+            y2={kolTopuz.y}
+            strokeWidth={30}
+            className="stroke-transparent cursor-grab active:cursor-grabbing"
+            onPointerDown={(e) => {
+              const p = koken;
+              const bas = a;
+              suruklemeyiBaslat(
+                e,
+                'kol',
+                ({ x, y, shift }) => setProtractorAngle(iletkiKolAcisi(x - p.x, -(y - p.y), taban, shift)),
+                () => setProtractorAngle(bas)
+              );
+            }}
           />
-
-          {/* B) Santimetre / Birim Çentikleri ve Sayıları */}
-          {Array.from({ length: Math.floor(rulerLength) + 1 }).map((_, cm) => {
-            const xPos = cm * viewport.zoom;
-            return (
-              <g key={`cm-${cm}`} className="pointer-events-none">
-                {/* Ana CM Çizgisi */}
-                <line
-                  x1={xPos}
-                  y1="-22"
-                  x2={xPos}
-                  y2="-4"
-                  stroke="#854d0e"
-                  strokeWidth="1.8"
-                />
-                {/* Rakam */}
-                <text
-                  x={xPos}
-                  y="12"
-                  textAnchor="middle"
-                  fill="#713f12"
-                  className="text-[10px] font-black font-mono select-none"
-                >
-                  {cm}
-                </text>
-
-                {/* Milimetre Alt Çentikleri */}
-                {cm < rulerLength &&
-                  [1, 2, 3, 4, 5, 6, 7, 8, 9].map((mm) => {
-                    const mmX = xPos + (mm * viewport.zoom) / 10;
-                    if (mmX > rulerLength * viewport.zoom) return null;
-                    return (
-                      <line
-                        key={`mm-${cm}-${mm}`}
-                        x1={mmX}
-                        y1="-22"
-                        x2={mmX}
-                        y2={mm === 5 ? '-10' : '-16'}
-                        stroke="#a16207"
-                        strokeWidth={mm === 5 ? 1.2 : 0.75}
-                      />
-                    );
-                  })}
-              </g>
-            );
+          {tutamacCiz({
+            tur: 'kol',
+            x: kolTopuz.x,
+            y: kolTopuz.y,
+            renk: 'mercan',
+            glif: 'kol',
+            baslik: 'Açıyı ölçmek için kolu sürükleyin (Shift: 5° adım)',
+            onPointerDown: (e) => {
+              const p = koken;
+              const bas = a;
+              suruklemeyiBaslat(
+                e,
+                'kol',
+                ({ x, y, shift }) => setProtractorAngle(iletkiKolAcisi(x - p.x, -(y - p.y), taban, shift)),
+                () => setProtractorAngle(bas)
+              );
+            },
           })}
 
-          {/* C) Sağ Kenar Uzunluk Boyutlandırma Tutamacı (Sağ Kenarı Basılı Tutup Çekerek Uzat/Kısalt) */}
-          <g
-            transform={`translate(${rulerLength * viewport.zoom}, 0)`}
-            onMouseDown={handleRulerResizeMouseDown}
-            className="cursor-ew-resize group/ruler-resize"
-          >
-            {/* Geniş tutma çizgisi */}
-            <line
-              x1="0"
-              y1="-24"
-              x2="0"
-              y2="24"
-              stroke="#ea580c"
-              strokeWidth="5"
-              strokeLinecap="round"
-              className="group-hover/ruler-resize:stroke-orange-600 transition-colors"
-            />
-            {/* Döner/çeker topuz */}
-            <circle
-              cx="0"
-              cy="0"
-              r="13"
-              fill="#ea580c"
-              stroke="#ffffff"
-              strokeWidth="2.5"
-              className="drop-shadow-lg group-hover/ruler-resize:scale-125 transition-transform"
-            />
-            <circle cx="0" cy="0" r="4" fill="#ffffff" />
-          </g>
-
-          {/* D) Döndürme Tutamacı (Sağ Üst Mavi Topuz) */}
-          <g
-            transform={`translate(${rulerLength * viewport.zoom + 22}, -20)`}
-            onMouseDown={handleRulerRotateMouseDown}
-            className="cursor-grab active:cursor-grabbing group/ruler-rotate"
-          >
-            <title>Cetveli Döndür (Shift ile 15° adımlarla)</title>
-            <circle
-              cx="0"
-              cy="0"
-              r="11"
-              fill="#2563eb"
-              stroke="#ffffff"
-              strokeWidth="2"
-              className="drop-shadow-md group-hover/ruler-rotate:scale-125 transition-transform"
-            />
-            <circle cx="0" cy="0" r="3.5" fill="#ffffff" />
-          </g>
+          {/* Taban döndürme: taban çizgisinin altında, kol topuzundan uzakta */}
+          <line
+            x1={tabanTopuz.x}
+            y1={1}
+            x2={tabanTopuz.x}
+            y2={23}
+            strokeWidth={2}
+            className={HALE_SINIFI.vurgu.sap}
+          />
+          {tutamacCiz({
+            tur: 'taban',
+            x: tabanTopuz.x,
+            y: tabanTopuz.y,
+            renk: 'vurgu',
+            glif: 'don',
+            baslik: 'Tabanı döndürmek için sürükleyin (Shift: 5° adım)',
+            onPointerDown: (e) => donusuSurukle(e, 'taban', koken, taban, setProtractorBaseAngle, true, 5),
+          })}
         </g>
 
-        {/* 2.B CETVEL ARAYÜZ KATMANI (DÖNDÜRÜLMEZ)
-            Paneller cetvelin döndürülmüş orta noktasına, çentikli yüzeyine dik
-            olarak çapalanır; böylece cetvel 180° çevrilse bile yazılar düz kalır. */}
-        <g className="ruler-instrument-ui select-none">
-          {/* E) Üst Cetvel Bilgi ve Hızlı Ayar Paneli */}
-          <g
-            transform={`translate(${rulerMidX + rulerPerpX * 48 - 105}, ${rulerMidY + rulerPerpY * 48 - 14})`}
-          >
-            <rect
-              width="210"
-              height="28"
-              rx="10"
-              fill="#0f172a"
-              fillOpacity="0.96"
-              stroke="#ca8a04"
-              strokeWidth="1.2"
-              className="shadow-2xl"
-              onMouseDown={handleRulerMouseDown}
-            />
-            <text x="50" y="18" textAnchor="middle" fill="#ffffff" className="font-black text-xs font-sans pointer-events-none">
-              📏 {formatTurkishNumber(rulerLength)} br • {rulerRotation}°
-            </text>
+        {gosterim.olcu && aktifTutamac !== 'kol' && (
+          <text x={yazi.x} y={yazi.y + 4} textAnchor="middle" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
+            {iletkiOkumasi(a)}
+          </text>
+        )}
+        {aktifTutamac === 'kol' && okumaHapi(iletkiOkumasi(a), yereldenEkrana(koken, donus, kolTopuz))}
+        {aktifTutamac === 'taban' && okumaHapi(tabanOkumasi(taban), yereldenEkrana(koken, donus, tabanTopuz))}
+      </g>
+    );
+  };
 
-            {/* Uzunluk [-] [+] Düğmeleri */}
-            <g
-              transform="translate(105, 4)"
-              className="cursor-pointer"
-              onClick={() => setRulerLength((l) => Math.max(2, l - 1))}
-            >
-              <rect width="20" height="20" rx="5" fill="#334155" />
-              <text x="10" y="14" textAnchor="middle" fill="#ffffff" className="font-black text-xs">-</text>
-            </g>
-            <g
-              transform="translate(130, 4)"
-              className="cursor-pointer"
-              onClick={() => setRulerLength((l) => Math.min(35, l + 1))}
-            >
-              <rect width="20" height="20" rx="5" fill="#ca8a04" />
-              <text x="10" y="14" textAnchor="middle" fill="#ffffff" className="font-black text-xs">+</text>
-            </g>
-            {/* 0° Yatay Yap Butonu */}
-            <g
-              transform="translate(155, 4)"
-              className="cursor-pointer"
-              onClick={() => setRulerRotation(0)}
-            >
-              <title>Açıyı Sıfırla (Yatay)</title>
-              <rect width="46" height="20" rx="5" fill="#1e293b" stroke="#64748b" strokeWidth="0.8" />
-              <text x="23" y="13" textAnchor="middle" fill="#94a3b8" className="font-bold text-[9px]">0° Yatay</text>
-            </g>
+  // 2) CETVEL --------------------------------------------------------------------
+  const cetvelCiz = () => {
+    const L = rulerLength;
+    const Lp = L * z;
+    const koken = worldToScreen(rulerPos, viewport);
+    const donus = rulerRotation;
+    const b = CETVEL_UC_BOSLUK;
+    const H = CETVEL_KALINLIK;
+    const centik = cetvelCentikYollari(L, z);
+    const boyTopuz = { x: Lp + 24, y: H / 2 };
+    const donTopuz = { x: Lp - 20, y: H + 26 };
+    // Ölçek şeridi (çentiklerin olduğu 18 px) daha opak, gövdenin geri kalanı yarı saydam
+    const serit = `M ${-b} ${b} A ${b} ${b} 0 0 1 0 0 H ${Lp} A ${b} ${b} 0 0 1 ${Lp + b} ${b} V 18 H ${-b} Z`;
+    const alt = `M ${-b} 18 H ${Lp + b} V ${H - b} A ${b} ${b} 0 0 1 ${Lp} ${H} H 0 A ${b} ${b} 0 0 1 ${-b} ${H - b} Z`;
+
+    return (
+      <g
+        data-olcme-araci="ruler"
+        data-boy={L}
+        data-donus={normalizeDeg(-donus)}
+        className="select-none"
+        onContextMenu={onContextMenuArac}
+      >
+        <g transform={`translate(${koken.x} ${koken.y}) rotate(${donus})`}>
+          <g
+            data-tutamac="govde"
+            className="cursor-grab active:cursor-grabbing"
+            onPointerDown={(e) => govdeyiSurukle(e, rulerPos, setRulerPos)}
+          >
+            <rect x={-b} y={0} width={Lp + 2 * b} height={H} rx={b} fill="none" strokeWidth={3} className={SAHTE_GOLGE} />
+            <path d={alt} className="fill-ada-fildisi/60 dark:fill-ada-deniz-koyu/60" />
+            <path d={serit} className="fill-ada-fildisi/85 dark:fill-ada-deniz-koyu/80" />
+            <rect x={-b} y={0} width={Lp + 2 * b} height={H} rx={b} strokeWidth={1.5} className={`fill-transparent ${GOVDE_KENAR}`} />
+            {/* Ölçü kenarı: 0 çentiği ve döndürme merkezi bu çizginin üstünde */}
+            <line x1={0} y1={0} x2={Lp} y2={0} strokeWidth={2} className={OLCU_CIZGISI} />
+            <path d={centik.birim} strokeWidth={1.25} strokeLinecap="butt" className={CENTIK_ANA} />
+            {centik.yarim && <path d={centik.yarim} strokeWidth={1} strokeLinecap="butt" className={CENTIK_ORTA} />}
+            {centik.onda && <path d={centik.onda} strokeWidth={0.75} strokeLinecap="butt" className={CENTIK_INCE} />}
+            {cetvelEtiketleri(L, z).map((k) => (
+              <text key={k} x={k * z} y={31} textAnchor="middle" className={`text-[11px] ${SAYI}`}>
+                {k}
+              </text>
+            ))}
+            <text x={6} y={43} className="text-[9px] font-sans font-semibold fill-ada-murekkep/55 dark:fill-ada-fildisi/55 pointer-events-none select-none">
+              br
+            </text>
           </g>
 
-          {/* F) Hızlı Uzunluk Şablonları (5, 8, 10, 12, 15, 20 br) */}
-          <g
-            transform={`translate(${rulerMidX - rulerPerpX * 46 - 110}, ${rulerMidY - rulerPerpY * 46 - 9})`}
-          >
-            {[5, 8, 10, 12, 15, 20].map((len, i) => (
-              <g
-                key={`rlen-${len}`}
-                transform={`translate(${i * 37}, 0)`}
-                className="cursor-pointer"
-                onClick={() => setRulerLength(len)}
-              >
-                <rect
-                  width="33"
-                  height="18"
-                  rx="5"
-                  fill={rulerLength === len ? '#ca8a04' : '#1e293b'}
-                  stroke="#ca8a04"
-                  strokeWidth="0.8"
-                  className="shadow-sm hover:opacity-90"
-                />
-                <text
-                  x="16.5"
-                  y="12"
-                  textAnchor="middle"
-                  fill="#ffffff"
-                  className="font-bold text-[9px] font-sans"
-                >
-                  {len} br
-                </text>
-              </g>
-            ))}
+          {/* Boy tutamacı: sağ ucun dışında; 0 ucu yerinde kalır, tam br'ye yapışır */}
+          <line x1={Lp + b} y1={H / 2} x2={Lp + 14} y2={H / 2} strokeWidth={2} className={HALE_SINIFI.mercan.sap} />
+          {tutamacCiz({
+            tur: 'boy',
+            x: boyTopuz.x,
+            y: boyTopuz.y,
+            renk: 'mercan',
+            glif: 'boy',
+            baslik: 'Boyu değiştirmek için sürükleyin',
+            onPointerDown: (e) => {
+              const r = (donus * Math.PI) / 180;
+              const izdusum = (x: number, y: number) => (x - koken.x) * Math.cos(r) + (y - koken.y) * Math.sin(r);
+              const ilk = L;
+              suruklemeyiBaslat(
+                e,
+                'boy',
+                ({ x, y, x0, y0 }) => {
+                  const yeni = cetvelBoyuSuruklemeden(ilk, izdusum(x0, y0), izdusum(x, y), z);
+                  tercihRef.current.cetvelBoy = yeni;
+                  setRulerLength(yeni);
+                },
+                () => {
+                  tercihRef.current.cetvelBoy = ilk;
+                  setRulerLength(ilk);
+                }
+              );
+            },
+          })}
 
-            {/* Ölçülen Uzunluğu Tuvale Doğru Parçası Olarak Ekle */}
-            {onAddSegmentFromRuler && (
-              <g
-                transform="translate(65, 26)"
-                className="cursor-pointer group/ruler-add"
-                onClick={() => {
-                  // Cetvel ekran uzayında rotate(rulerRotation) ile döndürülüyor;
-                  // dünya koordinatında y ekseni ters olduğu için açı işareti çevriliyor.
-                  const rad = (-rulerRotation * Math.PI) / 180;
-                  onAddSegmentFromRuler(rulerPos, {
-                    x: Number((rulerPos.x + rulerLength * Math.cos(rad)).toFixed(2)),
-                    y: Number((rulerPos.y + rulerLength * Math.sin(rad)).toFixed(2)),
-                  });
-                }}
-              >
-                <title>Cetvel boyunu tuvale doğru parçası olarak ekle</title>
-                <rect
-                  width="88"
-                  height="22"
-                  rx="7"
-                  fill="#ca8a04"
-                  className="group-hover/ruler-add:fill-yellow-400 transition-colors shadow-sm"
-                />
-                <text x="44" y="15" textAnchor="middle" fill="#ffffff" className="font-black text-[9px] font-sans">
-                  ✨ Tuvale Ekle
+          {/* Döndürme tutamacı: ölçü yapılmayan alt kenarda, boy tutamacından uzakta */}
+          <line x1={donTopuz.x} y1={H} x2={donTopuz.x} y2={H + 16} strokeWidth={2} className={HALE_SINIFI.vurgu.sap} />
+          {tutamacCiz({
+            tur: 'don',
+            x: donTopuz.x,
+            y: donTopuz.y,
+            renk: 'vurgu',
+            glif: 'don',
+            baslik: 'Döndürmek için sürükleyin (Shift: 15° adım)',
+            onPointerDown: (e) => donusuSurukle(e, 'don', koken, donus, setRulerRotation, false, 15),
+          })}
+        </g>
+
+        {aktifTutamac === 'boy' && okumaHapi(cetvelOkumasi(L), yereldenEkrana(koken, donus, boyTopuz))}
+        {aktifTutamac === 'don' && okumaHapi(donusOkumasi(donus), yereldenEkrana(koken, donus, donTopuz))}
+      </g>
+    );
+  };
+
+  // 3) GÖNYE ---------------------------------------------------------------------
+  const gonyeCiz = () => {
+    const Lp = setsquareSize * z;
+    const koken = worldToScreen(setsquarePos, viewport);
+    const donus = setsquareRotation;
+    const d = 0.16 * Lp;
+    const ic = Lp - d * (1 + Math.SQRT2);
+    const govdeYolu = `M 0 0 L ${Lp} 0 L 0 ${-Lp} Z M ${d} ${-d} L ${ic} ${-d} L ${d} ${-ic} Z`;
+    const s = Math.min(14, 0.1 * Lp);
+    const donTopuz = { x: Lp / 2 + 20, y: -Lp / 2 - 20 };
+
+    return (
+      <g
+        data-olcme-araci="setsquare"
+        data-donus={normalizeDeg(-donus)}
+        data-boy={setsquareSize}
+        className="select-none"
+        onContextMenu={onContextMenuArac}
+      >
+        <g transform={`translate(${koken.x} ${koken.y}) rotate(${donus})`}>
+          <g
+            data-tutamac="govde"
+            className="cursor-grab active:cursor-grabbing"
+            onPointerDown={(e) => govdeyiSurukle(e, setsquarePos, setSetsquarePos)}
+          >
+            {/* Boşluk dahil tüm üçgen tutulabilir (boşluğa basınca tuvale geçmesin) */}
+            <polygon points={`0,0 ${Lp},0 0,${-Lp}`} className="fill-transparent" />
+            <path d={govdeYolu} fillRule="evenodd" fill="none" strokeWidth={3} className={SAHTE_GOLGE} />
+            <path
+              d={govdeYolu}
+              fillRule="evenodd"
+              strokeWidth={1.5}
+              // Açık zeminde fildişi gövde zeminle karışır: saydam plastik gibi hafif vurgu tonu
+              className={`fill-ada-vurgu/15 dark:fill-ada-deniz-koyu/65 ${GOVDE_KENAR}`}
+            />
+            <path d={`M 0 ${-Lp} L 0 0 L ${Lp} 0`} fill="none" strokeWidth={2} className={OLCU_CIZGISI} />
+            <path d={`M 0 ${-s} H ${s} V 0`} fill="none" strokeWidth={1.5} className={OLCU_CIZGISI} />
+            <circle cx={s / 2} cy={-s / 2} r={1.75} className="fill-ada-deniz dark:fill-ada-fener pointer-events-none" />
+            {Lp >= 150 && (
+              <>
+                <text x={s + 5} y={-5} className={`text-[11px] ${SAYI}`}>
+                  90°
                 </text>
-              </g>
+                <text x={0.7 * Lp} y={-5} textAnchor="end" className={`text-[11px] ${SAYI}`}>
+                  45°
+                </text>
+                <text x={5} y={-0.7 * Lp} className={`text-[11px] ${SAYI}`}>
+                  45°
+                </text>
+              </>
             )}
           </g>
+
+          <line
+            x1={Lp / 2}
+            y1={-Lp / 2}
+            x2={Lp / 2 + 13}
+            y2={-Lp / 2 - 13}
+            strokeWidth={2}
+            className={HALE_SINIFI.vurgu.sap}
+          />
+          {tutamacCiz({
+            tur: 'don',
+            x: donTopuz.x,
+            y: donTopuz.y,
+            renk: 'vurgu',
+            glif: 'don',
+            baslik: 'Dik köşesi etrafında döndürmek için sürükleyin (Shift: 15° adım)',
+            onPointerDown: (e) => donusuSurukle(e, 'don', koken, donus, setSetsquareRotation, false, 15),
+          })}
         </g>
-        </>
-      )}
 
-      {/* 3. İNTERAKTİF GÖNYE (SET SQUARE - 90° & 45°/45°) */}
-      {activeTool === 'setsquare' && (
-        <>
-        <g
-          transform={`translate(${setsquareScreen.x}, ${setsquareScreen.y}) rotate(${setsquareRotation})`}
-          onMouseDown={handleSetsquareMouseDown}
-          className="cursor-grab active:cursor-grabbing"
-        >
-          {/* Gönye Üçgen Gövdesi */}
-          <polygon
-            points={`0,0 ${6 * viewport.zoom},0 0,${-6 * viewport.zoom}`}
-            fill="#a7f3d0"
-            fillOpacity="0.82"
-            stroke="#059669"
-            strokeWidth="2.5"
-            className="shadow-2xl"
-          />
+        {aktifTutamac === 'don' && okumaHapi(donusOkumasi(donus), yereldenEkrana(koken, donus, donTopuz))}
+      </g>
+    );
+  };
 
-          {/* İç Üçgen Boşluğu */}
-          <polygon
-            points={`${1.2 * viewport.zoom},${-0.8 * viewport.zoom} ${4.2 * viewport.zoom},${-0.8 * viewport.zoom} ${1.2 * viewport.zoom},${-3.8 * viewport.zoom}`}
-            fill="#f0fdf4"
-            fillOpacity="0.95"
-            stroke="#059669"
-            strokeWidth="1.5"
-          />
+  // 4) ALAN MODELİ ---------------------------------------------------------------
+  const alanCiz = () => {
+    const sutun = areaCols;
+    const satir = areaRows;
+    const koken = worldToScreen(areaModelPos, viewport);
+    const W = sutun * z;
+    const H = satir * z;
+    const kayma = alanKoseKaymasi(z);
+    const koseTopuz = { x: W + kayma, y: -H - kayma };
+    let cift = '';
+    let tek = '';
+    for (let r = 0; r < satir; r++) {
+      for (let c = 0; c < sutun; c++) {
+        const hucre = `M${Number((c * z).toFixed(2))} ${Number((-(r + 1) * z).toFixed(2))}h${z}v${z}h${-z}Z`;
+        if ((r + c) % 2 === 0) cift += hucre;
+        else tek += hucre;
+      }
+    }
+    let izgara = '';
+    for (let c = 1; c < sutun; c++) izgara += `M${Number((c * z).toFixed(2))} 0V${-H}`;
+    for (let r = 1; r < satir; r++) izgara += `M0 ${Number((-r * z).toFixed(2))}H${W}`;
 
-          {/* 90° Dik Açı İşareti (Köşede) */}
-          <rect
-            x="0"
-            y={-0.6 * viewport.zoom}
-            width={0.6 * viewport.zoom}
-            height={0.6 * viewport.zoom}
-            fill="none"
-            stroke="#047857"
-            strokeWidth="2"
-          />
-          <circle
-            cx={0.3 * viewport.zoom}
-            cy={-0.3 * viewport.zoom}
-            r="2.5"
-            fill="#047857"
-          />
-
-          {/* Açı Değerleri */}
-          <text
-            x={0.8 * viewport.zoom}
-            y={-0.8 * viewport.zoom}
-            className="text-[11px] font-black fill-emerald-900"
-          >
-            90°
-          </text>
-          <text
-            x={4.6 * viewport.zoom}
-            y={-0.2 * viewport.zoom}
-            className="text-[10px] font-bold fill-emerald-800"
-          >
-            45°
-          </text>
-          <text
-            x={0.2 * viewport.zoom}
-            y={-4.6 * viewport.zoom}
-            className="text-[10px] font-bold fill-emerald-800"
-          >
-            45°
-          </text>
-
-          {/* DÖNDÜRME TUTAMACI (Hipotenüs Ortasının Dışında - Mavi Topuz)
-              Sürükleme kök <g> üzerinde olduğu için tutamak kendi
-              onMouseDown'ında önce stopPropagation çağırır. */}
+    return (
+      <g data-olcme-araci="area_model" data-sutun={sutun} data-satir={satir} className="select-none" onContextMenu={onContextMenuArac}>
+        <g transform={`translate(${koken.x} ${koken.y})`}>
           <g
-            transform={`translate(${3 * viewport.zoom + 18}, ${-3 * viewport.zoom - 18})`}
-            onMouseDown={handleSetsquareRotateMouseDown}
-            className="cursor-grab active:cursor-grabbing group/ss-rotate"
+            data-tutamac="govde"
+            className="cursor-grab active:cursor-grabbing"
+            onPointerDown={(e) => govdeyiSurukle(e, areaModelPos, setAreaModelPos)}
           >
-            <title>Gönyeyi Döndür - Dik kenarı doğruya hizala (Shift ile 15° adımlarla)</title>
-            {/* Tutamağı hipotenüse bağlayan sap */}
-            <line x1="-16" y1="16" x2="0" y2="0" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" />
-            <circle
-              cx="0"
-              cy="0"
-              r="13"
-              fill="#2563eb"
-              stroke="#ffffff"
-              strokeWidth="2.5"
-              className="drop-shadow-lg group-hover/ss-rotate:scale-125 transition-transform"
-            />
-            <path
-              d="M -5 3 A 6 6 0 1 1 4 3"
-              fill="none"
-              stroke="#ffffff"
-              strokeWidth="2"
-              strokeLinecap="round"
-              className="pointer-events-none"
-            />
-            <path d="M 4 6 L 4 0 L 8 3 Z" fill="#ffffff" className="pointer-events-none" />
-          </g>
-        </g>
-
-        {/* 3.B GÖNYE ARAYÜZ KATMANI (DÖNDÜRÜLMEZ): dönüş bilgisi ve hızlı açılar */}
-        <g className="setsquare-instrument-ui select-none">
-          <g transform={`translate(${ssPanelX - 104}, ${ssPanelY - 13})`}>
-            <rect
-              width="208"
-              height="26"
-              rx="9"
-              fill="#064e3b"
-              fillOpacity="0.96"
-              stroke="#34d399"
-              strokeWidth="1.2"
-              className="shadow-2xl"
-            />
-            <text x="10" y="17" fill="#ffffff" className="font-black text-[10px] font-sans pointer-events-none">
-              📐 Dönüş: {setsquareRotation}°
-            </text>
-            {[0, 45, 90, 135].map((deg, i) => (
-              <g
-                key={`ss-rot-${deg}`}
-                transform={`translate(${96 + i * 28}, 4)`}
-                className="cursor-pointer"
-                onClick={() => setSetsquareRotation(deg)}
-              >
-                <title>Gönyeyi {deg}° konumuna getir</title>
-                <rect
-                  width="26"
-                  height="18"
-                  rx="5"
-                  fill={setsquareRotation === deg ? '#059669' : '#1e293b'}
-                  stroke="#34d399"
-                  strokeWidth="0.8"
-                  className="shadow-sm hover:opacity-90"
-                />
-                <text
-                  x="13"
-                  y="13"
-                  textAnchor="middle"
-                  fill="#ffffff"
-                  className="font-bold text-[9px] font-sans"
-                >
-                  {deg}°
-                </text>
-              </g>
-            ))}
-          </g>
-        </g>
-        </>
-      )}
-
-      {/* 4. İNTERAKTİF ALAN MODELLEME IZGARASI (GEOGEBRA AREA MODEL) */}
-      {activeTool === 'area_model' && (
-        <g transform={`translate(${areaScreen.x}, ${areaScreen.y})`} className="area-model-instrument">
-          {/* A) Model Gövdesi ve Birim Kareler Izgarası (Sürüklenebilir) */}
-          <g onMouseDown={handleAreaModelMouseDown} className="cursor-grab active:cursor-grabbing">
-            {/* Arka Plan Gölge ve Sınır Çerçevesi */}
+            <rect x={0} y={-H} width={W} height={H} rx={3} fill="none" strokeWidth={3} className={SAHTE_GOLGE} />
+            <rect x={0} y={-H} width={W} height={H} rx={3} className="fill-ada-fildisi/80 dark:fill-ada-deniz-koyu/75" />
+            <path d={cift} className="fill-ada-vurgu/25 dark:fill-ada-vurgu/30" />
+            {tek && <path d={tek} className="fill-ada-vurgu/10 dark:fill-ada-vurgu/15" />}
+            {izgara && <path d={izgara} strokeWidth={1} className="stroke-ada-deniz/45 dark:stroke-ada-vurgu/45 pointer-events-none" />}
             <rect
               x={0}
-              y={-areaRows * viewport.zoom}
-              width={areaCols * viewport.zoom}
-              height={areaRows * viewport.zoom}
-              fill="#10b981"
-              fillOpacity={0.08}
-              stroke="#059669"
-              strokeWidth={3}
-              rx={6}
-              className="drop-shadow-2xl"
+              y={-H}
+              width={W}
+              height={H}
+              rx={3}
+              fill="none"
+              strokeWidth={2}
+              className="stroke-ada-deniz dark:stroke-ada-vurgu pointer-events-none"
             />
-
-            {/* Birim Kare Hücreleri */}
-            {Array.from({ length: areaRows }).map((_, r) =>
-              Array.from({ length: areaCols }).map((_, c) => {
-                const cellIndex = (areaRows - 1 - r) * areaCols + c + 1;
-                const cellX = c * viewport.zoom;
-                const cellY = -r * viewport.zoom - viewport.zoom;
-                const isEven = (r + c) % 2 === 0;
-
-                return (
-                  <g key={`cell-${r}-${c}`}>
-                    <rect
-                      x={cellX}
-                      y={cellY}
-                      width={viewport.zoom}
-                      height={viewport.zoom}
-                      fill={isEven ? '#34d399' : '#6ee7b7'}
-                      fillOpacity={0.45}
-                      stroke="#059669"
-                      strokeWidth={1.2}
-                      className="hover:[fill-opacity:0.7] transition-colors"
-                    />
-                    {viewport.zoom >= 26 && (
-                      <text
-                        x={cellX + viewport.zoom / 2}
-                        y={cellY + viewport.zoom / 2 + 4}
-                        textAnchor="middle"
-                        fill="#065f46"
-                        className="font-black text-[11px] font-mono pointer-events-none select-none opacity-80"
-                      >
-                        {cellIndex}
-                      </text>
-                    )}
-                  </g>
-                );
-              })
-            )}
-
-            {/* B) Üst Boyut Etiketi (Genişlik / W) */}
-            <g transform={`translate(0, ${-areaRows * viewport.zoom - 14})`} className="pointer-events-none">
-              <line
-                x1={2}
-                y1={0}
-                x2={areaCols * viewport.zoom - 2}
-                y2={0}
-                stroke="#047857"
-                strokeWidth={2}
-                markerStart="url(#mi-arrow)"
-                markerEnd="url(#mi-arrow)"
-              />
-              <rect
-                x={(areaCols * viewport.zoom) / 2 - 45}
-                y={-10}
-                width={90}
-                height={20}
-                rx={6}
-                fill="#ffffff"
-                stroke="#059669"
-                strokeWidth={1}
-                className="shadow-sm dark:fill-slate-900"
-              />
-              <text
-                x={(areaCols * viewport.zoom) / 2}
-                y={4}
-                textAnchor="middle"
-                fill="#047857"
-                className="font-black text-[10px] font-sans dark:fill-emerald-400"
-              >
-                ⟵ {areaCols} Birim (W) ⟶
-              </text>
-            </g>
-
-            {/* C) Sol Boyut Etiketi (Yükseklik / H) */}
-            <g transform={`translate(-14, 0)`} className="pointer-events-none">
-              <line
-                x1={0}
-                y1={-2}
-                x2={0}
-                y2={-areaRows * viewport.zoom + 2}
-                stroke="#047857"
-                strokeWidth={2}
-                markerStart="url(#mi-arrow)"
-                markerEnd="url(#mi-arrow)"
-              />
-              <rect
-                x={-55}
-                y={(-areaRows * viewport.zoom) / 2 - 10}
-                width={50}
-                height={20}
-                rx={6}
-                fill="#ffffff"
-                stroke="#059669"
-                strokeWidth={1}
-                className="shadow-sm dark:fill-slate-900"
-              />
-              <text
-                x={-30}
-                y={(-areaRows * viewport.zoom) / 2 + 4}
-                textAnchor="middle"
-                fill="#047857"
-                className="font-black text-[10px] font-sans dark:fill-emerald-400"
-              >
-                {areaRows} br (H)
-              </text>
-            </g>
+            {z >= 28 &&
+              Array.from({ length: satir }).map((_, r) =>
+                Array.from({ length: sutun }).map((__, c) => (
+                  <text
+                    key={`${r}-${c}`}
+                    x={c * z + z / 2}
+                    y={-r * z - z / 2 + 4}
+                    textAnchor="middle"
+                    className="text-[11px] font-medium font-sans tabular-nums fill-ada-murekkep/70 dark:fill-ada-fildisi/75 pointer-events-none select-none"
+                  >
+                    {(satir - 1 - r) * sutun + c + 1}
+                  </text>
+                ))
+              )}
           </g>
 
-          {/* D) Sağ Üst Köşe Boyutlandırma Tutamağı (Resize Handle) */}
-          <g
-            transform={`translate(${areaCols * viewport.zoom}, ${-areaRows * viewport.zoom})`}
-            onMouseDown={handleAreaResizeMouseDown}
-            className="cursor-nesw-resize group/handle"
-          >
-            <circle
-              cx={0}
-              cy={0}
-              r={14}
-              fill="#2563eb"
-              stroke="#ffffff"
-              strokeWidth={3}
-              className="drop-shadow-lg group-hover/handle:scale-125 transition-transform"
-            />
-            <circle cx={0} cy={0} r={4} fill="#ffffff" />
-          </g>
-
-          {/* E) Üst Formül ve Canlı Çözüm Başlığı */}
-          <g transform={`translate(${((areaCols * viewport.zoom) / 2) - 130}, ${-areaRows * viewport.zoom - 52})`}>
-            <rect
-              width={260}
-              height={32}
-              rx={12}
-              fill="#064e3b"
-              fillOpacity={0.96}
-              stroke="#34d399"
-              strokeWidth={1.5}
-              className="shadow-2xl cursor-grab active:cursor-grabbing"
-              onMouseDown={handleAreaModelMouseDown}
-            />
-            <text x={130} y={16} textAnchor="middle" fill="#ffffff" className="font-black text-xs font-sans pointer-events-none">
-              🟩 {areaCols} × {areaRows} = {areaCols * areaRows} br² (Alan)
+          {/* Kenar uzunlukları ve alan/çevre: yalnız yazı (hap ya da düğme yok) */}
+          <text x={W / 2} y={-H - 8} textAnchor="middle" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
+            {sutun} br
+          </text>
+          <text x={-8} y={-H / 2 + 4} textAnchor="end" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
+            {satir} br
+          </text>
+          {gosterim.alan && aktifTutamac !== 'kose' && (
+            <text x={W / 2} y={22} textAnchor="middle" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
+              {alanOkumasi(sutun, satir)}
             </text>
-            <text x={130} y={27} textAnchor="middle" fill="#a7f3d0" className="font-bold text-[9px] font-sans pointer-events-none">
-              Çevre: 2 × ({areaCols} + {areaRows}) = {2 * (areaCols + areaRows)} br
-            </text>
-          </g>
-
-          {/* F) İnteraktif Hızlı Kontrol ve Boyutlandırma Çubuğu (W + / -, H + / -, Şekli Ekle) */}
-          <g transform={`translate(${((areaCols * viewport.zoom) / 2) - 150}, 16)`}>
-            <rect
-              width={300}
-              height={38}
-              rx={12}
-              fill="#0f172a"
-              fillOpacity={0.96}
-              stroke="#059669"
-              strokeWidth={1.5}
-              className="shadow-2xl"
-            />
-
-            {/* Genişlik (W) [-] [+] */}
-            <g transform="translate(10, 8)">
-              <text x="0" y="16" fill="#a7f3d0" className="font-bold text-[10px] font-sans">
-                W:
-              </text>
-              <g
-                transform="translate(18, 0)"
-                className="cursor-pointer"
-                onClick={() => setAreaCols((c) => Math.max(1, c - 1))}
-              >
-                <rect width="20" height="22" rx="5" fill="#334155" />
-                <text x="10" y="15" textAnchor="middle" fill="#ffffff" className="font-black text-xs">
-                  -
-                </text>
-              </g>
-              <text x="48" y="16" textAnchor="middle" fill="#ffffff" className="font-black text-xs font-mono">
-                {areaCols}
-              </text>
-              <g
-                transform="translate(58, 0)"
-                className="cursor-pointer"
-                onClick={() => setAreaCols((c) => Math.min(15, c + 1))}
-              >
-                <rect width="20" height="22" rx="5" fill="#059669" />
-                <text x="10" y="15" textAnchor="middle" fill="#ffffff" className="font-black text-xs">
-                  +
-                </text>
-              </g>
-            </g>
-
-            {/* Yükseklik (H) [-] [+] */}
-            <g transform="translate(100, 8)">
-              <text x="0" y="16" fill="#a7f3d0" className="font-bold text-[10px] font-sans">
-                H:
-              </text>
-              <g
-                transform="translate(16, 0)"
-                className="cursor-pointer"
-                onClick={() => setAreaRows((r) => Math.max(1, r - 1))}
-              >
-                <rect width="20" height="22" rx="5" fill="#334155" />
-                <text x="10" y="15" textAnchor="middle" fill="#ffffff" className="font-black text-xs">
-                  -
-                </text>
-              </g>
-              <text x="46" y="16" textAnchor="middle" fill="#ffffff" className="font-black text-xs font-mono">
-                {areaRows}
-              </text>
-              <g
-                transform="translate(56, 0)"
-                className="cursor-pointer"
-                onClick={() => setAreaRows((r) => Math.min(15, r + 1))}
-              >
-                <rect width="20" height="22" rx="5" fill="#059669" />
-                <text x="10" y="15" textAnchor="middle" fill="#ffffff" className="font-black text-xs">
-                  +
-                </text>
-              </g>
-            </g>
-
-            {/* Şekil Olarak Tuvale Ekle Butonu */}
-            <g
-              transform="translate(190, 6)"
-              className="cursor-pointer group/btn"
-              onClick={() => {
-                if (onAddPolygonFromAreaModel) {
-                  onAddPolygonFromAreaModel(areaModelPos, areaCols, areaRows);
-                }
-              }}
+          )}
+          {gosterim.cevre && (
+            <text
+              x={W / 2}
+              y={gosterim.alan ? 40 : 22}
+              textAnchor="middle"
+              strokeWidth={3}
+              style={HALE}
+              className={`text-[11px] ${BILGI_YAZISI}`}
             >
-              <rect
-                width="100"
-                height="26"
-                rx="8"
-                fill="#10b981"
-                className="group-hover/btn:fill-emerald-400 transition-colors shadow-sm"
-              />
-              <text x="50" y="17" textAnchor="middle" fill="#ffffff" className="font-black text-[10px] font-sans">
-                ✨ Tuvale Ekle
-              </text>
-            </g>
-          </g>
+              {cevreOkumasi(sutun, satir)}
+            </text>
+          )}
 
-          {/* G) Hızlı Çarpma Şablon Butonları (2x3, 3x4, 4x5, 5x6, 6x8, 10x10) */}
-          <g transform={`translate(${((areaCols * viewport.zoom) / 2) - 140}, 62)`}>
-            {[
-              { w: 2, h: 3 },
-              { w: 3, h: 4 },
-              { w: 4, h: 5 },
-              { w: 5, h: 6 },
-              { w: 6, h: 8 },
-              { w: 10, h: 10 },
-            ].map((p, i) => (
-              <g
-                key={`preset-${p.w}-${p.h}`}
-                transform={`translate(${i * 48}, 0)`}
-                className="cursor-pointer"
-                onClick={() => {
-                  setAreaCols(p.w);
-                  setAreaRows(p.h);
-                }}
-              >
-                <rect
-                  width="44"
-                  height="22"
-                  rx="6"
-                  fill={areaCols === p.w && areaRows === p.h ? '#059669' : '#1e293b'}
-                  stroke="#059669"
-                  strokeWidth="1"
-                  className="shadow-sm hover:opacity-90"
-                />
-                <text
-                  x="22"
-                  y="15"
-                  textAnchor="middle"
-                  fill="#ffffff"
-                  className="font-black text-[9px] font-sans"
-                >
-                  {p.w}×{p.h}
-                </text>
-              </g>
-            ))}
-          </g>
+          {tutamacCiz({
+            tur: 'kose',
+            x: koseTopuz.x,
+            y: koseTopuz.y,
+            renk: 'mercan',
+            glif: 'kose',
+            imlec: 'cursor-nesw-resize',
+            baslik: 'Sütun ve satır sayısını değiştirmek için sürükleyin',
+            onPointerDown: (e) => {
+              const sol = koken;
+              const ilk = { sutun, satir };
+              let ofset: Point2D | null = null;
+              suruklemeyiBaslat(
+                e,
+                'kose',
+                ({ x, y, x0, y0 }) => {
+                  if (!ofset) ofset = { x: x0 - (sol.x + koseTopuz.x), y: y0 - (sol.y + koseTopuz.y) };
+                  const kx = x - ofset.x;
+                  const ky = y - ofset.y;
+                  const [s, r] = alanBoyutuTutamactan(kx - sol.x - kayma, sol.y - ky - kayma, z);
+                  tercihRef.current.sutun = s;
+                  tercihRef.current.satir = r;
+                  setAreaCols(s);
+                  setAreaRows(r);
+                },
+                () => {
+                  tercihRef.current.sutun = ilk.sutun;
+                  tercihRef.current.satir = ilk.satir;
+                  setAreaCols(ilk.sutun);
+                  setAreaRows(ilk.satir);
+                }
+              );
+            },
+          })}
         </g>
-      )}
-    </g>
+
+        {aktifTutamac === 'kose' &&
+          okumaHapi(alanOkumasi(sutun, satir), { x: koken.x + koseTopuz.x, y: koken.y + koseTopuz.y })}
+      </g>
+    );
+  };
+
+  // ─── Sağ tık menüsü ──────────────────────────────────────────────────────────
+
+  const menuMaddeleri = (): OlcmeMenuMaddesi[] => {
+    switch (activeTool) {
+      case 'ruler':
+        return cetvelMenusu({ boy: rulerLength, donusSvg: rulerRotation });
+      case 'measure_angle':
+        return iletkiMenusu({ aci: protractorAngle, taban: protractorBaseAngle, olcuGoster: gosterim.olcu });
+      case 'setsquare':
+        return gonyeMenusu({ donusSvg: setsquareRotation });
+      default:
+        return alanModeliMenusu({
+          sutun: areaCols,
+          satir: areaRows,
+          ekleVar: !!onAddPolygonFromAreaModel,
+          alanGoster: gosterim.alan,
+          cevreGoster: gosterim.cevre,
+        });
+    }
+  };
+
+  const maddeye = (m: OlcmeMenuMaddesi): ContextMenuItem => ({
+    id: m.id,
+    label: m.label,
+    icon: ikonCiz(m.ikon),
+    radio: m.radio,
+    checked: m.checked,
+    disabled: m.disabled,
+    danger: m.danger,
+    separatorBefore: m.separatorBefore,
+    submenu: m.submenu?.map(maddeye),
+    onSelect: m.eylem ? () => uygula(m.eylem!) : undefined,
+    prompt: m.prompt
+      ? {
+          label: m.prompt.label,
+          unit: m.prompt.unit,
+          initial: m.prompt.initial,
+          onSubmit: (v: number) => uygula(m.prompt!.eylem(v)),
+        }
+      : undefined,
+  });
+
+  const durdur = (e: React.SyntheticEvent) => e.stopPropagation();
+  const menuAdi = ARAC_ADLARI[activeTool];
+
+  return (
+    <>
+      <g ref={kokRef} className="measurement-instruments select-none">
+        {activeTool === 'measure_angle' && iletkiCiz()}
+        {activeTool === 'ruler' && cetvelCiz()}
+        {activeTool === 'setsquare' && gonyeCiz()}
+        {activeTool === 'area_model' && alanCiz()}
+      </g>
+      {menu &&
+        createPortal(
+          <div
+            data-olcme-menusu=""
+            style={{ display: 'contents' }}
+            onPointerDown={durdur}
+            onPointerUp={durdur}
+            onPointerMove={durdur}
+            onMouseDown={durdur}
+            onContextMenu={durdur}
+            onContextMenuCapture={(e) => {
+              const u = uzunBasisRef.current;
+              if (u && (!u.kalkti || performance.now() - u.zaman < 400)) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              // Dokunmatikte örtünün mousedown'u gelmez (tuval pointerdown'u engeller): dışarı dokunuş burada kapatır
+              if (!(e.target instanceof Element) || !e.target.closest('[role="menu"]')) menuyuKapat();
+            }}
+          >
+            <ContextMenu
+              open
+              x={menu.x}
+              y={menu.y}
+              title={menuAdi}
+              ariaLabel={menuAdi}
+              items={menuMaddeleri().map(maddeye)}
+              onClose={menuyuKapat}
+            />
+          </div>,
+          menu.hedef
+        )}
+    </>
   );
 }

@@ -67,7 +67,7 @@ export function ValuePromptDialog({ request, onClose }: Props) {
     <Modal
       isOpen
       onClose={onClose}
-      overlayClassName="bg-black/60 backdrop-blur-sm select-none"
+      overlayClassName="bg-ada-murekkep/60 backdrop-blur-sm select-none"
       className="bg-card border border-border w-full max-w-sm rounded-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150"
     >
       <form onSubmit={gonder} className="p-5 space-y-4">

@@ -24,6 +24,7 @@ import {
   calculateLineEquation,
 } from '@/math/geometry';
 import { formatTurkishNumber, formatCoordinate } from '@/math/coordinates';
+import { noktaZ } from '@/math/zEkseni';
 import {
   Settings,
   Trash2,
@@ -183,10 +184,10 @@ export function PropertiesPanel({
   };
 
   const disaAktarimDugmeleri: { id: 'png' | 'svg' | 'pdf' | 'word'; etiket: string; ipucu: string; renk: string }[] = [
-    { id: 'png', etiket: 'Görsel (PNG)', ipucu: 'Çizimi resim dosyası olarak indir', renk: 'text-sky-600 dark:text-sky-400' },
-    { id: 'svg', etiket: 'Vektör (SVG)', ipucu: 'Kalitesi bozulmadan büyütülebilen vektör dosyası', renk: 'text-violet-600 dark:text-violet-400' },
-    { id: 'pdf', etiket: 'PDF', ipucu: 'Yazdırmaya hazır PDF belgesi', renk: 'text-rose-600 dark:text-rose-400' },
-    { id: 'word', etiket: 'Word (.doc)', ipucu: 'Word ile açılıp düzenlenebilen belge', renk: 'text-blue-700 dark:text-blue-400' },
+    { id: 'png', etiket: 'Görsel (PNG)', ipucu: 'Çizimi resim dosyası olarak indir', renk: 'text-ada-deniz dark:text-ada-vurgu' },
+    { id: 'svg', etiket: 'Vektör (SVG)', ipucu: 'Kalitesi bozulmadan büyütülebilen vektör dosyası', renk: 'text-ada-lavanta' },
+    { id: 'pdf', etiket: 'PDF', ipucu: 'Yazdırmaya hazır PDF belgesi', renk: 'text-ada-mercan' },
+    { id: 'word', etiket: 'Word (.doc)', ipucu: 'Word ile açılıp düzenlenebilen belge', renk: 'text-ada-deniz-koyu dark:text-ada-vurgu' },
   ];
 
   return (
@@ -194,7 +195,7 @@ export function PropertiesPanel({
       {/* PANEL BAŞLIĞI & DARALTMA BUTONU */}
       <div className="flex items-center justify-between pb-2 border-b border-border/70">
         <div className="flex items-center gap-2">
-          <Sliders className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <Sliders className="w-4 h-4 text-ada-deniz dark:text-ada-vurgu" />
           <span className="text-sm font-black uppercase tracking-wider text-foreground">
             {sekme === 'ayarlar' || sekme === 'stil' ? 'Ayarlar' : 'Özellikler'}
           </span>
@@ -235,12 +236,12 @@ export function PropertiesPanel({
                     type="button"
                     onClick={() => setViewport((prev) => ({ ...prev, backgroundColor: bg.color }))}
                     title={bg.name}
-                    className={`w-7 h-7 rounded-full border border-black/10 shadow-xs flex items-center justify-center transition-transform hover:scale-110 cursor-pointer ${
+                    className={`w-7 h-7 rounded-full border border-ada-murekkep/15 shadow-xs flex items-center justify-center transition-transform hover:scale-110 cursor-pointer ${
                       isSelected ? 'ring-2 ring-primary ring-offset-2 scale-105' : ''
                     }`}
                     style={{ backgroundColor: bg.color }}
                   >
-                    {isSelected && <Check className="w-3.5 h-3.5 text-slate-700 dark:text-slate-800" />}
+                    {isSelected && <Check className="w-3.5 h-3.5 text-ada-murekkep" />}
                   </button>
                 );
               })}
@@ -268,7 +269,7 @@ export function PropertiesPanel({
               className="flex items-center justify-between w-full cursor-pointer group"
             >
               <h3 className="text-[11px] font-black text-foreground uppercase tracking-wider flex items-center gap-1.5">
-                <Palette className="w-3.5 h-3.5 text-pink-600 dark:text-pink-400" />
+                <Palette className="w-3.5 h-3.5 text-ada-mercan" />
                 <span>Çizim ve Metin Stili</span>
               </h3>
               {isStyleOpen ? (
@@ -352,15 +353,15 @@ export function PropertiesPanel({
           </div>
 
           {/* 4. GÖRÜNÜM SEÇENEKLERİ */}
-          <div className="space-y-2.5 p-3 rounded-[22px] bg-slate-50/70 dark:bg-slate-900/50 border border-border/80 shadow-xs">
+          <div className="space-y-2.5 p-3 rounded-[22px] bg-muted/40 border border-border/80 shadow-xs">
             <h3 className="text-[11px] font-black text-foreground uppercase tracking-wider flex items-center gap-1.5 px-1">
               <Settings className="w-3.5 h-3.5 text-primary" />
               <span>Görünüm Seçenekleri</span>
             </h3>
             <div className="space-y-2 text-xs pt-1">
-              <label className="flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300 cursor-pointer transition-all shadow-xs select-none">
+              <label className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                 <div className="flex items-center gap-2.5">
-                  <Grid className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <Grid className="w-4 h-4 text-ada-deniz dark:text-ada-vurgu" />
                   <span className="text-foreground font-bold">Izgara Çizgileri</span>
                 </div>
                 <input
@@ -370,23 +371,23 @@ export function PropertiesPanel({
                   className="sr-only"
                 />
                 {viewport.showGrid ? (
-                  <div className="w-5 h-5 rounded-md bg-blue-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                  <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                     <Check className="w-3.5 h-3.5 stroke-[3]" />
                   </div>
                 ) : (
-                  <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 shrink-0" />
+                  <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                 )}
               </label>
 
               <label
-                className={`flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800 border cursor-pointer transition-all shadow-xs select-none ${
+                className={`flex items-center justify-between p-2.5 rounded-2xl bg-card border cursor-pointer transition-all shadow-xs select-none ${
                   viewport.showAxes
-                    ? 'border-indigo-300 dark:border-indigo-500/60 ring-2 ring-indigo-200/60 dark:ring-indigo-900/40'
-                    : 'border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300'
+                    ? 'border-primary/60 ring-2 ring-ring/30'
+                    : 'border-border hover:border-primary/50'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <Compass className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                  <Compass className="w-4 h-4 text-ada-vurgu" />
                   <span className="text-foreground font-bold">Koordinat Eksenleri (x, y)</span>
                 </div>
                 <input
@@ -396,17 +397,17 @@ export function PropertiesPanel({
                   className="sr-only"
                 />
                 {viewport.showAxes ? (
-                  <div className="w-5 h-5 rounded-md bg-teal-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                  <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                     <Check className="w-3.5 h-3.5 stroke-[3]" />
                   </div>
                 ) : (
-                  <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 shrink-0" />
+                  <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                 )}
               </label>
 
-              <label className="flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300 cursor-pointer transition-all shadow-xs select-none">
+              <label className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                 <div className="flex items-center gap-2.5">
-                  <Maximize className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                  <Maximize className="w-4 h-4 text-ada-deniz dark:text-ada-vurgu" />
                   <span className="text-foreground font-bold">Nokta Koordinatları</span>
                 </div>
                 <input
@@ -418,17 +419,17 @@ export function PropertiesPanel({
                   className="sr-only"
                 />
                 {viewport.showCoordinates ? (
-                  <div className="w-5 h-5 rounded-md bg-indigo-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                  <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                     <Check className="w-3.5 h-3.5 stroke-[3]" />
                   </div>
                 ) : (
-                  <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 shrink-0" />
+                  <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                 )}
               </label>
 
-              <label className="flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300 cursor-pointer transition-all shadow-xs select-none">
+              <label className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                 <div className="flex items-center gap-2.5">
-                  <div className="px-2 py-0.5 rounded-xl bg-amber-100/90 dark:bg-amber-950/50 border border-amber-300/60 text-amber-700 dark:text-amber-400 text-[10px] font-black leading-tight text-center shrink-0">
+                  <div className="px-2 py-0.5 rounded-xl bg-ada-altin/15 border border-ada-altin/40 text-ada-altin text-[10px] font-black leading-tight text-center shrink-0">
                     I-<br />IV
                   </div>
                   <span className="text-foreground font-bold">Bölge İsimleri (1, 2, 3, 4. Bölge)</span>
@@ -442,17 +443,17 @@ export function PropertiesPanel({
                   className="sr-only"
                 />
                 {viewport.showQuadrants ? (
-                  <div className="w-5 h-5 rounded-md bg-amber-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                  <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                     <Check className="w-3.5 h-3.5 stroke-[3]" />
                   </div>
                 ) : (
-                  <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 shrink-0" />
+                  <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                 )}
               </label>
 
-              <label className="flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300 cursor-pointer transition-all shadow-xs select-none">
+              <label className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                 <div className="flex items-center gap-2.5">
-                  <Contrast className="w-4 h-4 text-slate-700 dark:text-slate-300" />
+                  <Contrast className="w-4 h-4 text-foreground" />
                   <span className="text-foreground font-bold">Siyah–Beyaz Mod</span>
                 </div>
                 <input
@@ -464,11 +465,11 @@ export function PropertiesPanel({
                   className="sr-only"
                 />
                 {viewport.blackWhite ? (
-                  <div className="w-5 h-5 rounded-md bg-slate-700 flex items-center justify-center text-white shadow-xs shrink-0">
+                  <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                     <Check className="w-3.5 h-3.5 stroke-[3]" />
                   </div>
                 ) : (
-                  <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 shrink-0" />
+                  <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                 )}
               </label>
             </div>
@@ -479,30 +480,30 @@ export function PropertiesPanel({
       {sekme === 'ozellikler' && (
         <div className="flex flex-col gap-4 items-stretch">
           {/* 1. GÖRÜNÜM VE KOORDİNAT DÜZLEMİ AYARLARI */}
-          <div className="space-y-2.5 p-3.5 rounded-[22px] bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/90 dark:border-slate-800 shadow-xs">
+          <div className="space-y-2.5 p-3.5 rounded-[22px] bg-muted/40 border border-border/90 shadow-xs">
             <button
               type="button"
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
               className="flex items-center justify-between w-full cursor-pointer group px-1"
             >
-              <Settings className="w-4 h-4 text-indigo-400 dark:text-indigo-400 shrink-0" />
-              <div className="text-center font-black text-[11px] sm:text-xs text-slate-800 dark:text-slate-100 tracking-wider uppercase leading-snug">
+              <Settings className="w-4 h-4 text-ada-deniz dark:text-ada-vurgu shrink-0" />
+              <div className="text-center font-black text-[11px] sm:text-xs text-foreground tracking-wider uppercase leading-snug">
                 <div>GÖRÜNÜM VE KOORDİNAT</div>
                 <div>DÜZLEMİ AYARLARI</div>
               </div>
               {isSettingsOpen ? (
-                <ChevronUp className="w-4 h-4 text-slate-400 group-hover:text-foreground transition-colors shrink-0" />
+                <ChevronUp className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
               ) : (
-                <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-foreground transition-colors shrink-0" />
+                <ChevronDown className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
               )}
             </button>
 
             {isSettingsOpen && (
               <div className="space-y-2 text-xs pt-1">
                 {/* 1. Izgara Çizgileri */}
-                <label className="flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300 cursor-pointer transition-all shadow-xs select-none">
+                <label className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                   <div className="flex items-center gap-2.5">
-                    <Grid className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                    <Grid className="w-4 h-4 text-ada-deniz dark:text-ada-vurgu" />
                     <span className="text-foreground font-bold">Izgara Çizgileri</span>
                   </div>
                   <input
@@ -512,24 +513,24 @@ export function PropertiesPanel({
                     className="sr-only"
                   />
                   {viewport.showGrid ? (
-                    <div className="w-5 h-5 rounded-md bg-blue-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                    <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                   ) : (
-                    <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 shrink-0" />
+                    <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                   )}
                 </label>
 
                 {/* 2. Koordinat Eksenleri (x, y) */}
                 <label
-                  className={`flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800 border cursor-pointer transition-all shadow-xs select-none ${
+                  className={`flex items-center justify-between p-2.5 rounded-2xl bg-card border cursor-pointer transition-all shadow-xs select-none ${
                     viewport.showAxes
-                      ? 'border-indigo-300 dark:border-indigo-500/60 ring-2 ring-indigo-200/60 dark:ring-indigo-900/40'
-                      : 'border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300'
+                      ? 'border-primary/60 ring-2 ring-ring/30'
+                      : 'border-border hover:border-primary/50'
                   }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <Compass className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                    <Compass className="w-4 h-4 text-ada-vurgu" />
                     <span className="text-foreground font-bold">Koordinat Eksenleri (x, y)</span>
                   </div>
                   <input
@@ -539,18 +540,18 @@ export function PropertiesPanel({
                     className="sr-only"
                   />
                   {viewport.showAxes ? (
-                    <div className="w-5 h-5 rounded-md bg-teal-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                    <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                   ) : (
-                    <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 shrink-0" />
+                    <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                   )}
                 </label>
 
                 {/* 3. Nokta Koordinatları */}
-                <label className="flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300 cursor-pointer transition-all shadow-xs select-none">
+                <label className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                   <div className="flex items-center gap-2.5">
-                    <Maximize className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <Maximize className="w-4 h-4 text-ada-deniz dark:text-ada-vurgu" />
                     <span className="text-foreground font-bold">Nokta Koordinatları</span>
                   </div>
                   <input
@@ -562,18 +563,18 @@ export function PropertiesPanel({
                     className="sr-only"
                   />
                   {viewport.showCoordinates ? (
-                    <div className="w-5 h-5 rounded-md bg-indigo-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                    <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                   ) : (
-                    <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 shrink-0" />
+                    <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                   )}
                 </label>
 
                 {/* 4. Bölge İsimleri (1, 2, 3, 4. Bölge) */}
-                <label className="flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300 cursor-pointer transition-all shadow-xs select-none">
+                <label className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                   <div className="flex items-center gap-2.5">
-                    <div className="px-2 py-0.5 rounded-xl bg-amber-100/90 dark:bg-amber-950/50 border border-amber-300/60 text-amber-700 dark:text-amber-400 text-[10px] font-black leading-tight text-center shrink-0">
+                    <div className="px-2 py-0.5 rounded-xl bg-ada-altin/15 border border-ada-altin/40 text-ada-altin text-[10px] font-black leading-tight text-center shrink-0">
                       I-<br />IV
                     </div>
                     <span className="text-foreground font-bold">Bölge İsimleri (1, 2, 3, 4. Bölge)</span>
@@ -587,16 +588,16 @@ export function PropertiesPanel({
                     className="sr-only"
                   />
                   {viewport.showQuadrants ? (
-                    <div className="w-5 h-5 rounded-md bg-amber-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                    <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                   ) : (
-                    <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 shrink-0" />
+                    <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                   )}
                 </label>
 
                 {/* 5. Izgaraya Yapış (Snap) */}
-                <label className="flex items-center justify-between p-2.5 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/60 hover:border-indigo-300 cursor-pointer transition-all shadow-xs select-none">
+                <label className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                   <div className="flex items-center gap-2.5">
                     <span className="text-sm">🧲</span>
                     <span className="text-foreground font-bold">Izgaraya Yapış (Snap)</span>
@@ -608,11 +609,11 @@ export function PropertiesPanel({
                     className="sr-only"
                   />
                   {viewport.snapToGrid ? (
-                    <div className="w-5 h-5 rounded-md bg-emerald-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                    <div className="w-5 h-5 rounded-md bg-primary flex items-center justify-center text-primary-foreground shadow-xs shrink-0">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                     </div>
                   ) : (
-                    <div className="w-5 h-5 rounded-md border-2 border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 shrink-0" />
+                    <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                   )}
                 </label>
               </div>
@@ -705,7 +706,7 @@ export function PropertiesPanel({
                         : 'bg-card border-border/80 text-foreground hover:bg-muted font-medium'
                     }`}
                   >
-                    <Columns2 className="w-3.5 h-3.5 shrink-0 text-blue-400" />
+                    <Columns2 className="w-3.5 h-3.5 shrink-0 text-ada-vurgu" />
                     <span className="text-[11px] truncate">2D + 3D</span>
                   </button>
 
@@ -731,7 +732,7 @@ export function PropertiesPanel({
                         : 'bg-card border-border/80 text-foreground hover:bg-muted font-medium'
                     }`}
                   >
-                    <Columns2 className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                    <Columns2 className="w-3.5 h-3.5 shrink-0 text-ada-lavanta" />
                     <span className="text-[11px] truncate">Cebir + 3D</span>
                   </button>
 
@@ -744,7 +745,7 @@ export function PropertiesPanel({
                         : 'bg-card border-border/80 text-foreground hover:bg-muted font-medium'
                     }`}
                   >
-                    <Box className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                    <Box className="w-3.5 h-3.5 shrink-0 text-ada-lavanta" />
                     <span className="text-[11px] truncate">Sadece 3D Grafik</span>
                   </button>
                 </div>
@@ -778,7 +779,7 @@ export function PropertiesPanel({
                     type="checkbox"
                     checked={viewport.blackWhite === true}
                     onChange={(e) => setViewport((prev) => ({ ...prev, blackWhite: e.target.checked }))}
-                    className="w-3.5 h-3.5 accent-slate-600 cursor-pointer"
+                    className="w-3.5 h-3.5 accent-primary cursor-pointer"
                   />
                   <span className="text-[11px] font-bold text-foreground">Siyah–beyaz mod</span>
                 </label>
@@ -844,6 +845,53 @@ export function PropertiesPanel({
                       {formatCoordinate(selectedObject as PointObject)}
                     </div>
                   </div>
+
+                  {/* 3B yüksekliği (z): 2B görünüm üstten bakıştır; z yalnız 3B görünümde etkilidir */}
+                  {(() => {
+                    const pt = selectedObject as PointObject;
+                    const z = noktaZ(pt);
+                    const turetilmis = !!pt.construction || !!pt.onObjectId;
+                    // 6 basamak: odaklanıp çıkmak z'yi yuvarlayıp sessizce değiştirmesin
+                    const gosterim = formatTurkishNumber(z, 6);
+                    const uygula = (input: HTMLInputElement) => {
+                      const metin = input.value.trim();
+                      // Metin değişmediyse hiçbir şey yazma (gösterim yuvarlaması z'yi bozmasın)
+                      if (metin === gosterim) return;
+                      const deger = Number(metin.replace(',', '.'));
+                      // Boş ya da geçersiz giriş z'yi 0'a çekmez: alan eski değere döner
+                      if (metin === '' || !Number.isFinite(deger)) {
+                        input.value = gosterim;
+                        return;
+                      }
+                      if (Math.abs(deger - z) < 1e-9) return;
+                      updateObject(pt.id, { z: deger } as Partial<PointObject>);
+                    };
+                    return (
+                      <div className="space-y-1">
+                        <label htmlFor={`z-${pt.id}`} className="text-[11px] font-semibold text-muted-foreground">
+                          Yükseklik (z, 3B görünüm)
+                        </label>
+                        {turetilmis ? (
+                          <div className="font-mono text-xs text-foreground" title="Bu noktanın z'si kaynaklarından hesaplanır">
+                            {formatTurkishNumber(z)} (kaynaklarından)
+                          </div>
+                        ) : (
+                          <input
+                            id={`z-${pt.id}`}
+                            key={`z-${pt.id}-${z}`}
+                            type="text"
+                            inputMode="decimal"
+                            defaultValue={gosterim}
+                            onBlur={(e) => uygula(e.currentTarget)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') uygula(e.currentTarget);
+                            }}
+                            className="w-full px-3 py-1.5 rounded-lg bg-input border border-border text-foreground text-xs font-mono focus:ring-1 focus:ring-primary outline-none"
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Etiket Adı */}
                   <div className="space-y-1">
@@ -1054,7 +1102,7 @@ export function PropertiesPanel({
 
                     {/* En / Boy / Kenar Boyutlandırma Kontrolleri */}
                     <div className="p-3 bg-muted/30 rounded-xl space-y-3 border border-border/50">
-                      <div className="font-black text-slate-800 dark:text-slate-200 text-xs flex items-center justify-between">
+                      <div className="font-black text-foreground text-xs flex items-center justify-between">
                         <span>📐 Boyutları Ayarla</span>
                         <span className="text-[10px] text-muted-foreground font-mono">{formatTurkishNumber(curW)} x {formatTurkishNumber(curH)} br</span>
                       </div>
@@ -1196,12 +1244,12 @@ export function PropertiesPanel({
                 return (
                   <div className="space-y-4 text-xs">
                     {/* Kesir Kartı ve Matematiksel Değerler */}
-                    <div className="p-3.5 bg-violet-500/10 dark:bg-violet-950/20 rounded-2xl border border-violet-500/20 space-y-2.5">
+                    <div className="p-3.5 bg-ada-lavanta/15 rounded-2xl border border-ada-lavanta/30 space-y-2.5">
                       <div className="flex items-center justify-between">
                         {/* Görsel Kesir Çizgisi */}
-                        <div className="flex flex-col items-center justify-center font-mono font-black text-lg text-violet-700 dark:text-violet-300 leading-tight">
+                        <div className="flex flex-col items-center justify-center font-mono font-black text-lg text-ada-deniz-koyu dark:text-ada-kum leading-tight">
                           <span>{num}</span>
-                          <div className="w-8 h-0.5 bg-violet-700 dark:bg-violet-300 my-0.5 rounded-full" />
+                          <div className="w-8 h-0.5 bg-ada-deniz-koyu dark:bg-ada-kum my-0.5 rounded-full" />
                           <span>{den}</span>
                         </div>
 
@@ -1209,7 +1257,7 @@ export function PropertiesPanel({
                           <div className="font-bold text-xs text-foreground">
                             = {decimalVal} <span className="text-muted-foreground font-normal">({percentVal}%)</span>
                           </div>
-                          <div className="inline-block px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-700 dark:text-violet-300 text-[10px] font-bold">
+                          <div className="inline-block px-2 py-0.5 rounded-md bg-ada-lavanta/25 text-ada-deniz-koyu dark:text-ada-kum text-[10px] font-bold">
                             {getFracType()}
                           </div>
                         </div>
@@ -1222,7 +1270,7 @@ export function PropertiesPanel({
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="font-bold text-foreground">Pay (Taranan Parça):</span>
-                          <span className="font-mono font-black text-violet-600 dark:text-violet-400 text-sm">
+                          <span className="font-mono font-black text-ada-lavanta text-sm">
                             {num}
                           </span>
                         </div>
@@ -1244,11 +1292,11 @@ export function PropertiesPanel({
                               updateFraction(parseInt(e.target.value) || 0, den, false);
                             }}
                             {...fractionRelease}
-                            className="flex-1 h-2 bg-border rounded-lg appearance-none cursor-pointer accent-violet-600"
+                            className="flex-1 h-2 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
                           />
                           <button
                             onClick={() => updateFraction(num + 1, den)}
-                            className="w-7 h-7 rounded-lg bg-violet-600 hover:bg-violet-500 text-white flex items-center justify-center font-black cursor-pointer transition-colors shadow-sm"
+                            className="w-7 h-7 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center font-black cursor-pointer transition-colors shadow-sm"
                           >
                             +
                           </button>
@@ -1259,7 +1307,7 @@ export function PropertiesPanel({
                       <div className="space-y-1.5 pt-2 border-t border-border/40">
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="font-bold text-foreground">Payda (Toplam Parça):</span>
-                          <span className="font-mono font-black text-violet-600 dark:text-violet-400 text-sm">
+                          <span className="font-mono font-black text-ada-lavanta text-sm">
                             {den}
                           </span>
                         </div>
@@ -1281,11 +1329,11 @@ export function PropertiesPanel({
                               updateFraction(num, parseInt(e.target.value) || 1, false);
                             }}
                             {...fractionRelease}
-                            className="flex-1 h-2 bg-border rounded-lg appearance-none cursor-pointer accent-violet-600"
+                            className="flex-1 h-2 bg-border rounded-lg appearance-none cursor-pointer accent-primary"
                           />
                           <button
                             onClick={() => updateFraction(num, den + 1)}
-                            className="w-7 h-7 rounded-lg bg-violet-600 hover:bg-violet-500 text-white flex items-center justify-center font-black cursor-pointer transition-colors shadow-sm"
+                            className="w-7 h-7 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center font-black cursor-pointer transition-colors shadow-sm"
                           >
                             +
                           </button>
@@ -1314,7 +1362,7 @@ export function PropertiesPanel({
                             onClick={() => updateFraction(item.n, item.d)}
                             className={`py-1 px-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
                               num === item.n && den === item.d
-                                ? 'bg-violet-600 text-white border-violet-700 shadow-sm'
+                                ? 'bg-primary text-primary-foreground border-primary shadow-sm'
                                 : 'bg-muted/60 hover:bg-muted text-foreground border-border/80'
                             }`}
                           >
@@ -1335,10 +1383,10 @@ export function PropertiesPanel({
                     <button
                       key={col}
                       onClick={() => updateObject(selectedObject.id, { color: col })}
-                      className="w-5 h-5 rounded-full border border-black/10 flex items-center justify-center transition-transform hover:scale-110"
+                      className="w-5 h-5 rounded-full border border-ada-murekkep/15 flex items-center justify-center transition-transform hover:scale-110"
                       style={{ backgroundColor: col }}
                     >
-                      {selectedObject.color === col && <Check className="w-3 h-3 text-white" />}
+                      {selectedObject.color === col && <Check className="w-3 h-3 text-ada-fildisi" />}
                     </button>
                   ))}
                 </div>

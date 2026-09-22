@@ -13,7 +13,8 @@ sayfa_id: ana-sayfa | ilkokul | ortaokul | lise
 Kaynak .blend dosyası değiştirilmez; tüm işlemler kaydedilmeyen oturumda yapılır.
 
 Ana sayfada ../deniz-feneri/deniz-feneri.blend varsa "Matematik Feneri" (fener + adacık
-koleksiyonları) aynı oturumda sahneye eklenir, FENER_KONUMU'na taşınır ve denizine sığlık
+koleksiyonları) aynı oturumda sahneye eklenir, FENER_KONUMU'na taşınır, önüne ada
+tabelalarıyla aynı parçalardan kurulan "UYGULAMALAR" tabelası konur ve denizine sığlık
 halkası eklenir.
 """
 
@@ -82,6 +83,75 @@ FENER_KOLEKSIYONLARI = ("01 • DENİZ FENERİ", "02 • FENER ADACIĞI")
 FENER_KOKLERI = ("DENIZ_FENERI", "FENER_ADACIGI")
 # Blender koordinatı: İlkokul (-15.7, -5) ile Lise (15.7, -5) adalarının önünde, ortada
 FENER_KONUMU = Vector((0.0, -21.0, 0.0))
+# Fenerin önündeki tabela: ada tabelasının (koyu taş levha, renkli arkalık, fildişi yazı,
+# iki altın ayak) birebir kopyası; yalnız yazı ve arkalık rengi değişir.
+FENER_TABELA_YAZISI = "UYGULAMALAR"
+# Levha merkezi, adacık köküne göre (Blender x, y, z). Adalarda (0, -5.95, 2.35); adacık
+# küçük olduğundan levha giriş yolu ışıklarının hemen önünde, ayaklar çimin üstünde kalır.
+FENER_TABELA_YERI = Vector((0.0, -3.25, 2.35))
+# Arkalık: uygulamadaki fener kartının rengi #c99a52 (doğrusal RGB)
+FENER_TABELA_RENGI = (0.584, 0.323, 0.085)
+
+
+def tabela_arkalik_malzemesi(kaynak):
+    """Ada arkalığı malzemesinin (Principled + gürültü rampası) şampanya renkli kopyası."""
+    m = kaynak.copy()
+    m.name = "Fener • şampanya arkalık"
+    r, g, b = FENER_TABELA_RENGI
+    if m.use_nodes:
+        for n in m.node_tree.nodes:
+            if n.type == "BSDF_PRINCIPLED":
+                n.inputs["Base Color"].default_value = (r, g, b, 1.0)
+            elif n.type == "VALTORGB":
+                el = n.color_ramp.elements
+                el[0].color = (r * 0.78, g * 0.78, b * 0.78, 1.0)
+                el[-1].color = (min(1.0, r * 1.13), min(1.0, g * 1.13), min(1.0, b * 1.13), 1.0)
+    return m
+
+
+def fener_tabelasi(adacik):
+    """Ölçeklenmemiş bir ada tabelasının parçalarını kopyalayıp fener adacığının önüne kurar.
+
+    Parçalar adacık köküne bağlanır; böylece landmark:fener grubuna girer, fenerle birlikte
+    vurgulanır ve tıklanır. Döndürdüğü değer tabeladaki yazıdır (JSON'a yazılır).
+    """
+    if adacik is None:
+        log("UYARI: FENER_ADACIGI kökü yok; fener tabelası eklenmedi")
+        return None
+    ornek_levha = next((o for o in scene.objects
+                        if o.name.startswith("Ada adı") and "tabela" in o.name and o.parent is not None
+                        and o.parent.name.startswith("ADA_") and all(abs(s - 1.0) < 1e-6 for s in o.scale)), None)
+    if ornek_levha is None:
+        log("UYARI: örnek ada tabelası bulunamadı; fener tabelası eklenmedi")
+        return None
+    parcalar = [o for o in ornek_levha.parent.children_recursive if o.name.startswith("Ada adı")]
+    hedef_col = adacik.users_collection[0]
+    kayma = adacik.matrix_world.translation + FENER_TABELA_YERI - ornek_levha.matrix_world.translation
+    arkalik_mat = None
+    for o in parcalar:
+        yeni = o.copy()
+        if o.type == "FONT":
+            yeni.data = o.data.copy()
+            yeni.data.body = FENER_TABELA_YAZISI
+            yeni.name = f"Fener adı • {FENER_TABELA_YAZISI}"
+        elif "renkli arkalık" in o.name:
+            yeni.data = o.data.copy()
+            if arkalik_mat is None:
+                arkalik_mat = tabela_arkalik_malzemesi(o.data.materials[0])
+            yeni.data.materials[0] = arkalik_mat
+            yeni.name = "Fener adı • şampanya arkalık"
+        else:
+            yeni.name = o.name.replace("Ada adı", "Fener adı", 1)
+        yeni.parent = adacik
+        yeni.matrix_parent_inverse = adacik.matrix_world.inverted()
+        yeni.location = o.matrix_world.translation + kayma
+        yeni.rotation_euler = o.matrix_world.to_euler()
+        hedef_col.objects.link(yeni)
+    bpy.context.view_layer.update()
+    log(f"fener tabelası kuruldu: {len(parcalar)} parça, {ornek_levha.parent.name} tabelasından, yazı {FENER_TABELA_YAZISI!r}")
+    return FENER_TABELA_YAZISI
+
+
 fener = None
 if IS_HOME and os.path.exists(FENER_BLEND):
     with bpy.data.libraries.load(FENER_BLEND, link=False) as (kaynak, hedef):
@@ -101,6 +171,7 @@ if IS_HOME and os.path.exists(FENER_BLEND):
         "lamba": lamba.matrix_world.translation.copy() if lamba else FENER_KONUMU + Vector((0, 0.28, 9.4)),
         "nesne_sayisi": len(fener_nesneleri),
     }
+    fener["tabela"] = fener_tabelasi(next((o for o in fener_nesneleri if o.name == "FENER_ADACIGI"), None))
 
 
 def collection_renderable(col):
@@ -454,6 +525,7 @@ if IS_HOME:
     for root in island_roots:
         sid = stage_of_root(root)
         sign = next((c for c in root.children_recursive if c.name.startswith("Ada adı") and "tabela" in c.name), None)
+        yazi = next((c.data.body for c in root.children_recursive if c.type == "FONT" and c.name.startswith("Ada adı")), None)
         anchor = sign.matrix_world.translation if sign else root.matrix_world.translation
         for e in group_meta:
             if e["key"] == f"stage:{sid}":
@@ -463,6 +535,7 @@ if IS_HOME:
                     "range": {"ilkokul": "1–4. sınıf", "ortaokul": "5–8. sınıf", "lise": "Hazırlık + 9–12. sınıf"}.get(sid, ""),
                     "anchor": to_three(anchor),
                     "center": to_three(root.matrix_world.translation),
+                    "tabela": yazi,
                 })
     if fener is not None:
         for e in group_meta:
@@ -476,6 +549,7 @@ if IS_HOME:
                     "anchor": [round(lamba.x, 4), round(bmax[1] + 0.6, 4), round(-lamba.y, 4)],
                     "center": [round((bmin[0] + bmax[0]) / 2, 4), 0.0, round((bmin[2] + bmax[2]) / 2, 4)],
                     "lamp": to_three(lamba),
+                    "tabela": fener.get("tabela"),
                 })
 else:
     for root in grade_roots:

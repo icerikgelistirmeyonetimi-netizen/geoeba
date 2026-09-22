@@ -42,6 +42,30 @@ export function angleNeighbourIds(pointId: string, objects: readonly MathObject[
   return [...new Set(komsular)].filter((id) => id !== pointId && noktalar.has(id));
 }
 
+/**
+ * Şekil, köşesi `vertexId` olan bir açının `vertexId -> pointId` KOLUNU çiziyor mu?
+ *
+ * Kenar anlamı angleNeighbourIds ile aynıdır: iki ucu bu iki nokta olan doğru parçası,
+ * tanım noktaları bu ikisi olan doğru, birinden başlayıp ötekinden geçen ışın (iki yön de)
+ * ya da bu iki noktayı KOMŞU köşe olarak taşıyan çokgen (son köşeden ilke dönen kenar dâhil).
+ * Çokgenin köşegeni kenar değildir. Silme zinciri bunu kullanır: kolu silinen açı,
+ * kolu artık hiçbir şekil çizmiyorsa ekranda boşlukta asılı kalmasın diye birlikte gider.
+ */
+export function providesAngleArm(o: MathObject, vertexId: string, pointId: string): boolean {
+  if (!vertexId || !pointId || vertexId === pointId) return false;
+  const cift = (a?: string, b?: string) =>
+    (a === vertexId && b === pointId) || (a === pointId && b === vertexId);
+  if (o.type === 'segment') return cift(o.startPointId, o.endPointId);
+  if (o.type === 'line') return cift(o.point1Id, o.point2Id);
+  if (o.type === 'ray') return cift(o.startPointId, o.throughPointId);
+  if (o.type === 'polygon') {
+    const ids = o.pointIds;
+    const n = ids.length;
+    return n >= 2 && ids.some((id, i) => cift(id, ids[(i + 1) % n]));
+  }
+  return false;
+}
+
 export type PointAngleAction =
   /**
    * Nokta yay/dilim merkezi: "Açısını ölç" bu şekillerin merkez açılarını BİRLİKTE açıp kapatır

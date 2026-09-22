@@ -94,13 +94,13 @@ export function TextNoteDialog({
       onClose={onClose}
       labelledBy="text-note-dialog-title"
       initialFocusRef={inputRef}
-      overlayClassName="bg-black/40 backdrop-blur-sm animate-in fade-in duration-150"
+      overlayClassName="bg-ada-murekkep/45 backdrop-blur-sm animate-in fade-in duration-150"
       className="w-full max-w-md bg-card border border-border shadow-2xl rounded-3xl p-5 space-y-4 select-none animate-in zoom-in-95 duration-150"
     >
       {/* Başlık ve Kapat Butonu */}
       <div className="flex items-center justify-between pb-2 border-b border-border/80">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
             <Type className="w-4 h-4" />
           </div>
           <div>
@@ -133,7 +133,7 @@ export function TextNoteDialog({
           onKeyDown={handleKeyDown}
           rows={3}
           placeholder="Örnek: Pisagor Teoremi: a² + b² = c² veya Açıklama..."
-          className="w-full p-3.5 rounded-2xl bg-muted/50 border border-border focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-sm font-bold placeholder:text-muted-foreground/60 resize-none outline-none transition-all text-foreground"
+          className="w-full p-3.5 rounded-2xl bg-muted/50 border border-border focus:border-primary focus:ring-2 focus:ring-ring/25 text-sm font-bold placeholder:text-muted-foreground/60 resize-none outline-none transition-all text-foreground"
           style={{ color: selectedColor, fontSize: `${fontSize}px` }}
           aria-label="Not metni"
         />
@@ -142,7 +142,7 @@ export function TextNoteDialog({
       {/* Hızlı Matematik Sembolleri Çubuğu */}
       <div className="space-y-1.5">
         <div className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
-          <Sparkles className="w-3 h-3 text-amber-500" />
+          <Sparkles className="w-3 h-3 text-ada-altin" />
           <span>Hızlı Matematik Sembolleri:</span>
         </div>
 
@@ -205,7 +205,7 @@ export function TextNoteDialog({
             <button
               type="button"
               onClick={onDelete}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 font-bold text-xs transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-destructive/10 hover:bg-destructive/20 text-destructive font-bold text-xs transition-all cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>Sil</span>
@@ -226,7 +226,7 @@ export function TextNoteDialog({
             type="button"
             onClick={handleSave}
             disabled={!text.trim()}
-            className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-black text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+            className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-ada-deniz to-ada-vurgu hover:from-ada-deniz-koyu hover:to-ada-deniz text-primary-foreground font-black text-xs shadow-md transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
           >
             <Check className="w-4 h-4" />
             <span>{initialText ? 'Kaydet' : 'Tuvale Ekle'}</span>

@@ -203,6 +203,10 @@ describe('app: tools', () => {
     ['alanı modelle aracını aç', 'area_model'],
     ['Seç ve Taşı aracını seç', 'select'],
     ['Trig. Oranlar aracını seç', 'trig_ratios'],
+    ['yay ölç aracını seç', 'measure_arc'],
+    ['Yay Ölç aracını seç', 'measure_arc'],
+    ['yay ölçme aracını aç', 'measure_arc'],
+    ['yay aracını seç', 'arc'],
   ])('%s → %s', (text, id) => {
     expect(actionsOf(text)).toEqual([{ kind: 'selectTool', tool: id }]);
   });

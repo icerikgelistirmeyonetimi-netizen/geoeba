@@ -3,7 +3,8 @@
 import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ToolMode } from '@/types/workspace';
 import { isAnyModalOpen } from '@/components/ui/modalState';
-import { isEditingOrInDialog, toolForShortcut } from './toolShortcuts';
+import { workspaceOwnsKeyboard, toolForShortcut } from './toolShortcuts';
+import { ARAC_SECILDI_OLAYI } from './olcmeAraclari';
 import { Toolbar } from './Toolbar';
 import { CommandAssistant } from './CommandAssistant';
 import { Canvas } from './Canvas';
@@ -49,6 +50,7 @@ import {
 import { useWorkspace } from '@/state/WorkspaceContext';
 import { syncUserFunctions } from '@/math/functionNames';
 import { createId } from '@/state/ids';
+import { validateProjectSolids } from '@/math/projectFile';
 
 const SCENE_STORAGE_KEY = 'matematik_3d_sahne_v1';
 const HISTORY_LIMIT = 80;
@@ -102,6 +104,13 @@ type SceneAction =
   | { type: 'undo' }
   | { type: 'redo' };
 
+/**
+ * Her 3B sahne durumunun hangi zamanda OLUŞTURULDUĞU (anahtar: durum dizisinin kendisi).
+ * 2B ve 3B geçmişleri ayrı olduğundan ortak geri alma, hangisinin son adımının daha yeni
+ * olduğuna bu zamanlarla karar verir (bkz. math/ortakGecmis).
+ */
+const sahneZamani = new WeakMap<Solid3DObject[], number>();
+
 function pushPast(past: Solid3DObject[][], snapshot: Solid3DObject[]): Solid3DObject[][] {
   const next = [...past, snapshot];
   if (next.length > HISTORY_LIMIT) next.shift();
@@ -113,6 +122,7 @@ function sceneReducer(state: SceneState, action: SceneAction): SceneState {
     case 'set': {
       const nextSolids = action.updater(state.solids);
       if (nextSolids === state.solids) return state;
+      sahneZamani.set(nextSolids, action.now);
       const coalesce = !!action.key && state.lastKey === action.key && action.now - state.lastTime < COALESCE_MS;
       if (coalesce) {
         return { ...state, solids: nextSolids, lastTime: action.now, dragKey: null };
@@ -129,6 +139,7 @@ function sceneReducer(state: SceneState, action: SceneAction): SceneState {
     case 'drag': {
       const nextSolids = action.updater(state.solids);
       if (nextSolids === state.solids) return state;
+      sahneZamani.set(nextSolids, Date.now());
       if (state.dragKey === action.key) {
         return { ...state, solids: nextSolids };
       }
@@ -195,17 +206,18 @@ function loadSavedScene(): Solid3DObject[] {
     const raw = localStorage.getItem(SCENE_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.solids)) return [];
-    return (parsed.solids as Solid3DObject[]).filter(
-      (s) => s && typeof s.id === 'string' && typeof s.type === 'string' && s.position && s.dimensions
-    );
+    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.solids)) throw new Error('Geçersiz 3B kaydı');
+    return validateProjectSolids(parsed.solids);
   } catch {
-    return [];
+    throw new Error('Kayıtlı 3B sahne açılamadı. Önceki kayıt korunuyor; çalışmanızı Dosya menüsünden kaydedebilirsiniz.');
   }
 }
 
 export function WorkspaceView() {
   const {
+    setSceneBridge,
+    setHintMessage,
+    selectAll,
     objects,
     setSelectedObjectIds,
     setActiveTool,
@@ -267,22 +279,17 @@ export function WorkspaceView() {
 
   // Kayıtlı sahneyi geri yükle
   useEffect(() => {
-    const saved = loadSavedScene();
-    if (saved.length > 0) dispatch({ type: 'restore', solids: saved });
-    setSceneLoaded(true);
-  }, []);
+    try {
+      const saved = loadSavedScene();
+      if (saved.length > 0) dispatch({ type: 'restore', solids: saved });
+      setSceneLoaded(true);
+    } catch (error) { setHintMessage((error as Error).message); }
+  }, [setHintMessage]);
 
   // Sahneyi kaydet
   useEffect(() => {
     if (!sceneLoaded) return;
-    const handle = window.setTimeout(() => {
-      try {
-        localStorage.setItem(SCENE_STORAGE_KEY, JSON.stringify({ version: 1, solids }));
-      } catch {
-        /* depolama kapalı olabilir */
-      }
-    }, 250);
-    return () => window.clearTimeout(handle);
+    try { localStorage.setItem(SCENE_STORAGE_KEY, JSON.stringify({ version: 1, solids })); } catch { /* Dosya kaydı kullanılabilir. */ }
   }, [solids, sceneLoaded]);
 
   const dragKeyRef = useRef<string | null>(null);
@@ -320,6 +327,20 @@ export function WorkspaceView() {
   const [showGlobalVertices, setShowGlobalVertices] = useState(true);
   const [showGlobalEdges, setShowGlobalEdges] = useState(true);
   const [showGlobalFaces, setShowGlobalFaces] = useState(true);
+
+  useEffect(() => {
+    setSceneBridge({
+      solids, camera: camera3D, selectedIds: selectedSolidIds,
+      canUndo: scene.past.length > 0, canRedo: scene.future.length > 0,
+      undoTime: scene.past.length > 0 ? sahneZamani.get(solids) ?? 0 : undefined,
+      redoTime: scene.future.length > 0 ? sahneZamani.get(scene.future[0]) ?? 0 : undefined,
+      setSolids, setCamera: setCamera3D,
+      select: ids => { setSelectedSolidIds(ids); setActive3DTool('select_move'); },
+      restore: (next, camera) => { dispatch({ type: 'restore', solids: next }); if (camera) setCamera3D(camera); setSelectedSolidIds([]); },
+      undo: () => dispatch({ type: 'undo' }), redo: () => dispatch({ type: 'redo' }),
+    });
+  }, [solids, camera3D, selectedSolidIds, scene.past.length, scene.future, setSolids, setSceneBridge]);
+  useEffect(() => () => setSceneBridge(null), [setSceneBridge]);
 
   // Silinen cisimler seçimden düşsün
   useEffect(() => {
@@ -450,6 +471,14 @@ export function WorkspaceView() {
     setSelectedSolidIds((prev) => prev.filter((sid) => sid !== id));
   }, []);
 
+  /** Birden çok cismi tek geçmiş adımıyla siler (2B seçim çubuğu ve cisim sağ tık menüsü). */
+  const handleDeleteSolidsById = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const silinecek = new Set(ids);
+    setSolids((prev) => prev.filter((s) => !silinecek.has(s.id)));
+    setSelectedSolidIds((prev) => prev.filter((sid) => !silinecek.has(sid)));
+  }, [setSolids]);
+
   const handleDragSolidPosition = useCallback(
     (id: string, newPos: Point3D) => {
       dragSolids((prev) => prev.map((s) => (s.id === id ? { ...s, position: newPos } : s)));
@@ -526,6 +555,8 @@ export function WorkspaceView() {
       return;
     }
     setActiveTool(tool);
+    // Açık aracın yeniden seçilmesi durum değiştirmez; ölçme araçları bu olayla yeniden ortalanır
+    containerRef.current?.dispatchEvent(new CustomEvent(ARAC_SECILDI_OLAYI, { bubbles: true, detail: { tool } }));
     if (tool === 'regular_polygon') openRegularPolygonDialog();
   };
 
@@ -534,14 +565,14 @@ export function WorkspaceView() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || isAnyModalOpen() || isEditingOrInDialog(event.target)) return;
+      if (!workspaceOwnsKeyboard(event, containerRef.current) || isAnyModalOpen()) return;
       const current = shortcutsRef.current;
       if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.code === 'KeyA') {
         event.preventDefault();
-        setActiveTool('select');
-        setSelectedObjectIds(current.objects.map((object) => object.id));
+        selectAll();
         return;
       }
+      if (current.studioDimension === '3D') return;
       const tool = toolForShortcut(event);
       if (tool) {
         event.preventDefault();
@@ -550,7 +581,7 @@ export function WorkspaceView() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [setActiveTool, setSelectedObjectIds]);
+  }, [setActiveTool, setSelectedObjectIds, selectAll]);
 
   const selectedSolid = solids.find((s) => s.id === selectedSolidId) || null;
 
@@ -592,7 +623,7 @@ export function WorkspaceView() {
     <div className="flex flex-col h-full w-full bg-card/60 backdrop-blur-sm border-r border-border/60 overflow-hidden">
       <div className="flex items-center justify-between px-3.5 py-2 bg-muted/40 border-b border-border/60 shrink-0 select-none">
         <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-indigo-500 shadow-sm shadow-indigo-500/50" />
+          <div className="w-2.5 h-2.5 rounded-full bg-ada-deniz shadow-sm shadow-ada-deniz/50" />
           <span className="text-xs font-bold tracking-wider text-foreground uppercase">CEBİR</span>
           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
             {objects.length + solids.length}
@@ -619,15 +650,9 @@ export function WorkspaceView() {
     </div>
   );
 
-  // 2. 2D GRAFİK PANELİ
+  // 2. 2D GRAFİK PANELİ (başlık şeridi yok: tuval dikeyde tüm alanı kullanır)
   const render2DPanel = (
     <div className="flex flex-col h-full w-full bg-background relative overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-muted/40 border-b border-border/50 shrink-0 z-10 select-none min-w-0">
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50" />
-          <span className="text-xs font-bold tracking-wider text-foreground uppercase">2D GRAFİK</span>
-        </div>
-      </div>
       <div className="flex-1 min-h-0 relative flex overflow-hidden">
         <div className="flex-1 relative min-w-0">
           <Canvas
@@ -639,6 +664,7 @@ export function WorkspaceView() {
             onSelectSolids={setSelectedSolidIds}
             onUpdateSolidPosition={handleDragSolidPosition}
             onDeleteSolid={handleDeleteSolidById}
+            onDeleteSolids={handleDeleteSolidsById}
             onDragEnd={handleDragEnd}
           />
           <CommandAssistant onSelectTool={activateTool} />
@@ -659,7 +685,7 @@ export function WorkspaceView() {
     >
       <div className="flex items-center justify-between px-3.5 py-1.5 bg-muted/30 border-b border-border/40 shrink-0 z-10 select-none">
         <div className="flex items-center gap-2">
-          <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-sm shadow-purple-500/50" />
+          <div className="w-2.5 h-2.5 rounded-full bg-ada-lavanta shadow-sm shadow-ada-lavanta/50" />
           <span className="text-xs font-bold tracking-wider text-foreground uppercase">3D GRAFİK</span>
           {solids.length > 0 && (
             <span className="text-[10px] font-medium text-muted-foreground">({solids.length} Cisim)</span>
@@ -671,7 +697,7 @@ export function WorkspaceView() {
               setStudioDimension('3D');
               setIsAddObjectDialogOpen(true);
             }}
-            className="text-[11px] font-bold text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/30 px-2 py-0.5 rounded transition-colors flex items-center gap-1 cursor-pointer"
+            className="text-[11px] font-bold text-primary hover:bg-accent px-2 py-0.5 rounded transition-colors flex items-center gap-1 cursor-pointer"
             title="3D Cisim Ekle"
           >
             <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -735,7 +761,7 @@ export function WorkspaceView() {
   );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] w-full bg-background text-foreground overflow-hidden">
+    <div data-calisma-alani className="flex flex-col h-[calc(100vh-3.5rem)] w-full bg-background text-foreground overflow-hidden">
       {studioDimension === '2D' && !is3DLayout && <ActivityPanel />}
 
       {/* ANA ÇALIŞMA ALANI */}
@@ -748,7 +774,7 @@ export function WorkspaceView() {
                 onClick={() => setStudioDimension('2D')}
                 className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                   studioDimension === '2D'
-                    ? 'bg-slate-900 dark:bg-blue-600 text-white shadow-xs'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                 }`}
                 title="2D Geometri Araçlarını Göster"
@@ -760,7 +786,7 @@ export function WorkspaceView() {
                 onClick={() => setStudioDimension('3D')}
                 className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer ${
                   studioDimension === '3D'
-                    ? 'bg-slate-900 dark:bg-indigo-600 text-white shadow-xs'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                 }`}
                 title="3D Katı Cisim Araçlarını Göster"

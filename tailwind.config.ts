@@ -2,7 +2,8 @@ import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 
 const config: Config = {
-  darkMode: ["class"],
+  // Koyu tema html.dark ile açılır; `.zemin-acik` kabının içinde (koyu temada açık renkli tuval zemini) kapanır.
+  darkMode: ["variant", "&:is(.dark *):not(.zemin-acik *)"],
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -59,6 +60,20 @@ const config: Config = {
         warning: {
           DEFAULT: "#f59e0b",
           foreground: "#ffffff",
+        },
+        // Ada / sınıf paleti (adalar.module.css ve sinif.module.css ile aynı): bg-ada-deniz, text-ada-murekkep …
+        ada: {
+          murekkep: "#15302d",
+          "murekkep-2": "#3c5a56",
+          fildisi: "#fbf7ee",
+          kum: "#efe5d0",
+          altin: "#b9884a",
+          deniz: "#216a78",
+          "deniz-koyu": "#0f4c57",
+          vurgu: "#2a9d94",
+          mercan: "#d9805f",
+          lavanta: "#7f88c4",
+          fener: "#c99a52",
         },
         math: {
           point: "#2563eb",

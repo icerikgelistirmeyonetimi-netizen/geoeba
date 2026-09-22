@@ -131,13 +131,13 @@ export function RegularPolygonDialog({
       isOpen={isOpen}
       onClose={onClose}
       labelledBy="regular-polygon-dialog-title"
-      overlayClassName="bg-black/60 backdrop-blur-sm select-none"
+      overlayClassName="bg-ada-murekkep/60 backdrop-blur-sm select-none"
       className="bg-card border border-border w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-150"
     >
       {/* Başlık */}
       <div className="flex items-center justify-between border-b border-border pb-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-amber-500/15 flex items-center justify-center text-amber-600 dark:text-amber-400">
+          <div className="w-8 h-8 rounded-xl bg-ada-altin/15 flex items-center justify-center text-ada-altin">
             <Hexagon className="w-5 h-5" />
           </div>
           <div>
@@ -165,7 +165,7 @@ export function RegularPolygonDialog({
         <div className="space-y-2">
           <label className="text-xs font-semibold text-foreground flex items-center justify-between" htmlFor="regular-polygon-sides-input">
             <span>Kenar Sayısı (N)</span>
-            <span className="font-mono text-xs font-bold text-amber-600 dark:text-amber-400">
+            <span className="font-mono text-xs font-bold text-ada-altin">
               {polyName}
             </span>
           </label>
@@ -191,7 +191,7 @@ export function RegularPolygonDialog({
             <button
               type="button"
               onClick={() => setSides(sides + 1)}
-              className="w-10 h-10 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-lg transition-colors flex items-center justify-center cursor-pointer shadow-sm"
+              className="w-10 h-10 rounded-xl bg-primary hover:bg-ada-deniz-koyu dark:hover:bg-ada-deniz text-primary-foreground font-black text-lg transition-colors flex items-center justify-center cursor-pointer shadow-sm"
               aria-label="Kenar sayısını artır"
             >
               +
@@ -215,7 +215,7 @@ export function RegularPolygonDialog({
                 onClick={() => setSides(p.count)}
                 className={`px-2 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 cursor-pointer border ${
                   sides === p.count
-                    ? 'bg-amber-500 text-white border-amber-600 shadow-sm scale-105'
+                    ? 'bg-primary text-primary-foreground border-primary shadow-sm scale-105'
                     : 'bg-muted/60 hover:bg-muted text-foreground border-border/80'
                 }`}
                 title={p.name}
@@ -253,14 +253,14 @@ export function RegularPolygonDialog({
             step={0.5}
             value={radius}
             onChange={(e) => setRadius(parseFloat(e.target.value))}
-            className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-amber-500"
+            className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
             aria-label="Yarıçap"
           />
         </div>
 
         {/* MEB Eğitsel Matematik Özellikleri Kartı */}
-        <div className="bg-amber-500/10 dark:bg-amber-950/20 border border-amber-500/20 rounded-xl p-3 text-xs space-y-1.5">
-          <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+        <div className="bg-ada-altin/10 border border-ada-altin/25 rounded-xl p-3 text-xs space-y-1.5">
+          <div className="flex items-center gap-1.5 font-bold text-foreground">
             <Sparkles className="w-3.5 h-3.5" />
             <span>Matematiksel Özellikler:</span>
           </div>
@@ -291,7 +291,7 @@ export function RegularPolygonDialog({
           </button>
           <button
             type="submit"
-            className="px-5 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white transition-all shadow-md flex items-center gap-1.5 cursor-pointer active:scale-95"
+            className="px-5 py-2 rounded-xl text-xs font-bold bg-primary hover:bg-ada-deniz-koyu dark:hover:bg-ada-deniz text-primary-foreground transition-all shadow-md flex items-center gap-1.5 cursor-pointer active:scale-95"
           >
             <Check className="w-4 h-4" />
             <span>⬡ Çokgeni Çiz</span>

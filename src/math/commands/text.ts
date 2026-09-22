@@ -73,7 +73,7 @@ const VERBAL_NOUN_AFTER = /^\s*(?:arac|pencere|islem|modu|mod\b|dugme|buton|sekm
  * "ızgara olmasın", "ızgara çizgileri olmasın", "eksenleri görmek istemiyorum", "koordinatlar olmasın", "hiçbir şey seçili olmasın".
  * Etiketli cümleler ("A noktasının koordinatları olmasın") ve şekil emirleri ("üçgen çizme") olumsuz kalır.
  */
-const NEGATED_SETTING = /\b(?:(?:x ve y |koordinat )?(?:izgara|eksen)[a-z]*(?: cizgi[a-z]*)?|(?:nokta )?koordinat(?:lar|lari|larini|i|ini)?|olcum(?:ler|leri|lerini)?|ceyrek bolge[a-z]*) (?:(?:hic|artik|ekranda) )?(?:(?:gormek|gostermek|gorunmesini|gosterilmesini) )?(?:olmasin|istemiyorum|istemem)\b|\bhicbir (?:sey|nesne|sekil|nokta)[a-z]* secili olmasin\b/g;
+const NEGATED_SETTING = /\b(?:(?:x ve y |koordinat )?(?:izgara|eksen)[a-z]*(?: cizgi[a-z]*)?|(?:nokta )?koordinat(?:lar|lari|larini|i|ini)?|olcum(?:ler|leri|lerini)?|ceyrek bolge[a-z]*|esitlik (?:isaret|centik)[a-z]*) (?:(?:hic|artik|ekranda) )?(?:(?:gormek|gostermek|gorunmesini|gosterilmesini) )?(?:olmasin|istemiyorum|istemem)\b|\bhicbir (?:sey|nesne|sekil|nokta)[a-z]* secili olmasin\b/g;
 /** Cümle sonundaki olumsuz ayar isteği: "ızgara olmasın ve üçgen çiz" iki işlemdir. */
 const SETTING_REQUEST_END = new RegExp(`(?:${NEGATED_SETTING.source})$`);
 

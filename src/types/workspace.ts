@@ -32,6 +32,7 @@ export type ToolMode =
   | 'translate'
   | 'measure_slope'
   | 'trig_ratios'
+  | 'measure_arc'
   | 'checkbox'
   | 'button'
   | 'input_box'

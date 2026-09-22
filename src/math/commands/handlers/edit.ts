@@ -12,6 +12,7 @@ import {
 import {
   type TargetOptions, candidatesFor, cleanLabel, depsOf, describe, describeList, expandVertices, findTargets, functionName, hasTargetHint, joinTr, pick, pointsOf,
 } from './edit/targets';
+import { gorunurNoktaAdlari, noktalari, noktalariyla } from '@/math/nesneAdlari';
 import { hasPartWord, partExists, resolveParts, withoutPartWords } from './edit/parts';
 import { withEditClause } from './edit/clause';
 import { centroid, constructionName, fmtPoint, hostShapeOf, labelSequence, referencePoint, replaceCanonical, reproject, shiftFunction, transformPoints } from './edit/geometry';
@@ -124,11 +125,17 @@ function nextWordOfLabel(c: Clause, i: number): string {
 
 const PROPERTY_WORDS = /\b(?:dolgu\w*|renk\w*|rengi\w*|ad(?:i|ini|lari|larini)|isim\w*|ismi\w*|etiket\w*|kilit\w*|kilid\w*|olcu\w*|olcum\w*|alan(?:i|ini|lari|larini)|cevre\w*|uzunlug\w*|bag(?:i|ini|lari|larini|lanti\w*)|secim\w*|saydam\w*|kalinlig\w*|izgara\w*|eksen\w*|koordinat\w*|denklem\w*|deger\w*|egim\w*|yaricap\w*|ceyrek\w*|gorunum\w*|stil\w*)\b/;
 const WITH_POINTS = /\b(?:nokta|kose)(?:lar|ler)?(?:i|u)?(?:yla|yle|la|le)\b|\bnoktalariyla|\bkoseleriyle/;
+/** "yalnızca/yalnız/sadece ABC üçgenini sil": şekil gider, noktaları kalır. Seçim ve işaret sözcüklerinde geçerli değil. */
+const ONLY_SHAPE = /\b(?:yalnizca|yalniz|sadece)\s+(?!(?:secil|sectig|sectik|bunu|bunlari|onu|onlari|sunu|sunlari|hepsi|tum|butun|her)\w*\b)/;
+/** "…, noktalar kalsın", "köşeleri yerinde dursun", "noktalara dokunma": noktalar silinmez. */
+const KEEP_PHRASE = /\b(?:nokta|kose)(?:lar|ler)(?:i|in|ini|inin)?\b(?:\s+(?!sil)\w+){0,2}\s+(?:kalsin|kalacak|kalmali|dursun|korunsun|silinmesin|gitmesin)\b|\b(?:nokta(?:lar(?:a|ina)|ya|sina)|kose(?:ler(?:e|ine)|ye|sine))\s+dokunma\w*/;
+/** KEEP_PHRASE içindeki "noktalar/köşeleri" sözcüğü hedef değildir ("noktalar kalsın" tüm noktaları hedef yapmasın). */
+const KEEP_NOUN = /^(?:nokta|kose)(?:lar|ler)(?:i|in|ini|inin|a|e|ina|ine)?$/;
 
 const deleteHandler: CommandHandler = {
   id: 'edit.delete',
   examples: ['ABC sil', 'A noktasını sil', 'A, B ve C noktalarını sil', 'tüm çemberleri sil', 'son çizileni sil', 'seçili nesneleri sil',
-    'f fonksiyonunu sil', 'a kaydırıcısını sil', 'ABC üçgenini noktalarıyla birlikte sil'],
+    'f fonksiyonunu sil', 'a kaydırıcısını sil', 'ABC üçgenini noktalarıyla birlikte sil', 'yalnızca ABC üçgenini sil', 'ABC üçgenini sil, noktalar kalsın'],
   match(c, s) {
     if (!c.hasVerb('delete') || !/\b(?:sil|kaldir|temizle|yok et)/.test(c.text)) return 0;
     if (/\bgeri al|\bbagla/.test(c.text) || PROPERTY_WORDS.test(c.text) || STRONG_CREATE.test(c.text)) return 0;
@@ -142,49 +149,31 @@ const deleteHandler: CommandHandler = {
     if (BARE_DELETE.test(c.text) && !s.focus.length && !s.selection.length) {
       fail('Neyi sileyim? Nesnenin adını yazın (ör. “A noktasını sil”) ya da önce nesneyi seçin. Çizimin tamamı için “tümünü sil” yazın.');
     }
-    const nouns = targetNouns(c).filter(n => !WITH_POINTS.test(n.word));
-    const targets = editTargets(c, s, { many: true, nouns, example: 'ABC üçgenini sil' });
-    const all = WITH_POINTS.test(c.text) ? [...new Set([...targets, ...pointsOf(s, targets)])] : targets;
-    // Önceki komutun nesnesi ("üçgen çiz" → "sil"): onunla birlikte oluşturulmuş, yalnızca ona ait köşeler de gider.
-    const implicit = !c.labels.length && !c.refersToSelection && !hasPartWord(c, true) && targets.every(t => s.focus.includes(t.id) || s.selection.includes(t.id));
-    const before = s.objects;
-    const removed = new Set(s.remove(ids(all)));
-    const helpers = orphanPoints(s, before, all, removed, implicit);
-    if (helpers.length) s.remove(ids(helpers));
-    const extra = removed.size - all.length;
+    const withPoints = WITH_POINTS.test(c.text);
+    const keepPhrase = !withPoints && KEEP_PHRASE.test(c.text);
+    const keepPoints = keepPhrase || (!withPoints && ONLY_SHAPE.test(c.text));
+    const nouns = targetNouns(c).filter(n => !WITH_POINTS.test(n.word) && !(keepPhrase && KEEP_NOUN.test(n.word)));
+    const o: TargetOptions = { many: true, nouns, example: 'ABC üçgenini sil' };
+    // expandVertices "noktaları/köşeleri" görünce şekli köşelerine çevirir: "noktaları kalsın" bunu yapmamalı.
+    const targets = keepPhrase ? (resolveParts(c, s, o) ?? findTargets(c, s, o)) : editTargets(c, s, o);
+    const all = withPoints ? [...new Set([...targets, ...pointsOf(s, targets)])] : targets;
+    const before = [...snapshot(s).values()];
+    // Şeklin kendi noktaları ekrandaki silmeyle AYNI kuraldan geçer (WorkspaceContext.planDeletion).
+    const plan = s.removeWithOwnPoints(ids(all), { keepPoints, protectedIds: s.options.pendingPointIds });
     s.setFocus([]);
-    const shown = helpers.filter(p => p.visible);
-    const withPoints = all.length > targets.length ? ` (${all.length - targets.length} köşe noktasıyla birlikte)`
-      : shown.length ? ` (${joinTr(shown.map(p => p.label))} ${shown.length > 1 ? 'noktalarıyla' : 'noktasıyla'} birlikte)` : '';
-    s.say(`${sentence(describeList(targets))}${withPoints} silindi.${extra > 0 ? ` Bağlı ${extra} nesne de silindi.` : ''}`);
+    const giden = gorunurNoktaAdlari(before, plan.ownPointIds);
+    const kalan = gorunurNoktaAdlari(before, plan.keptPointIds);
+    const extra = plan.removal.size - all.length - plan.ownPointIds.length;
+    const ad = sentence(describeList(targets));
+    const govde = kalan.length ? `${ad} silindi (${noktalari(kalan)} yerinde kaldı).`
+      : `${ad}${all.length > targets.length ? ` (${all.length - targets.length} köşe noktasıyla birlikte)`
+        : giden.length ? ` (${noktalariyla(giden)} birlikte)` : ''} silindi.`;
+    s.say(`${govde}${extra > 0 ? ` Bağlı ${extra} nesne de silindi.` : ''}`);
   },
 };
 
 /** Yalın "sil", "şimdi sil", "sil lütfen": önceki komutun nesnesi ya da seçim. */
 const BARE_DELETE = /^(?:(?:simdi|lutfen|hemen|hadi|tamam|evet) )*(?:sil|kaldir)(?:in|elim|er misin|ebilir misin|iver)?(?: (?:lutfen|tamam|hadi))*$/;
-
-/**
- * Silinen nesnelerle aynı anda oluşturulmuş (sahnede hemen önlerinde duran) ve artık hiçbir şeyin kullanmadığı noktalar:
- * teğetin değme noktası, yüksekliğin ayağı gibi inşa noktaları; hedef önceki komutun nesnesiyse yalnızca o şekle ait köşeler de.
- */
-function orphanPoints(s: CommandScene, before: MathObject[], targets: MathObject[], removed: Set<string>, includeFree: boolean): PointObject[] {
-  const candidates = new Set<string>();
-  const users = (list: MathObject[], id: string) => list.filter(x => x.id !== id && depsOf(x).includes(id));
-  for (const target of targets) {
-    const at = before.findIndex(o => o.id === target.id);
-    const deps = new Set(depsOf(target));
-    for (let j = at - 1; j >= 0; j--) {
-      const o = before[j];
-      if (removed.has(o.id) || candidates.has(o.id)) { depsOf(o).forEach(id => deps.add(id)); continue; }
-      if (o.type !== 'point' || !deps.has(o.id)) break;
-      const alive = users(s.objects, o.id).filter(x => !candidates.has(x.id));
-      if (alive.length || !(o.construction || (includeFree && users(before, o.id).length === 1))) break;
-      candidates.add(o.id);
-      depsOf(o).forEach(id => deps.add(id));
-    }
-  }
-  return [...candidates].map(id => s.get(id)).filter((p): p is PointObject => p?.type === 'point');
-}
 
 // ============================================================================ seçme
 

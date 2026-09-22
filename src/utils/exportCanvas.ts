@@ -12,6 +12,15 @@ function guvenliAd(ad: string): string {
   return temiz === '' ? 'geoeba-cizim' : temiz;
 }
 
+/** Saydam SVG'nin ekranda görünen zeminini üst elemanlardan devral. */
+export function canvasBackground(svg: SVGSVGElement): string {
+  for (let el: Element | null = svg; el; el = el.parentElement) {
+    const color = getComputedStyle(el).backgroundColor;
+    if (color && color !== 'transparent' && !/rgba\([^)]*,\s*0\s*\)/.test(color)) return color;
+  }
+  return '#ffffff';
+}
+
 /** Bir Blob'u veya veri URL'sini indirir. */
 function indir(veri: Blob | string, dosyaAdi: string) {
   const url = typeof veri === 'string' ? veri : URL.createObjectURL(veri);
@@ -82,7 +91,7 @@ export async function svgToPngDataUrl(
   canvas.height = yukseklik * olcek;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Tarayıcı 2D çizim bağlamı vermedi.');
-  ctx.fillStyle = options.arkaPlan ?? '#ffffff';
+  ctx.fillStyle = options.arkaPlan ?? canvasBackground(svg);
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
@@ -125,16 +134,35 @@ export function svgToStandaloneXml(svg: SVGSVGElement): { xml: string; genislik:
   }
   kopya.removeAttribute('class');
 
-  // Beyaz zemin: Word ve PDF'te saydam arka plan siyah görünebiliyor
+  // Yazı ve zemin aynı temadan gelmeli; koyu temanın açık yazılarını beyaza basma.
   const zemin = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
   zemin.setAttribute('x', '0');
   zemin.setAttribute('y', '0');
   zemin.setAttribute('width', String(genislik));
   zemin.setAttribute('height', String(yukseklik));
-  zemin.setAttribute('fill', '#ffffff');
+  zemin.setAttribute('fill', canvasBackground(svg));
   kopya.insertBefore(zemin, kopya.firstChild);
 
   return { xml: new XMLSerializer().serializeToString(kopya), genislik, yukseklik };
+}
+
+/** Uygulama kabuğu yerine bağımsız, sayfaya sığan çizimi yazdırır. */
+export function printSvg(svg: SVGSVGElement): void {
+  const { xml, genislik, yukseklik } = svgToStandaloneXml(svg);
+  const frame = document.createElement('iframe');
+  frame.title = 'Çizimi yazdır';
+  frame.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument;
+  if (!doc) { frame.remove(); throw new Error('Yazdırma görünümü açılamadı.'); }
+  frame.onload = () => {
+    frame.contentWindow?.addEventListener('afterprint', () => frame.remove(), { once: true });
+    frame.contentWindow?.focus(); frame.contentWindow?.print();
+  };
+  doc.open();
+  doc.write(`<!doctype html><html lang="tr"><head><title>GeoEBA Çizimi</title><style>@page{size:A4 ${genislik > yukseklik ? 'landscape' : 'portrait'};margin:10mm}body{margin:0}svg{display:block;width:100%;height:auto;max-height:95vh;print-color-adjust:exact;-webkit-print-color-adjust:exact}</style></head><body>${xml}</body></html>`);
+  doc.close();
+  window.setTimeout(() => frame.remove(), 120_000);
 }
 
 /** Çizimi PNG olarak indirir. */

@@ -557,12 +557,22 @@ describe('angles', () => {
     expect(arms.map(a => a.label)).toEqual(['[BA]', '[BC]']);
     expect(arms.every(a => a.showLabel === false && a.thickness === 2 && a.color === '#f59e0b')).toBe(true);
     expect(r.selectedIds).toEqual([angle.id]);
+    // Kolu silinen açı boşlukta asılı kalmaz (silme zinciri: kolu artık hiçbir şekil çizmiyor)
+    expect(new CommandScene(r.objects).remove([arms[0].id])).toContain(angle.id);
+    // Kollar açıyla birlikte çizildi: açının KENDİSİ silinince turuncu kolları da gider, noktalar kalır
+    expect(arms.every(a => a.armOfAngleId === angle.id)).toBe(true);
+    expect(new CommandScene(r.objects).remove([angle.id]).sort()).toEqual([angle.id, ...arms.map(a => a.id)].sort());
     const again = ok('ABC açısını çiz', r.objects);
     expect(byType(again.objects, 'angle')).toHaveLength(1);
     expect(byType(again.objects, 'segment')).toHaveLength(2);
     expect(again.message).toContain('zaten');
     const existingArm = ok('ABC açısını oluştur', withSegment());
     expect(byType(existingArm.objects, 'segment')).toHaveLength(2);
+    // Var olan [AB] kullanıcınındır: açı silinince yalnızca açıyla çizilen [BC] gider
+    const ownArms = byType(existingArm.objects, 'segment').filter(s => s.armOfAngleId);
+    const [exAngle] = byType(existingArm.objects, 'angle');
+    expect(ownArms.map(s => s.label)).toEqual(['[BC]']);
+    expect(new CommandScene(existingArm.objects).remove([exAngle.id]).sort()).toEqual([exAngle.id, ownArms[0].id].sort());
     expect(byType(ok('abc açısını çiz', pts()).objects, 'angle')).toHaveLength(1);
   });
 
@@ -578,6 +588,15 @@ describe('angles', () => {
     expect(dist(pointById(r.objects, angle.vertexPointId), pointById(r.objects, angle.point1Id))).toBeCloseTo(4, 9);
     expect(angle.reflex ?? false).toBe(degrees > 180);
     expect(pointById(r.objects, angle.vertexPointId).label).toBe('B');
+  });
+
+  it('derecelik açı silinince açıyla çizilen kolları da gider, noktalar kalır', () => {
+    const r = ok('60 derecelik açı çiz');
+    const [angle] = byType(r.objects, 'angle');
+    const arms = byType(r.objects, 'segment');
+    expect(arms).toHaveLength(2);
+    expect(arms.every(a => a.armOfAngleId === angle.id)).toBe(true);
+    expect(new CommandScene(r.objects).remove([angle.id]).sort()).toEqual([angle.id, ...arms.map(a => a.id)].sort());
   });
 
   it('clockwise, arm length and colour', () => {

@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Keyboard, Loader2, Mic, MicOff, Settings2 } from 'lucide-react';
 import { ToolMode } from '@/types/workspace';
-import { isEditingOrInDialog } from './toolShortcuts';
+import { workspaceOwnsKeyboard } from './toolShortcuts';
 import { CommandPanel, IncomingCommand } from './CommandPanel';
 import { loadSpeechMode, saveSpeechMode, SpeechEngine, SpeechMode, useSpeechInput } from '@/hooks/useSpeechInput';
 import { chooseSpokenCommand, looksIncomplete } from '@/math/commands/speechChoice';
@@ -88,7 +88,7 @@ export function CommandAssistant({ onSelectTool }: { onSelectTool: (tool: ToolMo
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.code === 'KeyK' && !isEditingOrInDialog(event.target)) {
+      if (workspaceOwnsKeyboard(event, rootRef.current) && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.code === 'KeyK') {
         event.preventDefault();
         setOpen(value => !value);
       }
@@ -128,11 +128,11 @@ export function CommandAssistant({ onSelectTool }: { onSelectTool: (tool: ToolMo
 
   const showBubble = micOn || status === 'transcribing' || status === 'error';
   const bubble = showBubble && <div role="status" aria-live="polite"
-    className={`pointer-events-auto mb-1 w-[min(20rem,calc(100vw-7rem))] rounded-2xl border px-3 py-2 text-xs shadow-xl backdrop-blur ${status === 'error' ? 'border-rose-300 bg-rose-50/95 text-rose-700 dark:border-rose-900 dark:bg-rose-950/90 dark:text-rose-200' : 'border-border bg-card/95 text-foreground'}`}>
+    className={`pointer-events-auto mb-1 w-[min(20rem,calc(100vw-7rem))] rounded-2xl border px-3 py-2 text-xs shadow-xl backdrop-blur ${status === 'error' ? 'border-destructive/40 bg-destructive/10 text-destructive' : 'border-border bg-card/95 text-foreground'}`}>
     {status === 'error' ? <span>{error}</span> : <>
       <span className="flex items-center gap-2 font-semibold">
         {status === 'listening'
-          ? <span aria-hidden className="flex h-3 items-end gap-0.5">{[0.5, 1, 0.7].map((f, i) => <span key={i} className="w-1 rounded-full bg-rose-500 transition-all" style={{ height: `${Math.max(3, Math.min(12, 3 + level * 12 * f))}px` }} />)}</span>
+          ? <span aria-hidden className="flex h-3 items-end gap-0.5">{[0.5, 1, 0.7].map((f, i) => <span key={i} className="w-1 rounded-full bg-destructive transition-all" style={{ height: `${Math.max(3, Math.min(12, 3 + level * 12 * f))}px` }} />)}</span>
           : <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />}
         {status === 'starting' ? 'Mikrofon açılıyor…' : status === 'listening' ? 'Dinliyorum — komutlarınızı söyleyin' : 'Son söylenen yazıya çevriliyor…'}
       </span>
@@ -162,8 +162,8 @@ export function CommandAssistant({ onSelectTool }: { onSelectTool: (tool: ToolMo
         <button type="button" onClick={toggleMic} disabled={!speech.supported} aria-pressed={micOn}
           aria-label={micOn ? 'Mikrofonu kapat' : 'Mikrofonu aç ve sesle komut ver'}
           title={speech.supported ? (micOn ? 'Mikrofonu kapat' : 'Mikrofonu aç: kapatana kadar sesli komut verebilirsiniz') : 'Bu tarayıcı mikrofonu desteklemiyor'}
-          className={`relative flex h-10 w-10 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${micOn ? 'bg-rose-500 text-white' : 'text-foreground hover:bg-muted'}`}>
-          {micOn && <span aria-hidden className="absolute inset-0 animate-pulse rounded-full bg-rose-500/40" style={{ transform: `scale(${1 + level * 0.35})`, transition: 'transform 80ms linear' }} />}
+          className={`relative flex h-10 w-10 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${micOn ? 'bg-destructive text-destructive-foreground' : 'text-foreground hover:bg-muted'}`}>
+          {micOn && <span aria-hidden className="absolute inset-0 animate-pulse rounded-full bg-destructive/40" style={{ transform: `scale(${1 + level * 0.35})`, transition: 'transform 80ms linear' }} />}
           {micOn ? <MicOff className="relative h-5 w-5" /> : <Mic className="h-5 w-5" />}
         </button>
       </div>

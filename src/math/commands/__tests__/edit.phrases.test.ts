@@ -83,7 +83,8 @@ describe('edit phrases (full engine): functions by name', () => {
   });
   it('keeps lowercase function names in messages', () => {
     expect(run('g yi sil', fns()).message).toBe('g(x) = sin(x) fonksiyonu silindi.');
-    expect(run('c1 çemberini kaldır', world()).message).toMatch(/^c1 çemberi silindi/);
+    // Çemberin kendi merkezi de gittiği için ad, giden noktayı da söyler (ŞEKLİN KENDİ NOKTALARI kuralı).
+    expect(run('c1 çemberini kaldır', world()).message).toMatch(/^c1 çemberi \(O noktasıyla birlikte\) silindi\./);
   });
   it('edits several named functions and the right one', () => {
     const both = run('f ve g yi sil', fns());
@@ -117,14 +118,20 @@ describe('edit phrases (full engine): functions by name', () => {
 
 describe('edit phrases (full engine): parts and construction products', () => {
   it('tangents: delete (with their contact points), colour, hide, select', () => {
+    // İKİ teğet birden silinince onları tanımlayan P noktası da artık kullanılmıyor: şeklin kendi noktası olarak gider.
     const del = run('teğetleri sil', unfocus(tangentScene()));
     expect(tangents(del.objects)).toHaveLength(0);
     expect(built(del.objects, 'tangent')).toHaveLength(0);
-    expect(pt(del.objects, 'P')).toBeDefined();
+    expect(pt(del.objects, 'P')).toBeUndefined();
     expect(of(del.objects, 'circle')).toHaveLength(1);
     const both = run('ikisini de sil', tangentScene());
     expect(tangents(both.objects)).toHaveLength(0);
-    expect(pt(both.objects, 'P')).toBeDefined();
+    expect(pt(both.objects, 'P')).toBeUndefined();
+    // "noktalar kalsın": yalnızca teğet doğruları gider, P ve değme noktaları kalır
+    const keep = run('teğetleri sil, noktalar kalsın', unfocus(tangentScene()));
+    expect(tangents(keep.objects)).toHaveLength(0);
+    expect(pt(keep.objects, 'P')).toBeDefined();
+    expect(built(keep.objects, 'tangent')).toHaveLength(2);
     const red = run('teğetleri kırmızı yap', unfocus(tangentScene()));
     expect(tangents(red.objects).map(l => l.color)).toEqual(['#ef4444', '#ef4444']);
     expect(of(red.objects, 'circle')[0].color).not.toBe('#ef4444');
@@ -213,9 +220,12 @@ describe('edit phrases (full engine): the object of the previous command', () =>
     '“%s” after “%s” also removes the vertices created with it', (text, first) => {
       expect(run(text, play(st([]), [first])).objects).toEqual([]);
     });
-  it('keeps the vertices when the shape is deleted by name', () => {
+  it('removes the unused vertices when the shape is deleted by name too', () => {
     const r = run('ABC üçgenini sil', tri());
-    expect(of(r.objects, 'point')).toHaveLength(3);
+    expect(of(r.objects, 'point')).toHaveLength(0);
+    const keep = run('yalnızca ABC üçgenini sil', tri());
+    expect(of(keep.objects, 'polygon')).toHaveLength(0);
+    expect(of(keep.objects, 'point')).toHaveLength(3);
   });
   it('hides, shows and names parts of the focused shape', () => {
     expect(of(run('gizle', play(st([]), ['yarıçapı 3 olan çember çiz'])).objects, 'circle')[0].visible).toBe(false);

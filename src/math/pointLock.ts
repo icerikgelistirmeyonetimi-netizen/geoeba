@@ -1,6 +1,6 @@
 import { MathObject, PointObject, Point2D } from '@/types/math';
 import { objectDependencies, hostBicimi } from '@/state/WorkspaceContext';
-import { getArcGeometry, projectOntoHost } from './geometry';
+import { projectOntoHost } from './geometry';
 type LockCandidate = { host: MathObject; position: Point2D; distance: number; fixedRadius?: number };
 
 /** Nokta aracının bağlayabildiği ve bagliNoktalariOturt'un üzerinde tutabildiği taşıyıcı türleri. */
@@ -35,15 +35,7 @@ export function pointLockCandidates(point: PointObject, scene: MathObject[], zoo
     if ((shape.kind === 'line' || shape.kind === 'segment' || shape.kind === 'ray') && Math.hypot(shape.b.x - shape.a.x, shape.b.y - shape.a.y) < 1e-9) return [];
     const position = projectOntoHost(point, shape);
     if (!position) return [];
-    // hostBicimi yayı/dilimi TAM çember, elipsi dönüşsüz modeller: menü, çizilmemiş kısma kilit önermesin
-    if (host.type === 'arc' || host.type === 'sector') {
-      const m = byId.get(host.centerPointId), s = byId.get(host.startPointId), e = byId.get(host.directionPointId);
-      const geo = m?.type === 'point' && s?.type === 'point' && e?.type === 'point' ? getArcGeometry(m, s, e) : null;
-      if (!geo || m?.type !== 'point') return [];
-      const fark = (((Math.atan2(position.y - m.y, position.x - m.x) - geo.startAngle) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-      if (fark > geo.sweep + 1e-6 && fark < 2 * Math.PI - 1e-6) return [];
-    }
-    if (host.type === 'ellipse' && (host.rotation ?? 0) % 180 !== 0) return [];
+    // Menü ve sürükleme aynı yay sınırlarını ve elips dönüşünü kullanır.
     const distance = Math.hypot(point.x - position.x, point.y - position.y) * zoom;
     if (distance > 10) return [];
     return [{ host, position, distance, ...(releaseRadius && shape.kind === 'circle' ? { fixedRadius: shape.radius } : {}) }];
