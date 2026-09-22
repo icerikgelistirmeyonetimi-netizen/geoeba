@@ -22,7 +22,7 @@ export default function HomePage() {
       key={sayfa}
       sayfa={sayfa}
       onKademeSec={selectLevel}
-      onFener={startFreeSandbox}
+      onAtolye={startFreeSandbox}
       onAnaSayfa={goHome}
       onHata={() => setAdaYedek(true)}
     />

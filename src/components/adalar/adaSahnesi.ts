@@ -46,9 +46,7 @@ export interface SahneGrubu {
   anchor?: Uclu;
   /** Halka ve kadraj için yatay merkez */
   center?: Uclu;
-  /** Fener lambası; dönen huzme buradan çıkar */
-  lamp?: Uclu;
-  /** Ada ya da fener tabelasındaki yazı (3B modelin içinde; ör. "İLKOKUL", "UYGULAMALAR") */
+  /** Ada ya da atölye tabelasındaki yazı (3B modelin içinde; ör. "İLKOKUL", "ATÖLYE") */
   tabela?: string;
   /** Sınıf binası: 1–12 ya da 'hazirlik' */
   grade?: number | string;
@@ -389,70 +387,6 @@ export function gokOrtami(renderer: THREE.WebGLRenderer, gunesYonu: THREE.Vector
   return hedef;
 }
 
-/**
- * Deniz fenerinin dönen ışık huzmesi: lambadan açılan, uca doğru sönen, kenarları yumuşak
- * iki koni. Eklemeli karışım; gündüz sahnesinde hafif bir ışık demeti olarak görünür.
- */
-function fenerHuzmesi(lamba: Uclu): THREE.Group {
-  const boy = 18;
-  const yaricap = 2.4;
-  const geo = new THREE.ConeGeometry(yaricap, boy, 48, 1, true);
-  geo.translate(0, -boy / 2, 0); // tepe lambada
-  geo.rotateZ(Math.PI / 2); // koni +x yönünde açılır
-  const malzeme = new THREE.ShaderMaterial({
-    uniforms: {
-      uRenk: { value: new THREE.Color(1.0, 0.84, 0.55) },
-      uGuc: { value: 0.5 },
-      uBoy: { value: boy },
-    },
-    vertexShader: /* glsl */ `
-      varying vec3 vYerel;
-      varying vec3 vNormal;
-      varying vec3 vGoz;
-      void main() {
-        vYerel = position;
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        vGoz = -mv.xyz;
-        vNormal = normalMatrix * normal;
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: /* glsl */ `
-      uniform vec3 uRenk;
-      uniform float uGuc;
-      uniform float uBoy;
-      varying vec3 vYerel;
-      varying vec3 vNormal;
-      varying vec3 vGoz;
-      void main() {
-        float t = clamp(vYerel.x / uBoy, 0.0, 1.0);
-        float boyunca = pow(1.0 - t, 1.8) * smoothstep(0.0, 0.04, t);
-        vec3 goz = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(vGoz);
-        float kenar = pow(abs(dot(normalize(vNormal), goz)), 1.3);
-        gl_FragColor = vec4(uRenk * boyunca * kenar * uGuc, 1.0);
-      }`,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
-  });
-  const donen = new THREE.Group();
-  const egim = new THREE.Group();
-  egim.rotation.z = -0.07; // huzme ufka doğru hafif aşağı bakar
-  // Karşılıklı iki huzme
-  for (const aci of [0, Math.PI]) {
-    const koni = new THREE.Mesh(geo, malzeme);
-    koni.renderOrder = 4;
-    koni.userData.aoDisi = true;
-    const kol = new THREE.Group();
-    kol.rotation.y = aci;
-    kol.add(koni);
-    egim.add(kol);
-  }
-  donen.add(egim);
-  donen.position.set(...lamba);
-  return donen;
-}
-
 /** Kıyıya olan mesafe alanı: sabit geometriden (su üstündeki kara, köprü) hücre biriminde uzaklık. */
 interface KiyiAlani {
   kutu: THREE.Box3;
@@ -613,7 +547,6 @@ export class AdaSahnesi extends EventTarget {
   private ortamHedefi: THREE.WebGLRenderTarget | null = null;
   private ortam: THREE.Texture | null = null;
   private denizDokusu: THREE.Texture | null = null;
-  private huzme: THREE.Group | null = null;
   private ao: SeciciGTAOPass | null = null;
 
   constructor(kap: HTMLElement, secenek: AdaSahnesiSecenekleri) {
@@ -634,7 +567,7 @@ export class AdaSahnesi extends EventTarget {
     return this.kontrolIzni;
   }
 
-  /** Sahnedeki seçilebilir adalar, sınıf binaları ve fener. */
+  /** Sahnedeki seçilebilir adalar, sınıf binaları ve atölye. */
   get secilebilir(): readonly Secilebilir[] {
     return this.secilebilirler;
   }
@@ -879,10 +812,6 @@ export class AdaSahnesi extends EventTarget {
         });
       } else if (tur === 'stage' || tur === 'grade' || tur === 'landmark') {
         this.secilebilirEkle(kok, giris, tur);
-        if (giris.lamp) {
-          this.huzme = fenerHuzmesi(giris.lamp);
-          this.sahne.add(this.huzme);
-        }
       }
     }
     this.rotalariKur(kiyiAlani);
@@ -1114,7 +1043,7 @@ export class AdaSahnesi extends EventTarget {
     });
     this.sahne.add(halka);
 
-    // Ada etiketi tabelanın hemen altından aşağı sarkar; sınıf etiketi binanın, fener etiketi fener odasının üstünde durur
+    // Ada etiketi tabelanın hemen altından aşağı sarkar; sınıf etiketi binanın, atölye etiketi kendi tabelasının üstünde durur
     const capaKaymalari: Record<SecilebilirTuru, number> = { stage: -0.45, grade: 1.2, landmark: 0 };
     const capaKaymasi = capaKaymalari[tur];
     const capa = giris.anchor
@@ -1579,9 +1508,6 @@ export class AdaSahnesi extends EventTarget {
       s.halka.visible = g > 0.005;
     }
 
-    // Fener huzmesi yavaşça döner
-    if (this.huzme) this.huzme.rotation.y = this.zaman.value * 0.45;
-
     // Yüzen tekneler ve şamandıralar; yelkenliler rotalarında ilerler
     const t = this.zaman.value;
     for (const y of this.yuzenler) {
@@ -1721,7 +1647,6 @@ export class AdaSahnesi extends EventTarget {
     this.ortam = null;
     this.denizDokusu?.dispose();
     this.denizDokusu = null;
-    this.huzme = null;
 
     if (renderer) {
       renderer.dispose();

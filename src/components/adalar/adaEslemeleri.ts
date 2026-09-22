@@ -22,11 +22,12 @@ export const KADEME_ADALARI: readonly KademeAdasi[] = [
 ];
 
 /**
- * Ana sayfadaki deniz feneri: uygulamaların açıldığı 3B sınıfı (Serbest Çizim Stüdyosu) açar.
- * `tabela`, fenerin önündeki 3B tabelanın yazısıdır; scripts/adalar/web_aktar.py aynı yazıyı
- * modele işler ve ana-sayfa.json'a yazar (adaVerisi.test.ts ikisini karşılaştırır).
+ * Ana sayfadaki Matematik Atölyesi adası: uygulamaların açıldığı 3B sınıfı (Serbest Çizim
+ * Stüdyosu) açar. `tabela`, atölyenin önündeki 3B tabelanın yazısıdır; sahneyi üreten
+ * scripts/adalar/web_aktar.py aynı yazıyı modele işler ve ana-sayfa.json'a yazar
+ * (adaVerisi.test.ts ikisini karşılaştırır).
  */
-export const FENER = { id: 'fener', ad: 'Matematik Feneri', renk: '#c99a52', tabela: 'UYGULAMALAR' } as const;
+export const ATOLYE = { id: 'atolye', ad: 'Matematik Atölyesi', renk: '#c99a52', tabela: 'ATÖLYE' } as const;
 
 /** Kademe adasındaki sınıf binalarının rıhtımdaki sırası. */
 export const ADA_SINIFLARI: Record<LevelId, readonly GradeId[]> = {

@@ -12,10 +12,10 @@ sayfa_id: ana-sayfa | ilkokul | ortaokul | lise
 
 Kaynak .blend dosyası değiştirilmez; tüm işlemler kaydedilmeyen oturumda yapılır.
 
-Ana sayfada ../deniz-feneri/deniz-feneri.blend varsa "Matematik Feneri" (fener + adacık
-koleksiyonları) aynı oturumda sahneye eklenir, FENER_KONUMU'na taşınır, önüne ada
-tabelalarıyla aynı parçalardan kurulan "UYGULAMALAR" tabelası konur ve denizine sığlık
-halkası eklenir.
+Ana sayfanın kaynağı ../matematik-atolye-adasi/takimadalar-atolye.blend: ilkokul adası
+matematik parkı, deniz fenerinin yeri ise ATOLYE_ADASI kökündeki Matematik Atölyesi'dir.
+Atölye sahnenin içinde hazır gelir; başka .blend eklenmez. Atölye landmark:atolye grubuna
+girer, tabelası "ATÖLYE"dir ve denizine sığlık halkası eklenir (fener ışığı/huzmesi yoktur).
 """
 
 import bpy
@@ -76,102 +76,17 @@ def layer_collection_map(lc, acc):
 LC = layer_collection_map(view_layer.layer_collection, {})
 
 # ---------------------------------------------------------------------------
-# Matematik Feneri (yalnız ana sayfa)
+# Matematik Atölyesi (yalnız ana sayfa): sahnede hazır gelir, ek dosya yüklenmez
 # ---------------------------------------------------------------------------
-FENER_BLEND = os.path.normpath(os.path.join(os.path.dirname(bpy.data.filepath), "..", "deniz-feneri", "deniz-feneri.blend"))
-FENER_KOLEKSIYONLARI = ("01 • DENİZ FENERİ", "02 • FENER ADACIĞI")
-FENER_KOKLERI = ("DENIZ_FENERI", "FENER_ADACIGI")
-# Blender koordinatı: İlkokul (-15.7, -5) ile Lise (15.7, -5) adalarının önünde, ortada
-FENER_KONUMU = Vector((0.0, -21.0, 0.0))
-# Fenerin önündeki tabela: ada tabelasının (koyu taş levha, renkli arkalık, fildişi yazı,
-# iki altın ayak) birebir kopyası; yalnız yazı ve arkalık rengi değişir.
-FENER_TABELA_YAZISI = "UYGULAMALAR"
-# Levha merkezi, adacık köküne göre (Blender x, y, z). Adalarda (0, -5.95, 2.35); adacık
-# küçük olduğundan levha giriş yolu ışıklarının hemen önünde, ayaklar çimin üstünde kalır.
-FENER_TABELA_YERI = Vector((0.0, -3.25, 2.35))
-# Arkalık: uygulamadaki fener kartının rengi #c99a52 (doğrusal RGB)
-FENER_TABELA_RENGI = (0.584, 0.323, 0.085)
+ATOLYE_KOKLERI = ("ATOLYE_ADASI",)
+ATOLYE_TABELA_YAZISI = "ATÖLYE"
 
-
-def tabela_arkalik_malzemesi(kaynak):
-    """Ada arkalığı malzemesinin (Principled + gürültü rampası) şampanya renkli kopyası."""
-    m = kaynak.copy()
-    m.name = "Fener • şampanya arkalık"
-    r, g, b = FENER_TABELA_RENGI
-    if m.use_nodes:
-        for n in m.node_tree.nodes:
-            if n.type == "BSDF_PRINCIPLED":
-                n.inputs["Base Color"].default_value = (r, g, b, 1.0)
-            elif n.type == "VALTORGB":
-                el = n.color_ramp.elements
-                el[0].color = (r * 0.78, g * 0.78, b * 0.78, 1.0)
-                el[-1].color = (min(1.0, r * 1.13), min(1.0, g * 1.13), min(1.0, b * 1.13), 1.0)
-    return m
-
-
-def fener_tabelasi(adacik):
-    """Ölçeklenmemiş bir ada tabelasının parçalarını kopyalayıp fener adacığının önüne kurar.
-
-    Parçalar adacık köküne bağlanır; böylece landmark:fener grubuna girer, fenerle birlikte
-    vurgulanır ve tıklanır. Döndürdüğü değer tabeladaki yazıdır (JSON'a yazılır).
-    """
-    if adacik is None:
-        log("UYARI: FENER_ADACIGI kökü yok; fener tabelası eklenmedi")
-        return None
-    ornek_levha = next((o for o in scene.objects
-                        if o.name.startswith("Ada adı") and "tabela" in o.name and o.parent is not None
-                        and o.parent.name.startswith("ADA_") and all(abs(s - 1.0) < 1e-6 for s in o.scale)), None)
-    if ornek_levha is None:
-        log("UYARI: örnek ada tabelası bulunamadı; fener tabelası eklenmedi")
-        return None
-    parcalar = [o for o in ornek_levha.parent.children_recursive if o.name.startswith("Ada adı")]
-    hedef_col = adacik.users_collection[0]
-    kayma = adacik.matrix_world.translation + FENER_TABELA_YERI - ornek_levha.matrix_world.translation
-    arkalik_mat = None
-    for o in parcalar:
-        yeni = o.copy()
-        if o.type == "FONT":
-            yeni.data = o.data.copy()
-            yeni.data.body = FENER_TABELA_YAZISI
-            yeni.name = f"Fener adı • {FENER_TABELA_YAZISI}"
-        elif "renkli arkalık" in o.name:
-            yeni.data = o.data.copy()
-            if arkalik_mat is None:
-                arkalik_mat = tabela_arkalik_malzemesi(o.data.materials[0])
-            yeni.data.materials[0] = arkalik_mat
-            yeni.name = "Fener adı • şampanya arkalık"
-        else:
-            yeni.name = o.name.replace("Ada adı", "Fener adı", 1)
-        yeni.parent = adacik
-        yeni.matrix_parent_inverse = adacik.matrix_world.inverted()
-        yeni.location = o.matrix_world.translation + kayma
-        yeni.rotation_euler = o.matrix_world.to_euler()
-        hedef_col.objects.link(yeni)
-    bpy.context.view_layer.update()
-    log(f"fener tabelası kuruldu: {len(parcalar)} parça, {ornek_levha.parent.name} tabelasından, yazı {FENER_TABELA_YAZISI!r}")
-    return FENER_TABELA_YAZISI
-
-
-fener = None
-if IS_HOME and os.path.exists(FENER_BLEND):
-    with bpy.data.libraries.load(FENER_BLEND, link=False) as (kaynak, hedef):
-        hedef.collections = [c for c in kaynak.collections if c in FENER_KOLEKSIYONLARI]
-    fener_nesneleri = []
-    for col in hedef.collections:
-        if col is None:
-            continue
-        scene.collection.children.link(col)
-        for o in col.all_objects:
-            fener_nesneleri.append(o)
-            if o.parent is None:
-                o.location += FENER_KONUMU
-    bpy.context.view_layer.update()
-    lamba = next((o for o in fener_nesneleri if o.type == "LIGHT" and o.data.type == "POINT"), None)
-    fener = {
-        "lamba": lamba.matrix_world.translation.copy() if lamba else FENER_KONUMU + Vector((0, 0.28, 9.4)),
-        "nesne_sayisi": len(fener_nesneleri),
-    }
-    fener["tabela"] = fener_tabelasi(next((o for o in fener_nesneleri if o.name == "FENER_ADACIGI"), None))
+atolye = None
+if IS_HOME:
+    atolye_kok = bpy.data.objects.get("ATOLYE_ADASI")
+    if atolye_kok is None or atolye_kok.name not in scene.objects:
+        raise RuntimeError("Ana sayfa sahnesinde ATOLYE_ADASI kökü bulunamadı")
+    atolye = {"nesne_sayisi": 1 + len(atolye_kok.children_recursive), "tabela": ATOLYE_TABELA_YAZISI}
 
 
 def collection_renderable(col):
@@ -230,7 +145,7 @@ SEYRELTME = {
     "Ağaç • ince dal": 0.5,
     "Kıyı • aşınmış kaya": 0.5,
     "Palmiye • gövde boğumu": 0.5,
-    # Matematik Feneri adacığı
+    # Matematik Atölyesi adacığı
     "Bahçe • kıyı çalısı": 0.4,
     "Kıyı • yuvarlatılmış taş": 0.35,
     "Bahçe • minik çiçek": 0.35,
@@ -387,7 +302,7 @@ def grade_id(root):
 def group_for(ob):
     anc = list(ancestors(ob))
     chain = [ob] + anc
-    if ob.name.startswith("Okyanus"):
+    if ob.name.startswith(("Okyanus", "Deniz • sürekli su yüzeyi")):
         return None
     for a in chain:
         if a.name.startswith("Yelkenli") and a.type == "EMPTY":
@@ -398,8 +313,8 @@ def group_for(ob):
     if ob.name.startswith("Şamandıra"):
         m = re.search(r"\.(\d+)$", ob.name)
         return f"float:samandira-{m.group(1) if m else '000'}"
-    if fener is not None and any(a.name in FENER_KOKLERI for a in chain):
-        return "landmark:fener"
+    if atolye is not None and any(a.name in ATOLYE_KOKLERI for a in chain):
+        return "landmark:atolye"
     if IS_HOME:
         for a in chain:
             if a.type == "EMPTY" and a.name.startswith("ADA_"):
@@ -537,19 +452,20 @@ if IS_HOME:
                     "center": to_three(root.matrix_world.translation),
                     "tabela": yazi,
                 })
-    if fener is not None:
+    if atolye is not None:
+        # Etiket atölye tabelasının hemen üstünde durur; fener lambası/huzmesi yoktur.
+        tabela_nesnesi = next((o for o in atolye_kok.children_recursive
+                               if o.type == "FONT" and o.data.body.strip().upper().replace("Ö", "O") == "ATOLYE"), None)
+        capa = (tabela_nesnesi.matrix_world.translation if tabela_nesnesi
+                else atolye_kok.matrix_world.translation + Vector((0.0, -3.25, 2.35)))
         for e in group_meta:
-            if e["key"] == "landmark:fener":
-                bmin, bmax = e["bbox"]["min"], e["bbox"]["max"]
-                lamba = fener["lamba"]
+            if e["key"] == "landmark:atolye":
                 e.update({
-                    "label": "Matematik Feneri",
-                    "short": "Matematik Feneri",
-                    # Etiket fener odasının tepesinde; ışık huzmesi lambadan çıkar
-                    "anchor": [round(lamba.x, 4), round(bmax[1] + 0.6, 4), round(-lamba.y, 4)],
-                    "center": [round((bmin[0] + bmax[0]) / 2, 4), 0.0, round((bmin[2] + bmax[2]) / 2, 4)],
-                    "lamp": to_three(lamba),
-                    "tabela": fener.get("tabela"),
+                    "label": "Matematik Atölyesi",
+                    "short": "Atölye",
+                    "anchor": to_three(capa + Vector((0.0, 0.0, 0.6))),
+                    "center": to_three(atolye_kok.matrix_world.translation),
+                    "tabela": atolye.get("tabela"),
                 })
 else:
     for root in grade_roots:
@@ -614,15 +530,16 @@ def siglik_ekle(mat, cx, cy, rx, ry):
     return True
 
 
-ocean = next((o for o in scene.objects if o.name.startswith("Okyanus") and o.type == "MESH"), None)
+ocean = next((o for o in scene.objects
+              if o.name.startswith(("Okyanus", "Deniz • sürekli su yüzeyi")) and o.type == "MESH"), None)
 if ocean is not None:
     src_mat = ocean.material_slots[0].material if ocean.material_slots else None
-    if fener is not None and src_mat is not None:
-        fener_grubu = joined.get("landmark:fener")
-        if fener_grubu is not None:
-            mn, mx = world_bbox_of_mesh(fener_grubu)
+    if atolye is not None and src_mat is not None and not src_mat.get("atolye_siglik_eklendi"):
+        atolye_grubu = joined.get("landmark:atolye")
+        if atolye_grubu is not None:
+            mn, mx = world_bbox_of_mesh(atolye_grubu)
             if siglik_ekle(src_mat, (mn.x + mx.x) / 2, (mn.y + mx.y) / 2, (mx.x - mn.x) * 0.47, (mx.y - mn.y) * 0.47):
-                log("fener sığlığı deniz malzemesine eklendi")
+                log("atölye sığlığı deniz malzemesine eklendi")
     bake_me = ocean.data.copy()
     bm = bmesh.new()
     bm.from_mesh(bake_me)

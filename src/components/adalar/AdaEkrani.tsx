@@ -3,8 +3,8 @@
 /**
  * Matematik Takımadaları — uygulamanın giriş ekranı.
  *
- * `ana-sayfa`: üç kademe adası ve Matematik Feneri. Adaya tıklamak o kademenin adasını,
- * fener Serbest Çizim Stüdyosu'nu açar. Kademe adasında sınıf binasına ya da alttaki
+ * `ana-sayfa`: üç kademe adası ve Matematik Atölyesi. Adaya tıklamak o kademenin adasını,
+ * atölye Serbest Çizim Stüdyosu'nu açar. Kademe adasında sınıf binasına ya da alttaki
  * sınıf düğmesine tıklamak sağda o sınıfın ünitelerini listeleyen paneli açar; ünitenin
  * konusu seçilince panel sola doğru genişler ve konunun içeriği panelin içinde açılır
  * (sol üstteki başlık yazıları ve alttaki düğmeler bu sürede çekilir).
@@ -18,7 +18,7 @@ import { curriculumData } from '@/curriculum/curriculumData';
 import type { AdaSahnesi } from './adaSahnesi';
 import {
   ADA_SINIFLARI,
-  FENER,
+  ATOLYE,
   KADEME_ADALARI,
   kademeAdasi,
   sahneSinifKimligi,
@@ -33,13 +33,13 @@ import { ilkAcilisAnimasyonuAl } from '@/components/layout/logoAnimasyonu';
 const VARLIK_ONEKI = process.env.NEXT_PUBLIC_ASSET_PREFIX ?? '';
 const RENKLER: Record<string, string> = {
   ...Object.fromEntries(KADEME_ADALARI.map((k) => [k.id, k.renk])),
-  [FENER.id]: FENER.renk,
+  [ATOLYE.id]: ATOLYE.renk,
 };
 
 interface AdaEkraniProps {
   sayfa: AdaSayfasiKimligi;
   onKademeSec: (kademe: LevelId) => void;
-  onFener: () => void;
+  onAtolye: () => void;
   onAnaSayfa: () => void;
   /** WebGL2 yok ya da sahne yüklenemedi: 2B ekranlara dönülmeli. */
   onHata: () => void;
@@ -147,7 +147,7 @@ const bekle = (ms: number) => new Promise<void>((coz) => setTimeout(coz, ms));
 /** En fazla `ms` kadar bekler; kamera odaklanması bitmese de gezinti ilerler. */
 const enFazla = (soz: Promise<unknown>, ms: number) => Promise.race([soz, bekle(ms)]);
 
-export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: AdaEkraniProps) {
+export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: AdaEkraniProps) {
   const ANA = sayfa === 'ana-sayfa';
   const kademe = ANA ? null : kademeAdasi(sayfa);
 
@@ -160,8 +160,8 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
   const gidiliyor = useRef(false);
 
   // Geri çağırmalar effect'i yeniden başlatmasın diye en güncel hâlleri ref'te tutulur
-  const geriCagirmalar = useRef({ onKademeSec, onFener, onAnaSayfa, onHata });
-  geriCagirmalar.current = { onKademeSec, onFener, onAnaSayfa, onHata };
+  const geriCagirmalar = useRef({ onKademeSec, onAtolye, onAnaSayfa, onHata });
+  geriCagirmalar.current = { onKademeSec, onAtolye, onAnaSayfa, onHata };
 
   const [hazir, setHazir] = useState(false);
   const [ilerleme, setIlerleme] = useState(0.04);
@@ -371,7 +371,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
         sahne.dinle('etkilesim', () => setEtkilesildi(true)),
         sahne.dinle('bosluk', () => bosTiklamaRef.current()),
         sahne.dinle('sec', ({ giris }) => {
-          if (giris.tur === 'landmark') void fenereGit();
+          if (giris.tur === 'landmark') void atolyeyeGit();
           else if (giris.tur === 'stage') {
             const hedef = kademeAdasi(String(giris.id));
             if (hedef) void kademeyeGit(hedef.id);
@@ -411,7 +411,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
       sahne?.dispose();
       sahneRef.current = null;
     };
-    // fenereGit/kademeyeGit/sinifaGit yalnız ref'lerdeki güncel geri çağırmaları kullanır
+    // atolyeyeGit/kademeyeGit/sinifaGit yalnız ref'lerdeki güncel geri çağırmaları kullanır
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sayfa, kurulum, bosluklar]);
 
@@ -538,16 +538,16 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
     }
   }
 
-  async function fenereGit() {
+  async function atolyeyeGit() {
     if (gidiliyor.current) return;
     gidiliyor.current = true;
-    setCanli(`${FENER.ad}: Serbest Çizim Stüdyosu açılıyor.`);
+    setCanli(`${ATOLYE.ad}: Serbest Çizim Stüdyosu açılıyor.`);
     const sahne = sahneRef.current;
     if (sahne) {
-      sahne.kilitle(FENER.id);
-      await enFazla(sahne.odaklan(FENER.id, { sure: 1100 }), 1150);
+      sahne.kilitle(ATOLYE.id);
+      await enFazla(sahne.odaklan(ATOLYE.id, { sure: 1100 }), 1150);
     }
-    await gecis(() => geriCagirmalar.current.onFener());
+    await gecis(() => geriCagirmalar.current.onAtolye());
   }
 
   function anaSayfayaDon() {
@@ -682,7 +682,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
       <section aria-labelledby="ada-ekrani-basligi">
         <p id="ada-ekrani-basligi" className={s.gorunmez}>
           {ANA
-            ? 'Matematik Takımadaları: İlkokul, Ortaokul ve Lise adaları ile Matematik Feneri.'
+            ? 'Matematik Takımadaları: İlkokul, Ortaokul ve Lise adaları ile Matematik Atölyesi.'
             : `${kademe?.baslik}: sınıf binaları`}
         </p>
 
@@ -711,16 +711,16 @@ export function AdaEkrani({ sayfa, onKademeSec, onFener, onAnaSayfa, onHata }: A
             <button
               type="button"
               className={s.kart}
-              style={{ '--kart-renk': FENER.renk } as React.CSSProperties}
-              onClick={() => void fenereGit()}
-              onPointerEnter={() => vurgula(FENER.id)}
+              style={{ '--kart-renk': ATOLYE.renk } as React.CSSProperties}
+              onClick={() => void atolyeyeGit()}
+              onPointerEnter={() => vurgula(ATOLYE.id)}
               onPointerLeave={() => vurgula(null)}
-              onFocus={() => vurgula(FENER.id)}
+              onFocus={() => vurgula(ATOLYE.id)}
               onBlur={() => vurgula(null)}
             >
               <span className={s['kart-serit']} aria-hidden="true" />
               <span className={s['kart-govde']}>
-                <span className={s['kart-baslik']}>{FENER.ad}</span>
+                <span className={s['kart-baslik']}>{ATOLYE.ad}</span>
                 <span className={s['kart-aralik']}>Serbest Çizim Stüdyosu</span>
               </span>
               <span className={s['kart-ok']}>{ikon.ok}</span>

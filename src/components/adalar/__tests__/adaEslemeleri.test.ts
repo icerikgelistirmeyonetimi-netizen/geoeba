@@ -8,7 +8,7 @@ describe('ada eşlemeleri', () => {
     expect(sinifNumarasi(9)).toBe(9);
     expect(sinifNumarasi('12')).toBe(12);
     expect(sinifNumarasi('13')).toBeNull();
-    expect(sinifNumarasi('fener')).toBeNull();
+    expect(sinifNumarasi('atolye')).toBeNull();
     expect(sinifNumarasi(-1)).toBeNull();
   });
 

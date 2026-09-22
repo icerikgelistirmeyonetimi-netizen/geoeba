@@ -2,11 +2,11 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { SahneGrubu } from '../adaSahnesi';
-import { FENER, KADEME_ADALARI } from '../adaEslemeleri';
+import { ATOLYE, KADEME_ADALARI } from '../adaEslemeleri';
 
 /**
  * Blender'dan dışa aktarılan ana sayfa verisi (public/adalar/data/ana-sayfa.json) ile
- * uygulamanın eşlemeleri tutarlı olmalı: her kademe adası ve fener sahnede olmalı,
+ * uygulamanın eşlemeleri tutarlı olmalı: her kademe adası ve atölye sahnede olmalı,
  * önlerindeki 3B tabelaların yazısı beklenen olmalı.
  */
 const VERI_YOLU = path.resolve(__dirname, '../../../../public/adalar/data/ana-sayfa.json');
@@ -24,12 +24,16 @@ describe('ana sayfa sahne verisi', () => {
     }
   });
 
-  it('fenerin önündeki tabela "UYGULAMALAR" yazar ve fener grubu lambayla dışa aktarılmış', () => {
-    const fener = grup(`landmark:${FENER.id}`);
-    expect(fener).toBeDefined();
-    expect(fener?.tabela).toBe(FENER.tabela);
-    expect(fener?.tabela).toBe('UYGULAMALAR');
-    expect(fener?.lamp).toHaveLength(3);
-    expect(fener?.anchor).toHaveLength(3);
+  it('atölyenin önündeki tabela "ATÖLYE" yazar ve grubu etiketiyle dışa aktarılmış', () => {
+    const atolye = grup(`landmark:${ATOLYE.id}`);
+    expect(atolye).toBeDefined();
+    expect(atolye?.label).toBe(ATOLYE.ad);
+    expect(atolye?.tabela).toBe(ATOLYE.tabela);
+    expect(atolye?.tabela).toBe('ATÖLYE');
+    expect(atolye?.anchor).toHaveLength(3);
+  });
+
+  it('deniz feneri sahneden kaldırıldı', () => {
+    expect(grup('landmark:fener')).toBeUndefined();
   });
 });
