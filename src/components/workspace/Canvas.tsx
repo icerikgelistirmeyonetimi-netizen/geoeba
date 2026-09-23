@@ -47,7 +47,6 @@ import { MeasurementInstruments } from './MeasurementInstruments';
 import { ToolCursor } from './ToolCursor';
 import { TextNoteDialog } from './TextNoteDialog';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
-import { secimBasligi } from './secimBasligi';
 import { useSliderPlayback } from '@/hooks/useSliderPlayback';
 import { Solid3DObject, Point3D } from '@/types/workspace3d';
 import { projectSolidFor2D, SolidProjectionMode } from '@/math/solidProjection2D';
@@ -179,7 +178,7 @@ import { etiketPayi } from './esitlikCizimi';
 import { imlecDegeri, imlecSinifi } from './imlecSiniflari';
 import { gorunumKaydirmaBasisiMi, kaydirmaDisiHedefMi, nesneBasisiIslenmeli } from './gorunumKaydirma';
 import { noktaAdiYeri, noktaEngelleri } from './noktaAdi';
-import { Box, FlipHorizontal2, Info, Lightbulb, MousePointer2, Pentagon, X as CarpiSimgesi } from 'lucide-react';
+import { Box, FlipHorizontal2, Info, Lightbulb, Pentagon, X as CarpiSimgesi } from 'lucide-react';
 
 // Derlenmiş fonksiyon ifadeleri önbelleği (ifade başına tek derleme)
 const compiledExpressionCache = new Map<string, ((x: number, scope?: Record<string, number>) => number) | null>();
@@ -281,7 +280,7 @@ interface CanvasProps {
   onSelectSolids?: (ids: string[]) => void;
   onUpdateSolidPosition?: (id: string, pos: Point3D) => void;
   onDeleteSolid?: (id: string) => void;
-  /** Birden çok cismi TEK geçmiş adımıyla siler (2B seçim çubuğu). Yoksa onDeleteSolid tek tek çağrılır. */
+  /** Birden çok cismi TEK geçmiş adımıyla siler. Yoksa onDeleteSolid tek tek çağrılır. */
   onDeleteSolids?: (ids: string[]) => void;
   onDragEnd?: () => void;
 }
@@ -300,8 +299,6 @@ export function Canvas({
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  /** 2B seçim çubuğunun saydığı/sildiği 3B cisimler */
-  const seciliCisimler = selectedSolidIds.length > 0 ? selectedSolidIds : selectedSolidId ? [selectedSolidId] : [];
 
   const { selectedLevel, selectedGrade, isFreeSandbox, selectedActivity } = useCurriculum();
   const isPrimary = selectedLevel?.id === 'ilkokul' || (selectedGrade && selectedGrade.gradeNumber <= 4);
@@ -3263,7 +3260,7 @@ export function Canvas({
       });
     }
 
-    // "Sil" her nesne türünde bulunur. Delete tuşu ve seçim çubuğuyla aynı kümeyi siler: tıklanan nesne seçimin
+    // "Sil" her nesne türünde bulunur. Delete tuşuyla aynı kümeyi siler: tıklanan nesne seçimin
     // içindeyse seçimin tamamı (Kopyala ile aynı targetIds). Şekil silinince kendi kullanılmayan noktaları da gider.
     const silAciklamasi = targetIds.length > 1 ? `${targetIds.length} nesne silindi` : undefined;
     maddeler.push({
@@ -7498,52 +7495,6 @@ export function Canvas({
           )}
           <CubukDugmesi simge={<CarpiSimgesi className="w-4 h-4" />} onClick={cancelPendingAction}>
             İptal
-          </CubukDugmesi>
-        </KayanCubuk>
-      )}
-
-      {/* 6. SEÇİM ÇUBUĞU (2D): alttaki komut çekmecesinin üstünde; düğmeler dokunmatik hedef (≥ 44 px) */}
-      {(selectedObjectIds.length > 0 || seciliCisimler.length > 0) && activeTool === 'select' && (
-        <KayanCubuk konum="alt-yuksek" data-secim-kapsulu>
-          <CubukMetni
-            simge={<MousePointer2 className="w-4 h-4" />}
-            baslik={secimBasligi(selectedObjectIds.length, seciliCisimler.length)}
-            aciklama="taşımak için sürükleyin"
-          />
-          <CubukAyirici />
-          <CubukDugmesi
-            tur="tehlike"
-            simge={<Trash2 className="w-4 h-4" />}
-            onClick={() => {
-              if (selectedObjectIds.length > 0) {
-                deleteObjects(
-                  selectedObjectIds,
-                  selectedObjectIds.length === 1 ? undefined : `${selectedObjectIds.length} seçili nesne silindi`
-                );
-                setSelectedObjectIds([]);
-              }
-              // Seçili 3B cisimler de silinir (tek geçmiş adımı; geri al ile geri gelir)
-              if (seciliCisimler.length > 0) {
-                if (onDeleteSolids) onDeleteSolids(seciliCisimler);
-                else seciliCisimler.forEach((sid) => onDeleteSolid?.(sid));
-                onSelectSolid?.(null);
-                onSelectSolids?.([]);
-              }
-            }}
-          >
-            Sil
-          </CubukDugmesi>
-          <CubukDugmesi
-            simge={<CarpiSimgesi className="w-4 h-4" />}
-            onClick={() => {
-              setSelectedObjectIds([]);
-              if (seciliCisimler.length > 0) {
-                onSelectSolid?.(null);
-                onSelectSolids?.([]);
-              }
-            }}
-          >
-            Seçimi kaldır
           </CubukDugmesi>
         </KayanCubuk>
       )}

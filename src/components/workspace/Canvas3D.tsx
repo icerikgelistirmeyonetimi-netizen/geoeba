@@ -31,7 +31,6 @@ import {
 import { commandCircleGeometry } from '@/math/commandBindings';
 import { getArcGeometry } from '@/math/geometry';
 import { noktaZ, tabanZ, nesnelerin3BMerkezi } from '@/math/zEkseni';
-import { secimBasligi } from './secimBasligi';
 import { compileMathExpression } from '@/math/parser';
 import { useWorkspace } from '@/state/WorkspaceContext';
 import {
@@ -44,7 +43,7 @@ import { formatTurkishNumber } from '@/math/coordinates';
 import { isAnyModalOpen } from '@/components/ui/modalState';
 import { workspaceOwnsKeyboard } from './toolShortcuts';
 import { KayanCubuk, CubukMetni, CubukAyirici, CubukDugmesi } from './KayanCubuk';
-import { BookOpen, MousePointer2, X as CarpiSimgesi } from 'lucide-react';
+import { BookOpen, X as CarpiSimgesi } from 'lucide-react';
 import { RotateCw, Focus, Plus, Minus, Grid, Trash2, Box, Sparkles, ScanSearch, Search } from 'lucide-react';
 import { ViewCube3D } from './ViewCube3D';
 
@@ -2123,30 +2122,6 @@ export function Canvas3D(props: Canvas3DProps) {
           </KayanCubuk>
         );
       })()}
-
-      {/* Seçim çubuğu (sade kayan çubuk) */}
-      {(effectiveSelectedIds.length > 0 || selectedObjectIds.length > 0) && activeTool === 'select_move' && (
-        <KayanCubuk konum="alt" onMouseDown={stopMouseDown} data-secim-kapsulu>
-          <CubukMetni
-            simge={<MousePointer2 className="w-4 h-4" />}
-            baslik={secimBasligi(selectedObjectIds.length, effectiveSelectedIds.length)}
-            aciklama="sürükleyerek taşıyın, mavi Z okuyla yükseltin"
-          />
-          <CubukAyirici />
-          <CubukDugmesi tur="tehlike" simge={<Trash2 className="w-4 h-4" />} onClick={seciliyiSil}>
-            Sil
-          </CubukDugmesi>
-          <CubukDugmesi
-            simge={<CarpiSimgesi className="w-4 h-4" />}
-            onClick={() => {
-              selectIds([]);
-              if (selectedObjectIds.length > 0) workspace.setSelectedObjectIds([]);
-            }}
-          >
-            Seçimi kaldır
-          </CubukDugmesi>
-        </KayanCubuk>
-      )}
 
       {/* İnceleme modu ipucu */}
       {activeTool === 'inspect' && (
