@@ -25,6 +25,8 @@ interface CommandPanelProps {
   onSelectTool: (tool: ToolMode) => void;
   /** 'bar': eski alt çubuk; 'drawer': düğmenin yanında açılan kutu */
   variant?: 'bar' | 'drawer';
+  /** Gizliyken de sesli komutları işler; odağı yalnız görünürken alır. */
+  visible?: boolean;
   incoming?: IncomingCommand | null;
   /** Gelen komut işlendiğinde çağrılır (sıradaki sesli komut ancak bundan sonra verilir). */
   onIncomingHandled?: (nonce: number) => void;
@@ -33,7 +35,7 @@ interface CommandPanelProps {
   headerExtra?: React.ReactNode;
 }
 
-export function CommandPanel({ onSelectTool, variant = 'bar', incoming, onIncomingHandled, onClose, headerExtra }: CommandPanelProps) {
+export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, incoming, onIncomingHandled, onClose, headerExtra }: CommandPanelProps) {
   const {
     objects, selectedObjectIds, setSelectedObjectIds, setActiveTool, commit, viewport, setViewport, resetViewport, pendingPointIds,
     undo, redo, history, historyIndex, requestClearAll, styleSettings, setStyleSettings, openRegularPolygonDialog, openCircleRadiusDialog,
@@ -48,10 +50,11 @@ export function CommandPanel({ onSelectTool, variant = 'bar', incoming, onIncomi
   const [dismissed, setDismissed] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const manuallyEdited = useRef(false);
   const listId = useId();
   const helpId = useId();
   const drawer = variant === 'drawer';
-  const meaning = useSemanticCommands(text, focused);
+  const meaning = useSemanticCommands(text, visible && focused);
   const lexicalSuggestions = useMemo(() => searchCommands(text, {
     examples: toolExamples, history: lastCommands, labels: objects.map(o => o.label),
   }), [text, lastCommands, objects]);
@@ -81,35 +84,39 @@ export function CommandPanel({ onSelectTool, variant = 'bar', incoming, onIncomi
   // ve tek satırlık komutta bile kaydırma çubuğu görünüyordu. Sığdığı sürece çubuk hiç çizilmez.
   useEffect(() => {
     const el = inputRef.current;
-    if (!el) return;
+    if (!el || !visible) return;
     el.style.height = 'auto';
     const kenarlik = el.offsetHeight - el.clientHeight; // üst + alt kenarlık
     const istenen = el.scrollHeight + kenarlik;
     el.style.height = `${Math.min(istenen, MAX_INPUT_HEIGHT)}px`;
     el.style.overflowY = istenen > MAX_INPUT_HEIGHT ? 'auto' : 'hidden';
-  }, [text]);
+  }, [text, visible]);
 
   // Kutu açılınca yazmaya hazır olsun.
-  useEffect(() => { if (drawer) inputRef.current?.focus(); }, [drawer]);
+  useEffect(() => {
+    if (drawer && visible) inputRef.current?.focus();
+    if (!visible) { inputRef.current?.blur(); setFocused(false); }
+  }, [drawer, visible]);
 
-  const changeText = (value: string) => { setText(value); setActiveSuggestion(-1); setDismissed(false); };
+  const changeText = (value: string) => { manuallyEdited.current = value.trim().length > 0; setText(value); setActiveSuggestion(-1); setDismissed(false); };
   const chooseSuggestion = (value: string) => {
+    manuallyEdited.current = true;
     setText(value); setActiveSuggestion(-1); setDismissed(true); inputRef.current?.focus();
   };
 
-  const execute = (input: string = text) => {
+  const execute = (input: string = text, preserveDraft = false) => {
     setDismissed(true);
     const raw = input.trim();
     if (!raw) return;
     // pendingPointIds: yarım kalmış çokgen/parça çiziminin tıklanmış noktaları komut yolunda da KULLANIMDA sayılır.
     const plan = executeTurkishCommand(raw, objects, selectedObjectIds, { viewport, styleSettings, pendingPointIds });
     if (!plan.ok) {
-      setText(raw);
+      if (!preserveDraft) setText(raw);
       setResult({ ok: false, message: plan.message, suggestions: plan.suggestions?.length ? plan.suggestions : suggestions.map(s => s.text) });
       return;
     }
     const conflict = historyConflict(plan);
-    if (conflict) { setText(raw); setResult({ ok: false, message: conflict }); return; }
+    if (conflict) { if (!preserveDraft) setText(raw); setResult({ ok: false, message: conflict }); return; }
 
     let message = plan.message;
     if (plan.sceneChanged) {
@@ -170,7 +177,7 @@ export function CommandPanel({ onSelectTool, variant = 'bar', incoming, onIncomi
       if (!toolChosen && (plan.sceneChanged || (selectionChanged && plan.selectedIds.length > 0))) setActiveTool('select');
     }
     setResult({ ok: true, message });
-    setText('');
+    if (!preserveDraft) { setText(''); manuallyEdited.current = false; }
     setLastCommands(prev => [raw, ...prev.filter(v => v !== raw)].slice(0, 8));
   };
 
@@ -185,8 +192,13 @@ export function CommandPanel({ onSelectTool, variant = 'bar', incoming, onIncomi
     // Aynı komut iki kez uygulanmasın (React geliştirme modu etkileri iki kez çalıştırabilir).
     if (!incoming || lastIncoming.current === incoming.nonce) return;
     lastIncoming.current = incoming.nonce;
-    if (incoming.run) executeRef.current(incoming.text);
-    else { changeText(incoming.text); inputRef.current?.focus(); }
+    if (incoming.run) executeRef.current(incoming.text, true);
+    // Son algılanan metin düzeltmeye hazır kalır; ses sonucu odağı ya da elle yazılan taslağı almaz.
+    if (!manuallyEdited.current) {
+      setText(incoming.text);
+      setActiveSuggestion(-1);
+      setDismissed(true);
+    }
     handledRef.current?.(incoming.nonce);
   }, [incoming]);
 

@@ -55,7 +55,6 @@ export function CommandAssistant({ onSelectTool }: { onSelectTool: (tool: ToolMo
   const enqueue = useCallback((text: string) => {
     // Numara burada sabitlenir: aynı anda gelen iki cümle aynı numarayı alırsa biri kuyruktan düşerdi.
     const item: IncomingCommand = { text, nonce: ++nonce.current, run: autoRunRef.current };
-    setOpen(true);
     setHeard(list => [text, ...list.filter(h => !h.endsWith(' …'))].slice(0, 3));
     setQueue(list => [...list, item]);
   }, []);
@@ -147,10 +146,11 @@ export function CommandAssistant({ onSelectTool }: { onSelectTool: (tool: ToolMo
 
   // Kutu tuvalin genişliğine sığar: sağda araç sütunu için boşluk, solda kenar payı.
   return <div ref={rootRef} className="pointer-events-none absolute bottom-3 left-3 right-14 z-30 flex items-end justify-end gap-2 sm:bottom-4 sm:right-16">
-    {open && <div className={compact ? 'pointer-events-auto fixed inset-x-2 bottom-20 z-40' : 'pointer-events-auto min-w-0 max-w-[30rem] flex-1'}>
-      <CommandPanel variant="drawer" onSelectTool={onSelectTool} incoming={queue[0] ?? null} onIncomingHandled={handled}
+    {/* Sesli komut kuyruğu kutu kapalıyken de işlenir; yalnız kullanıcı kutuyu açar. */}
+    <div hidden={!open} className={compact ? 'pointer-events-auto fixed inset-x-2 bottom-20 z-40' : 'pointer-events-auto min-w-0 max-w-[30rem] flex-1'}>
+      <CommandPanel variant="drawer" visible={open} onSelectTool={onSelectTool} incoming={queue[0] ?? null} onIncomingHandled={handled}
         onClose={() => setOpen(false)} headerExtra={settingsPanel} />
-    </div>}
+    </div>
     <div className="flex flex-col items-end">
       {bubble}
       <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-border bg-card p-1 shadow-lg">

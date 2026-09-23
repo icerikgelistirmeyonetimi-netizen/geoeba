@@ -192,6 +192,15 @@ for ob in scene.objects:
     md.use_collapse_triangulate = True
     seyreltilen += 1
 
+# Dört ada adının harf boyutu dünya uzayında aynı olsun: kaynakta LİSE yazısı
+# 0.82, atölyenin tamamı 1.6 ölçekli. Tabela merkezleri ve yazı derinliği korunur.
+if IS_HOME:
+    for ob in scene.objects:
+        if ob.type == "FONT" and ob.name.startswith(("Ada adı", "Atölye adı")):
+            dunya_olcegi = ob.matrix_world.to_scale()
+            ob.scale.x *= 1.35 / dunya_olcegi.x
+            ob.scale.y *= 1.35 / dunya_olcegi.y
+
 bpy.context.view_layer.update()
 dg = bpy.context.evaluated_depsgraph_get()
 
