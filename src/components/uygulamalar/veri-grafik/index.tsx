@@ -22,6 +22,7 @@ import { aralikSecenekleri, gruplamaVar, seriRengi, varsayilanAralik } from './g
 import { caprazSayim, degiskenSutunlari, kategoriRengi, renkEslemesi, satirRengi } from './kategorik';
 import {
   ORNEK_VERILER,
+  ornekKonulari,
   csvUret,
   gecerliDegerler,
   ornekVeriOlustur,
@@ -69,8 +70,7 @@ import {
   svgPngIndir,
   useAcilirMenu,
   useAzaltilmisHareket,
-  useBoyut,
-} from './ortak';
+  useBoyut, TurIsareti } from './ortak';
 import { sekmeKimlikleri, sekmeOkTusu } from '../sekmeler';
 
 export { manifest } from './manifest';
@@ -87,27 +87,11 @@ function durumYukle(): Durum | null {
   }
 }
 
-function TurIsareti({ tur }: { tur: Sutun['tur'] }) {
-  // Sayısal: cetvel; kategorik: etiket
-  return tur === 'sayi' ? (
-    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 opacity-80" aria-hidden="true">
-      <path d="M2 11.5h12M4 11.5V9M7 11.5V8M10 11.5V9M13 11.5V7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  ) : (
-    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 opacity-80" aria-hidden="true">
-      <path d="M2.5 3h5.2l5.8 5.8-4.7 4.7L3 7.7V3z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-      <circle cx="5.5" cy="5.8" r="1.1" fill="currentColor" />
-    </svg>
-  );
-}
-
 /**
  * Örnekleyici açıkken üç sütun (örnekleyici | tablo | grafik) en az bu genişliği ister; daha dar pencerede
  * bölümler alt alta dizilir ve gövde dikey kayar.
  */
 export const UC_SUTUN_ESIGI = 1024;
-/** Karşılaştırma panelleri bundan dar grafikte yan yana değil alt alta çizilir */
-const YAN_YANA_ESIGI = 640;
 
 /** Veri türü uymadığı için pasif grafik sekmelerinin nedeni (ipucu ve panel iletisi) */
 const sekmeGerekceleri: Partial<Record<Sekme, string>> = {
@@ -117,9 +101,51 @@ const sekmeGerekceleri: Partial<Record<Sekme, string>> = {
 
 /** Göster / gizle seçeneği (basılı düğme; sekme düğmeleriyle aynı dil) */
 const SECENEK_DUGMESI = (aktif: boolean) =>
-  `h-11 rounded-[calc(var(--radius)-8px)] px-3 text-[13px] font-bold whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 ${
+  `inline-flex h-11 items-center gap-1.5 rounded-[calc(var(--radius)-8px)] px-2.5 text-[12px] font-semibold whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 ${
     aktif ? 'bg-primary text-primary-foreground' : 'text-foreground hover:bg-accent'
   }`;
+
+/** Nokta grafiği seçeneklerinin simgeleri: ortalama çizgisi, sapma bandı, değer etiketi, frekans sütunları */
+function SecenekSimgesi({ ad }: { ad: 'ortalama' | 'oms' | 'etiketler' | 'sutunlar' }) {
+  const ortak = { className: 'h-4 w-4 shrink-0', viewBox: '0 0 16 16', 'aria-hidden': true as const };
+  switch (ad) {
+    case 'ortalama':
+      return (
+        <svg {...ortak}>
+          <path d="M2 13.5h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <path d="M8 2.5v11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <circle cx="4.2" cy="11" r="1.6" fill="currentColor" />
+          <circle cx="11.8" cy="11" r="1.6" fill="currentColor" />
+          <circle cx="5.6" cy="7.4" r="1.6" fill="currentColor" />
+        </svg>
+      );
+    case 'oms':
+      return (
+        <svg {...ortak}>
+          <rect x="3.5" y="2.5" width="9" height="11" rx="1.5" fill="currentColor" fillOpacity="0.28" />
+          <path d="M3.5 2.5v11M12.5 2.5v11" stroke="currentColor" strokeWidth="1.3" strokeDasharray="2 1.6" strokeLinecap="round" />
+          <path d="M8 2.5v11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'etiketler':
+      return (
+        <svg {...ortak}>
+          <rect x="3" y="2" width="10" height="6" rx="1.8" fill="none" stroke="currentColor" strokeWidth="1.4" />
+          <path d="M6 5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <path d="M8 8v2.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <circle cx="8" cy="12.5" r="1.9" fill="currentColor" />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...ortak}>
+          <rect x="2" y="8.5" width="3.2" height="5.5" rx="0.8" fill="currentColor" />
+          <rect x="6.4" y="3" width="3.2" height="11" rx="0.8" fill="currentColor" />
+          <rect x="10.8" y="6" width="3.2" height="8" rx="0.8" fill="currentColor" />
+        </svg>
+      );
+  }
+}
 
 export type YerlesimModu = 'iki-sutun' | 'uc-sutun' | 'dikey' | 'dikey-kaydir';
 
@@ -150,6 +176,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const ayarMenu = useAcilirMenu();
   const [akis, setAkis] = useState(false);
   const [bildirim, setBildirim] = useState<string | null>(null);
+  /** Yüklenen örnek verinin neyi öğrettiği: grafiğin üstünde kapatılabilir ipucu şeridi (yalnız Tablom kümesinde) */
+  const [ipucu, setIpucu] = useState<string | null>(null);
   const grafikRef = useRef<HTMLDivElement>(null);
   const kokRef = useRef<HTMLDivElement>(null);
   const grafikBoyut = useBoyut(grafikRef);
@@ -268,8 +296,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   /** Seçenek şeridi yalnız o grafiğin seçeneği varsa çizilir */
   const seritVar =
     (sekme === 'nokta' && degiskenGecerli) ||
-    (sekme === 'sutun' && degiskenGecerli && !etkinKategorik) ||
-    (sekme === 'cizgi' && grafikSutun >= 0) ||
+    (sekme === 'cizgi' && grafikSutun >= 0 && sayisalDegiskenler.length > 1) ||
     (sekme === 'sacilim' && sacilim !== null);
 
   /** Kategorik sütunda kutucuk sırası: deney sütunuysa aygıttaki sıra, değilse alfabetik */
@@ -304,22 +331,29 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   }, [tumNoktaDegerler, aralik]);
   /** Değerler gruplanıyor mu (gruplama yoksa her nokta tam değerinde durur) */
   const gruplu = useMemo(() => tumNoktaDegerler.length > 0 && gruplamaVar(tumNoktaDegerler, aralik), [tumNoktaDegerler, aralik]);
+  /** Grafik ayarları menüsündeki bölümler: gruplama (nokta, sayısal değişken), sürükleme yuvarlaması (sütun / çizgi) */
+  const gruplamaAyari = sekme === 'nokta' && degiskenGecerli && !kategorikSecili && aralikSecenekler.length > 1;
+  const yuvarlamaAyari = (sekme === 'sutun' && degiskenGecerli && !etkinKategorik) || (sekme === 'cizgi' && grafikSutun >= 0);
 
   const ornekYukle = (id: string) => {
-    // Örnek veri kendi tablonuza yüklenir: örnekleyici kapanır, tablo görünür, eksen varsayılan değişkene yerleşir;
-    // belirli bir grafik için hazırlanmış örnek (saçılım, daire) o grafikte açılır
-    const onerilen = ORNEK_VERILER.find((o) => o.id === id)?.onerilenGrafik;
+    // Örnek veri kendi tablonuza yüklenir: örnekleyici kapanır, tablo görünür; örneğin önerdiği grafik, eksen,
+    // karşılaştırma değişkeni ve renk anahtarı uygulanır (belirtilmemişse varsayılanlar), açıklaması kısa bildirimde
+    const ornek = ORNEK_VERILER.find((o) => o.id === id);
+    const yeniTablo = ornekVeriOlustur(id);
+    const sutunId = (ad?: string) => (ad ? yeniTablo.sutunlar.find((s) => s.ad === ad)?.id ?? null : null);
     setDurum((d) => ({
       ...ornekleyiciDegistir(d, false),
-      tablo: ornekVeriOlustur(id),
-      degisken: null,
-      ikinciDegisken: null,
+      tablo: yeniTablo,
+      degisken: sutunId(ornek?.varsayilanDegisken),
+      ikinciDegisken: sutunId(ornek?.karsilastir),
       yDegisken: null,
+      renkDegisken: sutunId(ornek?.renkDegisken),
       aralik: null,
       sutunModu: false,
-      ...(onerilen ? { sekme: onerilen } : {}),
+      ...(ornek?.onerilenGrafik ? { sekme: ornek.onerilenGrafik } : {}),
     }));
     setSeciliSatir(null);
+    setIpucu(ornek?.aciklama ?? null);
     ornekMenu.kapat(true);
   };
 
@@ -419,8 +453,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const grafikGenislik = grafikBoyut.genislik;
   const grafikYukseklik = grafikBoyut.yukseklik;
   const ikiPanel = sekme === 'nokta' && ikinciGecerli;
-  /** Dar grafikte karşılaştırma panelleri alt alta (her biri yarım boy), genişte yan yana */
-  const panelAltAlta = ikiPanel && grafikGenislik < YAN_YANA_ESIGI;
+  /** Karşılaştırma panelleri hep alt alta (aynı eksen üst üste: dağılımlar hizalı karşılaştırılır, noktalar iri kalır) */
+  const panelAltAlta = ikiPanel;
   const panelGenislik = ikiPanel && !panelAltAlta ? Math.floor(grafikGenislik / 2) : grafikGenislik;
   const panelYukseklik = panelAltAlta ? Math.floor(grafikYukseklik / 2) : grafikYukseklik;
   const ortakEksen = useMemo(
@@ -466,8 +500,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
 
   return (
     <div ref={kokRef} className="flex h-full w-full flex-col bg-background text-foreground" data-uygulama="veri-grafik">
-      {/* Üst şerit: sekmeler + dosya işlemleri */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-2 py-2">
+      {/* Üst şerit: grafik türü sekmeleri + örnek veri, deney, indirme ve grafik ayarları */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-2 py-1.5">
         <div role="tablist" aria-label="Grafik türü" className="flex flex-wrap gap-1 rounded-[calc(var(--radius)-4px)] bg-muted p-1">
           {SEKMELER.map((s, i) => {
             const aktif = sekme === s.id;
@@ -536,19 +570,27 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                 role="menu"
                 aria-label="Örnek veri"
                 onKeyDown={ornekMenu.menuTusu}
-                className="absolute right-0 z-30 mt-1 min-w-[280px] overflow-hidden rounded-[calc(var(--radius)-4px)] border border-border bg-popover p-1 text-popover-foreground shadow-[0_18px_40px_-18px_rgba(6,40,45,.55)]"
+                className="absolute right-0 z-30 mt-1 max-h-[min(72vh,700px)] w-[min(440px,92vw)] overflow-y-auto rounded-[calc(var(--radius)-4px)] border border-border bg-popover p-1 text-popover-foreground shadow-[0_18px_40px_-18px_rgba(6,40,45,.55)]"
               >
-                {ORNEK_VERILER.map((o) => (
-                  <button
-                    key={o.id}
-                    type="button"
-                    role="menuitem"
-                    tabIndex={-1}
-                    className="block h-11 w-full rounded-[calc(var(--radius)-8px)] px-3 text-left text-[13px] font-semibold hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                    onClick={() => ornekYukle(o.id)}
-                  >
-                    {o.ad}
-                  </button>
+                {/* Konu başlıkları altında örnekler: ad + neyi öğrettiği (ortaokul veri konularının sırasıyla) */}
+                {ornekKonulari().map((k) => (
+                  <div key={k.id} role="group" aria-label={k.ad} data-ornek-konusu={k.id}>
+                    <p className="px-3 pb-1 pt-2.5 text-[12px] font-bold uppercase tracking-wide text-muted-foreground">{k.ad}</p>
+                    {k.ornekler.map((o) => (
+                      <button
+                        key={o.id}
+                        type="button"
+                        role="menuitem"
+                        tabIndex={-1}
+                        className="block w-full rounded-[calc(var(--radius)-8px)] px-3 py-1.5 text-left hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                        onClick={() => ornekYukle(o.id)}
+                        data-ornek={o.id}
+                      >
+                        <span className="block text-[13px] font-semibold leading-5">{o.ad}</span>
+                        <span className="block text-[12px] leading-4 text-muted-foreground">{o.aciklama}</span>
+                      </button>
+                    ))}
+                  </div>
                 ))}
               </div>
             )}
@@ -615,115 +657,139 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
               </div>
             )}
           </div>
+          {/* Grafik ayarları: kategoriye göre renklendirme (bütün grafikler, istatistik ve tablo) */}
+          <div ref={ayarMenu.kapRef} className="relative">
+              <button
+                ref={ayarMenu.dugmeRef}
+                type="button"
+                className={DUGME}
+                aria-haspopup="menu"
+                aria-expanded={ayarMenu.acik}
+                title="Grafik ayarları: renklendirme, gruplama, sürükleme yuvarlaması"
+                onClick={() => ayarMenu.setAcik((a) => !a)}
+                onKeyDown={ayarMenu.dugmeTusu}
+                data-grafik-ayarlari-dugmesi
+              >
+                <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden="true">
+                  <path
+                    d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4zm7.1 4.3l1.4 1.1-1.5 2.6-1.7-.6a6.6 6.6 0 0 1-1.6.9l-.3 1.8h-3l-.3-1.8a6.6 6.6 0 0 1-1.6-.9l-1.7.6-1.5-2.6 1.4-1.1a6.8 6.8 0 0 1 0-1.8l-1.4-1.1 1.5-2.6 1.7.6c.5-.4 1-.7 1.6-.9l.3-1.8h3l.3 1.8c.6.2 1.1.5 1.6.9l1.7-.6 1.5 2.6-1.4 1.1c.1.6.1 1.2 0 1.8z"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                Grafik ayarları
+              </button>
+              {ayarMenu.acik && (
+                <div
+                  ref={ayarMenu.menuRef}
+                  role="menu"
+                  aria-label="Grafik ayarları"
+                  onKeyDown={ayarMenu.menuTusu}
+                  className="absolute right-0 top-full z-30 mt-1 w-[min(320px,80vw)] rounded-[calc(var(--radius)-4px)] border border-border bg-popover p-2 text-[13px] text-popover-foreground shadow-[0_18px_40px_-18px_rgba(6,40,45,.55)]"
+                  data-grafik-ayarlari
+                >
+                  <p className="px-2 pt-1 font-bold">Kategoriye göre renklendir</p>
+                  <p className="px-2 pb-2 text-muted-foreground">Bütün grafiklerde, istatistikte ve tablodaki satırlarda aynı renkler kullanılır.</p>
+                  {[
+                    { id: RENKSIZ, ad: 'Renklendirme yok', eslem: null },
+                    ...kategorikDegiskenler.map((s) => ({ id: s.id, ad: s.ad, eslem: renkEslemesi(tablo, sutunIndeksi(tablo, s.id), kategoriSiralari.get(s.id)) })),
+                  ].map((o) => {
+                    const secili = o.id === RENKSIZ ? renkId === null : renkId === o.id;
+                    return (
+                      <button
+                        key={o.id}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={secili}
+                        tabIndex={-1}
+                        className="flex min-h-11 w-full items-center gap-2 rounded-[calc(var(--radius)-8px)] px-2 text-left font-semibold hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                        onClick={() => {
+                          guncelle({ renkDegisken: o.id });
+                          ayarMenu.kapat(true);
+                        }}
+                      >
+                        <span aria-hidden="true" className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${secili ? 'border-primary' : 'border-muted-foreground/50'}`}>
+                          {secili && <span className="h-2 w-2 rounded-full bg-primary" />}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate">{o.ad}</span>
+                        {o.eslem && (
+                          <span aria-hidden="true" className="flex shrink-0 gap-0.5">
+                            {o.eslem.kategoriler.slice(0, 5).map((k) => (
+                              <span key={k} className="h-3 w-3 rounded-full" style={{ backgroundColor: o.eslem!.renkler.get(k) }} />
+                            ))}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                  {kategorikDegiskenler.length === 0 && (
+                    <p className="px-2 pb-1 pt-2 text-muted-foreground">Tabloda kategorik değişken yok. Renklendirmek için ilk sütuna tekrar eden adlar yazın (ör. A, B) ya da bir sütunu başlığındaki tür düğmesiyle kategorik yapın.</p>
+                  )}
+                  {/* Gruplama (nokta grafiği): yakın değerleri gruplara toplar; en küçük seçenek gruplama yok (her nokta tam değerinde) */}
+                  {gruplamaAyari && (
+                    <div className="mt-2 border-t border-border pt-2" data-gruplama-ayari>
+                      <p className="px-2 pt-1 font-bold">Gruplama</p>
+                      <p className="px-2 pb-2 text-muted-foreground">Yakın değerleri gruplara toplar; “yok” iken her nokta tam değerinde durur.</p>
+                      {aralikSecenekler.map((a) => {
+                        const secili = Math.abs(a - aralik) < 1e-9;
+                        const otomatik = Math.abs(a - otomatikAralik) < 1e-9;
+                        const grupluMu = gruplamaVar(tumNoktaDegerler, a);
+                        return (
+                          <button
+                            key={a}
+                            type="button"
+                            role="menuitemradio"
+                            aria-checked={secili}
+                            tabIndex={-1}
+                            className="flex min-h-11 w-full items-center gap-2 rounded-[calc(var(--radius)-8px)] px-2 text-left font-semibold hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                            onClick={() => {
+                              guncelle({ aralik: otomatik ? null : a });
+                              ayarMenu.kapat(true);
+                            }}
+                          >
+                            <span aria-hidden="true" className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${secili ? 'border-primary' : 'border-muted-foreground/50'}`}>
+                              {secili && <span className="h-2 w-2 rounded-full bg-primary" />}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate">{grupluMu ? `Grup genişliği ${sayiYaz(a)}` : 'Gruplama yok'}</span>
+                            {otomatik && <span className="shrink-0 text-muted-foreground">otomatik</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {/* Sürükleme yuvarlaması (sütun ve çizgi grafiği): tepe sürüklenince değer bu adıma yuvarlanır */}
+                  {yuvarlamaAyari && (
+                    <div className="mt-2 border-t border-border pt-2" data-yuvarlama-ayari>
+                      <p className="px-2 pt-1 font-bold">Sürüklerken yuvarla</p>
+                      <p className="px-2 pb-2 text-muted-foreground">Sütun ya da nokta sürüklenince değer bu adıma yuvarlanır.</p>
+                      {[1, 0.5, 0.1].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={yuvarlamaAdimi === v}
+                          tabIndex={-1}
+                          className="flex min-h-11 w-full items-center gap-2 rounded-[calc(var(--radius)-8px)] px-2 text-left font-semibold hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                          onClick={() => {
+                            guncelle({ yuvarlamaAdimi: v });
+                            ayarMenu.kapat(true);
+                          }}
+                        >
+                          <span aria-hidden="true" className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${yuvarlamaAdimi === v ? 'border-primary' : 'border-muted-foreground/50'}`}>
+                            {yuvarlamaAdimi === v && <span className="h-2 w-2 rounded-full bg-primary" />}
+                          </span>
+                          <span>{sayiYaz(v)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
         </div>
       </div>
-
-      {/* Seçenek şeridi: yalnız bu grafiğin seçenekleri (değişken sekmeleri grafiğin üstünde); seçenek yoksa şerit yok */}
-      {seritVar && (
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-background px-3 py-2 text-[13px]" data-secenek-seridi>
-        {sekme === 'nokta' && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            {karsilastirSecimi(
-              degiskenler.filter((s) => s.id !== durum.degisken),
-              ikinciGecerli ? durum.ikinciDegisken ?? '' : '',
-            )}
-            {degiskenGecerli && !kategorikSecili && aralikSecenekler.length > 1 && (
-              <label className="inline-flex items-center gap-2" title="Yakın değerleri gruplara toplar; “yok” iken her nokta tam değerinde durur">
-                <span className="font-bold text-muted-foreground">Gruplama:</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={aralikSecenekler.length - 1}
-                  step={1}
-                  value={Math.max(0, aralikSecenekler.indexOf(aralik))}
-                  onChange={(e) => guncelle({ aralik: aralikSecenekler[Number(e.target.value)] ?? null })}
-                  className="h-11 w-24 accent-[hsl(var(--primary))]"
-                  aria-label="Gruplama (grup genişliği)"
-                  aria-valuetext={gruplu ? `${sayiYaz(aralik)} genişliğinde gruplar` : 'gruplama yok'}
-                />
-                <span className="min-w-[2.5rem] tabular-nums font-semibold">{gruplu ? sayiYaz(aralik) : 'yok'}</span>
-                {durum.aralik !== null && (
-                  <button type="button" className="h-9 px-2 text-[13px] font-semibold text-primary hover:underline" onClick={() => guncelle({ aralik: null })}>
-                    otomatik
-                  </button>
-                )}
-              </label>
-            )}
-            {/* Göster / gizle seçenekleri: basılı düğme grubu (onay kutusu yerine) */}
-            <div role="group" aria-label="Grafik seçenekleri" className="inline-flex flex-wrap gap-1 rounded-[calc(var(--radius)-6px)] bg-muted p-1">
-              {(
-                // Kategorik değişkende ortalama ve ortalama mutlak sapma hesaplanmaz: düğmeler hiç gösterilmez
-                (
-                  [
-                    ['ortalama', 'Ortalama'],
-                    ['oms', 'Ortalama mutlak sapma'],
-                    ['etiketler', kategorikSecili ? 'Sayılar' : 'Etiketler'],
-                  ] as [keyof NoktaSecenekleri, string][]
-                ).filter(([anahtar]) => !kategorikSecili || anahtar === 'etiketler')
-              ).map(([anahtar, ad]) => (
-                <button
-                  key={anahtar}
-                  type="button"
-                  aria-pressed={secenekler[anahtar]}
-                  disabled={!degiskenGecerli}
-                  className={SECENEK_DUGMESI(secenekler[anahtar])}
-                  onClick={() => guncelle({ secenekler: { ...secenekler, [anahtar]: !secenekler[anahtar] } })}
-                >
-                  {ad}
-                </button>
-              ))}
-              <button type="button" aria-pressed={sutunModu} disabled={!degiskenGecerli} className={SECENEK_DUGMESI(sutunModu)} onClick={() => guncelle({ sutunModu: !sutunModu })}>
-                Sütunlara dönüştür
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Saçılım: yatay eksen üstteki sekmeden, dikey eksen buradan */}
-        {sekme === 'sacilim' && sacilim && (
-          <label className="inline-flex items-center gap-1.5">
-            <span className="font-bold text-muted-foreground">Dikey eksen (y):</span>
-            <select
-              className={SECIM}
-              value={sacilim.y}
-              onChange={(e) => guncelle({ yDegisken: e.target.value || null })}
-              aria-label="Saçılım grafiğinin dikey ekseni"
-            >
-              {sayisalDegiskenler
-                .filter((s) => s.id !== sacilim.x)
-                .map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.ad}
-                  </option>
-                ))}
-            </select>
-          </label>
-        )}
-        {/* Çizgi: seçili değişken + istenirse ikinci sayısal değişken; sütun ve çizgide sürükleme yuvarlaması */}
-        {((sekme === 'sutun' && degiskenGecerli && !etkinKategorik) || (sekme === 'cizgi' && grafikSutun >= 0)) && (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            {sekme === 'cizgi' &&
-              karsilastirSecimi(
-                sayisalDegiskenler.filter((s) => s.id !== grafikSutunId),
-                ikinciGecerli && !ikinciKategorik && durum.ikinciDegisken !== grafikSutunId ? durum.ikinciDegisken ?? '' : '',
-              )}
-            <label className="inline-flex items-center gap-1.5">
-              <span className="font-bold text-muted-foreground">Sürüklerken yuvarla:</span>
-              <select
-                className={SECIM}
-                value={String(yuvarlamaAdimi)}
-                onChange={(e) => guncelle({ yuvarlamaAdimi: Number(e.target.value) })}
-                aria-label="Sürükleme yuvarlama adımı"
-              >
-                <option value="1">1</option>
-                <option value="0.5">0,5</option>
-                <option value="0.1">0,1</option>
-              </select>
-            </label>
-          </div>
-        )}
-      </div>
-      )}
 
       {/* Gövde: (örnekleyici |) tablo | grafik — dar pencerede alt alta */}
       <div className={`relative flex min-h-0 flex-1 ${dikey ? 'flex-col' : 'flex-row'} ${dikeyKaydir ? 'overflow-y-auto overflow-x-hidden' : ''}`}>
@@ -815,7 +881,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
           aria-labelledby={sekmeKimlikleri('veri', sekme).sekme}
         >
           {/* Değişken sekmeleri grafiğin üstünde (seçili sekme grafiğin gösterdiği değişken; renkli nokta ikinci değişken);
-              sağda grafik ayarları: kategoriye göre renklendirme (bütün grafikler, istatistik ve tablo) */}
+              tek değişkende satır çizilmez, adı zaten grafikte yazar */}
+          {sekmeDegiskenleri.length > 1 && (
           <div className="flex shrink-0 items-end gap-2 border-b border-border bg-background px-2 pt-2">
             <div role="tablist" aria-label="Grafikteki değişken" className="-mb-px flex min-w-0 flex-1 items-end gap-1 overflow-x-auto" data-degisken-sekmeleri>
               {sekmeDegiskenleri.map((s, i) => {
@@ -859,82 +926,30 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                 );
               })}
             </div>
-            <div ref={ayarMenu.kapRef} className="relative mb-1.5 shrink-0">
-              <button
-                ref={ayarMenu.dugmeRef}
-                type="button"
-                className={DUGME}
-                aria-haspopup="menu"
-                aria-expanded={ayarMenu.acik}
-                title="Grafik ayarları: kategoriye göre renklendirme"
-                onClick={() => ayarMenu.setAcik((a) => !a)}
-                onKeyDown={ayarMenu.dugmeTusu}
-                data-grafik-ayarlari-dugmesi
-              >
-                <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden="true">
-                  <path
-                    d="M10 6.8a3.2 3.2 0 1 0 0 6.4 3.2 3.2 0 0 0 0-6.4zm7.1 4.3l1.4 1.1-1.5 2.6-1.7-.6a6.6 6.6 0 0 1-1.6.9l-.3 1.8h-3l-.3-1.8a6.6 6.6 0 0 1-1.6-.9l-1.7.6-1.5-2.6 1.4-1.1a6.8 6.8 0 0 1 0-1.8l-1.4-1.1 1.5-2.6 1.7.6c.5-.4 1-.7 1.6-.9l.3-1.8h3l.3 1.8c.6.2 1.1.5 1.6.9l1.7-.6 1.5 2.6-1.4 1.1c.1.6.1 1.2 0 1.8z"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                Grafik ayarları
-              </button>
-              {ayarMenu.acik && (
-                <div
-                  ref={ayarMenu.menuRef}
-                  role="menu"
-                  aria-label="Grafik ayarları"
-                  onKeyDown={ayarMenu.menuTusu}
-                  className="absolute right-0 top-full z-30 mt-1 w-[min(320px,80vw)] rounded-[calc(var(--radius)-4px)] border border-border bg-popover p-2 text-[13px] text-popover-foreground shadow-[0_18px_40px_-18px_rgba(6,40,45,.55)]"
-                  data-grafik-ayarlari
-                >
-                  <p className="px-2 pt-1 font-bold">Kategoriye göre renklendir</p>
-                  <p className="px-2 pb-2 text-muted-foreground">Bütün grafiklerde, istatistikte ve tablodaki satırlarda aynı renkler kullanılır.</p>
-                  {[
-                    { id: RENKSIZ, ad: 'Renklendirme yok', eslem: null },
-                    ...kategorikDegiskenler.map((s) => ({ id: s.id, ad: s.ad, eslem: renkEslemesi(tablo, sutunIndeksi(tablo, s.id), kategoriSiralari.get(s.id)) })),
-                  ].map((o) => {
-                    const secili = o.id === RENKSIZ ? renkId === null : renkId === o.id;
-                    return (
-                      <button
-                        key={o.id}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={secili}
-                        tabIndex={-1}
-                        className="flex min-h-11 w-full items-center gap-2 rounded-[calc(var(--radius)-8px)] px-2 text-left font-semibold hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
-                        onClick={() => {
-                          guncelle({ renkDegisken: o.id });
-                          ayarMenu.kapat(true);
-                        }}
-                      >
-                        <span aria-hidden="true" className={`grid h-4 w-4 shrink-0 place-items-center rounded-full border-2 ${secili ? 'border-primary' : 'border-muted-foreground/50'}`}>
-                          {secili && <span className="h-2 w-2 rounded-full bg-primary" />}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate">{o.ad}</span>
-                        {o.eslem && (
-                          <span aria-hidden="true" className="flex shrink-0 gap-0.5">
-                            {o.eslem.kategoriler.slice(0, 5).map((k) => (
-                              <span key={k} className="h-3 w-3 rounded-full" style={{ backgroundColor: o.eslem!.renkler.get(k) }} />
-                            ))}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                  {kategorikDegiskenler.length === 0 && (
-                    <p className="px-2 pb-1 pt-2 text-muted-foreground">Tabloda kategorik değişken yok. Renklendirmek için ilk sütuna tekrar eden adlar yazın (ör. A, B).</p>
-                  )}
-                </div>
-              )}
-            </div>
           </div>
+          )}
+          {ipucu && etkinKume === 'tablom' && (
+            <div role="note" className="flex shrink-0 items-start gap-2 border-b border-border bg-accent/60 px-3 py-1.5 text-[13px] leading-5 text-foreground" data-ornek-ipucu>
+              <svg viewBox="0 0 20 20" className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true">
+                <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M10 9v5M10 6.2v.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+              <span className="min-w-0 flex-1">{ipucu}</span>
+              <button
+                type="button"
+                aria-label="İpucunu kapat"
+                className="-my-1 grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => setIpucu(null)}
+              >
+                <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true">
+                  <path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+            </div>
+          )}
           <div ref={grafikRef} id="vg-grafik-alani" className="relative min-h-0 flex-1 overflow-hidden">
-          {/* Kısa bildirim (CSV / PNG indirildi vb.): grafiğin altında geçici not */}
-          <div role="status" aria-live="polite" className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center empty:hidden">
+          {/* Kısa bildirim (CSV / PNG indirildi vb.): grafiğin üstünde geçici not (eksen etiketlerini örtmez) */}
+          <div role="status" aria-live="polite" className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center empty:hidden">
             {bildirim && <span className="rounded-full bg-foreground/90 px-3 py-1.5 text-[13px] font-semibold text-background shadow-sm">{bildirim}</span>}
           </div>
           {grafikGenislik > 0 && grafikYukseklik > 0 && (
@@ -1104,6 +1119,76 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
             </>
           )}
           </div>
+          {/* Seçenek şeridi: bu grafiğin seçenekleri grafiğin altında ince bir şerit (yalnız grafik sütununda; seçenek yoksa şerit yok) */}
+      {seritVar && (
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-t border-border bg-background px-2 py-1 text-[13px]" data-secenek-seridi>
+        {sekme === 'nokta' && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            {karsilastirSecimi(
+              degiskenler.filter((s) => s.id !== durum.degisken),
+              ikinciGecerli ? durum.ikinciDegisken ?? '' : '',
+            )}
+            {/* Göster / gizle seçenekleri: basılı düğme grubu (onay kutusu yerine) */}
+            <div role="group" aria-label="Grafik seçenekleri" className="inline-flex flex-wrap gap-1 rounded-[calc(var(--radius)-6px)] bg-muted p-1">
+              {(
+                // Kategorik değişkende ortalama ve ortalama mutlak sapma hesaplanmaz: düğmeler hiç gösterilmez
+                (
+                  [
+                    ['ortalama', 'Ortalama'],
+                    ['oms', 'Ortalama mutlak sapma'],
+                    ['etiketler', kategorikSecili ? 'Sayılar' : 'Etiketler'],
+                  ] as [keyof NoktaSecenekleri, string][]
+                ).filter(([anahtar]) => !kategorikSecili || anahtar === 'etiketler')
+              ).map(([anahtar, ad]) => (
+                <button
+                  key={anahtar}
+                  type="button"
+                  aria-pressed={secenekler[anahtar]}
+                  disabled={!degiskenGecerli}
+                  className={SECENEK_DUGMESI(secenekler[anahtar])}
+                  onClick={() => guncelle({ secenekler: { ...secenekler, [anahtar]: !secenekler[anahtar] } })}
+                >
+                  <SecenekSimgesi ad={anahtar} />
+                  {ad}
+                </button>
+              ))}
+              <button type="button" aria-pressed={sutunModu} disabled={!degiskenGecerli} className={SECENEK_DUGMESI(sutunModu)} onClick={() => guncelle({ sutunModu: !sutunModu })}>
+                <SecenekSimgesi ad="sutunlar" />
+                Sütunlara dönüştür
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Saçılım: yatay eksen üstteki sekmeden, dikey eksen buradan */}
+        {sekme === 'sacilim' && sacilim && (
+          <label className="inline-flex items-center gap-1.5">
+            <span className="font-bold text-muted-foreground">Dikey eksen (y):</span>
+            <select
+              className={SECIM}
+              value={sacilim.y}
+              onChange={(e) => guncelle({ yDegisken: e.target.value || null })}
+              aria-label="Saçılım grafiğinin dikey ekseni"
+            >
+              {sayisalDegiskenler
+                .filter((s) => s.id !== sacilim.x)
+                .map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.ad}
+                  </option>
+                ))}
+            </select>
+          </label>
+        )}
+        {/* Çizgi: seçili değişken + istenirse ikinci sayısal değişken (yuvarlama adımı Grafik ayarları menüsünde) */}
+        {sekme === 'cizgi' &&
+          grafikSutun >= 0 &&
+          karsilastirSecimi(
+            sayisalDegiskenler.filter((s) => s.id !== grafikSutunId),
+            ikinciGecerli && !ikinciKategorik && durum.ikinciDegisken !== grafikSutunId ? durum.ikinciDegisken ?? '' : '',
+          )}
+      </div>
+      )}
         </main>
       </div>
     </div>

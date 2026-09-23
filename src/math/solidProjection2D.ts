@@ -3,6 +3,7 @@ import { Point2D, ScreenPoint, ViewportTransform } from '@/types/math';
 import { Solid3DObject, Point3D } from '@/types/workspace3d';
 import { worldToScreen, formatTurkishNumber } from '@/math/coordinates';
 import { generateSolidMesh, calculate3DVolume, calculate3DSurfaceArea } from '@/math/geometry3d';
+import { labelZoomScale } from '@/math/labelViewport';
 
 /** İzdüşüm açısı (55 derece, kavalier/aksonometrik bakış) */
 export const PROJECTION_ANGLE_RAD = (55 * Math.PI) / 180;
@@ -116,6 +117,9 @@ export function projectSolidFor2D(
   const color = solid.color || '#3b82f6';
   const strokeColor = isSelected ? '#ec4899' : color;
   const strokeWidth = isSelected ? 2.4 : 1.6;
+  // Etiket boşlukları referans zoom 44'e aittir. Dünya noktası etrafında bu
+  // ölçüleri ölçeklemek, referans yerleşimini gerçek görünüme projekte eder.
+  const labelScale = labelZoomScale(viewport);
 
   const w = solid.dimensions.width || 3;
   const h = solid.dimensions.height || 3;
@@ -161,7 +165,7 @@ export function projectSolidFor2D(
       dimensionLabels: [
         {
           x: bottomMidScr.x,
-          y: bottomMidScr.y + 14,
+          y: bottomMidScr.y + 14 * labelScale,
           text: `a = ${formatTurkishNumber(w)} br`,
         },
       ],
@@ -193,11 +197,11 @@ export function projectSolidFor2D(
       dimensionLabels: [
         {
           x: bottomMidScr.x,
-          y: bottomMidScr.y + 14,
+          y: bottomMidScr.y + 14 * labelScale,
           text: `w = ${formatTurkishNumber(w)} br`,
         },
         {
-          x: leftMidScr.x - 14,
+          x: leftMidScr.x - 14 * labelScale,
           y: leftMidScr.y,
           text: `d = ${formatTurkishNumber(d)} br`,
         },
@@ -216,7 +220,7 @@ export function projectSolidFor2D(
       dimensionLabels: [
         {
           x: groundCenterScreen.x + scrR / 2,
-          y: groundCenterScreen.y - 8,
+          y: groundCenterScreen.y - 8 * labelScale,
           text: `r = ${formatTurkishNumber(r)} br`,
         },
       ],
@@ -235,7 +239,7 @@ export function projectSolidFor2D(
       dimensionLabels: [
         {
           x: groundCenterScreen.x + scrR / 2,
-          y: groundCenterScreen.y - 8,
+          y: groundCenterScreen.y - 8 * labelScale,
           text: `r = ${formatTurkishNumber(r)} br`,
         },
       ],
@@ -273,7 +277,7 @@ export function projectSolidFor2D(
       dimensionLabels: [
         {
           x: bottomMidScr.x,
-          y: bottomMidScr.y + 14,
+          y: bottomMidScr.y + 14 * labelScale,
           text: `${formatTurkishNumber(w)} × ${formatTurkishNumber(d)} br`,
         },
       ],
@@ -313,7 +317,7 @@ export function projectSolidFor2D(
       dimensionLabels: [
         {
           x: groundCenterScreen.x + scrR / 2,
-          y: groundCenterScreen.y - 8,
+          y: groundCenterScreen.y - 8 * labelScale,
           text: `r = ${formatTurkishNumber(r)} br`,
         },
       ],
@@ -569,7 +573,7 @@ export function projectSolidFor2D(
     edges: projectedEdges,
     badge: {
       x: groundCenterScreen.x,
-      y: Math.min(minY - 20, groundCenterScreen.y - 32),
+      y: Math.min(minY - 20 * labelScale, groundCenterScreen.y - 32 * labelScale),
       title: displayTitle,
       dimText,
       volume: calculate3DVolume(solid),

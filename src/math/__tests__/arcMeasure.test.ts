@@ -12,6 +12,7 @@ import {
   arcOptionsForPair,
   arcOptionsForPoint,
   arcTitle,
+  arcUnresolvedText,
   arcValueText,
   circleGeometryOf,
   circlesThroughPoint,
@@ -242,7 +243,14 @@ describe('arcMeasure: başlık, değer ve nesne yardımcıları', () => {
 
   it('flipArcMeasurement: diğer yaya geçer, kimlik/renk korunur, ara nokta kalkar, rozet kayıklığı sıfırlanır; çakışmada hata', () => {
     const s = kullaniciSahnesi();
-    const m = { ...makeArcMeasurement({ circleId: 'pembe', pointIds: ['B', 'D'], throughPointId: 'C' }, s), color: '#ff0000', labelOffsets: { measure: { x: 1, y: 1 }, pointLabel: { x: 2, y: 2 } } };
+    const m: ArcMeasurement = {
+      ...makeArcMeasurement({ circleId: 'pembe', pointIds: ['B', 'D'], throughPointId: 'C' }, s),
+      color: '#ff0000', labelOffsets: { measure: { x: 1, y: 1 }, pointLabel: { x: 2, y: 2 } },
+      labelAnchors: {
+        measure: { pointIds: ['B', 'C', 'D'], offset: { x: 3, y: 1 }, alignment: 'left' },
+        pointLabel: { pointIds: ['B'], offset: { x: 2, y: 2 }, alignment: 'center' },
+      },
+    };
     expect(m.label).toBe('BCD yayı');
     const s2 = [...s, m];
     const f = flipArcMeasurement(m, s2);
@@ -251,16 +259,34 @@ describe('arcMeasure: başlık, değer ve nesne yardımcıları', () => {
     expect(f.object).toMatchObject({ id: m.id, color: '#ff0000', createdAt: m.createdAt, label: 'BD yayı' });
     expect(f.object.throughPointId).toBeUndefined();
     expect(f.object.labelOffsets).toEqual({ pointLabel: { x: 2, y: 2 } });
+    expect(f.object.labelAnchors).toEqual({ pointLabel: m.labelAnchors!.pointLabel });
+    expect(m.labelAnchors?.measure.pointIds).toEqual(['B', 'C', 'D']);
     expect(deg(resolveArc(f.object, s2))).toBe(59.5);
     // Geri çevirince büyük yay (C'yi içeren)
     const s3 = s2.map((o) => (o.id === m.id ? f.object : o));
     const g = flipArcMeasurement(f.object, s3);
     if ('error' in g) throw new Error(g.error);
-    expect(g.object.major).toBe(true);
+    // Taraf artık `major` bayrağıyla değil, YAZILI başlangıç ucuyla tutulur
+    expect(g.object.major).toBeUndefined();
+    expect(g.object.startPointId).toBe('B');
+    expect(deg(resolveArc(g.object, s3))).toBe(300.5);
     expect(g.title).toBe('BCD yayı');
     // Çakışma: küçük yay ayrıca ölçülmüşse
     const kucuk = makeArcMeasurement({ circleId: 'pembe', pointIds: ['D', 'B'] }, s);
     expect(flipArcMeasurement(m, [...s2, kucuk])).toEqual({ error: 'BD yayı zaten ölçülmüş.' });
+  });
+
+  it('diğer yaya geçince yalnız ölçüm çapası olan nesnede labelAnchors bütünüyle kalkar', () => {
+    const s = capSahnesi();
+    const m: ArcMeasurement = {
+      ...makeArcMeasurement({ circleId: 'c', pointIds: ['B', 'D'] }, s),
+      labelAnchors: { measure: { pointIds: ['B', 'D'], offset: { x: 2, y: 3 }, alignment: 'right' } },
+    };
+    const flipped = flipArcMeasurement(m, [...s, m]);
+    if ('error' in flipped) throw new Error(flipped.error);
+    expect(flipped.object.labelAnchors).toBeUndefined();
+    expect(flipped.object.labelOffsets).toBeUndefined();
+    expect(m.labelAnchors?.measure.alignment).toBe('right');
   });
 
   it('flip tam 180°de de iki kez çevirince başa döner; menü yazısı "Diğer yarım çemberi ölç"', () => {
@@ -319,5 +345,89 @@ describe('arcMeasure: başlık, değer ve nesne yardımcıları', () => {
     const s = kullaniciSahnesi();
     expect(arcNearMissHint('A', 'D', s)).toContain('D noktası “C Merkezli Çember” üzerinde görünüyor ama tam üzerinde değil (0,08 br uzakta)');
     expect(arcNearMissHint('B', 'G', s)).toBeNull();
+  });
+});
+
+/**
+ * YAYIN KİMLİĞİ: ölçülen yay, uç noktalar taşınırken taraf değiştirmemeli. Uç, karşı ucun "öteki yanına"
+ * geçtiğinde küçük yay büyük yaya dönüşür; ölçüm yine AYNI yayı gösterir ve derece 180°'yi aşıp büyür.
+ */
+describe('arcMeasure: yay taşınırken taraf değiştirmez', () => {
+  /** O(0,0) merkezli, R(6,0) yarıçap noktalı çember; P ve Q çembere bağlı, açıları verilir. */
+  const donenSahne = (pAci: number, qAci: number): MathObject[] => {
+    const r = 6;
+    const uc = (id: string, a: number) =>
+      nokta(id, r * Math.cos((a * Math.PI) / 180), r * Math.sin((a * Math.PI) / 180), { onObjectId: 'k' });
+    return [
+      nokta('O', 0, 0),
+      nokta('R', r, 0),
+      cember({ id: 'k', label: 'O Merkezli Çember', centerPointId: 'O', radiusPointId: 'R' }),
+      uc('P', pAci),
+      uc('Q', qAci),
+    ];
+  };
+  /** Q'yu verilen açıya taşır (sahneyi kopyalayarak). */
+  const qTasi = (s: MathObject[], aci: number): MathObject[] =>
+    s.map((o) => (o.id === 'Q' ? { ...o, x: 6 * Math.cos((aci * Math.PI) / 180), y: 6 * Math.sin((aci * Math.PI) / 180) } : o));
+
+  it('küçük yay ölçülen uç 180°yi geçince aynı tarafta kalır, derece 180°nin üstüne çıkar', () => {
+    const s = donenSahne(10, 165);
+    const m = makeArcMeasurement({ circleId: 'k', pointIds: ['P', 'Q'] }, s);
+    const s1 = [...s, m];
+    const r0 = resolveArc(m, s1)!;
+    expect([r0.startId, r0.endId, deg(r0)]).toEqual(['P', 'Q', 155]);
+    expect(m.startPointId).toBe('P');
+    // Q, P'nin tam karşısının ötesine sürüklenir: eski kural burada yayı KARŞI tarafa atlatıyordu
+    const s2 = qTasi(s1, 198.43);
+    const r1 = resolveArc(m, s2)!;
+    expect([r1.startId, r1.endId]).toEqual(['P', 'Q']);
+    expect(deg(r1)).toBe(188.4);
+    expect(r1.major).toBe(true);
+    // Ortası da aynı tarafta kalır (vurgu karşı yarıya sıçramaz)
+    expect(Math.abs(r1.midAngle - r0.midAngle)).toBeLessThan(Math.PI / 4);
+    // Geri taşınınca yine küçük yay
+    expect(deg(resolveArc(m, qTasi(s2, 165))!)).toBe(155);
+  });
+
+  it('menüden seçilen BÜYÜK yay da taşındıktan sonra büyük tarafta kalır', () => {
+    const s = donenSahne(10, 150);
+    const m = makeArcMeasurement({ circleId: 'k', pointIds: ['P', 'Q'], major: true }, s);
+    const s1 = [...s, m];
+    const r0 = resolveArc(m, s1)!;
+    expect([r0.startId, r0.endId, deg(r0)]).toEqual(['Q', 'P', 220]);
+    const r1 = resolveArc(m, qTasi(s1, 190))!;
+    expect([r1.startId, r1.endId]).toEqual(['Q', 'P']);
+    expect(deg(r1)).toBe(180);
+    const r2 = resolveArc(m, qTasi(s1, 200))!;
+    expect([r2.startId, r2.endId, deg(r2)]).toEqual(['Q', 'P', 170]);
+  });
+
+  it('eski kayıtlarda (başlangıç ucu yazılı değilken) ilk işlemde yazılır; yazılıysa dizi aynı kalır', () => {
+    const s = donenSahne(10, 165);
+    const eski = { ...makeArcMeasurement({ circleId: 'k', pointIds: ['P', 'Q'] }, s), startPointId: undefined } as ArcMeasurement;
+    const once = [...s, eski];
+    const sonra = dropDanglingArcMeasurements(once);
+    expect(sonra).not.toBe(once);
+    expect((sonra.find((o) => o.id === eski.id) as ArcMeasurement).startPointId).toBe('P');
+    expect(dropDanglingArcMeasurements(sonra)).toBe(sonra);
+  });
+
+  it('ara nokta yayın üzerinden kalkarsa başlık ona göre değişir', () => {
+    const s = kullaniciSahnesi();
+    const m = makeArcMeasurement({ circleId: 'pembe', pointIds: ['B', 'D'], throughPointId: 'C' }, s);
+    expect(arcTitle(m, [...s, m])).toBe('BCD yayı');
+    // C çemberin öbür yayına taşınırsa (küçük yayın içine girmez) ad "BCD" kalmaz
+    const cevrilmis = { ...m, startPointId: 'D' } as ArcMeasurement;
+    expect(arcTitle(cevrilmis, [...s, cevrilmis])).toBe('BD yayı');
+  });
+
+  it('uçlar çakışınca ölçüm yok olmaz: rozet açıklaması üretilir', () => {
+    const s = donenSahne(10, 165);
+    const m = makeArcMeasurement({ circleId: 'k', pointIds: ['P', 'Q'] }, s);
+    const cakisik = qTasi([...s, m], 10);
+    expect(resolveArc(m, cakisik)).toBeNull();
+    expect(arcUnresolvedText(m, cakisik)).toBe('P ve Q çakıştı; aralarında yay yok');
+    const merkezde = cakisik.map((o) => (o.id === 'Q' ? { ...o, x: 0, y: 0 } : o));
+    expect(arcUnresolvedText(m, merkezde)).toBe('Q çemberin merkezinde; yay yok');
   });
 });

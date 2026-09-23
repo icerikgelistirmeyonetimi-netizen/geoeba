@@ -4,6 +4,59 @@ import { executeTurkishCommand } from '../turkishCommands';
 
 const p = (id: string, x = 0, y = 0) => ({ id, type: 'point', x, y });
 const base = { id: 'triangle', type: 'polygon', pointIds: ['A', 'B', 'C'] };
+
+describe('measurement label anchors', () => {
+  const anchor = { pointIds: ['A', 'B', 'C'], offset: { x: 6, y: 2 }, alignment: 'left' };
+
+  it('round trips shared-centre anchors and keeps legacy offsets', () => {
+    const labelAnchors = {
+      edge0: anchor,
+      edge1: { ...anchor, alignment: 'right', offset: { x: 6, y: 1 } },
+      area: { ...anchor, alignment: 'center', offset: { x: 6, y: 0 } },
+    };
+    const polygon = { ...base, labelAnchors, labelOffsets: { edge0: { x: 4, y: 1 } } };
+    const input = { objects: [p('A'), p('B', 3), p('C', 0, 4), polygon] };
+    const before = JSON.stringify(input);
+    const loaded = parseProjectFile(input);
+    expect(loaded.objects[3]).toMatchObject(polygon);
+    expect(parseProjectFile(JSON.parse(JSON.stringify(loaded)))).toEqual(loaded);
+    expect(JSON.stringify(input)).toBe(before);
+  });
+
+  it('does not turn a decorative point anchor into a self dependency', () => {
+    const loaded = parseProjectFile({ objects: [{ ...p('A'), labelAnchors: { pointLabel: anchor } }, p('B'), p('C')] });
+    expect(loaded.objects[0].labelAnchors?.pointLabel).toEqual(anchor);
+  });
+
+  it('drops stale or non-point anchor groups without rejecting the drawing', () => {
+    const labelAnchors = {
+      edge0: { ...anchor, pointIds: ['A', 'missing'] },
+      edge1: { ...anchor, pointIds: ['A', 'triangle'] },
+      edge2: anchor,
+    };
+    const input = { objects: [p('A'), p('B'), p('C'), { ...base, labelAnchors, labelOffsets: { edge0: { x: 5, y: 1 } } }] };
+    const before = JSON.stringify(input);
+    const loaded = parseProjectFile(input).objects[3];
+    expect(loaded.labelAnchors).toEqual({ edge2: anchor });
+    expect(loaded.labelOffsets).toEqual({ edge0: { x: 5, y: 1 } });
+    expect(JSON.stringify(input)).toBe(before);
+    const withoutValid = parseProjectFile({ objects: [p('A'), { ...p('B'), labelAnchors: { measure: labelAnchors.edge0 } }] });
+    expect(withoutValid.objects[1]).not.toHaveProperty('labelAnchors');
+  });
+
+  it.each([
+    { pointIds: [] },
+    { pointIds: ['A', 'A'] },
+    { pointIds: ['A', 3] },
+    { offset: { x: '6', y: 2 } },
+    { offset: { x: Infinity, y: 2 } },
+    { offset: null },
+    { alignment: 'start' },
+  ])('rejects malformed anchor coordinates or schema: %j', patch => {
+    expect(() => parseProjectFile({ objects: [p('A'), p('B'), p('C'), { ...base, labelAnchors: { edge0: { ...anchor, ...patch } } }] })).toThrow();
+  });
+});
+
 describe('project file validation', () => {
   it('opens legacy projects without changing or duplicating IDs', () => {
     const file = { version: '1.0', objects: [p('A'), p('B', 3), p('C', 0, 4), base] };
@@ -44,9 +97,26 @@ describe('project file validation', () => {
   it('preserves 3D scene, camera, styles and plane settings in a JSON round trip', () => {
     const file = { version: '2.0', objects: [], solids: [{ id: 'cube', type: 'cube', name: 'Küp', position: { x: 1, y: 2, z: 3 }, rotation: { x: 0, y: 30, z: 0 }, dimensions: { width: 3, height: 3, depth: 3 }, color: '#123456', opacity: 0.8, unfoldProgress: 0.5, showFaces: true, showWireframe: true, showVertices: false, selectedFaceIndex: null }],
       camera3D: { rotX: 25, rotY: -40, zoom: 55, panX: 0, panY: 30, perspective: 700, showAxes: true, showGrid: false, showCoordinates: false },
-      styleSettings: { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideLabelBoxes: true, hideFills: false },
+      styleSettings: { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideLabelBoxes: true, hideFills: false, olcuYazimi: 'kisa', aciYazimi: 'isaret' },
       layoutMode: '3d_only', viewport: { zoom: 88, panX: 42, panY: 0, showCoordinates: false } };
     expect(parseProjectFile(JSON.parse(JSON.stringify(file)))).toEqual(file);
+  });
+  it('opens a 1.0/2.0 file without the notation settings and fills them from the defaults', () => {
+    const eski = { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideLabelBoxes: true, hideFills: false };
+    expect(parseProjectFile({ objects: [], styleSettings: eski }).styleSettings)
+      .toEqual({ ...eski, olcuYazimi: 'tam', aciYazimi: 'sapka' });
+  });
+  it('drops unknown style keys instead of copying them into the document', () => {
+    const s = { strokeScale: 1, fontScale: 1, pointRadius: 6, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideLabelBoxes: false, hideFills: false, birSey: 'x' };
+    expect(parseProjectFile({ objects: [], styleSettings: s }).styleSettings).not.toHaveProperty('birSey');
+  });
+  it.each([
+    { olcuYazimi: 'uzun' },
+    { aciYazimi: 'ok' },
+    { hideFills: 'evet' },
+  ])('rejects invalid style settings: %j', patch => {
+    const s = { strokeScale: 1, fontScale: 1, pointRadius: 6, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideLabelBoxes: false, hideFills: false, ...patch };
+    expect(() => parseProjectFile({ objects: [], styleSettings: s })).toThrow('stil ayarları geçersiz');
   });
   it('accepts saved live constructions produced by the command system', () => {
     let objects: any[] = [];
@@ -62,7 +132,7 @@ describe('project file validation', () => {
 describe('arc measurement (two points on a circle, circle not split)', () => {
   const sahne = () => [p('M'), p('B', 3), p('C', 0, 3), p('D', 0, -3), { id: 'k', type: 'circle', centerPointId: 'M', radiusPointId: 'B' }];
   const olcum = (extra: Record<string, unknown> = {}) => ({ id: 'y', type: 'measurement', kind: 'arc', pointIds: ['B', 'D'], circleId: 'k', showValue: true, ...extra });
-  it.each([{}, { throughPointId: 'C' }, { major: true }])('round trips an arc measurement %j', extra => {
+  it.each([{}, { throughPointId: 'C' }, { major: true }, { startPointId: 'D' }, { startPointId: 'B', throughPointId: 'C' }])('round trips an arc measurement %j', extra => {
     const file = { objects: [...sahne(), olcum(extra)] };
     const loaded = parseProjectFile(JSON.parse(JSON.stringify(file)));
     expect(loaded.objects[5]).toMatchObject(olcum(extra));
@@ -74,6 +144,9 @@ describe('arc measurement (two points on a circle, circle not split)', () => {
     ['unknown circle', { circleId: 'yok' }],
     ['throughPointId pointing at a circle', { throughPointId: 'k' }],
     ['non-boolean major', { major: 'evet' }],
+    ['startPointId that is not an endpoint', { startPointId: 'C' }],
+    ['startPointId pointing at a circle', { startPointId: 'k' }],
+    ['unknown startPointId', { startPointId: 'yok' }],
     ['identical endpoints', { pointIds: ['B', 'B'] }],
     ['three endpoints', { pointIds: ['B', 'C', 'D'] }],
   ])('rejects an arc measurement with %s', (_name, extra) => {

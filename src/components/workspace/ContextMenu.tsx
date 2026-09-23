@@ -59,6 +59,15 @@ interface ContextMenuProps {
   title: string;
   /** Başlık yokken ekran okuyucuya söylenecek menü adı */
   ariaLabel?: string;
+  /**
+   * Tıklanan yerde BİRDEN ÇOK nesne varsa başlık yerine sekmeler çizilir; her sekme bir nesnedir.
+   * Sekme değişince menünün maddeleri o nesneye göre yeniden kurulur (üst üste binmiş kenarlar,
+   * noktalar ve çemberler için menüyü kapatıp tekrar denemek gerekmez).
+   */
+  sekmeler?: { id: string; baslik: string }[];
+  /** Şu an hangi sekme açık (nesne kimliği) */
+  etkinSekme?: string;
+  onSekmeSec?: (id: string) => void;
   items: ContextMenuItem[];
   onClose: () => void;
 }
@@ -82,7 +91,7 @@ function maddeRolu(item: ContextMenuItem): 'menuitem' | 'menuitemcheckbox' | 'me
  * - Dışarı tıklama ve sağ tıklama menüyü kapatır; o tıklama tuvale GEÇMEZ
  *   (yanlışlıkla yeni nokta çizilmesin diye tam ekran bir örtü kullanılır).
  */
-export function ContextMenu({ open, x, y, title, ariaLabel, items, onClose }: ContextMenuProps) {
+export function ContextMenu({ open, x, y, title, ariaLabel, sekmeler, etkinSekme, onSekmeSec, items, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const altMenuRef = useRef<HTMLDivElement>(null);
@@ -127,14 +136,20 @@ export function ContextMenu({ open, x, y, title, ariaLabel, items, onClose }: Co
     setAltMenuId(null);
   }, [x, y, title]);
 
-  /** Menüyü görünür alanın içine çeker (boyanmadan önce, titreme olmasın diye). */
+  /**
+   * Menüyü görünür alanın içine çeker (boyanmadan önce, titreme olmasın diye).
+   * Alt sınır, menüyü taşıyan PENCEREnin (role="dialog") alt kenarıdır: aksi hâlde uzun menülerin son maddesi
+   * (ör. "Sil") ekranın altındaki görev çubuğunun arkasında kalıp tıklanamıyordu.
+   */
   const kistir = useCallback(() => {
     const el = menuRef.current;
     if (!el) return;
     const w = el.offsetWidth;
     const h = el.offsetHeight;
+    const pencere = el.closest('[role="dialog"]')?.getBoundingClientRect();
+    const altSinir = pencere && pencere.height > 200 ? Math.min(window.innerHeight, pencere.bottom) : window.innerHeight;
     const maxLeft = window.innerWidth - w - KENAR_BOSLUGU;
-    const maxTop = window.innerHeight - h - KENAR_BOSLUGU;
+    const maxTop = altSinir - h - KENAR_BOSLUGU;
     setPos({
       left: Math.max(KENAR_BOSLUGU, Math.min(x, Math.max(KENAR_BOSLUGU, maxLeft))),
       top: Math.max(KENAR_BOSLUGU, Math.min(y, Math.max(KENAR_BOSLUGU, maxTop))),
@@ -144,7 +159,7 @@ export function ContextMenu({ open, x, y, title, ariaLabel, items, onClose }: Co
   useLayoutEffect(() => {
     if (!open) return;
     kistir();
-  }, [open, kistir, promptItem, items.length]);
+  }, [open, kistir, promptItem, items.length, sekmeler?.length]);
 
   // Alt menü açılınca sağa sığıp sığmadığına bak; klavyeyle açıldıysa ilk maddesine odaklan
   useLayoutEffect(() => {
@@ -154,9 +169,19 @@ export function ContextMenu({ open, x, y, title, ariaLabel, items, onClose }: Co
     if (!alt || !ana) return;
     const anaKutu = ana.getBoundingClientRect();
     setAltMenuSola(anaKutu.right + alt.offsetWidth + KENAR_BOSLUGU > window.innerWidth);
-    // Menünün altındaki bir maddenin alt menüsü (ör. "Eşitlik işareti") pencerenin altından taşmasın: yukarı kaydır
+    // Menünün altındaki bir maddenin alt menüsü (ör. "Eşitlik işareti", uzun "Açı ölç" listesi) pencerenin
+    // altından taşmasın: yukarı kaydır. Alt sınır kistir ile AYNI olmalıdır — yalnız window.innerHeight'e
+    // bakıldığında son bir iki satır ekranın altındaki görev çubuğunun arkasında kalıp görünmez oluyordu.
     const sahipUstu = alt.parentElement?.getBoundingClientRect().top ?? 0;
-    const tasma = sahipUstu + alt.offsetHeight - (window.innerHeight - KENAR_BOSLUGU);
+    const pencere = ana.closest('[role="dialog"]')?.getBoundingClientRect();
+    // Pencere görev çubuğunun ALTINA kadar uzanabiliyor; çubuğun üst kenarı da sınırdır.
+    const cubuk = document.querySelector('nav[aria-label="Görev çubuğu"]')?.getBoundingClientRect();
+    const altSinir = Math.min(
+      window.innerHeight,
+      pencere && pencere.height > 200 ? pencere.bottom : window.innerHeight,
+      cubuk && cubuk.height > 0 ? cubuk.top : window.innerHeight
+    );
+    const tasma = sahipUstu + alt.offsetHeight - (altSinir - KENAR_BOSLUGU);
     setAltMenuYukari(tasma > 0 ? Math.max(0, Math.min(tasma, sahipUstu - KENAR_BOSLUGU)) : 0);
     if (altMenuOdakRef.current) {
       altMenuOdakRef.current = false;
@@ -405,11 +430,53 @@ export function ContextMenu({ open, x, y, title, ariaLabel, items, onClose }: Co
           simgeli ? 'min-w-[15rem]' : 'min-w-[13rem]'
         } max-w-[17rem] rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl py-1.5 select-none animate-in fade-in zoom-in-95 duration-100`}
       >
-        {/* Başlık: menünün hangi nesneyi konuştuğunu gösterir (boş alan menüsünde yok) */}
-        {title && (
-          <div className="px-3 py-1.5 border-b border-border/70 mb-1">
-            <span className="block text-[11px] font-black text-foreground truncate">{title}</span>
+        {/* Başlık: menünün hangi nesneyi konuştuğunu gösterir (boş alan menüsünde yok).
+            Aynı yerde birden çok nesne varsa başlık SEKMELERE döner; sekme değişince maddeler yenilenir. */}
+        {sekmeler && sekmeler.length > 1 ? (
+          <div
+            role="tablist"
+            aria-label="Bu noktadaki nesneler"
+            className="flex flex-wrap gap-1 px-1.5 pb-1.5 pt-1 border-b border-border/70 mb-1"
+            onKeyDown={(e) => {
+              if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const sira = sekmeler.findIndex((t) => t.id === etkinSekme);
+              const yeniSira = e.key === 'Home' ? 0 : e.key === 'End' ? sekmeler.length - 1
+                : (sira + (e.key === 'ArrowRight' ? 1 : sekmeler.length - 1)) % sekmeler.length;
+              const yeni = sekmeler[yeniSira];
+              if (yeni) {
+                onSekmeSec?.(yeni.id);
+                e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[yeniSira]?.focus();
+              }
+            }}
+          >
+            {sekmeler.map((sekme) => {
+              const etkin = sekme.id === etkinSekme;
+              return (
+                <button
+                  key={sekme.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={etkin}
+                  title={sekme.baslik}
+                  tabIndex={etkin ? 0 : -1}
+                  onClick={() => onSekmeSec?.(sekme.id)}
+                  className={`shrink-0 max-w-[8rem] truncate rounded-lg px-2 py-1 text-[11px] font-black transition-colors cursor-pointer ${
+                    etkin ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  {sekme.baslik}
+                </button>
+              );
+            })}
           </div>
+        ) : (
+          title && (
+            <div className="px-3 py-1.5 border-b border-border/70 mb-1">
+              <span className="block text-[11px] font-black text-foreground truncate">{title}</span>
+            </div>
+          )
         )}
 
         {promptItem?.prompt ? (

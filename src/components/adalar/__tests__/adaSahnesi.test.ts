@@ -64,3 +64,102 @@ describe('dolguIsigiYamasi', () => {
     expect(THREE.ShaderChunk.lights_fragment_begin).not.toContain('dolguMalzeme');
   });
 });
+
+/*
+ * Atölye aletlerinin açı matematiği. Motor sınıfı jsdom'da kurulamaz (WebGL yok),
+ * bu yüzden hareket saf fonksiyonlarda tutulur ve burada doğrudan sınanır.
+ */
+describe('ibreTaramaAcisi', () => {
+  it('yüklemede ve açılış animasyonu boyunca ibre duruşta kalır', () => {
+    expect(modul.ibreTaramaAcisi(0)).toBe(0);
+    expect(modul.ibreTaramaAcisi(3.4)).toBe(0);
+    expect(modul.ibreTaramaAcisi(modul.IBRE_GECIKME)).toBe(0); // tarama başı: sıçrama yok
+  });
+
+  it('gerçekten ileri geri gider: +genlik, duruş, −genlik, duruş', () => {
+    const g = modul.IBRE_GECIKME;
+    expect(modul.ibreTaramaAcisi(g + 0.9)).toBeCloseTo(modul.IBRE_GENLIK, 6); // u=0.25 → 85°
+    expect(modul.ibreTaramaAcisi(g + 1.8)).toBeCloseTo(0, 6); // u=0.5 → 60°
+    expect(modul.ibreTaramaAcisi(g + 2.7)).toBeCloseTo(-modul.IBRE_GENLIK, 6); // u=0.75 → 35°
+    // Tarama sonu: kayan nokta yüzünden u tam 1'in bir epsilon altına düşebilir
+    expect(Math.abs(modul.ibreTaramaAcisi(g + modul.IBRE_SURE))).toBeLessThan(1e-12);
+
+    let artiVar = false;
+    let eksiVar = false;
+    for (let t = 0; t <= 20; t += 0.05) {
+      const a = modul.ibreTaramaAcisi(t);
+      if (a > 0) artiVar = true;
+      if (a < 0) eksiVar = true;
+    }
+    expect(artiVar).toBe(true);
+    expect(eksiVar).toBe(true);
+  });
+
+  it('taramalar arasında gerçekten bekler ("arada bir")', () => {
+    // 3.6 s tarama + 6.4 s durgunluk. Dikiş noktasında (u ≈ 1) kayan nokta
+    // artığı kalabilir; sayısal olarak sıfır sayılır.
+    for (let t = 7.1; t <= 13.5; t += 0.1) {
+      expect(Math.abs(modul.ibreTaramaAcisi(t)), `t=${t.toFixed(2)}`).toBeLessThan(1e-12);
+    }
+  });
+
+  it('periyodik, sınırlı ve sürekli', () => {
+    for (let i = 0; i < 50; i += 1) {
+      const t = i * 0.37;
+      expect(modul.ibreTaramaAcisi(t)).toBeCloseTo(modul.ibreTaramaAcisi(t + modul.IBRE_PERIYOT), 9);
+    }
+    for (let t = 0; t <= 30; t += 0.01) {
+      expect(Math.abs(modul.ibreTaramaAcisi(t))).toBeLessThanOrEqual(modul.IBRE_GENLIK + 1e-9);
+      // Dikiş noktasında sıçrama olmamalı
+      expect(Math.abs(modul.ibreTaramaAcisi(t + 0.01) - modul.ibreTaramaAcisi(t))).toBeLessThan(
+        modul.IBRE_GENLIK * 0.05
+      );
+    }
+  });
+
+  it('genlik duruş açısına göre kemerin 0–180 bandında kalır', () => {
+    // İbre kendi düzleminde döner; ucu (1.72) kemerin çentiklerinden (1.975) içeride kaldığı
+    // için açı ne olursa olsun çarpışma yok. Sınır yalnız okunabilirlik: 0/180 uçlarına taşmamak.
+    const durus = Math.PI / 3; // modeldeki 60 derece
+    const genlik = modul.ibreGenligi(durus);
+    expect(genlik).toBeCloseTo(modul.IBRE_GENLIK, 9);
+    expect(durus + genlik).toBeLessThanOrEqual(Math.PI - modul.IBRE_KENAR_PAYI + 1e-9);
+    expect(durus - genlik).toBeGreaterThanOrEqual(modul.IBRE_KENAR_PAYI - 1e-9);
+  });
+
+  it('duruş açısı uca yakınsa genlik kısılır, bilinmiyorsa varsayılan kalır', () => {
+    // Model değişip ibre 20 derecede dururken bile 5 derecenin altına inmez
+    const dar = modul.ibreGenligi((20 * Math.PI) / 180);
+    expect(dar).toBeCloseTo((15 * Math.PI) / 180, 9);
+    expect(modul.ibreGenligi(undefined)).toBe(modul.IBRE_GENLIK);
+    expect(modul.ibreGenligi(Number.NaN)).toBe(modul.IBRE_GENLIK);
+    // Kısılmış genlik salınıma gerçekten uygulanır
+    expect(modul.ibreTaramaAcisi(modul.IBRE_GECIKME + 0.9, dar)).toBeCloseTo(dar, 6);
+  });
+
+  it('azHareket benzetimi: zaman ilerlemezse ibre kıpırdamaz', () => {
+    expect(modul.ibreTaramaAcisi(0)).toBe(0);
+  });
+});
+
+describe('pergelTurAcisi', () => {
+  it('tam tur atar ve iki uçta hızı sıfırdır', () => {
+    expect(modul.pergelTurAcisi(0)).toBe(0);
+    expect(modul.pergelTurAcisi(0.5)).toBeCloseTo(Math.PI, 9);
+    expect(modul.pergelTurAcisi(1)).toBeCloseTo(Math.PI * 2, 9);
+  });
+
+  it('0–1 arasında kesin monoton artar', () => {
+    let onceki = -1;
+    for (let i = 0; i <= 40; i += 1) {
+      const a = modul.pergelTurAcisi(i / 40);
+      expect(a).toBeGreaterThan(onceki);
+      onceki = a;
+    }
+  });
+
+  it('ilerleme aralık dışına taşarsa kenetlenir', () => {
+    expect(modul.pergelTurAcisi(-1)).toBe(0);
+    expect(modul.pergelTurAcisi(2)).toBeCloseTo(Math.PI * 2, 9);
+  });
+});

@@ -48,12 +48,14 @@ describe('Veri ve Grafik uygulaması (sunucu tarafı akıllı çizim)', () => {
     expect(html).toContain('Temizle');
     expect(html).not.toContain('aria-label="Veri kümesi"');
     // Değişken seçimi grafiğin üstündeki sekmelerde (üst şeritte çip yok)
-    expect(html).toContain('aria-label="Grafikteki değişken"');
+    // Tek değişkenli varsayılan veride değişken sekme satırı çizilmez (adı grafikte yazar); seçenek şeridi grafiğin altında
+    expect(html).not.toContain('aria-label="Grafikteki değişken"');
+    expect(html).toContain('data-secenek-seridi');
     expect(html).not.toContain('aria-label="Grafikte gösterilen değişken"');
     expect(html).not.toContain('aria-label="Eksene atanacak değişken"');
     expect(html).toContain('aria-label="Grafik seçenekleri"');
-    // Eksen açılışta seçili gelir: "Boy (cm)" sekmesi seçili
-    expect(html).toMatch(/aria-selected="true" aria-controls="vg-grafik-alani"[^>]*title="Boy \(cm\) \(sayısal\)"/);
+    // Seçenek şeridi grafik alanının altında (sunucuda grafik ölçülmeden çizilmez, şerit yine de yerinde)
+    expect(html.indexOf('data-secenek-seridi')).toBeGreaterThan(html.indexOf('id="vg-grafik-alani"'));
     // Veri türüne göre: tek sayısal değişkenli tabloda saçılım sekmesi pasif ve nedeni ipucunda
     expect(html).toMatch(/aria-disabled="true"[^>]*title="Saçılım grafiği iki sayısal değişken/);
     expect(html).toContain('>Saçılım<');
@@ -152,6 +154,8 @@ describe('Veri ve Grafik uygulaması (sunucu tarafı akıllı çizim)', () => {
       <IstatistikPaneli tablo={ornekVeriOlustur('mac')} sutun={1} seciliSatir={null} onSatirSec={bos} adimlariGoster onAdimlariGoster={bos} />,
     );
     expect(html).toContain('Aritmetik ortalama');
+    expect(html).toContain('Tepe değer');
+    expect(html).toContain('tekrar eden değer yok');
     expect(html).toContain('85');
     expect(html).toContain('6,4');
     expect(html).toContain('|18 − 17| = 1');
@@ -289,14 +293,14 @@ describe('tablo sütun başlığı genişliği', () => {
     expect(sutunEnKucukGenisligi('x'.repeat(80), true)).toBe(260);
     // Tablonun doğal genişliği: # + sütunlar + satır sil + kaydırma çubuğu; Çekiliş gibi gizli sütunlar sayılmaz
     const t = ornekVeriOlustur('calisma');
-    const beklenen = 44 + t.sutunlar.reduce((s, c) => s + sutunEnKucukGenisligi(c.ad, c.tur === 'sayi'), 0) + 44 + 14;
+    const beklenen = 44 + t.sutunlar.reduce((s, c, j) => s + sutunEnKucukGenisligi(c.ad, j > 0), 0) + 44 + 14;
     expect(tabloDogalGenisligi(t)).toBe(beklenen);
   });
 });
 
 describe('renk anahtarı: kategoriye göre renklendirme (bütün grafikler, istatistik, tablo)', () => {
   const t = ornekVeriOlustur('calisma');
-  const eslem = renkEslemesi(t, 0)!;
+  const eslem = renkEslemesi(t, 1)!;
   const dolgular = (html: string, r: string) => new Set(Array.from(html.matchAll(new RegExp(`<circle r="${r}" fill="([^"]+)"`, 'g')), (e) => e[1]));
 
   it('eşleme: satır → kategori → renk; boş kategori gri', () => {
@@ -309,7 +313,7 @@ describe('renk anahtarı: kategoriye göre renklendirme (bütün grafikler, ista
   });
 
   it('saçılım: noktalar iki renkte, lejantta kategori ve sayı; renksizde tek renk ve lejant yok', () => {
-    const ortak = { tablo: t, xSutun: 1, ySutun: 2, seciliSatir: null, onSatirSec: bos, genislik: 700, yukseklik: 380, azaltilmisHareket: true };
+    const ortak = { tablo: t, xSutun: 2, ySutun: 3, seciliSatir: null, onSatirSec: bos, genislik: 700, yukseklik: 380, azaltilmisHareket: true };
     const html = renderToStaticMarkup(<SacilimGrafigi {...ortak} renkEslemi={eslem} />);
     expect(html).toContain('data-renk-lejanti');
     expect(html).toContain('Sınıf:');
@@ -335,19 +339,19 @@ describe('renk anahtarı: kategoriye göre renklendirme (bütün grafikler, ista
       surukleniyor: false,
       secenekler: { ortalama: false, oms: false, etiketler: false },
     };
-    const html = renderToStaticMarkup(<NoktaGrafigi {...ortak} sutun={2} renkEslemi={eslem} />);
+    const html = renderToStaticMarkup(<NoktaGrafigi {...ortak} sutun={3} renkEslemi={eslem} />);
     expect(html).toContain('data-renk-lejanti');
     expect(html).toContain('A (10)');
     const renkler = new Set(Array.from(html.matchAll(/<circle r="[\d.]+" fill="(#[0-9a-f]{6})"/gi), (e) => e[1].toLowerCase()));
     expect(renkler.has(eslem.renkler.get('A')!.toLowerCase())).toBe(true);
     expect(renkler.has(eslem.renkler.get('B')!.toLowerCase())).toBe(true);
-    const kendisi = renderToStaticMarkup(<NoktaGrafigi {...ortak} sutun={0} renkEslemi={eslem} />);
+    const kendisi = renderToStaticMarkup(<NoktaGrafigi {...ortak} sutun={1} renkEslemi={eslem} />);
     expect(kendisi).not.toContain('data-renk-lejanti');
   });
 
   it('sütun grafiği: her sütun satırının kategori renginde, lejant başlık satırında', () => {
     const html = renderToStaticMarkup(
-      <SutunGrafigi tablo={t} sutun={2} seciliSatir={null} onSatirSec={bos} onDegerDegis={bos} yuvarlamaAdimi={1} genislik={900} yukseklik={360} azaltilmisHareket renkEslemi={eslem} />,
+      <SutunGrafigi tablo={t} sutun={3} seciliSatir={null} onSatirSec={bos} onDegerDegis={bos} yuvarlamaAdimi={1} genislik={900} yukseklik={360} azaltilmisHareket renkEslemi={eslem} />,
     );
     expect(html).toContain('data-renk-lejanti');
     const renkler = new Set(Array.from(html.matchAll(/<rect x="0" y="0" width="[\d.]+" height="1" fill="([^"]+)"/g), (e) => e[1]));
@@ -364,7 +368,7 @@ describe('renk anahtarı: kategoriye göre renklendirme (bütün grafikler, ista
 
   it('çizgi grafiği: her kategori kendi renginde ayrı çizgi; ikinci seri kesikli; renksizde tek çizgi', () => {
     const ortak = { tablo: t, seciliSatir: null, onSatirSec: bos, onDegerDegis: bos, yuvarlamaAdimi: 1, genislik: 700, yukseklik: 360, azaltilmisHareket: true };
-    const html = renderToStaticMarkup(<CizgiGrafigi {...ortak} sutunlar={[2]} renkEslemi={eslem} />);
+    const html = renderToStaticMarkup(<CizgiGrafigi {...ortak} sutunlar={[3]} renkEslemi={eslem} />);
     expect(html).toContain('data-renk-lejanti');
     const gruplar = Array.from(html.matchAll(/<path d="([^"]+)" fill="none" stroke="([^"]+)"[^>]*data-cizgi-grubu="([^"]*)"/g), (e) => ({ d: e[1], renk: e[2], ad: e[3] }));
     expect(gruplar.map((g) => g.ad)).toEqual(['A', 'B']);
@@ -375,25 +379,25 @@ describe('renk anahtarı: kategoriye göre renklendirme (bütün grafikler, ista
     expect(noktaRenkleri.filter((r) => r === eslem.renkler.get('A'))).toHaveLength(10);
     expect(noktaRenkleri.filter((r) => r === eslem.renkler.get('B'))).toHaveLength(10);
 
-    const iki = renderToStaticMarkup(<CizgiGrafigi {...ortak} sutunlar={[1, 2]} renkEslemi={eslem} />);
+    const iki = renderToStaticMarkup(<CizgiGrafigi {...ortak} sutunlar={[2, 3]} renkEslemi={eslem} />);
     expect(iki.match(/data-cizgi-grubu=/g)).toHaveLength(4);
     expect(iki.match(/<path [^>]*stroke-dasharray="7 5"/g)).toHaveLength(2);
     expect(iki.match(/data-seri-ornegi/g)).toHaveLength(2);
 
-    const tek = renderToStaticMarkup(<CizgiGrafigi {...ortak} sutunlar={[2]} />);
+    const tek = renderToStaticMarkup(<CizgiGrafigi {...ortak} sutunlar={[3]} />);
     expect(tek).not.toContain('data-renk-lejanti');
     expect(tek).not.toContain('data-cizgi-grubu');
     expect(tek.match(/<path d="M/g)).toHaveLength(1);
   });
 
   it('daire grafiği: dilimler satırın kategori renginde; lejantta kategorilerin toplamdaki payı', () => {
-    const ortak = { tablo: t, sutun: 1, seciliSatir: null, onSatirSec: bos, onDegerlerDegis: bos, genislik: 800, yukseklik: 420, azaltilmisHareket: true };
+    const ortak = { tablo: t, sutun: 2, seciliSatir: null, onSatirSec: bos, onDegerlerDegis: bos, genislik: 800, yukseklik: 420, azaltilmisHareket: true };
     const html = renderToStaticMarkup(<DaireGrafigi {...ortak} renkEslemi={eslem} />);
     const dilimler = Array.from(html.matchAll(/<path d="[^"]+" fill="([^"]+)" fill-opacity/g), (e) => e[1]);
     expect(dilimler).toHaveLength(20);
     expect(new Set(dilimler)).toEqual(new Set([eslem.renkler.get('A'), eslem.renkler.get('B')]));
     const toplamlar: Record<string, number> = { A: 0, B: 0 };
-    t.satirlar.forEach((r) => (toplamlar[r.hucreler[0]] += sayiOku(r.hucreler[1]) ?? 0));
+    t.satirlar.forEach((r) => (toplamlar[r.hucreler[1]] += sayiOku(r.hucreler[2]) ?? 0));
     const toplam = toplamlar.A + toplamlar.B;
     expect(html).toContain('data-renk-lejanti');
     expect(html).toContain(`A %${sayiYaz((toplamlar.A / toplam) * 100, 1)}`);
@@ -402,11 +406,11 @@ describe('renk anahtarı: kategoriye göre renklendirme (bütün grafikler, ista
   });
 
   it('istatistik: gruplara göre özet tablosu (her grup ve tümü); anahtar yoksa tablo yok', () => {
-    const ortak = { tablo: t, sutun: 2, seciliSatir: null, onSatirSec: bos, adimlariGoster: true, onAdimlariGoster: bos };
+    const ortak = { tablo: t, sutun: 3, seciliSatir: null, onSatirSec: bos, adimlariGoster: true, onAdimlariGoster: bos };
     const html = renderToStaticMarkup(<IstatistikPaneli {...ortak} renkEslemi={eslem} />);
     expect(html).toContain('data-grup-istatistikleri');
     const ortalama = (k: string) => {
-      const v = t.satirlar.filter((r) => r.hucreler[0] === k).map((r) => sayiOku(r.hucreler[2]) ?? 0);
+      const v = t.satirlar.filter((r) => r.hucreler[1] === k).map((r) => sayiOku(r.hucreler[3]) ?? 0);
       return v.reduce((a, b) => a + b, 0) / v.length;
     };
     for (const k of ['A', 'B']) {
@@ -481,9 +485,46 @@ describe('renk anahtarı: kategoriye göre renklendirme (bütün grafikler, ista
     });
   });
 
-  it('uygulama: grafiğin üstünde "Grafik ayarları" düğmesi', () => {
+  it('uygulama: araç çubuğunda "Grafik ayarları" düğmesi', () => {
     const html = renderToStaticMarkup(<VeriGrafikUygulamasi pencereGenisligi={1000} />);
     expect(html).toContain('data-grafik-ayarlari-dugmesi');
     expect(html).toContain('Grafik ayarları');
+  });
+});
+
+describe('grafik düzeni: daire lejantı sığar, çizgi lejantı ada göre, tablo başlığında tür düğmesi', () => {
+  it('daire: çok dilimde lejant satırları sıklaşır, sığmayanlar "… ve k dilim daha" olur', () => {
+    const cok = tabloOlustur(['Ad', 'Değer'], Array.from({ length: 40 }, (_, i) => [`Satır ${i + 1}`, i + 1]));
+    const ortak = { seciliSatir: null, onSatirSec: bos, onDegerlerDegis: bos, sutun: 1, azaltilmisHareket: true };
+    const dar = renderToStaticMarkup(<DaireGrafigi {...ortak} tablo={cok} genislik={800} yukseklik={300} />);
+    expect(dar).toContain('data-lejant-kirpildi');
+    expect(dar).toMatch(/ve \d+ dilim daha/);
+    const az = renderToStaticMarkup(<DaireGrafigi {...ortak} tablo={ornekVeriOlustur('gun')} genislik={800} yukseklik={400} />);
+    expect(az).not.toContain('data-lejant-kirpildi');
+    // 24 satırlı boy verisi 480 px yükseklikte kırpılmadan sığar (satır aralığı daralır)
+    const boy = renderToStaticMarkup(<DaireGrafigi {...ortak} tablo={ornekVeriOlustur('boy')} genislik={800} yukseklik={480} />);
+    expect(boy).not.toContain('data-lejant-kirpildi');
+    expect(boy).toContain('Kaan');
+  });
+
+  it('çizgi: tek seride uzun ad kesilmez, iki seride adlar art arda dizilir', () => {
+    const t = tabloOlustur(['Ay', 'Aylık ortalama sıcaklık (derece)', 'Nem'], [['Ocak', 4, 70], ['Şubat', 6, 65]]);
+    const ortak = { tablo: t, seciliSatir: null, onSatirSec: bos, onDegerDegis: bos, yuvarlamaAdimi: 1, genislik: 700, yukseklik: 320, azaltilmisHareket: true };
+    const tek = renderToStaticMarkup(<CizgiGrafigi {...ortak} sutunlar={[1]} />);
+    expect(tek).toContain('Aylık ortalama sıcaklık (derece)');
+    const iki = renderToStaticMarkup(<CizgiGrafigi {...ortak} sutunlar={[1, 2]} />);
+    expect(iki).toContain('Aylık ortalama…');
+    expect(iki).not.toContain('Aylık ortalama …');
+    expect(iki).toContain('Nem');
+  });
+
+  it('tablo başlığı: ilk sütun dışında tür düğmesi ve sil düğmesi (kategorik sütunda da)', () => {
+    const t = ornekVeriOlustur('calisma');
+    const html = renderToStaticMarkup(<VeriTablosu tablo={t} seciliSatir={null} onSatirSec={bos} onTablo={bos} />);
+    expect(html.match(/data-sutun-turu="/g)).toHaveLength(3);
+    expect(html).toContain('data-sutun-turu="etiket"');
+    expect(html).toContain('aria-label="Sınıf sütununu sil"');
+    expect(html).not.toContain('aria-label="Öğrenci sütununu sil"');
+    expect(html).toContain('Sınıf sütununun türü: kategorik. Sayısal yap');
   });
 });

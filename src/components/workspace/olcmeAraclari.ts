@@ -47,6 +47,8 @@ export const OLCME_ARACI_ISLEM_OLAYI = 'geoeba:olcme-araci';
 
 export const UZUN_BASIS_MS = 600;
 export const UZUN_BASIS_TOLERANS_PX = 12;
+/** Parmak kalktıktan sonra tarayıcının uydurduğu fare olayları menüyü kapatmasın diye beklenen süre. */
+export const UZUN_BASIS_KAPANMA_MS = 700;
 
 export const CETVEL_BOY_MIN = 2;
 export const CETVEL_BOY_MAX = 35;
@@ -190,6 +192,28 @@ const ekranda = (noktalar: Point2D[], vp: Gorunum) =>
   noktalar.every((p) => p.x >= 0 && p.y >= 0 && p.x <= vp.width && p.y <= vp.height);
 
 /**
+ * Verilen noktaları görünür alana sokan en küçük kaydırma (ekran px). Bir eksende hiç sığmıyorsa
+ * o eksende ortalanır. Menüden döndürülen araç ekranın dışına sarkmasın diye kullanılır.
+ */
+export function gorunumeSokmaKaymasi(noktalar: Point2D[], vp: Gorunum): { dx: number; dy: number } {
+  const kayma = (degerler: number[], uzunluk: number) => {
+    const enAz = Math.min(...degerler);
+    const enCok = Math.max(...degerler);
+    if (enCok - enAz > uzunluk) return (uzunluk - enAz - enCok) / 2; // sığmıyor: ortala
+    if (enAz < 0) return -enAz;
+    if (enCok > uzunluk) return uzunluk - enCok;
+    return 0;
+  };
+  return { dx: kayma(noktalar.map((p) => p.x), vp.width), dy: kayma(noktalar.map((p) => p.y), vp.height) };
+}
+
+/** Ekran kaymasını dünya koordinatında uygular (ekran y'si aşağı, dünya y'si yukarı artar). */
+const ekranKaymasiniUygula = (konum: Point2D, kayma: { dx: number; dy: number }, zoom: number): Point2D => ({
+  x: konum.x + kayma.dx / zoom,
+  y: konum.y - kayma.dy / zoom,
+});
+
+/**
  * Menüden boy değişince cetvelin yeni 0 çentiği: yeni boy ekrana sığıyorsa 0 ucu yerinde kalır
  * (öğretmenin bir noktaya hizaladığı 0 kaymasın); taşıyorsa görsel merkez sabit tutulur.
  */
@@ -197,6 +221,19 @@ export function cetvelBoyunuDegistir(konum: Point2D, donusSvg: number, eskiBoy: 
   if (ekranda(cetvelKoseleri(konum, donusSvg, yeniBoy, vp), vp)) return konum;
   const merkez = cetvelMerkezi(konum, donusSvg, eskiBoy, vp.zoom);
   return cetvelKonumuMerkezden(merkez, donusSvg, yeniBoy, vp.zoom);
+}
+
+/**
+ * Menüden açı değişince cetvelin yeni 0 çentiği: döndükten sonra cetvel ekranda kalıyorsa 0 ucu
+ * yerinde kalır (hizalanan uç kaymasın); taşacaksa görsel merkez korunarak döndürülür ve gerekirse
+ * görünür alana sokulur, yani "Dikey yap" cetveli ekranın dışına savurmaz.
+ */
+export function cetvelDonusunuDegistir(konum: Point2D, boy: number, eskiDonus: number, yeniDonus: number, vp: Gorunum): Point2D {
+  if (ekranda(cetvelKoseleri(konum, yeniDonus, boy, vp), vp)) return konum;
+  const merkez = cetvelMerkezi(konum, eskiDonus, boy, vp.zoom);
+  const merkezli = cetvelKonumuMerkezden(merkez, yeniDonus, boy, vp.zoom);
+  const kayma = gorunumeSokmaKaymasi(cetvelKoseleri(merkezli, yeniDonus, boy, vp), vp);
+  return ekranKaymasiniUygula(merkezli, kayma, vp.zoom);
 }
 
 // Açıölçer -------------------------------------------------------------------
@@ -248,12 +285,36 @@ export function gonyeMerkezi(konum: Point2D, donusSvg: number, boy: number): Poi
   return { x: konum.x + k * (Math.cos(r) + Math.sin(r)), y: konum.y + k * (Math.cos(r) - Math.sin(r)) };
 }
 
-export function gonyeyiYerlestir(tercihBoy: number, donusSvg: number, vp: Gorunum): { konum: Point2D; boy: number } {
-  const boy = gonyeBoyuSigdir(tercihBoy, vp);
-  const m = gorunurMerkez(vp);
+/** Görsel merkezi (ağırlık merkezi) verilen gönyenin dik köşesi (gonyeMerkezi'nin tersi). */
+export function gonyeKonumuMerkezden(merkez: Point2D, donusSvg: number, boy: number): Point2D {
   const r = rad(donusSvg);
   const k = boy / 3;
-  return { boy, konum: { x: m.x - k * (Math.cos(r) + Math.sin(r)), y: m.y - k * (Math.cos(r) - Math.sin(r)) } };
+  return { x: merkez.x - k * (Math.cos(r) + Math.sin(r)), y: merkez.y - k * (Math.cos(r) - Math.sin(r)) };
+}
+
+export function gonyeyiYerlestir(tercihBoy: number, donusSvg: number, vp: Gorunum): { konum: Point2D; boy: number } {
+  const boy = gonyeBoyuSigdir(tercihBoy, vp);
+  return { boy, konum: gonyeKonumuMerkezden(gorunurMerkez(vp), donusSvg, boy) };
+}
+
+/** Gönyenin üç köşesi ve döndürme tutamacı (ekran px) */
+export function gonyeKoseleri(konum: Point2D, donusSvg: number, boy: number, vp: Gorunum): Point2D[] {
+  const koken = worldToScreen(konum, vp as ViewportTransform);
+  const Lp = boy * vp.zoom;
+  return [
+    { x: 0, y: 0 },
+    { x: Lp, y: 0 },
+    { x: 0, y: -Lp },
+    { x: Lp / 2 + 20, y: -Lp / 2 - 20 },
+  ].map((p) => yereldenEkrana(koken, donusSvg, p));
+}
+
+/** Menüden açı değişince gönyenin yeni dik köşesi: cetveldeki kuralın aynısı (taşarsa merkez + görünüme sokma). */
+export function gonyeDonusunuDegistir(konum: Point2D, boy: number, eskiDonus: number, yeniDonus: number, vp: Gorunum): Point2D {
+  if (ekranda(gonyeKoseleri(konum, yeniDonus, boy, vp), vp)) return konum;
+  const merkezli = gonyeKonumuMerkezden(gonyeMerkezi(konum, eskiDonus, boy), yeniDonus, boy);
+  const kayma = gorunumeSokmaKaymasi(gonyeKoseleri(merkezli, yeniDonus, boy, vp), vp);
+  return ekranKaymasiniUygula(merkezli, kayma, vp.zoom);
 }
 
 // Alan modeli ----------------------------------------------------------------
@@ -392,6 +453,18 @@ export function okumaKonumu(tutamac: Point2D, genislik: number, vp: Gorunum): Po
   const enCok = vp.width - genislik / 2 - 6;
   const x = enCok < enAz ? vp.width / 2 : clamp(tutamac.x, enAz, enCok);
   return { x, y };
+}
+
+/**
+ * `nokta`yı `kacinilan` noktadan `uzaklik` piksel uzaklaştırır: sürüklenen tutamacın okuma hapı
+ * komşu tutamacın üstüne binmesin (ör. cetvelin döndürme okuması boy tutamacını örtmesin).
+ */
+export function tutamactanUzaklastir(nokta: Point2D, kacinilan: Point2D, uzaklik: number): Point2D {
+  const dx = nokta.x - kacinilan.x;
+  const dy = nokta.y - kacinilan.y;
+  const u = Math.hypot(dx, dy);
+  if (u < 1e-6) return { ...nokta };
+  return { x: nokta.x + (dx / u) * uzaklik, y: nokta.y + (dy / u) * uzaklik };
 }
 
 export const cetvelOkumasi = (boy: number) => `${formatTurkishNumber(boy)} br`;

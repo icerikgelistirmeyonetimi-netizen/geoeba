@@ -14,6 +14,16 @@ import { fold } from '@/math/commands/text';
  */
 export const NOKTALI_SEKILLER: ReadonlySet<ObjectType> = new Set<ObjectType>(['polygon', 'segment', 'line', 'ray', 'circle', 'ellipse', 'arc', 'sector']);
 
+/**
+ * "Uzunluk Ölç (cm)" / "Birimle Ölç (br)" aracının ve uzunluk ölçme komutlarının bıraktığı |AB| parçası: var olan iki
+ * noktayı ÖLÇEN bir etikettir, noktaları tanımlayan bir şekil değildir. Bu yüzden silinince ölçtüğü noktalar yerinde
+ * kalır (açı ve ölçüm etiketlerinde olduğu gibi); "3 br uzunluğunda AB doğru parçası" gibi gerçek şekiller ise |AB|
+ * etiketi taşımadığı için bu süzgece takılmaz.
+ */
+export function olcumParcasiMi(o: MathObject): boolean {
+  return o.type === 'segment' && !!o.unit && o.showLength !== false && /^\|[^|]+\|$/.test((o.label ?? '').trim());
+}
+
 /** Mesajlarda nesnenin Türkçe adı: "ABC üçgeni", "A noktası", "[AB] doğru parçası". */
 export function describe(o: MathObject): string {
   const f = fold(o.label ?? '');

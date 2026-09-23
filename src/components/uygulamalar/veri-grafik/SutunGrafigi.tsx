@@ -59,10 +59,17 @@ export function SutunGrafigi({
 
   const W = Math.max(genislik, 240);
   const H = Math.max(yukseklik, 180);
-  const taban = H - ALT;
   const alanG = W - SOL - SAG;
 
   const noktalar = useMemo(() => gecerliDegerler(tablo, sutun), [tablo, sutun]);
+  const adet = Math.max(noktalar.length, 1);
+  const hucreG = alanG / adet;
+  // Etiketler hücreye sığmıyorsa (13 px yazıda harf başına ~7,4 px) eğik yazılır ve 12 harfte kısaltılır;
+  // eğik etiket daha çok dikey yer ister: alt boşluk etiket uzunluğuna göre büyür (en çok 96 px)
+  const enUzunEtiket = noktalar.reduce((m, n) => Math.max(m, satirEtiketi(tablo, n.satir).length), 0);
+  const etiketEgik = hucreG < 64 || Math.min(enUzunEtiket, 12) * 7.4 + 10 > hucreG;
+  const altBosluk = etiketEgik ? Math.min(96, Math.max(ALT, 24 + Math.min(enUzunEtiket, 12) * 7.4 * 0.58 + 10)) : ALT;
+  const taban = H - altBosluk;
   const canliEksen = useMemo(() => {
     if (noktalar.length === 0) return payliEksen(0, 10, 5);
     const d = noktalar.map((n) => n.deger);
@@ -73,8 +80,6 @@ export function SutunGrafigi({
   const sutunAdi = tablo.sutunlar[sutun]?.ad ?? '';
   const ondalik = adimOndalik(yuvarlamaAdimi);
 
-  const adet = Math.max(noktalar.length, 1);
-  const hucreG = alanG / adet;
   const sutunG = Math.max(6, Math.min(hucreG * 0.66, 72));
   const gecis = azaltilmisHareket || surukle ? 'none' : `transform 300ms ${GECIS}`;
 
@@ -110,8 +115,6 @@ export function SutunGrafigi({
     e.preventDefault();
     onDegerDegis(satir, sutun, deger + fark, ondalik);
   };
-
-  const etiketEgik = hucreG < 64;
 
   return (
     <svg

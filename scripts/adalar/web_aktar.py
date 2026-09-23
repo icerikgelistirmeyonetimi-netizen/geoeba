@@ -81,12 +81,40 @@ LC = layer_collection_map(view_layer.layer_collection, {})
 ATOLYE_KOKLERI = ("ATOLYE_ADASI",)
 ATOLYE_TABELA_YAZISI = "ATÖLYE"
 
+# Dönen atölye aletleri: landmark:atolye grubundan ayrılır, kendi pivotunda döner.
+# yerel_eksen ATOLYE_ADASI'nın YEREL uzayında; dünya eksenine kök matrisiyle çevrilir.
+ARAC_TANIMLARI = {
+    "arac:pergel": {
+        "esles": ("tool", "pergel"),         # ata zincirinde ['tool']=='pergel' olan EMPTY
+        "pivot_nesne": "ARAC_PERGEL",
+        "yerel_eksen": (0.0, 0.0, 1.0),      # ada yerel +Z (düşey) → three +Y
+        "motion": "tur",
+    },
+    "arac:ibre": {
+        "esles": ("ad", "İletki • 60 derece göstergesi"),
+        "pivot_nesne": "İletki • merkez pimi",
+        "yerel_eksen": (0.0, -1.0, 0.0),     # ada yerel −Y → three +Z (derece ARTIŞ yönü)
+        "motion": "salinim",
+        "restAngle": round(math.pi / 3, 5),  # modeldeki duruş açısı: 60 derece
+    },
+}
+ARAC_GEOMETRI = {}   # anahtar → {"pivot": Vector, "eksen": Vector}, DÜNYA uzayı
+
 atolye = None
 if IS_HOME:
     atolye_kok = bpy.data.objects.get("ATOLYE_ADASI")
     if atolye_kok is None or atolye_kok.name not in scene.objects:
         raise RuntimeError("Ana sayfa sahnesinde ATOLYE_ADASI kökü bulunamadı")
     atolye = {"nesne_sayisi": 1 + len(atolye_kok.children_recursive), "tabela": ATOLYE_TABELA_YAZISI}
+    # Pivot/eksen join'den önce, nesneler hâlâ sahnedeyken dünya uzayında toplanır
+    for anahtar, tanim in ARAC_TANIMLARI.items():
+        kaynak = bpy.data.objects.get(tanim["pivot_nesne"])
+        if kaynak is None:
+            raise RuntimeError(f"{anahtar}: pivot nesnesi bulunamadı: {tanim['pivot_nesne']}")
+        ARAC_GEOMETRI[anahtar] = {
+            "pivot": kaynak.matrix_world.translation.copy(),
+            "eksen": (atolye_kok.matrix_world.to_3x3() @ Vector(tanim["yerel_eksen"])).normalized(),
+        }
 
 
 def collection_renderable(col):
@@ -314,6 +342,14 @@ def group_for(ob):
         m = re.search(r"\.(\d+)$", ob.name)
         return f"float:samandira-{m.group(1) if m else '000'}"
     if atolye is not None and any(a.name in ATOLYE_KOKLERI for a in chain):
+        # Dönen aletler ayrı gruba çıkar; kalan her şey atölyenin tek mesh'inde birleşir
+        for anahtar, tanim in ARAC_TANIMLARI.items():
+            tur, deger = tanim["esles"]
+            if tur == "tool":
+                if any(a.type == "EMPTY" and a.get("tool") == deger for a in chain):
+                    return anahtar
+            elif ob.name.startswith(deger):
+                return anahtar
         return "landmark:atolye"
     if IS_HOME:
         for a in chain:
@@ -419,6 +455,20 @@ for key, obj in sorted(joined.items(), key=lambda kv: (kv[0].startswith("iz:"), 
         obj.location = pivot
         entry["pivot"] = to_three(pivot)
         entry["halfLength"] = round(max(mx.x - mn.x, mx.y - mn.y) / 2, 4)
+    elif kind == "arac":
+        # Yüzenlerden farkı: pivot su yüzeyine indirilmez, gerçek 3B dünya noktasıdır
+        g = ARAC_GEOMETRI.get(key)
+        if g is None:
+            raise RuntimeError(f"{key}: pivot/eksen toplanmamış")
+        pivot = g["pivot"]
+        obj.data.transform(Matrix.Translation(-pivot))
+        obj.location = pivot
+        entry["pivot"] = to_three(pivot)
+        entry["axis"] = [c + 0.0 for c in to_three(g["eksen"])]   # −0.0 → 0.0
+        entry["owner"] = "landmark:atolye"
+        entry["motion"] = ARAC_TANIMLARI[key]["motion"]
+        if "restAngle" in ARAC_TANIMLARI[key]:
+            entry["restAngle"] = ARAC_TANIMLARI[key]["restAngle"]
     elif kind == "iz":
         tekne = next((e for e in group_meta if e["key"] == f"float:{gid}"), None)
         if tekne is not None:
@@ -434,6 +484,18 @@ for key, obj in sorted(joined.items(), key=lambda kv: (kv[0].startswith("iz:"), 
                 tekne["wake"] = key
     obj["group"] = key
     group_meta.append(entry)
+
+# Ayrılan aletler görsel olarak sahibinin parçasıdır: sahibin kutusu onları da kapsasın.
+# (Seçim vekili, vurgu halkası, odak noktası ve güneş gölge kamerası bu kutudan üretiliyor.)
+# Sıralama anahtarı "arac:*"ı "landmark:atolye"den önce işlediği için bu bir son geçiştir.
+_kayit = {e["key"]: e for e in group_meta}
+for e in group_meta:
+    ust = _kayit.get(e.get("owner"))
+    if ust is None:
+        continue
+    for i in range(3):
+        ust["bbox"]["min"][i] = min(ust["bbox"]["min"][i], e["bbox"]["min"][i])
+        ust["bbox"]["max"][i] = max(ust["bbox"]["max"][i], e["bbox"]["max"][i])
 
 # Etiket bağlantı noktaları
 if IS_HOME:

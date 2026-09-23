@@ -34,9 +34,10 @@ export interface CizgiGrafigiProps {
 const SOL = 56;
 const SAG = 20;
 const UST_TEMEL = 46;
-/** Lejant yazılarının taban çizgisi ve seri lejantında bir öğenin genişliği */
+/** Lejant yazılarının taban çizgisi */
 const LEJANT_Y = 26;
-const SERI_ARALIGI = 150;
+/** 13 px kalın yazıda harf başına yaklaşık genişlik */
+const HARF = 7.4;
 /** Renk anahtarında ikinci serinin çizgi deseni */
 const KESIK = '7 5';
 const ALT = 56;
@@ -75,8 +76,17 @@ export function CizgiGrafigi({
 
   const W = Math.max(genislik, 240);
   const H = Math.max(yukseklik, 200);
-  const taban = H - ALT;
   const alanG = W - SOL - SAG;
+  const n = Math.max(tablo.satirlar.length, 1);
+  // Her satır eşit bir dilimin ortasında: ilk nokta Y eksenine, son nokta kenara yapışmaz
+  const adimX = alanG / n;
+  const etiketAdimi = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(alanG / 64))));
+  // Uzun satır etiketleri (ünite adları) dilime sığmıyorsa eğik yazılır ve 12 harfte kısaltılır;
+  // eğik etiket için alt boşluk büyür (en çok 96 px)
+  const enUzunEtiket = tablo.satirlar.reduce((m, _, i) => Math.max(m, satirEtiketi(tablo, i).length), 0);
+  const etiketEgik = Math.min(enUzunEtiket, 12) * 7.4 + 10 > adimX * etiketAdimi;
+  const altBosluk = etiketEgik ? Math.min(96, Math.max(ALT, 24 + Math.min(enUzunEtiket, 12) * 7.4 * 0.58 + 10)) : ALT;
+  const taban = H - altBosluk;
   const sutunAnahtari = sutunlar?.join(',') ?? '';
   const seriler = useMemo(
     () => {
@@ -98,7 +108,17 @@ export function CizgiGrafigi({
     return [...k].sort((a, b) => a - b);
   }, [seriler, tablo]);
   const lejantSayilari = anahtar ? kategoriSayilari(anahtar, cizilenSatirlar) : undefined;
-  const seriLejantSonu = SOL + seriler.length * SERI_ARALIGI;
+  /** Seri lejantı: adlar art arda dizilir (tek seride ad 36, iki seride 16 harfe kadar); işaretin genişliği + aralık */
+  const adSiniri = seriler.length === 1 ? 36 : 16;
+  const isaretGenisligi = anahtar ? 34 : 26;
+  const seriLejantlari = seriler.reduce<{ x: number; ad: string }[]>((liste, s) => {
+    const onceki = liste[liste.length - 1];
+    const x = onceki ? onceki.x + onceki.ad.length * HARF + isaretGenisligi + 16 : SOL;
+    const ad = s.sutun.ad.length > adSiniri ? `${s.sutun.ad.slice(0, adSiniri - 1).trimEnd()}…` : s.sutun.ad;
+    return [...liste, { x, ad }];
+  }, []);
+  const sonLejant = seriLejantlari[seriLejantlari.length - 1];
+  const seriLejantSonu = sonLejant ? sonLejant.x + sonLejant.ad.length * HARF + isaretGenisligi + 16 : SOL;
   /** Kategori lejantı seri lejantının yanına sığmazsa ikinci satıra iner; çizim alanı o kadar aşağıdan başlar */
   const lejantAltSatirda = anahtar !== null && seriLejantSonu + renkLejantiGenisligi(anahtar, lejantSayilari) > W - SAG;
   const UST = lejantAltSatirda ? UST_TEMEL + 22 : UST_TEMEL;
@@ -119,9 +139,6 @@ export function CizgiGrafigi({
   }, [tumDegerler, taban, UST]);
   const eksen = surukle ? surukle.eksen : canliEksen;
   const olcek = dogrusalOlcek(eksen.min, eksen.max, taban, UST);
-  const n = Math.max(tablo.satirlar.length, 1);
-  // Her satır eşit bir dilimin ortasında: ilk nokta Y eksenine, son nokta kenara yapışmaz
-  const adimX = alanG / n;
   const xKonum = (i: number) => SOL + adimX * (i + 0.5);
 
   const seriNoktalari = useMemo(
@@ -139,7 +156,6 @@ export function CizgiGrafigi({
   );
 
   const gecis = azaltilmisHareket || surukle ? 'none' : `all 300ms ${GECIS}`;
-  const etiketAdimi = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(alanG / 64))));
 
   const isaretciHareket = (e: React.PointerEvent<SVGElement>) => {
     if (!surukle || !svgRef.current) return;
@@ -164,7 +180,7 @@ export function CizgiGrafigi({
     >
       {/* Lejant: seriler (renk anahtarı varken renksiz çizgi örneğiyle: düz / kesikli), yanında kategori renkleri */}
       {seriNoktalari.map((s, si) => (
-        <g key={s.sutun.id} transform={`translate(${SOL + si * SERI_ARALIGI}, 14)`}>
+        <g key={s.sutun.id} transform={`translate(${seriLejantlari[si]?.x ?? SOL}, 14)`}>
           {anahtar ? (
             <g data-seri-ornegi>
               <line x1={0} x2={22} y1={7} y2={7} stroke={RENK.solukMetin} strokeWidth={2.5} strokeDasharray={si > 0 ? KESIK : undefined} />
@@ -174,7 +190,7 @@ export function CizgiGrafigi({
             <rect width={14} height={14} rx={4} fill={seriRengi(si)} />
           )}
           <text x={anahtar ? 28 : 20} y={12} fontSize={13} fontWeight={700} fill={RENK.metin}>
-            {s.sutun.ad.length > 16 ? `${s.sutun.ad.slice(0, 15)}…` : s.sutun.ad}
+            {seriLejantlari[si]?.ad ?? s.sutun.ad}
           </text>
         </g>
       ))}
@@ -212,12 +228,13 @@ export function CizgiGrafigi({
             y={taban + 20}
             fontSize={13}
             fontWeight={secili ? 800 : 500}
-            textAnchor="middle"
+            textAnchor={etiketEgik ? 'end' : 'middle'}
+            transform={etiketEgik ? `rotate(-35 ${xKonum(i)} ${taban + 20})` : undefined}
             fill={secili ? RENK.mercan : RENK.metin}
             style={{ cursor: 'pointer' }}
             onClick={() => onSatirSec(secili ? null : i)}
           >
-            {etiket.length > 10 ? `${etiket.slice(0, 9)}…` : etiket}
+            {etiket.length > 12 ? `${etiket.slice(0, 11)}…` : etiket}
           </text>
         );
       })}

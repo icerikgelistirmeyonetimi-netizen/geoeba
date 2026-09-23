@@ -310,9 +310,13 @@ export function frekansSutunlari(yiginlar: Yigin[]): FrekansSutunu[] {
   return yiginlar.map((y) => ({ merkez: y.merkez, frekans: y.ogeler.length }));
 }
 
-/** Nokta yarıçapı: yığın genişliği ve en yüksek yığın dikey alana sığacak biçimde */
+/**
+ * Nokta yarıçapı: yığın genişliği ve en yüksek yığın dikey alana sığacak biçimde. Komşu yığınların noktaları
+ * hafifçe örtüşebilir (çap, yığın genişliğinin 1,24 katına kadar; TinkerPlots gibi): puan (0–100) ya da
+ * yarım derecelik sıcaklık verisinde noktalar minicik kalmasın.
+ */
 export function noktaYaricapi(yiginPiksel: number, dikeyAlan: number, enYuksek: number, enBuyuk = 11, enKucuk = 5): number {
-  const yatay = yiginPiksel / 2 - 1;
+  const yatay = yiginPiksel * 0.62;
   const dikey = enYuksek > 0 ? dikeyAlan / enYuksek / 2 - 0.5 : enBuyuk;
   return Math.max(enKucuk, Math.min(enBuyuk, yatay, dikey));
 }

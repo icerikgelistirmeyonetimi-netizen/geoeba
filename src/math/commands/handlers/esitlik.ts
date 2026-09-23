@@ -4,7 +4,7 @@ import { type CommandScene, fail, trNum } from '../scene';
 import type { CommandHandler } from '../types';
 import {
   CIZGI_ADLARI, esitlikHedefleri, esitlikIsaretleri, esitlikOgesiAdi, esitlikYamalari, kenarAnahtari, parcaAnahtari,
-  sonrakiEsitlikSayisi, tumElleIsaretleriniTemizle, yayAnahtari, UZUNLUK_BAGIL, UZUNLUK_MUTLAK,
+  sonrakiEsitlikSayisi, tumElleIsaretleriniTemizle, uzunlukEsit, yayAnahtari,
   type EsitlikGrubu, type EsitlikSonucu, type EsitlikTuru, type EsitlikYamasi,
 } from '../../esitlikIsaretleri';
 
@@ -242,7 +242,11 @@ const toggle: CommandHandler = {
     }
     const ilk = gruplar.slice(0, 4).map((g) => grupMetni(scene, g)).join('; ');
     const fazla = gruplar.length > 4 ? '; …' : '';
-    scene.say(yay ? `Eşit yaylar işaretlendi: ${gruplar.length} grup (${ilk}${fazla}).` : `Eşitlik işaretleri açık: ${gruplar.length} grup (${ilk}${fazla}).`);
+    // Kalabalık gruplar ve dolmuş numaralama alanları sessizce atlanmasın.
+    const atlanan = sonuc.atlananGruplar
+      ? ` ${sonuc.atlananGruplar} grup işaretlenmedi (çok kalabalık ya da dört çizgi sayısı da dolu); elle işaretleyebilirsiniz.`
+      : '';
+    scene.say((yay ? `Eşit yaylar işaretlendi: ${gruplar.length} grup (${ilk}${fazla}).` : `Eşitlik işaretleri açık: ${gruplar.length} grup (${ilk}${fazla}).`) + atlanan);
   },
 };
 
@@ -267,7 +271,7 @@ const equal: CommandHandler = {
     yamalariUygula(scene, esitlikYamalari(scene.objects, sonuc, anahtarlar.map((anahtar) => ({ anahtar, deger: k }))));
     const uzunluklar = anahtarlar.map((a) => sonuc.ogeler.get(a)?.uzunluk ?? 0);
     const enBuyuk = Math.max(...uzunluklar), enKucuk = Math.min(...uzunluklar);
-    const esit = enBuyuk - enKucuk <= UZUNLUK_BAGIL * enBuyuk + UZUNLUK_MUTLAK;
+    const esit = uzunlukEsit(enKucuk, enBuyuk);
     const not = esit ? '' : ` Not: ${tur === 'yay' ? 'yay uzunlukları' : 'uzunlukları'} şu an eşit değil (${uzunluklar.map((u) => `${trNum(u)} br`).join('; ')}).`;
     scene.say(`${birlestir(adlar(scene, anahtarlar))} ${CIZGIYLE[k]} eşit işaretlendi.${not}`);
   },

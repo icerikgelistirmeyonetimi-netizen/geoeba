@@ -220,7 +220,11 @@ export function NoktaGrafigi({
     const yiginPiksel = olcek ? olcek.ileri(aralik) - olcek.ileri(0) : 0;
     // Akıllı tahta: noktalar kap yüksekliğine ve en büyük yığına göre büyür (en çok 22 px yarıçap);
     // basamaklı yarıçap sayesinde canlı çekilişte her yeni nokta bütün grafiği yeniden ölçeklemez
-    let r = olcek ? basamakla(noktaYaricapi(yiginPiksel, alanY - 12, enYuksek, 22, 6)) : 8;
+    // Yarıçap için etkin genişlik: dolu yığınlar arasındaki en küçük uzaklık (5, 8, 10, 15 … gibi seyrek değerlerde
+    // noktalar çözünürlük kadar değil komşu yığına kadar büyür; tek yığında yalnız dikey alan sınırlar)
+    const enKucukUzaklik = yiginlar.slice(1).reduce((m, y, i) => Math.min(m, y.merkez - yiginlar[i].merkez), Infinity);
+    const yaricapPiksel = !olcek ? yiginPiksel : yiginlar.length <= 1 ? alanG : Math.max(yiginPiksel, olcek.ileri(enKucukUzaklik) - olcek.ileri(0));
+    let r = olcek ? basamakla(noktaYaricapi(yaricapPiksel, alanY - 12, enYuksek, 22, 6)) : 8;
     /** sütun modunda bir gözlemin sütun yüksekliği (px) */
     let birim = 2 * r + 1;
     /** noktaların dikey adımı ve bir yığındaki nokta sütunu sayısı */

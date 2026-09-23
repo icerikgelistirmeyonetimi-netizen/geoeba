@@ -46,7 +46,9 @@ import {
   Contrast,
   Check,
   Plus,
+  Lightbulb,
 } from 'lucide-react';
+import { CubukMetni, KayanCubuk } from './KayanCubuk';
 import { useWorkspace } from '@/state/WorkspaceContext';
 import { syncUserFunctions } from '@/math/functionNames';
 import { createId } from '@/state/ids';
@@ -217,6 +219,7 @@ export function WorkspaceView() {
   const {
     setSceneBridge,
     setHintMessage,
+    hintMessage,
     selectAll,
     objects,
     setSelectedObjectIds,
@@ -722,6 +725,13 @@ export function WorkspaceView() {
       </div>
       <div className="flex-1 min-h-0 relative flex overflow-hidden">
         <div className="flex-1 relative min-w-0">
+          {/* İPUCU ÇUBUĞU: 3B düzende 2B tuval çizilmediği için silme ipucu ("... noktalarıyla birlikte silindi.
+              Geri almak için ...") burada gösterilir; yoksa 3B'den silen öğretmen Geri Al hatırlatmasını hiç görmez. */}
+          {hintMessage && (
+            <KayanCubuk konum="ust" etkilesimsiz className="z-40" role="status" aria-live="polite">
+              <CubukMetni vurgu="altin" simge={<Lightbulb className="w-4 h-4" />} baslik={hintMessage} />
+            </KayanCubuk>
+          )}
           <Canvas3D
             solids={solids}
             selectedSolidId={selectedSolidId}

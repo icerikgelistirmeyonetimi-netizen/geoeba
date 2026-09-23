@@ -1,6 +1,7 @@
 // Çalışma Alanı Araç ve Durum Tipleri
 
 import { MathObject } from './math';
+import { ACI_YAZIMLARI, OLCU_YAZIMLARI, type AciYazimi, type OlcuYazimi } from '@/math/matematikYazimi';
 
 export type ToolMode =
   | 'select'
@@ -116,6 +117,10 @@ export interface StyleSettings {
   hideLabelBoxes: boolean;
   /** Şekillerin iç dolgusunu kaldırır: yalnızca kenar çizgileri kalır. */
   hideFills: boolean;
+  /** Ölçü yazımı: 'tam' = adıyla (|AB| = 5 br), 'kisa' = yalnızca değer (5 br). Yalnızca tuval etiketlerini etkiler. */
+  olcuYazimi: OlcuYazimi;
+  /** Açı yazımı: 'sapka' = m(ABC^) (MEB), 'isaret' = m(∠ABC). */
+  aciYazimi: AciYazimi;
 }
 
 export const DEFAULT_STYLE_SETTINGS: StyleSettings = {
@@ -127,6 +132,14 @@ export const DEFAULT_STYLE_SETTINGS: StyleSettings = {
   axisScale: 1,
   hideLabelBoxes: false,
   hideFills: false,
+  olcuYazimi: 'tam',
+  aciYazimi: 'sapka',
+};
+
+/** Metin (seçenek) alanlarının kabul edilen değerleri; kayıttan okurken ve proje dosyasında denetlenir. */
+export const STYLE_SECENEKLERI: Partial<Record<keyof StyleSettings, readonly string[]>> = {
+  olcuYazimi: OLCU_YAZIMLARI,
+  aciYazimi: ACI_YAZIMLARI,
 };
 
 /** Stil ayarlarının tarayıcıda saklandığı anahtar. */
@@ -146,8 +159,12 @@ export function loadStyleSettings(): StyleSettings {
     const sonuc = { ...DEFAULT_STYLE_SETTINGS };
     (Object.keys(DEFAULT_STYLE_SETTINGS) as (keyof StyleSettings)[]).forEach((k) => {
       const v = parsed[k];
+      const secenekler = STYLE_SECENEKLERI[k];
       const varsayilan = DEFAULT_STYLE_SETTINGS[k];
-      if (typeof varsayilan === 'boolean') {
+      if (secenekler) {
+        // Seçenek alanları metindir: eski sürümde bu dal olmadığı için her yüklemede varsayılana dönerlerdi.
+        if (typeof v === 'string' && secenekler.includes(v)) (sonuc[k] as string) = v;
+      } else if (typeof varsayilan === 'boolean') {
         if (typeof v === 'boolean') (sonuc[k] as boolean) = v;
       } else if (typeof v === 'number' && Number.isFinite(v)) {
         (sonuc[k] as number) = v;

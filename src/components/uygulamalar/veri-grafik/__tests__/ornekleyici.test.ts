@@ -668,7 +668,7 @@ describe('örnek veri: A ve B sınıfı matematik sınav ortalamaları (saçıl�
 describe('saçılım: kategorik değişkene göre renk', () => {
   it('varsayılan ilk kategorik değişken; "renksiz" seçilebilir; geçersiz seçim otomatiğe döner', () => {
     const t = ornekVeriOlustur('calisma');
-    const [sinif, calisma, puan] = t.sutunlar.map((s) => s.id);
+    const [, sinif, calisma, puan] = t.sutunlar.map((s) => s.id);
     expect(ORNEK_VERILER.find((o) => o.id === 'calisma')!.onerilenGrafik).toBe('sacilim');
     expect(sacilimEksenleri({ degisken: null, yDegisken: null }, t)).toEqual({ x: calisma, y: puan, renk: sinif });
     expect(sacilimEksenleri({ degisken: null, yDegisken: null, renkDegisken: RENKSIZ }, t)!.renk).toBeNull();

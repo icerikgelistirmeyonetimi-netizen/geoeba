@@ -67,18 +67,21 @@ const ALT = 56;
 export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik, azaltilmisHareket, renkEslemi = null }: KategorikSutunProps) {
   const W = Math.max(genislik, 240);
   const H = Math.max(yukseklik, 180);
-  const taban = H - ALT;
   const alanG = W - SOL - SAG;
   const f = useMemo(() => kategorikFrekanslar(tablo, sutun, sira), [tablo, sutun, sira]);
   const n = f.reduce((t, x) => t + x.sayi, 0);
   const enCok = f.reduce((m, x) => Math.max(m, x.sayi), 0);
-  const eksen = guzelEksen(0, Math.max(enCok * 1.12, 1), Math.max(3, Math.floor((taban - UST) / 44)));
-  const olcek = dogrusalOlcek(0, eksen.max, taban, UST);
   const hucreG = alanG / Math.max(f.length, 1);
   const sutunG = Math.max(8, Math.min(hucreG * 0.66, 96));
   const gecis = azaltilmisHareket ? 'none' : `transform 300ms ${GECIS}`;
   const sutunAdi = tablo.sutunlar[sutun]?.ad ?? '';
-  const egik = hucreG < 64;
+  // Kategori adları hücreye sığmıyorsa eğik yazılır; eğik etiket için alt boşluk büyür (en çok 96 px)
+  const enUzunKategori = f.reduce((m, x) => Math.max(m, x.kategori.length), 0);
+  const egik = hucreG < 64 || Math.min(enUzunKategori, 12) * 7.4 + 10 > hucreG;
+  const altBosluk = egik ? Math.min(96, Math.max(ALT, 24 + Math.min(enUzunKategori, 12) * 7.4 * 0.58 + 10)) : ALT;
+  const taban = H - altBosluk;
+  const eksen = guzelEksen(0, Math.max(enCok * 1.12, 1), Math.max(3, Math.floor((taban - UST) / 44)));
+  const olcek = dogrusalOlcek(0, eksen.max, taban, UST);
   const anahtar = farkliAnahtar(renkEslemi, tablo, sutun);
   const capraz = useMemo(() => (anahtar ? caprazSayim(tablo, sutun, anahtar, sira) : null), [anahtar, tablo, sutun, sira]);
   const baslik = `${sutunAdi} · frekans (n = ${n})`;

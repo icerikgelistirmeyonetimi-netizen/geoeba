@@ -2,7 +2,7 @@
 
 /**
  * İstatistik paneli: seçili değişken için aritmetik ortalama, ortalama mutlak sapma, medyan,
- * en küçük/en büyük, açıklık. "Hesaplama adımlarını göster" adım adım ara sonuçları açar.
+ * tepe değer, en küçük/en büyük, açıklık. "Hesaplama adımlarını göster" adım adım ara sonuçları açar.
  * Renk anahtarı seçiliyse aynı ölçüler anahtarın her grubu için ayrı ayrı ("Gruplara göre") karşılaştırılır.
  */
 import React, { useMemo } from 'react';
@@ -71,6 +71,11 @@ export function IstatistikPaneli({ tablo, sutun, seciliSatir, onSatirSec, adimla
           <Kart baslik="Aritmetik ortalama" deger={yaz(ozet.ortalama)} aciklama="x̄ = toplam ÷ n" />
           <Kart baslik="Ortalama mutlak sapma" deger={yaz(ozet.oms)} aciklama="Σ|x − x̄| ÷ n" />
           <Kart baslik="Medyan" deger={yaz(ozet.medyan)} aciklama="sıralı dizinin ortası" />
+          <Kart
+            baslik="Tepe değer"
+            deger={ozet.tepe.length > 0 ? ozet.tepe.map((v) => sayiYaz(v)).join(', ') : '—'}
+            aciklama={ozet.tepe.length > 0 ? `en sık görülen (${ozet.tepeSayisi} kez)` : 'tekrar eden değer yok'}
+          />
           <Kart baslik="En küçük" deger={yaz(ozet.enKucuk)} />
           <Kart baslik="En büyük" deger={yaz(ozet.enBuyuk)} />
           <Kart baslik="Açıklık" deger={yaz(ozet.aciklik)} aciklama="en büyük − en küçük" />

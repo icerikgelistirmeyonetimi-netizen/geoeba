@@ -42,6 +42,7 @@ import {
   ALAN_MAX,
   ALAN_MIN,
   OLCME_ARACI_ISLEM_OLAYI,
+  UZUN_BASIS_KAPANMA_MS,
   UZUN_BASIS_MS,
   UZUN_BASIS_TOLERANS_PX,
   VARSAYILANLAR,
@@ -54,6 +55,7 @@ import {
   cetvelBoyuSuruklemeden,
   cetvelBoyunuDegistir,
   cetvelCentikYollari,
+  cetvelDonusunuDegistir,
   cetvelEtiketleri,
   cetvelMenusu,
   cetvelOkumasi,
@@ -62,6 +64,7 @@ import {
   cevreOkumasi,
   donusOkumasi,
   donusYakala,
+  gonyeDonusunuDegistir,
   gonyeMenusu,
   gonyeyiYerlestir,
   iletkiCentikYollari,
@@ -76,6 +79,7 @@ import {
   okumaKonumu,
   olcmeAraciMi,
   tabanOkumasi,
+  tutamactanUzaklastir,
   yereldenEkrana,
   type GosterimAnahtari,
   type OlcmeAraci,
@@ -245,7 +249,14 @@ export function MeasurementInstruments({
    * Açık sağ tık menüsü: konum ve menünün taşınacağı kap (tuvalin kendi menüleriyle aynı yer).
    * `yukari`: yönerge çubuğundaki düğmeden açıldı; menü ölçülüp düğmenin ÜSTÜNE taşınacak.
    */
-  const [menu, setMenu] = useState<{ x: number; y: number; hedef: HTMLElement; yukari?: boolean } | null>(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    hedef: HTMLElement;
+    yukari?: boolean;
+    /** Konumu ölçülüp düzeltildi (ikinci ölçümde döngüye girmesin). */
+    ayarlandi?: boolean;
+  } | null>(null);
   /** Aynı aracın yeniden seçilmesi (yeniden ortalama tetikleyicisi) */
   const [yenidenSecim, setYenidenSecim] = useState(0);
 
@@ -272,6 +283,18 @@ export function MeasurementInstruments({
   const gorunur = olcmeAraciMi(activeTool);
 
   const menuyuKapat = useCallback(() => setMenu(null), []);
+
+  /**
+   * Basılı tutma penceresi: parmak hâlâ ekrandaysa ya da kalkalı çok kısa süre olduysa doğrudur.
+   * Parmak kalkınca tarayıcı o noktaya bir mousedown/mouseup/click (ve contextmenu) uydurur; menü
+   * parmağın biraz yanında açıldığı için bunlar örtüye düşer ve menüyü hemen kapatırdı.
+   */
+  const uzunBasisPenceresi = useCallback(() => {
+    const u = uzunBasisRef.current;
+    if (!u) return false;
+    const gecen = performance.now() - u.zaman;
+    return u.kalkti ? gecen < UZUN_BASIS_KAPANMA_MS : gecen < 5000;
+  }, []);
 
   // ─── Yardımcı işlevler (hook değil; her çizimde güncel durumu görürler) ──────
 
@@ -348,9 +371,12 @@ export function MeasurementInstruments({
         t.cetvelBoy = yeni;
         break;
       }
-      case 'cetvelDonus':
-        setRulerRotation(normalizeDeg(eylem.donusSvg));
+      case 'cetvelDonus': {
+        const yeni = normalizeDeg(eylem.donusSvg);
+        setRulerPos(cetvelDonusunuDegistir(rulerPos, rulerLength, rulerRotation, yeni, vp));
+        setRulerRotation(yeni);
         break;
+      }
       case 'cetvelParcaEkle': {
         const { nesneler, aciklama, bas, son } = cetveldenParcaNesneleri(
           rulerPos,
@@ -386,9 +412,12 @@ export function MeasurementInstruments({
         }
         break;
       }
-      case 'gonyeDonus':
-        setSetsquareRotation(normalizeDeg(eylem.donusSvg));
+      case 'gonyeDonus': {
+        const yeni = normalizeDeg(eylem.donusSvg);
+        setSetsquarePos(gonyeDonusunuDegistir(setsquarePos, setsquareSize, setsquareRotation, yeni, vp));
+        setSetsquareRotation(yeni);
         break;
+      }
       case 'alanBoyut': {
         const sutun = Math.min(ALAN_MAX, Math.max(ALAN_MIN, Math.round(eylem.sutun)));
         const satir = Math.min(ALAN_MAX, Math.max(ALAN_MIN, Math.round(eylem.satir)));
@@ -461,13 +490,19 @@ export function MeasurementInstruments({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTool, yenidenSecim]);
 
-  // Çubuk düğmesinden açılan menü düğmenin üstünde açılır: imleç menünün üstünde kalıp alt menüyü açmasın,
-  // düğme örtülmesin. Boyanmadan önce ölçülür (ContextMenu kendi konumunu ekrana kıstırır).
+  // Menü boyanmadan önce ölçülür ve konumu düzeltilir (ContextMenu yalnız pencereye kıstırır):
+  // - `yukari`: çubuk düğmesinden açıldı, düğmenin üstüne taşınır (imleç alt menüyü açmasın, düğme örtülmesin).
+  // - Her menü tuvalin alt kenarının içinde kalır: uzun menülerin son maddesi ("Sil") görev çubuğu altında kalmasın.
   useLayoutEffect(() => {
-    if (!menu?.yukari) return;
+    if (!menu || menu.ayarlandi) return;
     const el = menu.hedef.querySelector<HTMLElement>('[data-olcme-menusu] > [role="menu"]');
     const h = el?.offsetHeight ?? 0;
-    setMenu((m) => (m && m.yukari ? { ...m, y: Math.max(8, m.y - h - 8), yukari: false } : m));
+    const altSinir = menu.hedef.getBoundingClientRect().bottom - 8;
+    setMenu((m) => {
+      if (!m || m.ayarlandi) return m;
+      const ham = m.yukari ? m.y - h - 8 : m.y;
+      return { ...m, y: Math.max(8, Math.min(ham, altSinir - h)), yukari: false, ayarlandi: true };
+    });
   }, [menu]);
 
   // Delete/Backspace koruması: araç odaktayken tuvaldeki seçili nesneler yanlışlıkla silinmesin
@@ -634,9 +669,8 @@ export function MeasurementInstruments({
   const onContextMenuArac = (e: React.MouseEvent<SVGGElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    const u = uzunBasisRef.current;
     // Basılı tutmanın ardından gelen yerel contextmenu: menü zaten açık, yerinde kalsın
-    if (menu && u && (!u.kalkti || performance.now() - u.zaman < 400)) return;
+    if (menu && uzunBasisPenceresi()) return;
     aktifSuruklemeRef.current?.bitir(true);
     menuyuAc(e.clientX, e.clientY);
   };
@@ -707,6 +741,8 @@ export function MeasurementInstruments({
     const kolUcu = yon(a, R + 12);
     const kolTopuz = yon(a, R + 22);
     const kolIc = yon(a, 0.3 * R);
+    // Sayı halkası R−24'te; kol bu şeritte kesilir ki gösterdiği sayı okunabilsin
+    const kolBosluk = R - 34 > 0.3 * R ? { ic: yon(a, R - 34), dis: yon(a, R - 13) } : null;
     const tabanTopuz = { x: -0.55 * R, y: 34 };
     const sektorUc = yon(a, bant);
     const yayUc = yon(a, 0.3 * R);
@@ -764,9 +800,9 @@ export function MeasurementInstruments({
                 />
               </>
             )}
-            <path d={centik.on} strokeWidth={1.25} strokeLinecap="butt" className={CENTIK_ANA} />
-            <path d={centik.bes} strokeWidth={0.9} strokeLinecap="butt" className={CENTIK_ORTA} />
-            {centik.bir && <path d={centik.bir} strokeWidth={0.6} strokeLinecap="butt" className={CENTIK_INCE} />}
+            <path d={centik.on} fill="none" strokeWidth={1.25} strokeLinecap="butt" className={CENTIK_ANA} />
+            <path d={centik.bes} fill="none" strokeWidth={0.9} strokeLinecap="butt" className={CENTIK_ORTA} />
+            {centik.bir && <path d={centik.bir} fill="none" strokeWidth={0.6} strokeLinecap="butt" className={CENTIK_INCE} />}
             {iletkiEtiketleri(R).map((t) => (
               <text
                 key={t.derece}
@@ -784,11 +820,35 @@ export function MeasurementInstruments({
               strokeWidth={1.25}
               className="fill-ada-fildisi dark:fill-ada-deniz-koyu stroke-ada-murekkep dark:stroke-ada-fildisi pointer-events-none"
             />
-            <path d="M-9 0H9M0-9V9" strokeWidth={1} className={CENTIK_ANA} />
+            <path d="M-9 0H9M0-9V9" fill="none" strokeWidth={1} className={CENTIK_ANA} />
           </g>
 
-          {/* Kol (ibre): görünen çizgi + geniş tutma şeridi + topuz */}
-          <line x1={0} y1={0} x2={kolUcu.x} y2={kolUcu.y} strokeWidth={3} strokeLinecap="round" className="stroke-ada-mercan pointer-events-none" />
+          {/* Kol (ibre): görünen çizgi + geniş tutma şeridi + topuz.
+              Sayı halkasının (R−24) üstünde boşluk bırakılır: kol, gösterdiği sayının üstünü çizmesin. */}
+          {kolBosluk ? (
+            <>
+              <line
+                x1={0}
+                y1={0}
+                x2={kolBosluk.ic.x}
+                y2={kolBosluk.ic.y}
+                strokeWidth={3}
+                strokeLinecap="round"
+                className="stroke-ada-mercan pointer-events-none"
+              />
+              <line
+                x1={kolBosluk.dis.x}
+                y1={kolBosluk.dis.y}
+                x2={kolUcu.x}
+                y2={kolUcu.y}
+                strokeWidth={3}
+                strokeLinecap="round"
+                className="stroke-ada-mercan pointer-events-none"
+              />
+            </>
+          ) : (
+            <line x1={0} y1={0} x2={kolUcu.x} y2={kolUcu.y} strokeWidth={3} strokeLinecap="round" className="stroke-ada-mercan pointer-events-none" />
+          )}
           <line
             data-tutamac="kol"
             x1={kolIc.x}
@@ -869,9 +929,11 @@ export function MeasurementInstruments({
     const centik = cetvelCentikYollari(L, z);
     const boyTopuz = { x: Lp + 24, y: H / 2 };
     const donTopuz = { x: Lp - 20, y: H + 26 };
-    // Ölçek şeridi (çentiklerin olduğu 18 px) daha opak, gövdenin geri kalanı yarı saydam
-    const serit = `M ${-b} ${b} A ${b} ${b} 0 0 1 0 0 H ${Lp} A ${b} ${b} 0 0 1 ${Lp + b} ${b} V 18 H ${-b} Z`;
-    const alt = `M ${-b} 18 H ${Lp + b} V ${H - b} A ${b} ${b} 0 0 1 ${Lp} ${H} H 0 A ${b} ${b} 0 0 1 ${-b} ${H - b} Z`;
+    // Ölçek şeridi: çentikler + sayı satırı (0…38 px) neredeyse opak, alttaki 10 px yarı saydam kalır.
+    // Sayılar saydam kısımda kalınca altındaki eksen sayıları ikinci bir ölçek gibi okunuyordu.
+    const SERIT_ALTI = 38;
+    const serit = `M ${-b} ${b} A ${b} ${b} 0 0 1 0 0 H ${Lp} A ${b} ${b} 0 0 1 ${Lp + b} ${b} V ${SERIT_ALTI} H ${-b} Z`;
+    const alt = `M ${-b} ${SERIT_ALTI} H ${Lp + b} V ${H - b} A ${b} ${b} 0 0 1 ${Lp} ${H} H 0 A ${b} ${b} 0 0 1 ${-b} ${H - b} Z`;
 
     return (
       <g
@@ -888,14 +950,14 @@ export function MeasurementInstruments({
             onPointerDown={(e) => govdeyiSurukle(e, rulerPos, setRulerPos)}
           >
             <rect x={-b} y={0} width={Lp + 2 * b} height={H} rx={b} fill="none" strokeWidth={3} className={SAHTE_GOLGE} />
-            <path d={alt} className="fill-ada-fildisi/60 dark:fill-ada-deniz-koyu/60" />
-            <path d={serit} className="fill-ada-fildisi/85 dark:fill-ada-deniz-koyu/80" />
+            <path d={alt} className="fill-ada-fildisi/75 dark:fill-ada-deniz-koyu/70" />
+            <path d={serit} className="fill-ada-fildisi/95 dark:fill-ada-deniz-koyu/90" />
             <rect x={-b} y={0} width={Lp + 2 * b} height={H} rx={b} strokeWidth={1.5} className={`fill-transparent ${GOVDE_KENAR}`} />
             {/* Ölçü kenarı: 0 çentiği ve döndürme merkezi bu çizginin üstünde */}
             <line x1={0} y1={0} x2={Lp} y2={0} strokeWidth={2} className={OLCU_CIZGISI} />
-            <path d={centik.birim} strokeWidth={1.25} strokeLinecap="butt" className={CENTIK_ANA} />
-            {centik.yarim && <path d={centik.yarim} strokeWidth={1} strokeLinecap="butt" className={CENTIK_ORTA} />}
-            {centik.onda && <path d={centik.onda} strokeWidth={0.75} strokeLinecap="butt" className={CENTIK_INCE} />}
+            <path d={centik.birim} fill="none" strokeWidth={1.25} strokeLinecap="butt" className={CENTIK_ANA} />
+            {centik.yarim && <path d={centik.yarim} fill="none" strokeWidth={1} strokeLinecap="butt" className={CENTIK_ORTA} />}
+            {centik.onda && <path d={centik.onda} fill="none" strokeWidth={0.75} strokeLinecap="butt" className={CENTIK_INCE} />}
             {cetvelEtiketleri(L, z).map((k) => (
               <text key={k} x={k * z} y={31} textAnchor="middle" className={`text-[11px] ${SAYI}`}>
                 {k}
@@ -949,7 +1011,12 @@ export function MeasurementInstruments({
         </g>
 
         {aktifTutamac === 'boy' && okumaHapi(cetvelOkumasi(L), yereldenEkrana(koken, donus, boyTopuz))}
-        {aktifTutamac === 'don' && okumaHapi(donusOkumasi(donus), yereldenEkrana(koken, donus, donTopuz))}
+        {/* Döndürme okuması boy tutamacından uzağa itilir (her açıda üstüne binmesin) */}
+        {aktifTutamac === 'don' &&
+          okumaHapi(
+            donusOkumasi(donus),
+            tutamactanUzaklastir(yereldenEkrana(koken, donus, donTopuz), yereldenEkrana(koken, donus, boyTopuz), 56)
+          )}
       </g>
     );
   };
@@ -1040,6 +1107,7 @@ export function MeasurementInstruments({
     const H = satir * z;
     const kayma = alanKoseKaymasi(z);
     const koseTopuz = { x: W + kayma, y: -H - kayma };
+    const kenarYazilari = W >= 44 && H >= 44;
     let cift = '';
     let tek = '';
     for (let r = 0; r < satir; r++) {
@@ -1062,10 +1130,12 @@ export function MeasurementInstruments({
             onPointerDown={(e) => govdeyiSurukle(e, areaModelPos, setAreaModelPos)}
           >
             <rect x={0} y={-H} width={W} height={H} rx={3} fill="none" strokeWidth={3} className={SAHTE_GOLGE} />
-            <rect x={0} y={-H} width={W} height={H} rx={3} className="fill-ada-fildisi/80 dark:fill-ada-deniz-koyu/75" />
+            <rect x={0} y={-H} width={W} height={H} rx={3} className="fill-ada-fildisi/90 dark:fill-ada-deniz-koyu/85" />
             <path d={cift} className="fill-ada-vurgu/25 dark:fill-ada-vurgu/30" />
             {tek && <path d={tek} className="fill-ada-vurgu/10 dark:fill-ada-vurgu/15" />}
-            {izgara && <path d={izgara} strokeWidth={1} className="stroke-ada-deniz/45 dark:stroke-ada-vurgu/45 pointer-events-none" />}
+            {izgara && (
+              <path d={izgara} fill="none" strokeWidth={1} className="stroke-ada-deniz/45 dark:stroke-ada-vurgu/45 pointer-events-none" />
+            )}
             <rect
               x={0}
               y={-H}
@@ -1092,13 +1162,18 @@ export function MeasurementInstruments({
               )}
           </g>
 
-          {/* Kenar uzunlukları ve alan/çevre: yalnız yazı (hap ya da düğme yok) */}
-          <text x={W / 2} y={-H - 8} textAnchor="middle" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
-            {sutun} br
-          </text>
-          <text x={-8} y={-H / 2 + 4} textAnchor="end" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
-            {satir} br
-          </text>
+          {/* Kenar uzunlukları ve alan/çevre: yalnız yazı (hap ya da düğme yok).
+              Model çok küçükse (uzak plan) kenar yazıları köşe tutamacıyla üst üste binerdi: gizlenir. */}
+          {kenarYazilari && (
+            <>
+              <text x={W / 2} y={-H - 8} textAnchor="middle" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
+                {sutun} br
+              </text>
+              <text x={-8} y={-H / 2 + 4} textAnchor="end" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
+                {satir} br
+              </text>
+            </>
+          )}
           {gosterim.alan && aktifTutamac !== 'kose' && (
             <text x={W / 2} y={22} textAnchor="middle" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
               {alanOkumasi(sutun, satir)}
@@ -1202,6 +1277,13 @@ export function MeasurementInstruments({
   });
 
   const durdur = (e: React.SyntheticEvent) => e.stopPropagation();
+  /** Basılı tutmanın bıraktığı sahte fare olayını yutar (menü açık kalsın); menünün içindekilere dokunmaz. */
+  const uzunBasistanGelen = (e: React.MouseEvent) => {
+    if (!uzunBasisPenceresi()) return;
+    if (e.target instanceof Element && e.target.closest('[role="menu"]')) return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
   const menuAdi = ARAC_ADLARI[activeTool];
 
   return (
@@ -1223,12 +1305,16 @@ export function MeasurementInstruments({
             onMouseDown={durdur}
             onContextMenu={durdur}
             onContextMenuCapture={(e) => {
-              const u = uzunBasisRef.current;
-              if (u && (!u.kalkti || performance.now() - u.zaman < 400)) {
+              if (uzunBasisPenceresi()) {
                 e.preventDefault();
                 e.stopPropagation();
               }
             }}
+            // Parmak kalkınca tarayıcının uydurduğu mousedown/mouseup/click örtüye düşer ve menüyü
+            // kapatırdı: basılı tutma penceresinde bu olaylar menünün dışındayken yutulur.
+            onMouseDownCapture={uzunBasistanGelen}
+            onMouseUpCapture={uzunBasistanGelen}
+            onClickCapture={uzunBasistanGelen}
             onClick={(e) => {
               e.stopPropagation();
               // Dokunmatikte örtünün mousedown'u gelmez (tuval pointerdown'u engeller): dışarı dokunuş burada kapatır

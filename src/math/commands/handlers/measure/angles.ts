@@ -1,8 +1,12 @@
 import type { AngleObject, MathObject, MeasurementObject, PointObject, PolygonObject } from '@/types/math';
 import { angleTrigRatios, calculateAngleDegrees } from '../../../geometry';
+import { noktadakiAcilar } from '../../../pointAngles';
 import type { Clause, LabelRef } from '../../text';
 import { type CommandScene, fail, tidy, trNum } from '../../scene';
-import { type Intent, type Kind, arcGeometry, corner, deg, fmt, nameOf, nounFilter, pick, setFlags, wantsMany } from './common';
+import { type Olcu, aci } from '@/math/matematikYazimi';
+import {
+  type Intent, type Kind, arcGeometry, corner, deg, esit, fmt, merkezAciOlcusu, nameOf, nounFilter, pick, setFlags, wantsMany, yaz,
+} from './common';
 
 export interface Ctx {
   c: Clause;
@@ -49,6 +53,20 @@ const onlyPoint = (scene: CommandScene, ref: LabelRef): PointObject | undefined 
   return pts?.length === 1 ? pts[0] : undefined;
 };
 
+/** "3 açı var" yerine "üç açı var": soru cümlesi Türkçe okunsun. */
+const SAYI_ADLARI = ['sıfır', 'bir', 'iki', 'üç', 'dört', 'beş', 'altı', 'yedi', 'sekiz', 'dokuz', 'on'];
+const sayiAdi = (n: number) => SAYI_ADLARI[n] ?? String(n);
+
+/**
+ * Köşede BİRDEN ÇOK açı varsa sessizce birini seçmek yerine sorar (yanıt vermeden geri döner: tek aday varsa sorun yok).
+ * Liste sağ tık menüsündeki "Açı ölç" alt menüsüyle aynı kaynaktan (noktadakiAcilar) gelir, ikisi çelişemez.
+ */
+function hangiAci(x: Ctx, vertex: PointObject): void {
+  const adaylar = noktadakiAcilar(vertex.id, x.scene.objects);
+  if (adaylar.length < 2) return;
+  fail(`${vertex.label} noktasında ${sayiAdi(adaylar.length)} açı var: ${adaylar.map(a => a.title).join(', ')}. Hangisini ölçeyim? Üç harfle yazın: “${adaylar[0].title} açısını ölç”. Hepsini istiyorsanız: “${vertex.label} noktasındaki açıları ölç”.`);
+}
+
 /** Tek bir köşedeki açı: çokgen köşesi → yay/dilim merkezi → iki kolu olan nokta. */
 function cornerAt(x: Ctx, vertex: PointObject, context?: PolygonObject): AngleSpec {
   const { scene } = x;
@@ -65,6 +83,11 @@ function cornerAt(x: Ctx, vertex: PointObject, context?: PolygonObject): AngleSp
     polygons = preferred;
   }
   if (polygons.length === 1) {
+    // Köşeye çokgen kenarları DIŞINDA kollar da geliyorsa (ör. A'dan inen yükseklik/açıortay) "A açısı" yine
+    // belirsizdir: köşe açısını sessizce seçmeyip adayları sorarız. Çokgen AÇIKÇA belirtilmişse
+    // (adıyla yazıldıysa, seçiliyse ya da odaktaysa) eski tek adımlı davranış korunur.
+    const belirtilmis = !!context || scene.focus.includes(polygons[0].id) || scene.selection.includes(polygons[0].id);
+    if (!belirtilmis) hangiAci(x, vertex);
     const found = corner(scene, polygons[0], polygons[0].pointIds.indexOf(vertex.id));
     return { kind: 'angle', ids: found.ids, reflex: found.reflex, existing: findAngle(scene, found.ids) };
   }
@@ -82,6 +105,9 @@ function cornerAt(x: Ctx, vertex: PointObject, context?: PolygonObject): AngleSp
     const ids: [string, string, string] = [a, vertex.id, b];
     return { kind: 'angle', ids, reflex: false, existing: findAngle(scene, ids) };
   }
+  // ÜÇ ya da daha çok kol: "E açısını ölç" hangisi belli değildir. Sessizce birini seçmek yerine
+  // adaylar sayılır ve sorulur — sağ tık menüsündeki "Açı ölç" alt menüsüyle aynı liste.
+  if (neighbours.size >= 3) hangiAci(x, vertex);
   // Başka bağlam yoksa ve sahnede köşe dışında yalnızca iki nokta varsa onlar kol sayılır ("A, B, C noktalarını oluştur" → "B açısı").
   const others = scene.points().filter(p => p.id !== vertex.id);
   if (!neighbours.size && others.length === 2) {
@@ -141,14 +167,18 @@ export function angleSpec(x: Ctx): AngleSpec {
   fail('Hangi açı? Köşesini ya da üç harfini yazın: “B açısını ölç” veya “ABC açısını ölç”.');
 }
 
-const nameIds = (scene: CommandScene, ids: string[]) => ids.map(id => scene.point(id).label).join('');
+/** m(∠ABC) = 60° — kol, KÖŞE, kol; 180°'den büyük açıya " (dış açı)" niteleyicisi eklenir. */
+function aciOlcusu(scene: CommandScene, ids: [string, string, string], derece: number, disAci = false): Olcu {
+  const [p1, v, p3] = ids.map(id => scene.point(id));
+  return aci(p1, v, p3, derece, { disAci });
+}
 
 function centralAngle(x: Ctx, shape: MathObject, create: boolean) {
   const g = arcGeometry(x.scene, shape);
   if (create || x.it.question) setFlags(x.scene, shape, { showCentralAngle: true });
   x.focus.push(shape.id);
   x.answers.push(g.sweep * 180 / Math.PI);
-  x.out.push(`${nameOf(shape)}: merkez açı = ${deg(g.sweep * 180 / Math.PI)}.`);
+  x.out.push(`${nameOf(shape)}: ${yaz(merkezAciOlcusu(x.scene, shape, g.sweep * 180 / Math.PI), true)}.`);
 }
 
 /** Açıyı gösterir (yoksa oluşturur); soru ise yalnızca yanıtlar. Açı nesnesini (ya da merkez açılı şekli) döndürür. */
@@ -183,11 +213,29 @@ export function angles(x: Ctx) {
     const shown = showAngle(x, { kind: 'angle', ids: best.ids, reflex: best.reflex, existing: findAngle(scene, best.ids) }, create);
     x.focus.push(shown.object ? shown.object.id : polygon.id);
     x.answers.push(shown.value);
-    x.out.push(`${polygon.label} ${big ? 'en büyük' : 'en küçük'} açısı: ∠${nameIds(scene, best.ids)} = ${deg(shown.value)}.${shown.created ? ' Açı tuvale eklendi.' : ''}`);
+    x.out.push(`${polygon.label} ${big ? 'en büyük' : 'en küçük'} açısı: ${yaz(aciOlcusu(scene, best.ids, shown.value, best.reflex))}.${shown.created ? ' Açı tuvale eklendi.' : ''}`);
     return;
   }
   const plural = /\bacilar/.test(x.text) || (it.all && x.labels.every(ref => !onlyPoint(scene, ref)));
   if (plural) {
+    // "E noktasındaki açıları ölç": bir KÖŞEDEKİ bütün açılar (kol çiftlerinin hepsi), çokgen değil.
+    const tekNokta = x.labels.length === 1 ? onlyPoint(scene, x.labels[0]) : undefined;
+    const koseAcilari = tekNokta ? noktadakiAcilar(tekNokta.id, scene.objects) : [];
+    if (tekNokta && koseAcilari.length) {
+      const parts: string[] = [];
+      let added = 0;
+      for (const koseAci of koseAcilari) {
+        const ids: [string, string, string] = [koseAci.armIds[0], tekNokta.id, koseAci.armIds[1]];
+        const reflex = reflexFor(scene, ids);
+        const shown = showAngle(x, { kind: 'angle', ids, reflex, existing: findAngle(scene, ids) }, create);
+        if (shown.object) x.focus.push(shown.object.id);
+        if (shown.created) added++;
+        parts.push(yaz(aciOlcusu(scene, ids, shown.value, reflex)));
+      }
+      if (!create) x.focus.push(tekNokta.id);
+      x.out.push(`${tekNokta.label} noktasındaki açılar: ${parts.join(', ')}${added ? '; açılar tuvale eklendi' : ''}.`);
+      return;
+    }
     const nf = nounFilter(x.text);
     const polygons = pick(x.c, scene, { types: ['polygon'], noun: nf?.noun ?? 'çokgen', filter: nf?.filter, many: wantsMany(x.text, x.labels) }) as PolygonObject[];
     for (const polygon of polygons) {
@@ -199,7 +247,7 @@ export function angles(x: Ctx) {
         if (shown.object) x.focus.push(shown.object.id);
         if (shown.created) added++;
         sum += shown.value;
-        parts.push(`∠${nameIds(scene, found.ids)} = ${deg(shown.value)}`);
+        parts.push(yaz(aciOlcusu(scene, found.ids, shown.value, found.reflex)));
       });
       if (!create) x.focus.push(polygon.id);
       x.out.push(`${polygon.label} açıları: ${parts.join(', ')} (toplam ${deg(sum)})${added ? '; açılar tuvale eklendi' : ''}.`);
@@ -213,12 +261,12 @@ export function angles(x: Ctx) {
   const radians = /\bradyan/.test(x.text) ? ` (${fmt(shown.value * Math.PI / 180, 4)} rad)` : '';
   if (shown.object && shown.object.type !== 'angle') {
     x.focus.push(shown.object.id);
-    x.out.push(`${nameOf(shown.object)}: merkez açı = ${deg(shown.value)}${radians}.`);
+    x.out.push(`${nameOf(shown.object)}: ${yaz(merkezAciOlcusu(scene, shown.object, shown.value), true)}${radians}.`);
     return;
   }
   x.focus.push(...(shown.object ? [shown.object.id] : [spec.ids[1]]));
   const note = shown.created ? ' Açı tuvale eklendi.' : !shown.object && !create ? ' Tuvalde göstermek için “… açısını ölç” yazın.' : '';
-  x.out.push(`∠${nameIds(scene, spec.ids)} = ${deg(shown.value)}${radians}.${note}`);
+  x.out.push(`${yaz(aciOlcusu(scene, spec.ids, shown.value, spec.reflex))}${radians}.${note}`);
 }
 
 // ---------------------------------------------------------------------------------------------------------------- trigonometri
@@ -245,7 +293,7 @@ function numericTrig(x: Ctx, asked: TrigFn[]) {
   const fns: TrigFn[] = asked.length ? asked : ['sin', 'cos', 'tan'];
   const unit = radians ? `${trNum(n, 4)} rad` : `${trNum(n, 4)}°`;
   if (fns.length === 1 && values[fns[0]] !== null) x.answers.push(values[fns[0]]!);
-  x.out.push(`${fns.map(f => `${f} ${unit} = ${values[f] === null ? 'tanımsız' : fmt(values[f]!, 4)}`).join(', ')}.`);
+  x.out.push(`${fns.map(f => `${f} ${unit} ${values[f] === null ? '= tanımsız' : esit(values[f]!, 4)}`).join(', ')}.`);
 }
 
 export function trig(x: Ctx) {
@@ -264,9 +312,8 @@ export function trig(x: Ctx) {
   else if (create) object = scene.addMeasurement('trig', spec.ids);
   x.focus.push(object ? object.id : v.id);
   const fns: TrigFn[] = asked.length ? asked : ['sin', 'cos', 'tan'];
-  const value = (f: TrigFn) => f === 'tan' ? (r.tan === null ? 'tanımsız' : fmt(r.tan, 4))
-    : f === 'cot' ? (Math.abs(r.sin) < 1e-12 ? 'tanımsız' : fmt(r.cos / r.sin, 4)) : fmt(r[f], 4);
-  const name = `∠${nameIds(scene, spec.ids)}`;
+  const value = (f: TrigFn) => f === 'tan' ? (r.tan === null ? '= tanımsız' : esit(r.tan, 4))
+    : f === 'cot' ? (Math.abs(r.sin) < 1e-12 ? '= tanımsız' : esit(r.cos / r.sin, 4)) : esit(r[f], 4);
   const right = r.dikKose ? ' (dik üçgen)' : '';
-  x.out.push(`${name} = ${deg(r.derece)}${right}: ${fns.map(f => `${f} = ${value(f)}`).join(', ')}.${object && !existing ? ' Oranlar tuvale eklendi.' : ''}`);
+  x.out.push(`${yaz(aciOlcusu(scene, spec.ids, r.derece))}${right}: ${fns.map(f => `${f} ${value(f)}`).join(', ')}.${object && !existing ? ' Oranlar tuvale eklendi.' : ''}`);
 }

@@ -243,3 +243,17 @@ export function RenkNoktasi({ renk }: { renk: string | undefined }) {
     </svg>
   );
 }
+
+/** Değişken türü simgesi: sayısal = cetvel, kategorik = etiket (değişken sekmeleri ve tablo başlıkları) */
+export function TurIsareti({ tur, className = 'h-3.5 w-3.5 opacity-80' }: { tur: 'sayi' | 'etiket'; className?: string }) {
+  return tur === 'sayi' ? (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
+      <path d="M2 11.5h12M4 11.5V9M7 11.5V8M10 11.5V9M13 11.5V7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
+      <path d="M2.5 3h5.2l5.8 5.8-4.7 4.7L3 7.7V3z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx="5.5" cy="5.8" r="1.1" fill="currentColor" />
+    </svg>
+  );
+}

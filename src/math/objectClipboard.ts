@@ -9,7 +9,8 @@ function references(value: unknown, key = ''): string[] {
   // releasedRadiusPointId yalnızca "kilit çözülünce yarıçapı geri ver" hatırlatmasıdır, bağımlılık değildir:
   // izlenseydi çemberi (ya da dönüşüm görüntüsünü) kopyalamak başka noktaları da panoya taşırdı.
   // armOfAngleId de bağımlılık değildir: tek bir kolu kopyalamak açının tamamını panoya çekmemeli.
-  if (key === 'releasedRadiusPointId' || key === 'armOfAngleId') return [];
+  // Yazının hizalama grubu yalnızca görünümü belirler; tek kenarı kopyalamak grubun tamamını çekmez.
+  if (key === 'releasedRadiusPointId' || key === 'armOfAngleId' || key === 'labelAnchors') return [];
   if (typeof value === 'string') return /Ids?$/.test(key) ? [value] : [];
   if (Array.isArray(value)) return value.flatMap(v => references(v, key));
   if (value && typeof value === 'object') return Object.entries(value).flatMap(([k, v]) => references(v, k));
@@ -66,6 +67,14 @@ export function pasteObjects(clipboard: ObjectClipboard, scene: MathObject[], lo
   }
   const objects = clipboard.objects.map(source => {
     const object = remap(source) as MathObject;
+    if (source.labelAnchors && object.labelAnchors) {
+      const anchors = Object.fromEntries(Object.entries(object.labelAnchors).filter(([kind]) =>
+        source.labelAnchors![kind].pointIds.every(id => idMap.has(id))));
+      // Grubun tamamı panodaysa kimlikler remap ile yenilenmiştir. Kısmi kopya eski
+      // sahnedeki noktalara bağlı kalmasın; mevcut labelOffsets yedek konumu korunur.
+      if (Object.keys(anchors).length) object.labelAnchors = anchors;
+      else delete object.labelAnchors;
+    }
     // Yarıçapı bırakan nokta panoda yoksa hatırlatma yeni çemberde anlamsızdır
     if (object.type === 'circle' && source.type === 'circle' && source.releasedRadiusPointId && !idMap.has(source.releasedRadiusPointId)) delete object.releasedRadiusPointId;
     // Açısı panoda yoksa kopya parça artık o açının kolu değildir (eski açının silinmesi kopyayı götürmesin)

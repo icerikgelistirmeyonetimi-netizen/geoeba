@@ -1,4 +1,5 @@
 import type { Point2D, PointObject, PolygonObject } from '@/types/math';
+import { aci, olcuMetni } from '@/math/matematikYazimi';
 import type { Clause } from '../../text';
 import { type CommandScene, fail, trNum } from '../../scene';
 import type { CommandHandler } from '../../types';
@@ -79,7 +80,11 @@ function finish(scene: CommandScene, p1: PointObject, v: PointObject, p3: PointO
   scene.setFocus([angle.id]);
   const isNew = !createdBefore.has(angle.id) && scene.clauseCreated.includes(angle.id);
   const label = angle.type === 'angle' ? angle.label : `${angle.label} merkez açısı`;
-  const head = isNew ? `${label} = ${trNum(value, 1)}° açısı çizildi.` : `${label} zaten vardı; ölçüsü gösteriliyor (${trNum(value, 1)}°).`;
+  // Ölçü MEB yazımıyla: m(∠ABC) = 60° (yay/dilim merkez açısında şeklin adı kalır).
+  const olcu = angle.type === 'angle'
+    ? olcuMetni(aci(p1, v, p3, value, { basamak: 1, disAci: o.reflex }))
+    : `${label} = ${trNum(value, 1)}°`;
+  const head = isNew ? `${olcu} açısı çizildi.` : `${label} zaten vardı; ölçüsü gösteriliyor (${trNum(value, 1)}°).`;
   scene.say(`${head}${pointsNote(scene)}${o.note ? ` ${o.note}` : ''}`);
 }
 
@@ -102,7 +107,9 @@ function drawAllCorners(c: Clause, scene: CommandScene) {
     const angle = scene.addAngle(p1.id, v.id, p3.id, { withArms: false, reflex: reflex || undefined, color });
     const inner = angleDegrees(p1, v, p3);
     ids.push(angle.id);
-    parts.push(`${angle.type === 'angle' ? angle.label : `${angle.label} merkez açısı`} = ${trNum(reflex ? 360 - inner : inner, 1)}°`);
+    parts.push(angle.type === 'angle'
+      ? olcuMetni(aci(p1, v, p3, reflex ? 360 - inner : inner, { basamak: 1, disAci: reflex }))
+      : `${angle.label} merkez açısı = ${trNum(reflex ? 360 - inner : inner, 1)}°`);
   }
   const n = polygon.pointIds.length;
   scene.setFocus(ids);
@@ -170,7 +177,7 @@ export const angleCreate: CommandHandler = {
         if (degrees !== undefined) {
           const actual = angleDegrees(e1, ev, e3), wanted = d > 180 ? 360 - d : d;
           if (Math.abs(actual - wanted) > 1e-6) {
-            fail(`${n1}, ${nv} ve ${n3} noktaları zaten var ve ∠${n1}${nv}${n3} = ${trNum(actual, 1)}°. Ölçüyü değiştirmek için “${n1}${nv}${n3} açısını ${trNum(d)} derece yap” yazın.`);
+            fail(`${n1}, ${nv} ve ${n3} noktaları zaten var ve ${olcuMetni(aci(e1, ev, e3, actual, { basamak: 1 }))}. Ölçüyü değiştirmek için “${n1}${nv}${n3} açısını ${trNum(d)} derece yap” yazın.`);
           }
         }
         finish(scene, e1, ev, e3, { reflex, color });

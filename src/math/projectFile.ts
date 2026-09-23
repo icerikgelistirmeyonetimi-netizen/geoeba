@@ -1,5 +1,6 @@
 import type { MathObject, ViewportTransform } from '@/types/math';
 import type { LayoutMode, StyleSettings } from '@/types/workspace';
+import { DEFAULT_STYLE_SETTINGS, STYLE_SECENEKLERI } from '@/types/workspace';
 import type { Camera3D, Solid3DObject } from '@/types/workspace3d';
 
 export interface ProjectFile {
@@ -55,6 +56,17 @@ export function validateProjectObjects(input: unknown): MathObject[] {
     if (o.onObjectId !== undefined) id(o, 'onObjectId');
     if (['point', 'text', 'image', 'checkbox', 'button', 'input_box', 'fraction'].includes(o.type)) numbers(o, ['x', 'y']);
     if (o.labelOffsets !== undefined) for (const v of Object.values(row(o.labelOffsets))) numbers(row(v), ['x', 'y']);
+    if (o.labelAnchors !== undefined) {
+      o.labelAnchors = Object.fromEntries(Object.entries(row(o.labelAnchors)).map(([kind, value]) => {
+        const anchor = row(value);
+        const pointIds = ids(anchor, 'pointIds');
+        if (new Set(pointIds).size !== pointIds.length) fail('etiket çapasının noktaları yineleniyor');
+        const offset = row(anchor.offset);
+        numbers(offset, ['x', 'y']);
+        if (!['left', 'center', 'right'].includes(anchor.alignment)) fail('etiket hizalaması geçersiz');
+        return [kind, { pointIds: [...pointIds], offset: { x: offset.x, y: offset.y }, alignment: anchor.alignment }];
+      }));
+    }
     switch (o.type) {
       case 'point':
         o.isIndependent ??= true; if (typeof o.isIndependent !== 'boolean') fail('nokta bağımsızlığı geçersiz');
@@ -110,6 +122,8 @@ export function validateProjectObjects(input: unknown): MathObject[] {
           id(o, 'circleId');
           if (o.pointIds[0] === o.pointIds[1]) fail('yay ölçümünün uçları aynı');
           if (o.throughPointId !== undefined) id(o, 'throughPointId');
+          // Başlangıç ucu yayın kimliğidir: uçlardan biri olmalı (eski dosyalarda yoktur, ilk işlemde yazılır)
+          if (o.startPointId !== undefined) { id(o, 'startPointId'); if (!o.pointIds.includes(o.startPointId)) fail('yay ölçümünün başlangıç ucu geçersiz'); }
         }
         break;
       default: fail(`tanınmayan nesne türü: ${o.type}`);
@@ -150,11 +164,19 @@ export function validateProjectObjects(input: unknown): MathObject[] {
   });
   const byId = new Map(objects.map(o => [o.id, o]));
   if (byId.size !== objects.length) fail('aynı kimliği kullanan birden çok nesne var');
+  // Etiket çapası süs bilgisidir: eski gruptan bir nokta silinmişse çizim yine açılır.
+  // Kısmi bir grubun merkezini kullanmak yazıyı sıçratır; o kayıtta eski kayıklığa dönülür.
+  for (const o of objects) if (o.labelAnchors) {
+    const anchors = Object.fromEntries(Object.entries(o.labelAnchors as Record<string, Row>)
+      .filter(([, anchor]) => anchor.pointIds.every((pointId: string) => byId.get(pointId)?.type === 'point')));
+    if (Object.keys(anchors).length) o.labelAnchors = anchors;
+    else delete o.labelAnchors;
+  }
   const dependencies = new Map<string, string[]>();
   function references(value: unknown, key = '', parent?: Row): string[] {
     // armOfAngleId yalnızca "bu parça şu açının kolu" hatırlatmasıdır: açı silinince parça kalabilir,
     // bu yüzden eksik hedefi kaydı reddettirmemeli (reddedilince kayıtlı çizim boş açılıyordu).
-    if (key === 'id' || key === 'releasedRadiusPointId' || key === 'armOfAngleId') return [];
+    if (key === 'id' || key === 'releasedRadiusPointId' || key === 'armOfAngleId' || key === 'labelAnchors') return [];
     if (key === 'centerPointId' && parent?.type === 'circle' && parent.throughPointIds?.length) return [];
     if (typeof value === 'string' && (/Ids?$/.test(key) || key === 'dependsOn')) {
       const target = byId.get(value);
@@ -220,7 +242,18 @@ export function parseProjectFile(input: unknown): ProjectFile {
   if (data.styleSettings !== undefined) {
     const s = row(data.styleSettings); numbers(s, ['strokeScale', 'fontScale', 'pointRadius', 'pointLabelScale', 'measurementScale', 'axisScale'], true);
     if (typeof s.hideLabelBoxes !== 'boolean' || typeof s.hideFills !== 'boolean') fail('stil ayarları geçersiz');
-    out.styleSettings = s as StyleSettings;
+    for (const [k, allowed] of Object.entries(STYLE_SECENEKLERI)) if (s[k] !== undefined && !(allowed as readonly string[]).includes(s[k])) fail('stil ayarları geçersiz');
+    // Bilinen alanlar tek tek doğrulanır: tanınmayan anahtarlar düşer, eksik olanlar varsayılandan tamamlanır
+    // (1.0/2.0 dosyaları yeni ayarlar olmadan da açılır).
+    const temiz = { ...DEFAULT_STYLE_SETTINGS };
+    for (const k of Object.keys(DEFAULT_STYLE_SETTINGS) as (keyof StyleSettings)[]) {
+      const v = s[k];
+      const secenekler = STYLE_SECENEKLERI[k];
+      if (secenekler) { if (typeof v === 'string' && secenekler.includes(v)) (temiz[k] as string) = v; }
+      else if (typeof DEFAULT_STYLE_SETTINGS[k] === 'boolean') { if (typeof v === 'boolean') (temiz[k] as boolean) = v; }
+      else if (finite(v)) (temiz[k] as number) = v;
+    }
+    out.styleSettings = temiz;
   }
   if (data.camera3D !== undefined) {
     const c = row(data.camera3D); numbers(c, ['rotX', 'rotY', 'panX', 'panY']); numbers(c, ['zoom', 'perspective'], true);

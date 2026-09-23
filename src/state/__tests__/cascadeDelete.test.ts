@@ -101,7 +101,9 @@ describe('Şekle ait etiketlerin silinmesi', () => {
     expect(sil(o, ['poly'])).toEqual(['poly', 'trig']);
   });
 
-  it('köşe noktaları KORUNUR: bağımsız nesnelerdir', () => {
+  // Not: collectDependentIds TEK BAŞINA köşe noktalarına dokunmaz. Ekrandaki ve komuttaki silme bunun üstüne
+  // planDeletion'ı çalıştırır ve şeklin kullanılmayan kendi noktalarını da götürür (sekilNoktalariSilme.test.ts).
+  it('collectDependentIds köşe noktalarını KENDİ BAŞINA silmez: bağımsız nesnelerdir', () => {
     const o = [...ucgen(), yap({ id: 'ang', type: 'angle', point1Id: 'A', vertexPointId: 'B', point3Id: 'C' })];
     const kalan = sil(o, ['poly']);
     expect(kalan).not.toContain('A');

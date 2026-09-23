@@ -101,7 +101,7 @@ describe('core sweep 2: back-to-back commands and distribution', () => {
 describe('core sweep 2: measurement and compass', () => {
   it.each(['üçgenin alanını hesaplayıp göster', 'üçgenin alanını hesapla ve göster', 'üçgenin alanını hesapla göster'])('%s reports the area only once', text => {
     const r = ok(text, setup('ABC üçgeni çiz'));
-    expect(r.message).toContain('alan');
+    expect(r.message).toContain('A(ABC) ≈ 6,93 br²');
     expect(r.message).not.toContain('zaten görünür');
   });
   it('places the compass tip with “batır” and draws the arc around A', () => {
@@ -222,7 +222,7 @@ describe('core sweep 2 repair: distribution, role phrases, trailing show and “
     }
   });
   it.each(['üçgenin alanını hesaplayıp yaz', 'üçgenin alanını hesapla ve sonucu göster', 'üçgenin alanını hesapla ve tuvalde göster'])('%s reports the area', text => {
-    expect(ok(text, setup('ABC üçgeni çiz')).message).toContain('alan');
+    expect(ok(text, setup('ABC üçgeni çiz')).message).toContain('A(ABC) ≈ 6,93 br²');
   });
   it('splits after “verb lütfen”', () => {
     expect(ok('yakınlaştır lütfen ızgarayı gizle').actions).toEqual([{ kind: 'zoom', factor: 1.2 }, { kind: 'viewport', patch: { showGrid: false } }]);

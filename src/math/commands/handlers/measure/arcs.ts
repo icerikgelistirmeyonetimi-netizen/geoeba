@@ -3,10 +3,11 @@ import {
   arcNearMissHint, arcTitle, commonCircles, findArcMeasurement, isArcMeasurement, isPointOnCircle, makeArcMeasurement, resolveArc,
   sameArc, type ArcMeasurement, type ArcSpec,
 } from '@/math/arcMeasure';
+import { yayOlcusu, yayUzunlugu } from '@/math/matematikYazimi';
 import type { Clause, LabelRef } from '../../text';
-import { type CommandScene, fail, skip, trNum } from '../../scene';
+import { type CommandScene, fail, skip } from '../../scene';
 import type { CommandHandler } from '../../types';
-import { EXPLICIT, QUESTION, isForeign, setFlags, view } from './common';
+import { EXPLICIT, QUESTION, isForeign, setFlags, view, yaz, yayOlcumUclari } from './common';
 
 /**
  * İKİ NOKTA ARASINDAKİ YAY (çember bölünmeden): "BD yayını ölç", "BD yayının uzunluğu", "BD yayının ölçüsü",
@@ -92,7 +93,8 @@ function specFor(req: ArcRequest, scene: CommandScene): { spec: ArcSpec; circles
 function reply(spec: ArcSpec, circles: MathObject[], scene: CommandScene): string {
   const r = resolveArc(spec, scene.objects) ?? fail('Noktalar çakışık; aralarında yay yok.');
   const where = circles.length > 1 ? ` (${circles[0].label || 'çember'} üzerinde)` : '';
-  return `${arcTitle(spec, scene.objects, r)}${where}: uzunluk ${trNum(r.length)} br, ölçü ${trNum(r.degrees, 1)}°.`;
+  const uclar = yayOlcumUclari(spec, scene, r);
+  return `${arcTitle(spec, scene.objects, r)}${where}: ${yaz(yayUzunlugu(uclar, r.length))}, ${yaz(yayOlcusu(uclar, r.degrees))}.`;
 }
 
 /** Ölçümü gösterir (yoksa oluşturur). Hiçbir alan değişmediyse yalnızca ölçüm görünümünü açar (boş geçmiş adımı yok). */

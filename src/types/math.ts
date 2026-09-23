@@ -10,6 +10,15 @@ export type ScreenPoint = {
   y: number;
 };
 
+/** Ölçüm yazısının ortak şekil grubuna bağlı, deformasyonda hizasını koruyan çapası. */
+export interface MeasurementLabelAnchor {
+  /** Merkezi birlikte belirleyen noktalar; geometrik bağımlılık değildir. */
+  pointIds: string[];
+  /** Hizalama noktasının, noktaların aritmetik merkezine göre dünya birimindeki kayıklığı. */
+  offset: Point2D;
+  alignment: 'left' | 'center' | 'right';
+}
+
 export type ObjectType =
   | 'point'
   | 'segment'
@@ -65,6 +74,8 @@ export interface BaseMathObject {
    * Kayıklık şekle GÖRE tutulduğu için şekil taşındığında etiket de onunla birlikte gider.
    */
   labelOffsets?: Record<string, Point2D>;
+  /** Uzaklaştırılmış ölçüm yazılarının ortak şekil merkezine bağlı konumları. */
+  labelAnchors?: Record<string, MeasurementLabelAnchor>;
   /** Nesne hareket ettikçe ekranda kalıcı iz bırakır mı (GeoGebra Show Trace) */
   showTrace?: boolean;
 }
@@ -390,9 +401,15 @@ export interface MeasurementObject extends BaseMathObject {
   showValue?: boolean;
   /** arc: yayın üzerinde durduğu çember. Çember silinince ölçüm de silinir. */
   circleId?: string;
-  /** arc: bu noktayı İÇEREN taraf ölçülür ("BCD yayı"). Verildiğinde `major` yok sayılır. */
+  /**
+   * arc: yayın SAAT YÖNÜNÜN TERSİNE başladığı uç (pointIds'ten biri) — hangi yayın ölçüldüğünün kimliği.
+   * Ölçüm oluşturulurken yazılır; noktalar taşınınca yay taraf değiştirmesin diye `throughPointId`/`major`
+   * yerine bu alan kullanılır (eski kayıtlarda yoksa ilk işlemde doldurulur).
+   */
+  startPointId?: string;
+  /** arc: bu noktayı İÇEREN taraf ölçülür ("BCD yayı"); yalnızca yay ilk seçilirken ve başlıkta kullanılır. */
   throughPointId?: string;
-  /** arc: true ise büyük yay; yoksa ya da false ise küçük yay. */
+  /** arc: yay ilk seçilirken büyük yay istendiyse true (başlangıç ucu yazıldıktan sonra yalnızca hatırlatmadır). */
   major?: boolean;
 }
 

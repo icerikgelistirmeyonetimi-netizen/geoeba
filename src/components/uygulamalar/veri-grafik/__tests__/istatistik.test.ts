@@ -11,6 +11,7 @@ import {
   ortalamaMutlakSapma,
   ozetHesapla,
   temizle,
+  tepeDeger,
 } from '../istatistik';
 
 const SELMA = [18, 5, 32, 17, 13];
@@ -45,7 +46,7 @@ describe('istatistik: merkezi eğilim', () => {
 
   it('ozetHesapla tüm alanları doldurur', () => {
     const o = ozetHesapla(YASEMIN);
-    expect(o).toEqual({ n: 5, ortalama: 17, medyan: 17, oms: 1.2, enKucuk: 15, enBuyuk: 19, aciklik: 4 });
+    expect(o).toEqual({ n: 5, ortalama: 17, medyan: 17, tepe: [], tepeSayisi: 1, oms: 1.2, enKucuk: 15, enBuyuk: 19, aciklik: 4 });
   });
 
   it('hesaplamaAdimlari: toplam/n, |x−x̄| listesi, sıralı dizi ve medyan indeksleri', () => {
@@ -103,5 +104,17 @@ describe('istatistik: güzel eksen', () => {
     const ters = guzelEksen(20, 5);
     expect(ters.min).toBeLessThanOrEqual(5);
     expect(ters.max).toBeGreaterThanOrEqual(20);
+  });
+});
+
+describe('istatistik: tepe değer', () => {
+  it('en sık görülen değer(ler); tekrar yoksa boş; özet içinde', () => {
+    expect(tepeDeger([1, 2, 2, 3, 3, 3])).toEqual({ degerler: [3], sayi: 3 });
+    expect(tepeDeger([4, 1, 1, 4])).toEqual({ degerler: [1, 4], sayi: 2 });
+    expect(tepeDeger([1, 2, 3])).toEqual({ degerler: [], sayi: 1 });
+    expect(tepeDeger([])).toEqual({ degerler: [], sayi: 0 });
+    const oz = ozetHesapla([3, 5, 2, 4, 3, 6, 3, 1]);
+    expect(oz.tepe).toEqual([3]);
+    expect(oz.tepeSayisi).toBe(3);
   });
 });

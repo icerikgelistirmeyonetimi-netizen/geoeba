@@ -132,6 +132,8 @@ describe('grafik: yığma', () => {
     expect(noktaYaricapi(8, 200, 3)).toBe(5); // en küçük yarıçap (komşu yığınlar hafifçe örtüşebilir)
     expect(noktaYaricapi(40, 60, 10)).toBe(5);
     expect(noktaYaricapi(40, 100, 5)).toBe(9.5);
+    // Komşu yığınlar hafifçe örtüşebilir: 14 px'lik yığında yarıçap 7'den büyük (eskiden 6)
+    expect(noktaYaricapi(14, 200, 3)).toBeCloseTo(8.68, 2);
   });
 });
 

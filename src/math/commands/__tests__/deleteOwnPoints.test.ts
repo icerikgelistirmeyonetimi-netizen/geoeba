@@ -145,6 +145,22 @@ describe('komutla silme: “yalnızca şekli sil” kaçış kapısı', () => {
     expect(r.message).toContain('Bağlı 1 nesne');
     expect(of(r.objects, 'polygon')).toHaveLength(0);
   });
+
+  it('iki söyleyiş aynı cümleyi kurar: noktalar adlarıyla anılır', () => {
+    const duz = run('ABC üçgenini sil', tri()).message;
+    const ile = run('ABC üçgenini noktalarıyla birlikte sil', tri()).message;
+    expect(duz).toBe('ABC üçgeni (A, B ve C noktalarıyla birlikte) silindi.');
+    expect(ile).toBe(duz);
+  });
+
+  it('uzunluk ölçümünü silmek ölçtüğü noktaları silmez (etikettir, şekil değildir)', () => {
+    const sahne = unfocus(play(st([]), ['A (-3; -1) noktası oluştur', 'B (3; 1) noktası oluştur', 'AB uzunluğunu ölç']));
+    const olcum = sahne.objects.find(o => o.type === 'segment');
+    expect(olcum?.label).toBe('|AB|');
+    const r = run('seçilileri sil', st(sahne.objects, [olcum!.id]));
+    expect(labels(r.objects)).toEqual(['A', 'B']);
+    expect(r.message).toBe('|AB| doğru parçası silindi.');
+  });
 });
 
 describe('komutla silme: dönüşüm parametreleri ve yönlendirme', () => {

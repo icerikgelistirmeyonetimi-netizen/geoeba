@@ -11,11 +11,13 @@ import type { ContextMenuItem } from './ContextMenu';
 import { EsitlikSimgesi, EsitUzunluklarSimgesi } from './EsitlikSimgeleri';
 import { centikKalinligi, centikKaydirmasi, centikYolu, type CentikEngelleri } from './esitlikCizimi';
 import {
-  esitlikYamalari, etkinEsitlik, kenarAnahtari, parcaAnahtari, sonrakiEsitlikSayisi, yayAnahtari,
+  esitlikGrupAnahtarlari, esitlikYamalari, etkinEsitlik, kenarAnahtari, parcaAnahtari, sonrakiEsitlikSayisi, yayAnahtari,
   type EsitlikIsareti, type EsitlikSonucu, type EsitlikTuru, type EsitlikYamasi,
 } from '@/math/esitlikIsaretleri';
 
 export type { EsitlikYamasi };
+
+const EMPTY: readonly PointObject[] = [];
 
 /**
  * Çentik katmanı. Geçiş (transition) ve sınıf YOK: kaydırırken yol `d` her karede yeniden hesaplanır, geride kalmaz.
@@ -26,8 +28,12 @@ export function EsitlikIsaretleriKatmani({ isaretler, viewport, seciliIdler, ciz
   viewport: ViewportTransform;
   seciliIdler: string[];
   cizgiOlcegi: number;
-  /** Görünür noktalar: öğenin ortasında duran nokta çentiği örtmesin diye çentik yana kaydırılır */
-  noktalar?: Iterable<PointObject>;
+  /**
+   * Görünür noktalar: öğenin ortasında duran nokta çentiği örtmesin diye çentik yana kaydırılır.
+   * DİZİ olmalı, yineleyici (Map.values()) DEĞİL: React StrictMode aynı props ile render'ı iki kez çağırır;
+   * tek kullanımlık bir yineleyici ikinci (ekrana giden) çağrıda boş gelir ve kaydırma hiç çalışmaz.
+   */
+  noktalar?: readonly PointObject[];
   noktaYaricapi?: number;
 }) {
   if (!isaretler.length) return null;
@@ -38,7 +44,7 @@ export function EsitlikIsaretleriKatmani({ isaretler, viewport, seciliIdler, ciz
     eksenX: viewport.showAxes ? kok.x : undefined,
     eksenY: viewport.showAxes ? kok.y : undefined,
   };
-  for (const p of noktalar ?? []) {
+  for (const p of noktalar ?? EMPTY) {
     if (p.visible === false) continue;
     const s = worldToScreen(p, viewport);
     engeller.noktalar.push({ x: s.x, y: s.y, r: (p.size || noktaYaricapi) + 1.5 });
@@ -103,7 +109,11 @@ export function esitlikMenuMaddeleri({ hedef, kenarNo, objects, seciliIdler, son
   if (!anahtar || !sonuc.temsilci.has(anahtar)) return [];
   const tur: EsitlikTuru = anahtar.startsWith('arc:') ? 'yay' : 'duz';
   const e = etkinEsitlik(sonuc, anahtar);
-  const sec = (deger: number | undefined) => uygula(esitlikYamalari(objects, sonuc, [{ anahtar, deger }]), 'Eşitlik işareti değiştirildi');
+  // 1–4 seçilince hedefin OTOMATİK grubu birlikte işaretlenir (eşi çıplak kalmasın); 0 ve Otomatik yalnız hedefi değiştirir.
+  const sec = (deger: number | undefined) => {
+    const hedefler = deger ? esitlikGrupAnahtarlari(sonuc, anahtar) : [anahtar];
+    uygula(esitlikYamalari(objects, sonuc, hedefler.map((a) => ({ anahtar: a, deger }))), 'Eşitlik işareti değiştirildi');
+  };
   const secenek = (id: string, label: string, deger: number | undefined, icon: React.ReactNode): ContextMenuItem =>
     ({ id, label, icon, radio: true, checked: e.elle === deger, onSelect: () => sec(deger) });
   const maddeler: ContextMenuItem[] = [

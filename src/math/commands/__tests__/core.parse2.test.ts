@@ -289,9 +289,9 @@ describe('core parse 2 repair: “seçtiğim” in measurements and circles', ()
     const pts = play('A (0; 0) noktası', 'B (4; 0) noktası', 'C (0; 3) noktası');
     expect(ok('seçtiğim noktalar arasındaki mesafeyi ölç', pts, [point(pts, 'A').id, point(pts, 'C').id]).message).toContain('|AC| = 3');
     const tri = triangle();
-    expect(ok('seçtiğim üçgenin alanını hesapla', tri, select(tri, 'polygon')).message).toContain('alan = 6');
-    expect(ok('seçtiğim üçgenin çevresini hesapla', tri, select(tri, 'polygon')).message).toContain('çevre = 12');
-    expect(ok('seçtiğim üçgenin alanı kaç', tri, select(tri, 'polygon')).message).toContain('alan = 6');
+    expect(ok('seçtiğim üçgenin alanını hesapla', tri, select(tri, 'polygon')).message).toContain('A(ABC) = 6');
+    expect(ok('seçtiğim üçgenin çevresini hesapla', tri, select(tri, 'polygon')).message).toContain('Ç(ABC) = 12');
+    expect(ok('seçtiğim üçgenin alanı kaç', tri, select(tri, 'polygon')).message).toContain('A(ABC) = 6');
     const segment = play('A (0; 0) noktası', 'B (4; 0) noktası', '[AB] doğru parçası çiz');
     expect(ok('seçtiğim doğru parçasının uzunluğunu ölç', segment, select(segment, 'segment')).message).toContain('|AB| = 4');
     const angle = play('A (0; 0) noktası', 'B (4; 0) noktası', 'C (0; 3) noktası', 'ABC açısını çiz');

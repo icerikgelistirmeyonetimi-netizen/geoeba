@@ -1,5 +1,6 @@
 import type { AngleObject, CircleObject, EllipseObject, FunctionObject, MathObject, ObjectType, Point2D, PointObject, PolygonObject } from '@/types/math';
 import { calculateAngleDegrees, calculatePolygonArea, calculatePolygonPerimeter, projectOntoHost } from '@/math/geometry';
+import { aci, olcuMetni } from '@/math/matematikYazimi';
 import { copyObjects, pasteObjects } from '@/math/objectClipboard';
 import { validateMathExpression } from '@/math/parser';
 import type { CommandHandler } from '../types';
@@ -161,13 +162,16 @@ const deleteHandler: CommandHandler = {
     // Şeklin kendi noktaları ekrandaki silmeyle AYNI kuraldan geçer (WorkspaceContext.planDeletion).
     const plan = s.removeWithOwnPoints(ids(all), { keepPoints, protectedIds: s.options.pendingPointIds });
     s.setFocus([]);
-    const giden = gorunurNoktaAdlari(before, plan.ownPointIds);
+    // "ABC üçgenini sil" ile "ABC üçgenini noktalarıyla birlikte sil" AYNI cümleyi kurar: giden noktalar adlarıyla
+    // (8'den fazlaysa noktalariyla sayıya düşer). Açıkça eklenen köşeler ve şeklin kendi noktaları birlikte sayılır.
+    const hedefIds = new Set(ids(targets));
+    const gidenIds = new Set([...ids(all).filter(id => !hedefIds.has(id)), ...plan.ownPointIds]);
+    const giden = gorunurNoktaAdlari(before, before.filter(o => gidenIds.has(o.id)).map(o => o.id));
     const kalan = gorunurNoktaAdlari(before, plan.keptPointIds);
     const extra = plan.removal.size - all.length - plan.ownPointIds.length;
     const ad = sentence(describeList(targets));
     const govde = kalan.length ? `${ad} silindi (${noktalari(kalan)} yerinde kaldı).`
-      : `${ad}${all.length > targets.length ? ` (${all.length - targets.length} köşe noktasıyla birlikte)`
-        : giden.length ? ` (${noktalariyla(giden)} birlikte)` : ''} silindi.`;
+      : `${ad}${giden.length ? ` (${noktalariyla(giden)} birlikte)` : ''} silindi.`;
     s.say(`${govde}${extra > 0 ? ` Bağlı ${extra} nesne de silindi.` : ''}`);
   },
 };
@@ -979,7 +983,7 @@ function setAngle(c: Clause, s: CommandScene, degreesOrChange: number | Change, 
   }
   if (angle && reflex !== undefined) s.update(angle.id, { reflex });
   s.setFocus(angle ? [angle.id] : [moving.id]);
-  s.say(`∠${p1.label}${v.label}${p3.label} = ${trNum(degrees)}° yapıldı; ${moving.label} noktası ${fmtPoint(target)} konumuna taşındı.`);
+  s.say(`${olcuMetni(aci(p1, v, p3, degrees, { disAci: degrees > 180 }))} yapıldı; ${moving.label} noktası ${fmtPoint(target)} konumuna taşındı.`);
 }
 
 const sizeHandler: CommandHandler = {

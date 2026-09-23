@@ -16,6 +16,14 @@ Matematik Atölyesi durur. Atölye sahnenin içinde hazır gelir (dışa aktarı
 eklenmez), `landmark:atolye` grubuna girer ve tabelası "ATÖLYE"dir; fener ışığı/huzmesi yoktur.
 Tabela yazıları `data/ana-sayfa.json` içinde her grubun `tabela` alanına yazılır.
 
+Atölyenin dönen aletleri (pergel ve iletki ibresi) ayrı gruplara çıkar: `arac:pergel`,
+`arac:ibre`. Her biri `pivot` (dünya, three uzayı), `axis` (birim dönme ekseni),
+`owner` (`"landmark:atolye"`) ve `motion` (`"tur"` | `"salinim"`) taşır; salınanlarda
+ayrıca `restAngle` (modeldeki duruş açısı) bulunur ve motor salınım genliğini bu açıya
+göre kısar, böylece ibre iletkinin 0–180 bandı dışına taşmaz. `owner`
+kutusu bu parçaların kutusuyla birleştirilir. Hareketin zamanlaması/genliği JSON'da
+DEĞİL, `src/components/adalar/adaSahnesi.ts` sabitlerindedir. Model/JSON elle düzenlenmez.
+
 ## Modelleri yeniden üretme (Blender 4.4)
 
 Kaynak sahneler depoda tutulmaz; `matematik-atolye-adasi/takimadalar-atolye.blend`,

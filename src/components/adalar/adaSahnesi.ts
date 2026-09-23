@@ -26,7 +26,7 @@ export type Uclu = [number, number, number];
 
 export type AdaSayfasi = 'ana-sayfa' | 'ilkokul' | 'ortaokul' | 'lise';
 
-export type SahneGrubuTuru = 'stage' | 'grade' | 'landmark' | 'float' | 'iz' | 'static';
+export type SahneGrubuTuru = 'stage' | 'grade' | 'landmark' | 'float' | 'iz' | 'arac' | 'static';
 
 export type SecilebilirTuru = 'stage' | 'grade' | 'landmark';
 
@@ -51,13 +51,21 @@ export interface SahneGrubu {
   /** Sınıf binası: 1–12 ya da 'hazirlik' */
   grade?: number | string;
   description?: string;
-  /** Yüzen nesnenin Blender pivotu */
+  /** Yüzen nesnenin ya da dönen atölye aletinin pivotu (three.js dünya uzayı) */
   pivot?: Uclu;
   halfLength?: number;
   /** Yelkenlinin burun yönü (x, z) */
   heading?: [number, number];
   /** Yelkenlinin iz grubunun anahtarı */
   wake?: string;
+  /** Dönen alet: birim dönme ekseni (three.js) */
+  axis?: Uclu;
+  /** Dönen alet: görsel olarak ait olduğu seçilebilir grubun anahtarı */
+  owner?: string;
+  /** Dönen aletin hareket tipi */
+  motion?: 'tur' | 'salinim';
+  /** Dönen aletin modeldeki duruş açısı (radyan) */
+  restAngle?: number;
 }
 
 export interface SahneIsigi {
@@ -167,6 +175,10 @@ export interface Secilebilir {
   h: number;
   hSon?: number;
   nabiz: number;
+  /** Bu seçilebilire ait dönen aletler (pergel, ibre) */
+  aletler: DonenAlet[];
+  /** Üzerine gelme mandalı: tek seferlik tur yalnız yükselen kenarda başlar */
+  aletTetik: boolean;
 }
 
 export type AdaSahnesiOlayHaritasi = {
@@ -203,6 +215,21 @@ interface Rota {
   f: THREE.Vector2;
   n: THREE.Vector2;
   q: number;
+}
+
+/** Kendi pivotunda dönen atölye aleti (exporter'ın "arac:*" grupları). */
+interface DonenAlet {
+  nesne: THREE.Object3D;
+  eksen: THREE.Vector3;
+  hareket: 'tur' | 'salinim';
+  sahip: string;
+  /** Salınım genliği (radyan); duruş açısına göre kısılmış olabilir */
+  genlik: number;
+  /** Birden çok salınan alet olursa faz kayması */
+  faz: number;
+  /** Tur ilerlemesi 0–1 */
+  ilerleme: number;
+  donuyor: boolean;
 }
 
 interface Yuzen {
@@ -319,6 +346,53 @@ export const yumusak = {
   cikis: (t: number) => 1 - Math.pow(1 - t, 3),
   gecis: (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2),
 };
+
+/*
+ * Atölye aletlerinin açı matematiği modül düzeyinde saf tutulur: jsdom'da WebGL yok,
+ * AdaSahnesi örneği kurulamaz; sınıf metoduna gömülürse test edilemez.
+ */
+
+/** İbre salınımının istenen genliği (duruştan sapma). 60±40 derece; kemerin çentikleri boyunca görünür. */
+export const IBRE_GENLIK = (40 * Math.PI) / 180;
+/** İbre kemerin 0/180 uçlarına bu kadar yaklaşmaz. */
+export const IBRE_KENAR_PAYI = (5 * Math.PI) / 180;
+/** Bir ileri-geri taramanın süresi (saniye). */
+export const IBRE_SURE = 3.6;
+/** Tarama periyodu; aradaki 6.4 saniye tam durgunluk ("arada bir"). */
+export const IBRE_PERIYOT = 10;
+/** İlk tarama açılış animasyonundan (~2.3 s) sonra başlasın. */
+export const IBRE_GECIKME = 3.5;
+
+/**
+ * İletki ibresi: IBRE_PERIYOT saniyede bir, IBRE_SURE boyunca ileri-geri tarar;
+ * arada tam durur. Dönen değer duruş açısına göre DELTA'dır (radyan).
+ * sin³ eğrisi u=0.25'te +genlik, u=0.75'te −genlik verir ve bekleme bölümüne
+ * C² sürekli bağlanır; başlarken/dururken sıçrama olmaz.
+ */
+export function ibreTaramaAcisi(t: number, genlik = IBRE_GENLIK): number {
+  const p = ((((t - IBRE_GECIKME) % IBRE_PERIYOT) + IBRE_PERIYOT) % IBRE_PERIYOT);
+  const u = p / IBRE_SURE;
+  if (u >= 1) return 0;
+  const s = Math.sin(2 * Math.PI * u);
+  return genlik * s * s * s;
+}
+
+/**
+ * Duruş açısı (exporter'ın `restAngle` alanı) verildiğinde salınım genliği kemerin 0–180
+ * bandına sığacak şekilde kısılır; duruş açısı bilinmiyorsa istenen genlik kullanılır.
+ */
+export function ibreGenligi(durus?: number): number {
+  if (durus == null || !Number.isFinite(durus)) return IBRE_GENLIK;
+  return Math.max(0, Math.min(IBRE_GENLIK, durus - IBRE_KENAR_PAYI, Math.PI - durus - IBRE_KENAR_PAYI));
+}
+
+/** Pergelin tam turu kaç saniye sürer. */
+export const PERGEL_SURE = 3;
+
+/** Pergel: ilerleme 0→1 boyunca tam tur; iki uçta hız sıfır. */
+export function pergelTurAcisi(p: number): number {
+  return Math.PI * 2 * yumusak.gecis(Math.min(1, Math.max(0, p)));
+}
 
 /** Cam ve vurgu halkaları ortam kapatmasına (AO) katılmaz. */
 export class SeciciGTAOPass extends GTAOPass {
@@ -509,6 +583,7 @@ export class AdaSahnesi extends EventTarget {
   private animasyonlar: Animasyon[] = [];
   private readonly secilebilirler: Secilebilir[] = [];
   private readonly yuzenler: Yuzen[] = [];
+  private readonly aletler: DonenAlet[] = [];
   private readonly etiketler = new Map<Secilebilir, HTMLElement>();
   private fareUzerinde: Secilebilir | null = null;
   private disVurgu: Secilebilir | null = null;
@@ -745,7 +820,10 @@ export class AdaSahnesi extends EventTarget {
         const malzeme = uyarla(mesh.material as THREE.Material);
         mesh.material = malzeme;
         const cam = malzeme.userData.kind === 'glass';
-        mesh.castShadow = !cam && !hareketli(grup);
+        // Gölge haritası bir kez pişirilir; dönen alet gölgesi duruş pozunda donup nesneden
+        // kopardı. hareketli()'ye eklenmez: o yüklem kadraj kutusu, nokta bulutu ve kıyı
+        // alanı için de kullanılıyor, pergel ise sahnenin en yüksek noktası.
+        mesh.castShadow = !cam && !hareketli(grup) && !grup.startsWith('arac:');
         mesh.receiveShadow = true;
         if (cam) {
           mesh.renderOrder = 2;
@@ -792,6 +870,15 @@ export class AdaSahnesi extends EventTarget {
     // Gruplar: seçilebilir adalar / sınıf binaları ve yüzen tekneler
     const girisler = new Map(veri.groups.map((g) => [g.key, g]));
     const dugumler = new Map(kokler.map((k) => [grupAdi(k), k]));
+    // gltf.scene.children sırası garanti değil: alet kökleri sahibinden önce toplanır
+    const aracKokleri = new Map<string, THREE.Object3D[]>();
+    for (const kok of kokler) {
+      const g = girisler.get(grupAdi(kok));
+      if (g?.kind !== 'arac' || !g.owner) continue;
+      const liste = aracKokleri.get(g.owner);
+      if (liste) liste.push(kok);
+      else aracKokleri.set(g.owner, [kok]);
+    }
     for (const kok of kokler) {
       const giris = girisler.get(grupAdi(kok));
       if (!giris) continue;
@@ -810,9 +897,31 @@ export class AdaSahnesi extends EventTarget {
           yon: giris.heading ? new THREE.Vector2(giris.heading[0], giris.heading[1]).normalize() : null,
           yariBoy: giris.halfLength || 1,
         });
+      } else if (tur === 'arac') {
+        if (!giris.pivot || !giris.axis) continue; // exporter eksik yazdıysa alet sabit kalır
+        // Bilinmeyen bir hareket türü sessizce salınıma düşmesin: alet sabit kalsın
+        if (giris.motion !== 'tur' && giris.motion !== 'salinim') continue;
+        const hareket = giris.motion;
+        this.aletler.push({
+          nesne: kok,
+          eksen: new THREE.Vector3(...giris.axis).normalize(),
+          hareket,
+          genlik: ibreGenligi(giris.restAngle),
+          sahip: giris.owner ?? '',
+          // Faz yalnız salınanlar arasında sayılır: tek ibre gecikmesiz başlasın
+          // (IBRE_GECIKME açılış animasyonunu zaten bekletiyor)
+          faz: this.aletler.filter((a) => a.hareket === 'salinim').length * 1.3,
+          ilerleme: 0,
+          donuyor: false,
+        });
       } else if (tur === 'stage' || tur === 'grade' || tur === 'landmark') {
-        this.secilebilirEkle(kok, giris, tur);
+        this.secilebilirEkle(kok, giris, tur, aracKokleri.get(giris.key));
       }
+    }
+    // Aleti sahibine bağla: atölyenin üzerine gelince pergel turunu o tetikler
+    for (const a of this.aletler) {
+      const s = this.secilebilirler.find((x) => x.anahtar === a.sahip);
+      if (s) s.aletler.push(a);
     }
     this.rotalariKur(kiyiAlani);
   }
@@ -979,19 +1088,27 @@ export class AdaSahnesi extends EventTarget {
     }
   }
 
-  private secilebilirEkle(kok: THREE.Object3D, giris: SahneGrubu, tur: SecilebilirTuru): void {
+  private secilebilirEkle(
+    kok: THREE.Object3D,
+    giris: SahneGrubu,
+    tur: SecilebilirTuru,
+    ekKokler?: THREE.Object3D[]
+  ): void {
     const renkHex = this.renkler[tur === 'grade' ? this.sayfa : giris.id] || '#ffffff';
     const adaGibi = tur === 'stage' || tur === 'landmark';
     const vurguRenk = new THREE.Color(renkHex);
     const malzemeler: Secilebilir['malzemeler'] = [];
-    kok.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      // Vurgu ışınımı nesneye özel olsun; kopya dolgu yamasını yeniden alır
-      const kopya: IsiyanMalzeme = dolguYamasiBagla((mesh.material as THREE.Material).clone());
-      mesh.material = kopya;
-      malzemeler.push({ m: kopya, taban: kopya.emissive ? kopya.emissive.clone() : null });
-    });
+    // Ayrı köke taşınan aletler (pergel, ibre) sahibiyle birlikte parlasın
+    for (const k of ekKokler ? [kok, ...ekKokler] : [kok]) {
+      k.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        // Vurgu ışınımı nesneye özel olsun; kopya dolgu yamasını yeniden alır
+        const kopya: IsiyanMalzeme = dolguYamasiBagla((mesh.material as THREE.Material).clone());
+        mesh.material = kopya;
+        malzemeler.push({ m: kopya, taban: kopya.emissive ? kopya.emissive.clone() : null });
+      });
+    }
 
     const min = new THREE.Vector3(...giris.bbox.min);
     const max = new THREE.Vector3(...giris.bbox.max);
@@ -1067,6 +1184,8 @@ export class AdaSahnesi extends EventTarget {
       boyut,
       h: 0,
       nabiz: 0,
+      aletler: [],
+      aletTetik: false,
     });
   }
 
@@ -1489,6 +1608,20 @@ export class AdaSahnesi extends EventTarget {
     const k = 1 - Math.exp(-dt * 9);
     for (const s of this.secilebilirler) {
       const aktif = s === this.fareUzerinde || s === this.disVurgu || s === this.kilitli;
+      // Atölyeye gelince pergel bir tur atar; kilitlenme (stüdyoya geçiş) tetiklemez.
+      // Mandal yükselen kenarı yakalar: fare üzerinde beklerken her karede yeniden başlamaz.
+      if (s.aletler.length) {
+        const uzerinde = s === this.fareUzerinde || s === this.disVurgu;
+        if (uzerinde && !s.aletTetik && !this.azHareket) {
+          for (const a of s.aletler) {
+            if (a.hareket === 'tur' && !a.donuyor) {
+              a.donuyor = true;
+              a.ilerleme = 0;
+            }
+          }
+        }
+        s.aletTetik = uzerinde;
+      }
       s.h += ((aktif ? 1 : 0) - s.h) * k;
       if (s.nabiz > 0) s.nabiz = Math.max(0, s.nabiz - dt * 0.9);
       const nabizGorunur = Math.sin(s.nabiz * Math.PI) * 0.8;
@@ -1533,6 +1666,23 @@ export class AdaSahnesi extends EventTarget {
       if (y.iz) {
         y.iz.position.set(px, y.izY, pz);
         y.iz.rotation.y = donus;
+      }
+    }
+
+    // Atölye aletleri: iletki ibresi arada bir tarar, pergel üzerine gelince tam tur atar.
+    // Düğümün taban dönüşü birim (exporter mesh'i pivota göre merkezliyor), doğrudan yazılır.
+    for (const a of this.aletler) {
+      if (a.hareket === 'salinim') {
+        a.nesne.quaternion.setFromAxisAngle(a.eksen, ibreTaramaAcisi(t + a.faz, a.genlik));
+      } else if (a.donuyor) {
+        a.ilerleme = Math.min(1, a.ilerleme + dt / PERGEL_SURE);
+        if (a.ilerleme >= 1) {
+          a.donuyor = false;
+          a.ilerleme = 0;
+          a.nesne.quaternion.identity(); // 360° = birim dönüş; duruş pozu bit bit aynı
+        } else {
+          a.nesne.quaternion.setFromAxisAngle(a.eksen, pergelTurAcisi(a.ilerleme));
+        }
       }
     }
 
@@ -1657,6 +1807,7 @@ export class AdaSahnesi extends EventTarget {
     this.etiketler.clear();
     this.secilebilirler.length = 0;
     this.yuzenler.length = 0;
+    this.aletler.length = 0;
     this.fareUzerinde = null;
     this.disVurgu = null;
     this.kilitli = null;

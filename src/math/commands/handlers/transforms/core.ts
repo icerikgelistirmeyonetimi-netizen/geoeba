@@ -554,6 +554,7 @@ export interface ImageResult { images: MathObject[]; reused: number; created: nu
  */
 export function createImages(scene: CommandScene, targets: MathObject[], map: PointMap, color: string = COLORS.image): ImageResult {
   const mapping = new Map<string, PointObject>();
+  const imageAnchors = new Map<string, NonNullable<MathObject['labelAnchors']>>();
   const primeSkips: PrimeSkip[] = [];
   let reused = 0, created = 0;
 
@@ -589,12 +590,13 @@ export function createImages(scene: CommandScene, targets: MathObject[], map: Po
       return image;
     }
     const make = (patch: Record<string, unknown>): MathObject => {
-      const { selected: _selected, locked: _locked, ...base } = target as MathObject & { selected?: boolean; locked?: boolean };
+      const { selected: _selected, locked: _locked, labelAnchors, ...base } = target as MathObject & { selected?: boolean; locked?: boolean };
       const draft = { ...base, id: createId(PREFIX[target.type] ?? 'obj'), createdAt: Date.now(), color, ...patch } as MathObject;
       if ('fillColor' in target || target.type === 'polygon' || target.type === 'sector' || target.type === 'ellipse') (draft as { fillColor?: string }).fillColor = color;
       draft.label = imageLabel(scene, target, draft);
       const existing = scene.objects.find(o => sameShape(scene, o, draft));
       if (existing) { reused++; return existing; }
+      if (labelAnchors) imageAnchors.set(draft.id, labelAnchors);
       created++;
       return scene.add(draft);
     };
@@ -639,7 +641,22 @@ export function createImages(scene: CommandScene, targets: MathObject[], map: Po
         fail(`${target.label} dönüştürülemez.`);
     }
   });
-  return { images, reused, created, primeSkips };
+  // Ortak etiket grubu, daha sonra dönüştürülen başka bir hedefin noktalarını da içerebilir.
+  // Bütün hedeflerden sonra yalnız mevcut eşlemeleri kullan; etiket uğruna görüntü noktası üretme.
+  for (const [id, anchors] of imageAnchors) {
+    const remapped: NonNullable<MathObject['labelAnchors']> = {};
+    for (const [kind, anchor] of Object.entries(anchors)) {
+      if (!anchor.pointIds.length || anchor.pointIds.some(pointId => !mapping.has(pointId))) continue;
+      remapped[kind] = {
+        ...anchor,
+        pointIds: anchor.pointIds.map(pointId => mapping.get(pointId)!.id),
+        offset: { ...anchor.offset },
+      };
+    }
+    // Tam eşlenemeyen çapanın yerine, kopyalanmış labelOffsets eski konumu korur.
+    if (Object.keys(remapped).length) scene.update(id, { labelAnchors: remapped });
+  }
+  return { images: images.map(image => scene.get(image.id) ?? image), reused, created, primeSkips };
 }
 
 /** Şekli yerinde dönüştürür (kopya oluşturmaz). İnşaya bağlı noktalar taşınamaz. */

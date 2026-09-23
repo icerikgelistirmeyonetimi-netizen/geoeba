@@ -38,6 +38,12 @@ export interface ArcSpec {
   circleId: string;
   /** [ilk, ikinci] */
   pointIds: readonly string[];
+  /**
+   * Yayın SAAT YÖNÜNÜN TERSİNE başladığı uç — yayın KİMLİĞİ. Ölçüm nesnelerinde her zaman yazılıdır:
+   * bir uç karşı ucun ötesine sürüklense bile ölçülen yay taraf değiştirmez (derece 180°'yi aşıp büyümeye
+   * devam eder). `throughPointId` ve `major` yalnızca yay İLK kez seçilirken (menü, komut) kullanılır.
+   */
+  startPointId?: string;
   throughPointId?: string;
   major?: boolean;
 }
@@ -211,9 +217,11 @@ export function resolveArc(spec: ArcSpec, objects: readonly MathObject[]): Resol
   if (s < YAY_ACI_EPS || s > TAU - YAY_ACI_EPS) return null;
 
   // true: A'dan B'ye (tarama s) · false: B'den A'ya (tarama 2π − s)
-  let fromA: boolean | null = null;
+  // Yazılı başlangıç ucu her şeyden önce gelir: yay, noktalar taşınırken (uç karşı ucun ötesine geçse bile)
+  // taraf değiştirmez. Yoksa ara nokta, o da yoksa küçük/büyük kuralı karar verir.
+  let fromA: boolean | null = spec.startPointId === aId ? true : spec.startPointId === bId ? false : null;
   const T = spec.throughPointId ? pointIn(objects, spec.throughPointId) : undefined;
-  if (T && T.id !== aId && T.id !== bId && away(T)) {
+  if (fromA === null && T && T.id !== aId && T.id !== bId && away(T)) {
     const t = norm(ang(T) - aAng);
     const e = 1e-7;
     if (t > e && t < s - e) fromA = true;
@@ -245,6 +253,12 @@ export function resolveArc(spec: ArcSpec, objects: readonly MathObject[]): Resol
   };
 }
 
+/** Nokta çözülmüş yayın İÇİNDE mi (uçlar hariç)? */
+function insideArc(r: ResolvedArc, p: PointObject): boolean {
+  const u = norm(Math.atan2(p.y - r.center.y, p.x - r.center.x) - r.startAngle);
+  return u > 1e-7 && u < r.sweep - 1e-7;
+}
+
 /** Çözülmüş yayın İÇİNDE duran, ortasına en yakın görünür çember noktası (uçlar ve merkez hariç). */
 function interiorPoint(spec: ArcSpec, objects: readonly MathObject[], r: ResolvedArc): PointObject | undefined {
   const circle = byIdOf(objects).get(spec.circleId);
@@ -271,7 +285,8 @@ export function arcTitle(spec: ArcSpec, objects: readonly MathObject[], resolved
   const A = pointIn(objects, spec.pointIds[0]), B = pointIn(objects, spec.pointIds[1]);
   if (!A || !B) return 'Yay ölçümü';
   const T = spec.throughPointId ? pointIn(objects, spec.throughPointId) : undefined;
-  if (T) return `${A.label}${T.label}${B.label} yayı`;
+  // Ara nokta yayın ÜZERİNDEN kalkmışsa (taşınmış ya da yay öbür tarafa çevrilmiş) adı artık anlatmaz
+  if (T && (!resolved || insideArc(resolved, T))) return `${A.label}${T.label}${B.label} yayı`;
   if (resolved && (resolved.major || resolved.half)) {
     const P = interiorPoint(spec, objects, resolved);
     if (P) return `${A.label}${P.label}${B.label} yayı`;
@@ -279,6 +294,12 @@ export function arcTitle(spec: ArcSpec, objects: readonly MathObject[], resolved
   }
   return `${A.label}${B.label} yayı`;
 }
+
+/**
+ * Yayın İÇİNDEKİ adlandırıcı nokta (yazım katmanı için): büyük yay ve yarım çember üç harfle yazılır
+ * (|A͡C͡B|). arcTitle ile aynı kuralı kullanır, ad iki yerde ayrı ayrı türetilmesin.
+ */
+export const yayIcNoktasi = interiorPoint;
 
 /** "10,79 br · 59,5°" (uzunluk 2, derece 1 ondalık) */
 export function arcValueText(r: ResolvedArc): string {
@@ -321,14 +342,18 @@ export function findArcMeasurement(spec: ArcSpec, objects: readonly MathObject[]
 }
 
 export function makeArcMeasurement(spec: ArcSpec, objects: readonly MathObject[], now: number = Date.now()): ArcMeasurement {
+  // Hangi yayın ölçüldüğü OLUŞTURULURKEN sabitlenir (başlangıç ucu yazılır): noktalar taşınınca yay
+  // karşı tarafa atlamaz, derece 180°'nin ötesine geçebilir.
+  const r = resolveArc(spec, objects);
   return {
     id: createId('olc'),
     type: 'measurement',
     kind: 'arc',
-    label: arcTitle(spec, objects),
+    label: arcTitle(spec, objects, r),
     showLabel: true,
     pointIds: [spec.pointIds[0], spec.pointIds[1]],
     circleId: spec.circleId,
+    ...(r ? { startPointId: r.startId } : spec.startPointId ? { startPointId: spec.startPointId } : {}),
     ...(spec.throughPointId ? { throughPointId: spec.throughPointId } : {}),
     ...(spec.major && !spec.throughPointId ? { major: true } : {}),
     showValue: true,
@@ -376,20 +401,14 @@ export function flipArcMeasurement(m: ArcMeasurement, objects: readonly MathObje
   const current = resolveArc(m, objects);
   if (!current) return { error: 'Yay çözülemedi.' };
   const [a, b] = m.pointIds;
-  const candidates: ArcSpec[] = [
-    { circleId: m.circleId, pointIds: [a, b], major: false },
-    { circleId: m.circleId, pointIds: [a, b], major: true },
-    { circleId: m.circleId, pointIds: [b, a], major: false },
-    { circleId: m.circleId, pointIds: [b, a], major: true },
-  ];
-  const target = candidates.find((c) => {
-    const r = resolveArc(c, objects);
-    return !!r && r.startId === current.endId && r.endId === current.startId;
-  });
-  if (!target) return { error: 'Yay çözülemedi.' };
-  const title = arcTitle(target, objects);
+  // Tümleyen yay: başlangıç ucu şimdiki BİTİŞ ucudur. Böylece tam 180°'de de (ve uçlar taşındıktan sonra da)
+  // çevirme hep öbür tarafı verir; iki kez çevirince başa dönülür.
+  const target: ArcSpec = { circleId: m.circleId, pointIds: [a, b], startPointId: current.endId };
+  const resolved = resolveArc(target, objects);
+  if (!resolved) return { error: 'Yay çözülemedi.' };
+  const title = arcTitle(target, objects, resolved);
   if (findArcMeasurement(target, objects, m.id)) return { error: `${title} zaten ölçülmüş.` };
-  const { throughPointId: _through, major: _major, labelOffsets, ...rest } = m;
+  const { throughPointId: _through, major: _major, labelOffsets, labelAnchors, ...rest } = m;
   void _through; void _major;
   let offsets: Record<string, Point2D> | undefined;
   if (labelOffsets) {
@@ -397,19 +416,42 @@ export function flipArcMeasurement(m: ArcMeasurement, objects: readonly MathObje
     void _measure;
     offsets = Object.keys(others).length ? others : undefined;
   }
+  let anchors: ArcMeasurement['labelAnchors'];
+  if (labelAnchors) {
+    const { measure: _measure, ...others } = labelAnchors;
+    void _measure;
+    anchors = Object.keys(others).length ? others : undefined;
+  }
   const object: ArcMeasurement = {
     ...rest,
     pointIds: [target.pointIds[0], target.pointIds[1]],
+    startPointId: current.endId,
     label: title,
-    ...(target.major ? { major: true } : {}),
     ...(offsets ? { labelOffsets: offsets } : {}),
+    ...(anchors ? { labelAnchors: anchors } : {}),
   };
   return { object, title };
 }
 
 /**
- * Çemberi ya da noktası kalmamış yay ölçümlerini ayıklar (ör. çember iki yaya bölününce). Kayıtlı çizim yeniden açılırken
- * sarkan başvuru bütün sahneyi düşürmesin diye her işlemde çalışır; ayıklanacak bir şey yoksa AYNI diziyi döndürür.
+ * Uçları çakıştığı (ya da bir uç merkeze geldiği) için çizilecek yay kalmadığında rozette yazan açıklama.
+ * Ölçüm sessizce kaybolmasın diye tuval bunu değer satırında gösterir.
+ */
+export function arcUnresolvedText(spec: ArcSpec, objects: readonly MathObject[]): string {
+  const A = pointIn(objects, spec.pointIds[0]), B = pointIn(objects, spec.pointIds[1]);
+  if (!A || !B) return 'Yayın noktaları bulunamadı';
+  const circle = byIdOf(objects).get(spec.circleId);
+  const geom = circle && circle.type === 'circle' ? circleGeometryOf(circle, objects) : null;
+  if (!geom) return 'Çember çizilemiyor; yay ölçülemez';
+  const merkezde = [A, B].filter((p) => Math.hypot(p.x - geom.center.x, p.y - geom.center.y) <= 1e-12);
+  if (merkezde.length) return `${merkezde.map((p) => p.label).join(' ve ')} çemberin merkezinde; yay yok`;
+  return `${A.label} ve ${B.label} çakıştı; aralarında yay yok`;
+}
+
+/**
+ * Çemberi ya da noktası kalmamış yay ölçümlerini ayıklar (ör. çember iki yaya bölününce) ve başlangıç ucu yazılı
+ * olmayan ESKİ kayıtlara o anki yayın başlangıcını yazar (yay bundan sonra taraf değiştirmez). Kayıtlı çizim yeniden
+ * açılırken sarkan başvuru bütün sahneyi düşürmesin diye her işlemde çalışır; değişiklik yoksa AYNI diziyi döndürür.
  */
 export function dropDanglingArcMeasurements<T extends readonly MathObject[]>(objects: T): T {
   let any = false;
@@ -421,7 +463,15 @@ export function dropDanglingArcMeasurements<T extends readonly MathObject[]>(obj
     !m.circleId || byId.get(m.circleId)?.type !== 'circle' || m.pointIds.length !== 2 || !m.pointIds.every(isPoint)
     || (m.throughPointId !== undefined && !isPoint(m.throughPointId));
   const kept = objects.filter((o) => !(o.type === 'measurement' && o.kind === 'arc' && dangling(o)));
-  return (kept.length === objects.length ? objects : kept) as unknown as T;
+  let degisti = kept.length !== objects.length;
+  const son = kept.map((o) => {
+    if (!isArcMeasurement(o) || o.startPointId) return o;
+    const r = resolveArc(o, kept);
+    if (!r) return o;
+    degisti = true;
+    return { ...o, startPointId: r.startId };
+  });
+  return (degisti ? son : objects) as unknown as T;
 }
 
 // ------------------------------------------------------------------------------------------------ menü seçenekleri

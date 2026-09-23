@@ -75,6 +75,10 @@ export async function svgToPngDataUrl(
     if (cs.display === 'none') hedef.style.display = 'none';
   }
 
+  // Açık ölçme aracı (cetvel, açıölçer, gönye, alan modeli) çizimin parçası değil: çıktıya girmesin.
+  // Stil kopyalama döngüsünden SONRA silinir; yoksa kaynak/kopya dizinleri kayar.
+  kopya.querySelectorAll('[data-olcme-araci]').forEach((el) => el.remove());
+
   const xml = new XMLSerializer().serializeToString(kopya);
   const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
 
@@ -133,6 +137,9 @@ export function svgToStandaloneXml(svg: SVGSVGElement): { xml: string; genislik:
     h.removeAttribute('class');
   }
   kopya.removeAttribute('class');
+
+  // Açık ölçme aracı çizimin parçası değil (stil döngüsünden sonra silinir: dizinler kaymasın)
+  kopya.querySelectorAll('[data-olcme-araci]').forEach((el) => el.remove());
 
   // Yazı ve zemin aynı temadan gelmeli; koyu temanın açık yazılarını beyaza basma.
   const zemin = document.createElementNS('http://www.w3.org/2000/svg', 'rect');

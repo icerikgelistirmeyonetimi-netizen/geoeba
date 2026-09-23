@@ -45,10 +45,23 @@ export function aciklik(degerler: number[]): number | null {
   return kucuk === null || buyuk === null ? null : buyuk - kucuk;
 }
 
+/** Tepe değer(ler): en sık görülen değer(ler), küçükten büyüğe; hiçbir değer tekrar etmiyorsa boş dizi */
+export function tepeDeger(degerler: number[]): { degerler: number[]; sayi: number } {
+  const sayac = new Map<number, number>();
+  for (const d of degerler) sayac.set(d, (sayac.get(d) ?? 0) + 1);
+  const enCok = Math.max(0, ...sayac.values());
+  if (enCok < 2) return { degerler: [], sayi: enCok };
+  return { degerler: [...sayac.entries()].filter(([, n]) => n === enCok).map(([d]) => d).sort((a, b) => a - b), sayi: enCok };
+}
+
 export interface Ozet {
   n: number;
   ortalama: number | null;
   medyan: number | null;
+  /** tepe değer(ler); tekrar eden değer yoksa boş */
+  tepe: number[];
+  /** tepe değerin görülme sayısı */
+  tepeSayisi: number;
   oms: number | null;
   enKucuk: number | null;
   enBuyuk: number | null;
@@ -56,10 +69,13 @@ export interface Ozet {
 }
 
 export function ozetHesapla(degerler: number[]): Ozet {
+  const tepe = tepeDeger(degerler);
   return {
     n: degerler.length,
     ortalama: ortalama(degerler),
     medyan: medyan(degerler),
+    tepe: tepe.degerler,
+    tepeSayisi: tepe.sayi,
     oms: ortalamaMutlakSapma(degerler),
     enKucuk: enKucuk(degerler),
     enBuyuk: enBuyuk(degerler),

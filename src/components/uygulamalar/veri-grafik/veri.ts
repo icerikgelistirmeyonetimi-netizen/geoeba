@@ -72,12 +72,15 @@ export function bosTablo(): VeriTablosu {
   };
 }
 
-/** Başlıklar + satır dizilerinden tablo kurar; ilk sütun etiket, diğerleri sayısal */
-export function tabloOlustur(basliklar: string[], satirlar: (string | number)[][]): VeriTablosu {
+/**
+ * Başlıklar + satır dizilerinden tablo kurar; ilk sütun etiket, diğerleri sayısal. `turler` ile ilk sütun dışındaki
+ * sütunlar kategorik (etiket) yapılabilir (ör. her satır bir öğrenci, "Sınıf" sütunu A / B).
+ */
+export function tabloOlustur(basliklar: string[], satirlar: (string | number)[][], turler?: (SutunTuru | undefined)[]): VeriTablosu {
   const sutunlar: Sutun[] = basliklar.map((ad, i) => ({
     id: kimlikUret('s'),
     ad,
-    tur: i === 0 ? 'etiket' : 'sayi',
+    tur: i === 0 ? 'etiket' : turler?.[i] ?? 'sayi',
   }));
   return {
     sutunlar,
@@ -125,6 +128,12 @@ export function sutunSil(tablo: VeriTablosu, indeks: number): VeriTablosu {
 
 export function sutunAdiDegistir(tablo: VeriTablosu, indeks: number, ad: string): VeriTablosu {
   return { ...tablo, sutunlar: tablo.sutunlar.map((s, i) => (i === indeks ? { ...s, ad } : s)) };
+}
+
+/** Sütunun türünü değiştirir (sayısal ↔ kategorik); ilk sütun hep etiket kalır, hücre metinleri korunur */
+export function sutunTuruDegistir(tablo: VeriTablosu, indeks: number, tur: SutunTuru): VeriTablosu {
+  if (indeks <= 0 || indeks >= tablo.sutunlar.length || tablo.sutunlar[indeks].tur === tur) return tablo;
+  return { ...tablo, sutunlar: tablo.sutunlar.map((s, i) => (i === indeks ? { ...s, tur } : s)) };
 }
 
 export function hucreYaz(tablo: VeriTablosu, satir: number, sutun: number, metin: string): VeriTablosu {
@@ -254,8 +263,21 @@ export function izgaradanTablo(izgara: string[][]): VeriTablosu {
     if (ham) return ham;
     return i === 0 ? 'Etiket' : `Değişken ${i}`;
   });
-  const govde = baslikVar ? izgara.slice(1) : izgara;
-  return tabloOlustur(basliklar, govde.map((r) => Array.from({ length: genislik }, (_, i) => r[i] ?? '')));
+  const govde = (baslikVar ? izgara.slice(1) : izgara).map((r) => Array.from({ length: genislik }, (_, i) => r[i] ?? ''));
+  return tabloOlustur(basliklar, govde, metinSutunlari(govde));
+}
+
+/**
+ * Yapıştırılan ızgarada kategorik sütunlar: ilk sütun dışında, dolu hücrelerinin hiçbiri sayı okunmayan
+ * (en az iki dolu hücreli) sütun etiket türünde açılır — "Sınıf: A / B" gibi sütunlar kırmızı "hatalı" hücre olmaz.
+ */
+export function metinSutunlari(hucreler: string[][]): (SutunTuru | undefined)[] {
+  const genislik = Math.max(0, ...hucreler.map((r) => r.length));
+  return Array.from({ length: genislik }, (_, i) => {
+    if (i === 0) return undefined;
+    const dolu = hucreler.map((r) => (r[i] ?? '').trim()).filter((h) => h !== '');
+    return dolu.length >= 2 && dolu.every((h) => sayiOku(h) === null) ? 'etiket' : undefined;
+  });
 }
 
 // ── CSV ───────────────────────────────────────────────────────────────────────
@@ -306,22 +328,161 @@ export function sonrakiHucre(konum: HucreKonumu, yon: GezintiYonu, satirSayisi: 
 }
 
 // ── Örnek veriler ─────────────────────────────────────────────────────────────
+// Her örnek bir ortaokul veri konusunu öğretmek için tasarlandı: sayılar elde hesaplanabilir (tam ortalama,
+// tam medyan, "güzel" merkez açılar) ve grafikte anlatılmak istenen biçim (çan eğrisi, sağa çarpıklık,
+// uç değer, pozitif / negatif ilişki) açıkça görünür.
 
 /** Uygulamadaki grafik türleri (durum.ts'teki sekmeler bununla aynıdır) */
 export type GrafikTuru = 'nokta' | 'sutun' | 'cizgi' | 'daire' | 'sacilim' | 'istatistik';
 
+/** Örnek verilerin konu başlıkları: menüde bu sırayla kümelenir (ortaokul veri konularının sırası) */
+export const ORNEK_KONULARI = [
+  { id: 'kategorik', ad: 'Sıklık tablosu, sütun ve daire grafiği' },
+  { id: 'dagilim', ad: 'Nokta grafiği, ortalama ve sapma' },
+  { id: 'zaman', ad: 'Çizgi grafiği: zaman içinde değişim' },
+  { id: 'iliski', ad: 'Saçılım grafiği: iki değişkenin ilişkisi' },
+] as const;
+
+export type OrnekKonusu = (typeof ORNEK_KONULARI)[number]['id'];
+
 export interface OrnekVeri {
   id: string;
   ad: string;
+  konu: OrnekKonusu;
+  /** Verinin neyi öğrettiği (menüde adın altında; yüklenince kısa bildirim olarak) */
+  aciklama: string;
   olustur: () => VeriTablosu;
   /** Örnek belirli bir grafik için hazırlandıysa yüklenince o grafik açılır */
   onerilenGrafik?: GrafikTuru;
+  /** Yüklenince eksene gelecek değişken (sütun adı; verilmezse ilk sayısal, yoksa ilk kategorik) */
+  varsayilanDegisken?: string;
+  /** Yüklenince karşılaştırma paneline gelecek ikinci değişken (sütun adı) */
+  karsilastir?: string;
+  /** Yüklenince renk anahtarı olacak kategorik değişken (sütun adı; verilmezse ilk kategorik) */
+  renkDegisken?: string;
 }
 
 export const ORNEK_VERILER: OrnekVeri[] = [
+  // ── Kategorik veri: sıklık tablosu, sütun ve daire grafiği ────────────────────
   {
+    // Her satır bir öğrencinin cevabı; 24 cevapta her sayı 15°'nin katı olur (Elma 7 → 105°, Karpuz 2 → 30°)
+    id: 'meyve',
+    ad: 'En sevilen meyve',
+    konu: 'kategorik',
+    onerilenGrafik: 'sutun',
+    aciklama: '24 öğrencinin cevabı: sıklık tablosu, sütun ve daire grafiği; en çok seçilen tepe değerdir.',
+    olustur: () =>
+      tabloOlustur(
+        ['Meyve'],
+        ['Elma', 'Muz', 'Çilek', 'Elma', 'Portakal', 'Çilek', 'Elma', 'Muz', 'Karpuz', 'Çilek', 'Elma', 'Portakal', 'Muz', 'Çilek', 'Elma', 'Karpuz', 'Portakal', 'Elma', 'Muz', 'Çilek', 'Portakal', 'Elma', 'Muz', 'Çilek'].map((m) => [m]),
+      ),
+  },
+  {
+    // Bir bütünün parçaları: 24 saat = 360°, her saat 15° (Uyku 9 saat → 135°, Yemek 1,5 saat → 22,5°)
+    id: 'gun',
+    ad: 'Bir günün saatleri',
+    konu: 'kategorik',
+    aciklama: '24 saat = 360°, her saat 15°: dilimlerin merkez açılarını ve yüzdelerini karşılaştırın; sınırı sürükleyin.',
+    onerilenGrafik: 'daire',
+    olustur: () =>
+      tabloOlustur(
+        ['Etkinlik', 'Süre (saat)'],
+        [
+          ['Uyku', 9],
+          ['Okul', 7],
+          ['Ders çalışma', 2],
+          ['Oyun', 2.5],
+          ['Yemek', 1.5],
+          ['Diğer', 2],
+        ],
+      ),
+  },
+  {
+    // İki kategorik değişken (Sınıf × En sevdiği ders): 5-A ve 5-B'de 12'şer öğrenci; toplamlar 15°'nin katı
+    // (Beden Eğitimi 7 → 105°, Sosyal Bilgiler 2 → 30°). Renk anahtarı Sınıf: yığılmış sütun, halkalı daire, iki yönlü tablo.
+    id: 'ders',
+    ad: 'En sevilen ders (5-A ve 5-B)',
+    konu: 'kategorik',
+    onerilenGrafik: 'sutun',
+    aciklama: 'İki kategorik değişken: sınıfa göre yığılmış sütunlar ve İstatistik sekmesinde iki yönlü tablo.',
+    varsayilanDegisken: 'En sevdiği ders',
+    renkDegisken: 'Sınıf',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Sınıf', 'En sevdiği ders'],
+        [
+          ['Ali', '5-A', 'Matematik'],
+          ['Ayşe', '5-A', 'Fen Bilimleri'],
+          ['Barış', '5-A', 'Beden Eğitimi'],
+          ['Ceyda', '5-A', 'Matematik'],
+          ['Çağla', '5-A', 'Türkçe'],
+          ['Damla', '5-B', 'Matematik'],
+          ['Emir', '5-B', 'Fen Bilimleri'],
+          ['Eylül', '5-B', 'Beden Eğitimi'],
+          ['Fırat', '5-A', 'Matematik'],
+          ['Gül', '5-B', 'Türkçe'],
+          ['Halil', '5-A', 'Fen Bilimleri'],
+          ['Hazal', '5-B', 'Türkçe'],
+          ['İsmail', '5-A', 'Beden Eğitimi'],
+          ['Kerem', '5-B', 'Beden Eğitimi'],
+          ['Lina', '5-B', 'Sosyal Bilgiler'],
+          ['Metin', '5-B', 'Beden Eğitimi'],
+          ['Nisa', '5-A', 'Matematik'],
+          ['Okan', '5-B', 'Matematik'],
+          ['Öykü', '5-B', 'Türkçe'],
+          ['Rüya', '5-A', 'Fen Bilimleri'],
+          ['Selim', '5-A', 'Sosyal Bilgiler'],
+          ['Şevval', '5-B', 'Fen Bilimleri'],
+          ['Taha', '5-A', 'Beden Eğitimi'],
+          ['Zehra', '5-B', 'Beden Eğitimi'],
+        ],
+        [undefined, 'etiket', 'etiket'],
+      ),
+  },
+
+  // ── Nokta grafiği, ortalama ve sapma ──────────────────────────────────────────
+  {
+    // 20 öğrenci, 0–6 kitap: 3 kitap en sık (tepe değer 3), medyan 3, ortalama 2,7 (toplam 54)
+    id: 'kitap',
+    ad: 'Bir ayda okunan kitap sayısı',
+    konu: 'dagilim',
+    onerilenGrafik: 'nokta',
+    aciklama: 'Noktalar aynı değerde yığılır: tepe değeri, medyanı ve ortalamayı bulup karşılaştırın.',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Kitap sayısı'],
+        [
+          ['Ada', 3],
+          ['Bora', 5],
+          ['Ceren', 2],
+          ['Deniz', 4],
+          ['Ege', 3],
+          ['Fatma', 6],
+          ['Gökçe', 3],
+          ['Hakan', 1],
+          ['Işıl', 2],
+          ['Kuzey', 3],
+          ['Leyla', 0],
+          ['Mina', 2],
+          ['Naz', 4],
+          ['Oğuz', 1],
+          ['Pelin', 3],
+          ['Rüzgar', 2],
+          ['Sude', 4],
+          ['Tuna', 1],
+          ['Umut', 3],
+          ['Yağmur', 2],
+        ],
+      ),
+  },
+  {
+    // 24 öğrenci, 152 cm çevresinde simetrik (çan biçimli) dağılım: ortalama = medyan = tepe değer = 152,
+    // ortalama mutlak sapma tam 2,5 cm, açıklık 14 cm
     id: 'boy',
-    ad: 'Öğrencilerin boy uzunlukları (cm)',
+    ad: 'Sınıfın boy uzunlukları (cm)',
+    konu: 'dagilim',
+    onerilenGrafik: 'nokta',
+    aciklama: 'Çan biçimli dağılım: Ortalama ve Ortalama mutlak sapma düğmelerini açın, sapma çizgilerini izleyin.',
     olustur: () =>
       tabloOlustur(
         ['Öğrenci', 'Boy (cm)'],
@@ -329,21 +490,68 @@ export const ORNEK_VERILER: OrnekVeri[] = [
           ['Ayşe', 152],
           ['Mehmet', 158],
           ['Zeynep', 149],
-          ['Ali', 161],
+          ['Ali', 151],
           ['Elif', 155],
-          ['Can', 158],
+          ['Can', 146],
           ['Defne', 152],
-          ['Emre', 164],
+          ['Emre', 159],
           ['Selin', 150],
-          ['Kerem', 158],
-          ['Nehir', 146],
-          ['Yusuf', 155],
+          ['Kerem', 153],
+          ['Nehir', 148],
+          ['Yusuf', 154],
+          ['Ece', 152],
+          ['Burak', 145],
+          ['Lale', 151],
+          ['Mert', 156],
+          ['Derya', 153],
+          ['Onur', 150],
+          ['İrem', 155],
+          ['Tolga', 149],
+          ['Melis', 154],
+          ['Arda', 152],
+          ['Duru', 153],
+          ['Kaan', 151],
         ],
       ),
   },
   {
+    // Sağa çarpık dağılım ve uç değer: 15 öğrenci, biri (Feyza) uzaktan servisle 60 dakika.
+    // Ortalama 16 > medyan 12 > tepe değer 10; uç değer çıkarılınca ortalama 12,9'a iner, medyan 11 olur.
+    id: 'ulasim',
+    ad: 'Okula ulaşım süresi (dakika)',
+    konu: 'dagilim',
+    onerilenGrafik: 'nokta',
+    aciklama: 'Uç değer (60 dk) ortalamayı çeker, medyanı pek etkilemez: o satırı silip ölçülere yeniden bakın.',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Süre (dk)'],
+        [
+          ['Ahmet', 10],
+          ['Buse', 15],
+          ['Cem', 5],
+          ['Dilara', 20],
+          ['Efe', 10],
+          ['Feyza', 60],
+          ['Giray', 8],
+          ['Hande', 12],
+          ['İlker', 15],
+          ['Kübra', 10],
+          ['Levent', 25],
+          ['Merve', 5],
+          ['Nazlı', 20],
+          ['Ozan', 15],
+          ['Pınar', 10],
+        ],
+      ),
+  },
+  {
+    // Ders kitabındaki örnek: iki oyuncunun ortalaması aynı (17), ortalama mutlak sapmaları farklı (6,4 ve 1,2)
     id: 'mac',
-    ad: 'Maçta atılan sayılar (Selma / Yasemin)',
+    ad: 'Basketbol: Selma ve Yasemin',
+    konu: 'dagilim',
+    onerilenGrafik: 'nokta',
+    aciklama: 'Aynı ortalama (17), farklı sapma: karşılaştırma panellerinde kimin daha istikrarlı olduğunu görün.',
+    karsilastir: 'Yasemin',
     olustur: () =>
       tabloOlustur(
         ['Maç', 'Selma', 'Yasemin'],
@@ -356,9 +564,15 @@ export const ORNEK_VERILER: OrnekVeri[] = [
         ],
       ),
   },
+
+  // ── Çizgi grafiği: zaman içinde değişim ───────────────────────────────────────
   {
+    // Zaman serisi: mevsimlere göre yükselip alçalan sıcaklık (tepe Temmuz)
     id: 'sicaklik',
-    ad: 'Aylık sıcaklık (°C)',
+    ad: 'Bir ilin aylık ortalama sıcaklığı (°C)',
+    konu: 'zaman',
+    aciklama: 'Aylara göre iniş çıkış: bir noktayı sürükleyin, komşu aylara göre değişim (Δ ve %) etikette yazar.',
+    onerilenGrafik: 'cizgi',
     olustur: () =>
       tabloOlustur(
         ['Ay', 'Sıcaklık (°C)'],
@@ -379,29 +593,37 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       ),
   },
   {
-    id: 'kitap',
-    ad: 'Okunan kitap sayısı (aylık)',
+    // Büyüme eğrisi: haftalık artış 3, 4, 5, 4, 3, 2, 1 cm — önce hızlanır sonra yavaşlar
+    id: 'fide',
+    ad: 'Fasulye fidesinin boyu (cm)',
+    konu: 'zaman',
+    aciklama: '8 haftalık büyüme: artış önce hızlanır, sonra yavaşlar; Δ ve yüzde değişimi okuyun.',
+    onerilenGrafik: 'cizgi',
     olustur: () =>
       tabloOlustur(
-        ['Öğrenci', 'Kitap'],
+        ['Hafta', 'Boy (cm)'],
         [
-          ['Ada', 3],
-          ['Bora', 5],
-          ['Ceren', 2],
-          ['Deniz', 4],
-          ['Ege', 3],
-          ['Fatma', 6],
-          ['Gökçe', 3],
-          ['Hakan', 1],
+          ['1. hafta', 2],
+          ['2. hafta', 5],
+          ['3. hafta', 9],
+          ['4. hafta', 14],
+          ['5. hafta', 18],
+          ['6. hafta', 21],
+          ['7. hafta', 23],
+          ['8. hafta', 24],
         ],
       ),
   },
+
+  // ── Saçılım grafiği: iki değişkenin ilişkisi ──────────────────────────────────
   {
     // Saçılım için eşleştirilmiş veri: her satır aynı ünite sınavı, iki sayı o sınavda iki sınıfın ortalaması.
     // (İki sınıfın öğrencileri satır satır eşleşmez; eşleştiren şey ortak sınavdır.) Zor ünitelerde iki sınıf
     // birlikte düşer: noktalar sol alttan sağ üste uzanır (pozitif ilişki).
     id: 'sinif',
-    ad: 'A ve B sınıfı matematik sınav ortalamaları (saçılım için)',
+    ad: 'A ve B sınıfının ünite sınavı ortalamaları',
+    konu: 'iliski',
+    aciklama: 'Her nokta bir ünite sınavı: iki sınıf birlikte yükselip düşer, noktalar sol alttan sağ üste dizilir.',
     onerilenGrafik: 'sacilim',
     olustur: () =>
       tabloOlustur(
@@ -421,67 +643,74 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       ),
   },
   {
-    // Saçılım + kategoriye göre renk: her satır bir öğrenci. İlk sütun (Sınıf) tekrar ettiği için kategoriktir;
-    // saçılımda A ve B sınıfı aynı grafikte iki renkle görünür. Çalışma arttıkça puan artar, A sınıfı biraz önde.
+    // Her satır bir öğrenci; Sınıf kategorik sütunu renk anahtarıdır: A ve B sınıfı aynı saçılımda iki renkle.
+    // Çalışma arttıkça puan artar (pozitif ilişki), A sınıfı biraz önde.
     id: 'calisma',
-    ad: 'A ve B sınıfı: çalışma süresi ve matematik puanı (saçılım, renkli)',
+    ad: 'Haftalık çalışma süresi ve matematik puanı',
+    konu: 'iliski',
+    aciklama: 'Çalışma arttıkça puan artar; A ve B sınıfı aynı grafikte renklerle, İstatistik sekmesinde gruplara göre.',
+    onerilenGrafik: 'sacilim',
+    renkDegisken: 'Sınıf',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Sınıf', 'Haftalık çalışma (saat)', 'Matematik puanı'],
+        [
+          ['Aylin', 'A', 2, 55],
+          ['Berk', 'A', 3, 61],
+          ['Cansu', 'A', 4, 62],
+          ['Doruk', 'A', 5, 69],
+          ['Esra', 'A', 6, 70],
+          ['Furkan', 'A', 6, 75],
+          ['Gizem', 'A', 7, 78],
+          ['Hasan', 'A', 8, 81],
+          ['İpek', 'A', 9, 86],
+          ['Kağan', 'A', 10, 90],
+          ['Lara', 'B', 1, 47],
+          ['Mustafa', 'B', 2, 51],
+          ['Nil', 'B', 3, 58],
+          ['Orhan', 'B', 4, 56],
+          ['Pamir', 'B', 5, 63],
+          ['Rana', 'B', 6, 64],
+          ['Serkan', 'B', 7, 70],
+          ['Tuğçe', 'B', 8, 72],
+          ['Ufuk', 'B', 9, 76],
+          ['Yeliz', 'B', 10, 82],
+        ],
+        [undefined, 'etiket'],
+      ),
+  },
+  {
+    // Negatif ilişki: hava ısındıkça sıcak çikolata satışı düşer (günler karışık sırada, ilişki saçılımda ortaya çıkar)
+    id: 'cikolata',
+    ad: 'Hava sıcaklığı ve sıcak çikolata satışı',
+    konu: 'iliski',
+    aciklama: 'Sıcaklık arttıkça satış azalır: noktalar sol üstten sağ alta iner (negatif ilişki).',
     onerilenGrafik: 'sacilim',
     olustur: () =>
       tabloOlustur(
-        ['Sınıf', 'Haftalık çalışma (saat)', 'Matematik puanı'],
+        ['Gün', 'Sıcaklık (°C)', 'Satış (bardak)'],
         [
-          ['A', 2, 55],
-          ['A', 3, 61],
-          ['A', 4, 62],
-          ['A', 5, 69],
-          ['A', 6, 70],
-          ['A', 6, 75],
-          ['A', 7, 78],
-          ['A', 8, 81],
-          ['A', 9, 86],
-          ['A', 10, 90],
-          ['B', 1, 47],
-          ['B', 2, 51],
-          ['B', 3, 58],
-          ['B', 4, 56],
-          ['B', 5, 63],
-          ['B', 6, 64],
-          ['B', 7, 70],
-          ['B', 8, 72],
-          ['B', 9, 76],
-          ['B', 10, 82],
+          ['1. gün', 4, 52],
+          ['2. gün', 9, 43],
+          ['3. gün', 2, 58],
+          ['4. gün', 13, 31],
+          ['5. gün', 7, 44],
+          ['6. gün', 17, 24],
+          ['7. gün', 11, 36],
+          ['8. gün', 21, 17],
+          ['9. gün', 5, 50],
+          ['10. gün', 15, 30],
+          ['11. gün', 24, 12],
+          ['12. gün', 19, 20],
         ],
-      ),
-  },
-  {
-    // Daire grafiği için bir bütünün parçaları: toplam 24 saat = 360°, 1 saat = 15°
-    id: 'gun',
-    ad: 'Bir günün saatleri (daire grafiği için)',
-    onerilenGrafik: 'daire',
-    olustur: () =>
-      tabloOlustur(
-        ['Etkinlik', 'Süre (saat)'],
-        [
-          ['Uyku', 9],
-          ['Okul', 7],
-          ['Ders çalışma', 2],
-          ['Oyun', 2.5],
-          ['Yemek', 1.5],
-          ['Diğer', 2],
-        ],
-      ),
-  },
-  {
-    // Kategorik veri: her satır bir öğrencinin cevabı (sıklık tablosu, sütun ve daire grafiği)
-    id: 'meyve',
-    ad: 'En sevilen meyve (kategorik veri)',
-    olustur: () =>
-      tabloOlustur(
-        ['Meyve'],
-        ['Elma', 'Muz', 'Çilek', 'Elma', 'Portakal', 'Çilek', 'Elma', 'Muz', 'Karpuz', 'Çilek', 'Elma', 'Portakal', 'Muz', 'Çilek', 'Elma', 'Karpuz', 'Portakal', 'Elma', 'Muz', 'Çilek', 'Portakal', 'Elma', 'Muz', 'Çilek'].map((m) => [m]),
       ),
   },
 ];
+
+/** Örnekler konu başlıklarına göre (menü sırası) */
+export function ornekKonulari(): { id: OrnekKonusu; ad: string; ornekler: OrnekVeri[] }[] {
+  return ORNEK_KONULARI.map((k) => ({ id: k.id, ad: k.ad, ornekler: ORNEK_VERILER.filter((o) => o.konu === k.id) }));
+}
 
 export function ornekVeriOlustur(id: string): VeriTablosu {
   const ornek = ORNEK_VERILER.find((o) => o.id === id) ?? ORNEK_VERILER[0];

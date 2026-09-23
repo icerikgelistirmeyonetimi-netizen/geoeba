@@ -1,7 +1,12 @@
-import type { MathObject, ObjectType, Point2D, PointObject, PolygonObject } from '@/types/math';
+import type { ArcObject, MathObject, ObjectType, Point2D, PointObject, PolygonObject } from '@/types/math';
 import {
   calculateAngleDegrees, calculateEllipseArea, calculateEllipsePerimeter, calculatePolygonArea, calculatePolygonPerimeter, getArcGeometry,
 } from '../../../geometry';
+import { TAU, type ArcSpec, type ResolvedArc, yayIcNoktasi } from '@/math/arcMeasure';
+import {
+  type Olcu, type YayUclari, VARSAYILAN_YAZIM, alan, cemberBasligi, cemberCevresi, cevre, daireAlani, dilimAlani, dilimCevresi,
+  elipsAlani, elipsCevresi, kullanilabilirAd, merkezAci, olcuMetni, sayiMetni, yayOlcusu, yuvarlandiMi,
+} from '@/math/matematikYazimi';
 import { type Clause, type LabelRef, fold, labelKey } from '../../text';
 import { type CommandScene, fail, tidy, trNum } from '../../scene';
 
@@ -196,6 +201,116 @@ export const br2 = (v: number) => `${fmt(v)} br²`;
 export const deg = (v: number) => `${fmt(v)}°`;
 export const coord = (p: Point2D) => `(${trNum(p.x)}; ${trNum(p.y)})`;
 
+// ---------------------------------------------------------------------------------------------------------------- yazım
+
+/**
+ * MEB yazımı (src/math/matematikYazimi.ts): yanıtlar |AB| = 5 br, m(∠ABC) = 60°, A(ABC) = 12 br²,
+ * Ç(ABC) = 24 br, r = |OA| = 3 br, |A͡B| ≈ 7,12 br biçiminde yazılır. Motor yanıtları HER ZAMAN tam
+ * yazımı kullanır (Kısa yazım yalnızca tuval etiketlerinindir).
+ */
+export const yaz = (o: Olcu, cumleIci = false) => olcuMetni(o, VARSAYILAN_YAZIM, { cumleIci });
+/** Ölçü nokta adlarıyla yazılabiliyor mu? Yazılamıyorsa yanıt "alan = …" gibi sözcüğe düşer. */
+export const adli = (o: Olcu) => !!o.adlar && o.adlar.length > 0;
+/** "= 3 br" / "≈ 3,33 br": yuvarlanan değer yalnızca '≈' alır, "= ≈" hiçbir yerde yazılmaz. */
+export const esit = (v: number, basamak = 2) => `${yuvarlandiMi(v, basamak) ? '≈' : '='} ${sayiMetni(v, basamak)}`;
+export const esitBr = (v: number) => `${esit(v)} br`;
+export const esitDeg = (v: number) => `${esit(v)}°`;
+
+/** Çember başlığı "Ç(M, r)" — merkezi adlı çemberlerde; üç noktadan geçen çemberde null. */
+export function cemberAdi(scene: CommandScene, o: MathObject): string | null {
+  if (o.type !== 'circle') return null;
+  const id = scene.circleOf(o)?.centerId;
+  const c = id ? scene.get(id) : undefined;
+  return c && c.type === 'point' ? cemberBasligi(c)?.duz ?? null : null;
+}
+
+/** Şeklin alan ölçüsü: çokgen köşeleriyle A(ABC), daire dilimi A(AOB dilimi), çember/elips sözcükle. */
+export function alanOlcusu(scene: CommandScene, o: MathObject): Olcu {
+  const v = areaOf(scene, o)!;
+  switch (o.type) {
+    case 'polygon': return alan(scene.vertices(o), v);
+    case 'ellipse': return elipsAlani(v);
+    case 'sector': return dilimAlani(scene.point(o.startPointId), scene.point(o.centerPointId), scene.point(o.directionPointId), v);
+    default: return daireAlani(v);
+  }
+}
+
+/** Şeklin çevre ölçüsü: Ç(ABC), Ç(AOB dilimi), çemberde "Çevre = 2πr", elipste "Çevre ≈ …". */
+export function cevreOlcusu(scene: CommandScene, o: MathObject): Olcu {
+  const v = perimeterOf(scene, o)!;
+  switch (o.type) {
+    case 'polygon': return cevre(scene.vertices(o), v);
+    case 'ellipse': return elipsCevresi(v);
+    case 'sector': return dilimCevresi(scene.point(o.startPointId), scene.point(o.centerPointId), scene.point(o.directionPointId), v);
+    default: return cemberCevresi(v);
+  }
+}
+
+/** Yayın ölçüleri: 180°'den büyük / tam 180° sınırı (ekranda 0,1° duyarlılıkla yazıldığı için kaba tutulur). */
+const YAY_EPS = 1e-4;
+const yayUstunde = (g: { center: Point2D; radius: number }, p: Point2D) =>
+  Math.abs(distance(g.center, p) - g.radius) <= 1e-6 * Math.max(1, g.radius);
+const yayAcisi = (merkez: Point2D, bas: number, p: Point2D) =>
+  ((Math.atan2(p.y - merkez.y, p.x - merkez.x) - bas) % TAU + TAU) % TAU;
+
+/** Yayın ÜZERİNDE, uçlar dışında, ortasına en yakın nokta: büyük yayı ve yarım çemberi üç harfle adlandırır. */
+function yayAraNoktasi(scene: CommandScene, o: ArcObject, g: { center: Point2D; radius: number; startAngle: number; sweep: number }): PointObject | undefined {
+  let best: { p: PointObject; d: number } | undefined;
+  for (const p of scene.points()) {
+    if (p.id === o.startPointId || p.id === o.centerPointId || p.id === o.directionPointId) continue;
+    // Ad kurulamayan (gizli ya da adsız) nokta yayı adlandıramaz; aranan tek şey üçüncü harftir.
+    if (p.visible === false || !kullanilabilirAd(p)) continue;
+    if (!yayUstunde(g, p)) continue;
+    const u = yayAcisi(g.center, g.startAngle, p);
+    if (!(u > 1e-6 && u < g.sweep - 1e-6)) continue;
+    const d = Math.abs(u - g.sweep / 2);
+    if (!best || d < best.d) best = { p, d };
+  }
+  return best?.p;
+}
+
+/**
+ * Yay / daire diliminin uçları. Yön noktası yayın ÜZERİNDE değilse (yalnızca yönü veriyorsa) son uç
+ * adlandırmada kullanılmaz: "|A͡B|" yerine "Yay uzunluğu ≈ …" yazılır.
+ */
+export function yayUclariOf(scene: CommandScene, o: MathObject): YayUclari {
+  const g = arcGeometry(scene, o);
+  const shape = o as ArcObject;
+  const yon = scene.point(shape.directionPointId);
+  const buyuk = g.sweep > Math.PI + YAY_EPS;
+  const yarim = Math.abs(g.sweep - Math.PI) <= YAY_EPS;
+  return {
+    bas: scene.point(shape.startPointId),
+    son: yayUstunde(g, yon) ? yon : null,
+    ara: buyuk || yarim ? yayAraNoktasi(scene, shape, g) : undefined,
+    buyuk,
+    yarim,
+  };
+}
+
+/** Yay ya da daire diliminin merkez açısı: ucu yayın üzerinde olan yayda m(A͡B), yoksa m(∠AOB). */
+export function merkezAciOlcusu(scene: CommandScene, o: MathObject, derece: number): Olcu {
+  const uclar = yayUclariOf(scene, o);
+  if (o.type === 'arc' && uclar.son) return yayOlcusu(uclar, derece);
+  const shape = o as ArcObject;
+  return merkezAci(scene.point(shape.startPointId), scene.point(shape.centerPointId), scene.point(shape.directionPointId), derece);
+}
+
+/** İki nokta arasındaki yay ölçümünün uçları — adlar arcMeasure'ın (resolveArc + yayIcNoktasi) kuralıyla. */
+export function yayOlcumUclari(spec: ArcSpec, scene: CommandScene, r: ResolvedArc): YayUclari {
+  const nokta = (id?: string) => { const p = id ? scene.get(id) : undefined; return p && p.type === 'point' ? p : null; };
+  const T = nokta(spec.throughPointId);
+  const u = T ? yayAcisi(r.center, r.startAngle, T) : -1;
+  const icte = T && u > 1e-7 && u < r.sweep - 1e-7 ? T : undefined;
+  return {
+    bas: nokta(spec.pointIds[0]),
+    son: nokta(spec.pointIds[1]),
+    ara: r.major || r.half ? icte ?? yayIcNoktasi(spec, scene.objects, r) : undefined,
+    buyuk: r.major,
+    yarim: r.half,
+  };
+}
+
 export function typeNoun(o: MathObject): string {
   switch (o.type) {
     case 'polygon': return o.pointIds.length === 3 ? 'üçgen' : o.pointIds.length === 4 ? 'dörtgen' : 'çokgen';
@@ -323,12 +438,12 @@ export function perimeterOf(scene: CommandScene, o: MathObject): number | null {
   }
 }
 
-export function arcGeometry(scene: CommandScene, o: MathObject): { radius: number; sweep: number; center: Point2D } {
+export function arcGeometry(scene: CommandScene, o: MathObject): { radius: number; sweep: number; center: Point2D; startAngle: number } {
   if (o.type !== 'arc' && o.type !== 'sector') fail('Bu ölçü yalnızca yay ve daire dilimi için hesaplanır.');
   const c = scene.point(o.centerPointId);
   const g = getArcGeometry(c, scene.point(o.startPointId), scene.point(o.directionPointId));
   if (!g) fail(`${nameOf(o)} için yarıçap sıfır; merkez ve başlangıç noktası farklı olmalı.`);
-  return { radius: g.radius, sweep: g.sweep, center: P(c) };
+  return { radius: g.radius, sweep: g.sweep, center: P(c), startAngle: g.startAngle };
 }
 
 export const distance = (a: Point2D, b: Point2D) => Math.hypot(a.x - b.x, a.y - b.y);

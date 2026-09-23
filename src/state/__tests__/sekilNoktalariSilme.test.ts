@@ -314,11 +314,60 @@ describe('Şeklin kendi noktaları: kapsam sınırları', () => {
     expect(kendi(ucgen(), ['A'])).toEqual([]);
   });
 
-  it('çerçeveyle seçimde nokta + şekil birlikte seçilince yalnızca eski davranış uygulanır', () => {
-    // A noktasının çevresine çizilen kutu: ABC üçgeni ve AD parçası da seçime girer
+  it('çerçeveyle seçimde şekil de seçilidir: kutu nereye denk gelirse gelsin kendi noktaları gider', () => {
+    // A noktasının çevresine çizilen kutu: isObjectInMarquee bir köşe kutuya girince ABC üçgenini ve AD parçasını da
+    // seçer ("2 nesne seçildi"). Şekil açıkça seçimin içinde olduğu için kendi noktaları da gider: ekranda artakalan
+    // B, C, D noktası kalmaz (kullanıcının "bazen noktaları kalıyor" dediği durum).
     const o = [...ucgen(), nokta('D'), yap({ id: 'ad', type: 'segment', startPointId: 'A', endPointId: 'D' })];
-    expect(sil(o, ['A', 'ucgen', 'ad'])).toEqual(['A', 'ad', 'ucgen']);
-    expect(kendi(o, ['A', 'ucgen', 'ad'])).toEqual([]);
+    expect(sil(o, ['A', 'ucgen', 'ad'])).toEqual(['A', 'B', 'C', 'D', 'ad', 'ucgen']);
+    expect(kendi(o, ['A', 'ucgen', 'ad'])).toEqual(['B', 'C', 'D']);
+    // Yalnızca NOKTA seçiliyken (çerçeve şekli almadıysa) eski davranış sürer: şekil gider, kardeş noktalar kalır
+    expect(sil(o, ['A'])).toEqual(['A', 'ad', 'ucgen']);
+  });
+
+  it('ölçüm parçası (|AB| Uzunluk/Birim ölç) silinince ölçtüğü noktalar kalır', () => {
+    const olcum = (ek: Record<string, unknown> = {}) =>
+      yap({ id: 'olc', type: 'segment', label: '|AB|', unit: 'cm', showLength: true, startPointId: 'A', endPointId: 'B', ...ek });
+    const o = [nokta('A'), nokta('B'), olcum()];
+    expect(sil(o, ['olc'])).toEqual(['olc']);
+    expect(kendi(o, ['olc'])).toEqual([]);
+    expect(planDeletion(o, ['olc']).shapeIds).toEqual([]);
+    // "3 br uzunluğunda AB doğru parçası" gerçek bir şekildir: |AB| etiketi yoktur, noktalarıyla birlikte gider
+    const gercek = [nokta('A'), nokta('B'), yap({ id: 's', type: 'segment', label: 'AB', unit: 'br', showLength: true, startPointId: 'A', endPointId: 'B' })];
+    expect(sil(gercek, ['s'])).toEqual(['A', 'B', 's']);
+  });
+
+  it('şekil yüzünden zincirde giden parçanın öbür ucu da gider (ortada nokta kalmaz)', () => {
+    // Çember c; A noktası çemberin ÜZERİNDE; [AF] parçası A ile serbest F'yi birleştiriyor.
+    // c silinince A (rule 1) ve [AF] (rule 1) gider; F de artık kimsenin kullanmadığı bir artık noktadır.
+    const o = [
+      nokta('O'), nokta('R'),
+      yap({ id: 'c', type: 'circle', centerPointId: 'O', radiusPointId: 'R' }),
+      nokta('A', { onObjectId: 'c' }), nokta('F'),
+      yap({ id: 'af', type: 'segment', startPointId: 'A', endPointId: 'F' }),
+    ];
+    expect(sil(o, ['c'])).toEqual(['A', 'F', 'O', 'R', 'af', 'c']);
+    expect(kendi(o, ['c'])).toEqual(['O', 'R', 'A', 'F']);
+    // İpucu yalnızca istenen şekli anar, zincirdekileri değil
+    expect(planDeletion(o, ['c']).shapeIds).toEqual(['c']);
+  });
+
+  it('açı silmek, kolları şekil olsa bile hiçbir noktayı silmez', () => {
+    // Açı aracı: iki kol parçası + açı. Açıyı silmek kollarını götürür ama A, B, C yerinde kalır.
+    const o = [
+      nokta('A'), nokta('B'), nokta('C'),
+      yap({ id: 'kolAB', type: 'segment', startPointId: 'A', endPointId: 'B', armOfAngleId: 'ang' }),
+      yap({ id: 'kolAC', type: 'segment', startPointId: 'A', endPointId: 'C', armOfAngleId: 'ang' }),
+      yap({ id: 'ang', type: 'angle', point1Id: 'B', vertexPointId: 'A', point3Id: 'C' }),
+    ];
+    const kalanlar = applyDeletionPlan(o, planDeletion(o, ['ang'])).map(x => x.id);
+    expect(kalanlar).toEqual(['A', 'B', 'C']);
+    expect(kendi(o, ['ang'])).toEqual([]);
+  });
+
+  it('sahnede olmayan bir kimlikle silme dizisi değiştirmez (boş geçmiş adımı açılmaz)', () => {
+    const o = ucgen();
+    expect(applyDeletionPlan(o, planDeletion(o, ['yok-boyle-bir-id']))).toBe(o);
   });
 
   it('şeklin tamamı çerçevelenince zaten her şey gider', () => {

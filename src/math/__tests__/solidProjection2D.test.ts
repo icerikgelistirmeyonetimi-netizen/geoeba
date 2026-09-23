@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { projectPoint3DTo2DWorld, projectSolidFor2D } from '../solidProjection2D';
 import { Solid3DObject } from '@/types/workspace3d';
 import { ViewportTransform } from '@/types/math';
+import { screenToWorld } from '@/math/coordinates';
 
 describe('solidProjection2D', () => {
   const defaultViewport: ViewportTransform = {
@@ -110,4 +111,37 @@ describe('solidProjection2D', () => {
     expect(hiddenEdges.length).toBeGreaterThan(0);
     expect(visibleEdges.length).toBeGreaterThan(0);
   });
+
+  it.each(['cube', 'prism', 'triangular_prism', 'pyramid', 'cylinder', 'cone', 'sphere'] as const)(
+    '%s ölçü etiketleri ve bilgi rozeti zoom/pan değişince dünya konumunu korur', type => {
+      const solid: Solid3DObject = {
+        id: `solid-${type}`, type, name: type,
+        position: { x: 2, y: -3, z: 1 },
+        dimensions: { width: 3, height: 5, depth: 4, radius: 2 },
+        rotation: { x: 0, y: 0, z: 27 },
+        color: '#3b82f6', opacity: 0.85,
+        showWireframe: true, showVertices: true, showFaces: true,
+        unfoldProgress: 0, selectedFaceIndex: null,
+      };
+      const reference = { ...defaultViewport, zoom: 44 };
+      for (const mode of ['top', 'axonometric'] as const) {
+        const first = projectSolidFor2D(solid, reference, false, mode);
+        const firstLabels = [...(first.topView?.dimensionLabels ?? []), first.badge];
+        for (const zoom of [5, 22, 88, 300]) {
+          const viewport = { ...reference, zoom, panX: 127, panY: -89, width: 1200, height: 720 };
+          const next = projectSolidFor2D(solid, viewport, false, mode);
+          const nextLabels = [...(next.topView?.dimensionLabels ?? []), next.badge];
+          expect(nextLabels).toHaveLength(firstLabels.length);
+          nextLabels.forEach((label, index) => {
+            const before = screenToWorld(firstLabels[index], reference);
+            const after = screenToWorld(label, viewport);
+            expect(after.x).toBeCloseTo(before.x, 10);
+            expect(after.y).toBeCloseTo(before.y, 10);
+          });
+          expect(next.badge.title).toBe(first.badge.title);
+          expect(next.badge.volume).toBe(first.badge.volume);
+        }
+      }
+    },
+  );
 });

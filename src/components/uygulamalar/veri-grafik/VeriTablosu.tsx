@@ -17,12 +17,13 @@ import {
   sutunAdiDegistir,
   sutunEkle,
   sutunSil,
+  sutunTuruDegistir,
   yapistir,
   yapistirmayiAyristir,
   type GezintiYonu,
   type VeriTablosu as VeriTablosuModeli,
 } from './veri';
-import { DUGME } from './ortak';
+import { DUGME, TurIsareti } from './ortak';
 import { SIRA_SUTUNLARI, degiskenSutunlari } from './kategorik';
 
 export interface VeriTablosuProps {
@@ -58,17 +59,16 @@ function baslikYaziGenisligi(metin: string): number {
 }
 
 /**
- * Sütun başlığının en küçük genişliği (px): yazı + iç boşluk, sayısal sütunda 44 px'lik sil düğmesi.
- * En az 88 px, en çok 260 px (daha uzun adlar kısaltılır).
+ * Sütun başlığının en küçük genişliği (px): yazı + iç boşluk; ilk sütun dışındakilerde tür (36 px) ve sil (44 px)
+ * düğmeleri. En az 88 px, en çok 260 px (daha uzun adlar kısaltılır).
  */
-export function sutunEnKucukGenisligi(ad: string, silDugmesi: boolean): number {
-  return Math.round(Math.min(260, Math.max(88, baslikYaziGenisligi(ad.trim()) + 22 + (silDugmesi ? 44 : 0))));
+export function sutunEnKucukGenisligi(ad: string, dugmeler: boolean): number {
+  return Math.round(Math.min(260, Math.max(88, baslikYaziGenisligi(ad.trim()) + 22 + (dugmeler ? 36 + 44 : 0))));
 }
 
 /** Tablonun kaydırmadan sığacağı genişlik (px): # + görünen sütunlar + satır sil + kaydırma çubuğu */
 export function tabloDogalGenisligi(tablo: VeriTablosuModeli): number {
-  const sutunlar = tablo.sutunlar.filter((s) => !SIRA_SUTUNLARI.has(s.id));
-  return 44 + sutunlar.reduce((t, s) => t + sutunEnKucukGenisligi(s.ad, s.tur === 'sayi'), 0) + 44 + 14;
+  return 44 + tablo.sutunlar.reduce((t, s, j) => (SIRA_SUTUNLARI.has(s.id) ? t : t + sutunEnKucukGenisligi(s.ad, j > 0)), 0) + 44 + 14;
 }
 
 // Sunucuda (statik çizim, testler) layout effect uyarısı çıkmasın
@@ -202,8 +202,8 @@ export function VeriTablosu({ tablo, seciliSatir, onSatirSec, onTablo, vurguluSu
                 <th
                   scope="col"
                   key={sutun.id}
-                  // Başlık adı kesilmesin: sütun en az adı (+ sayısal sütunda sil düğmesi) kadar geniş; çok sütunda tablo yatay kayar
-                  style={{ minWidth: sutunEnKucukGenisligi(sutun.ad, sutun.tur === 'sayi') }}
+                  // Başlık adı kesilmesin: sütun en az adı (+ tür ve sil düğmeleri) kadar geniş; çok sütunda tablo yatay kayar
+                  style={{ minWidth: sutunEnKucukGenisligi(sutun.ad, j > 0) }}
                   className={`border-b border-r border-border px-0 text-left font-bold ${
                     vurguluSutun === sutun.id ? 'bg-accent' : 'bg-muted'
                   }`}
@@ -221,7 +221,20 @@ export function VeriTablosu({ tablo, seciliSatir, onSatirSec, onTablo, vurguluSu
                         }
                       }}
                     />
-                    {sutun.tur === 'sayi' && (
+                    {/* Tür düğmesi: sayısal ↔ kategorik (ilk sütun hep etiket). Kategorik sütunla iki yönlü tablo, yığılmış sütun ve renk anahtarı kurulur */}
+                    {j > 0 && (
+                      <button
+                        type="button"
+                        aria-label={`${sutun.ad} sütununun türü: ${sutun.tur === 'sayi' ? 'sayısal. Kategorik yap' : 'kategorik. Sayısal yap'}`}
+                        title={sutun.tur === 'sayi' ? 'Sayısal sütun: kategorik (metin) yapmak için tıklayın' : 'Kategorik sütun: sayısal yapmak için tıklayın'}
+                        className="grid h-11 w-9 shrink-0 place-items-center text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => onTablo(sutunTuruDegistir(tablo, j, sutun.tur === 'sayi' ? 'etiket' : 'sayi'))}
+                        data-sutun-turu={sutun.tur}
+                      >
+                        <TurIsareti tur={sutun.tur} />
+                      </button>
+                    )}
+                    {j > 0 && (
                       <button
                         type="button"
                         aria-label={`${sutun.ad} sütununu sil`}

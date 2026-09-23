@@ -30,6 +30,7 @@ import {
   FractionObject,
   Point2D,
   MeasurementKind,
+  MeasurementLabelAnchor,
   CheckboxObject,
   ButtonObject,
   InputBoxObject,
@@ -78,7 +79,9 @@ import { useCurriculum } from './CurriculumContext';
 import { createId } from './ids';
 import { pointAngleAction, providesAngleArm } from '@/math/pointAngles';
 import { withLengthMeasurement } from '@/math/partialLengths';
-import { NOKTALI_SEKILLER, gorunurNoktaAdlari, noktalariyla, silmeIpucu } from '@/math/nesneAdlari';
+import { aci, alan, cevre, olcuMetni, uzunluk } from '@/math/matematikYazimi';
+import { GERI_AL_IPUCU, NOKTALI_SEKILLER, gorunurNoktaAdlari, noktalariyla, olcumParcasiMi, silmeIpucu } from '@/math/nesneAdlari';
+import { birlestirmeIpucu, birlestirmeToleransi, noktalariBirlestir, ustUsteleriBirlestir } from '@/math/noktaBirlestir';
 import {
   addArcMeasurement, arcMeasurementDependencies, arcNearMissHint, arcValueText, circlesThroughPoint, commonCircles, dropDanglingArcMeasurements,
   arcTitle, findArcMeasurement, resolveArc, type ArcSpec,
@@ -201,7 +204,11 @@ interface WorkspaceContextType {
   setLengthMeasurement: (fromPointId: string, toPointId: string, show: boolean) => void;
   measureArea: (objectId: string) => void;
   measurePerimeter: (objectId: string) => void;
-  measureAngleAtPoint: (pointId: string) => void;
+  /**
+   * Noktadaki açıyı ölçer. `armIds` verilirse (menüdeki "Açı ölç" alt menüsü bunu verir)
+   * TAM O açı kurulur; verilmezse kollar noktanın kendisinden bulunur.
+   */
+  measureAngleAtPoint: (pointId: string, armIds?: readonly [string, string]) => void;
   measureArcAngle: (shapeId: string) => void;
   /** İşaret kutusunu açıp kapatır; bağlı nesnelerin görünürlüğü buna eşitlenir. */
   toggleCheckbox: (checkboxId: string) => void;
@@ -221,6 +228,10 @@ interface WorkspaceContextType {
   connectPoints: (pointIds: string[]) => void;
   /** Seçili noktalar arasındaki doğru parçalarını kaldırır. */
   disconnectPoints: (pointIds: string[]) => void;
+  /** ÜST ÜSTE gelen iki noktayı tek noktaya indirir: biri kalır, her başvuru ona yönlenir (tek geçmiş adımı). */
+  mergePoints: (firstPointId: string, secondPointId: string) => void;
+  /** Sahnedeki bütün üst üste gelen noktaları birleştirir. */
+  mergeCoincidentPoints: (tolerance?: number) => void;
   /** Seçili noktalara en küçük karelerle polinom uydurup fonksiyon olarak ekler. */
   fitPolynomialToPoints: (pointIds: string[], degree: number) => void;
   /** Çokgenin tek bir kenarının uzunluk etiketini açar/kapatır. */
@@ -228,7 +239,7 @@ interface WorkspaceContextType {
   /** Çokgenin bütün kenar uzunluklarını gösterir veya gizler. */
   setAllPolygonEdgeLabels: (polygonId: string, show: boolean) => void;
   hideMeasurement: (objectId: string, kind: MeasurementKind | string) => void;
-  setLabelOffset: (objectId: string, kind: MeasurementKind | string, offset: Point2D, recordHistory?: boolean) => void;
+  setLabelOffset: (objectId: string, kind: MeasurementKind | string, offset: Point2D, recordHistory?: boolean, anchor?: MeasurementLabelAnchor | null) => void;
   measureArcLength: (arcId: string) => void;
   /**
    * Aynı çemberin üzerindeki iki nokta arasındaki yayı ölçer (çember BÖLÜNMEZ). Varsayılan küçük yay;
@@ -255,19 +266,34 @@ const MAX_HISTORY_LENGTH = 120;
 
 export const DEFAULT_ZOOM = 44;
 
-const DEFAULT_VIEWPORT: ViewportTransform = {
-  zoom: DEFAULT_ZOOM,
-  panX: 0,
-  panY: 0,
-  width: 1200,
-  height: 700,
+/**
+ * Ayarlar penceresindeki "Varsayılana Sıfırla"nın geri yüklediği GÖRÜNÜM alanları.
+ * Yakınlaştırma, kaydırma ve tuval ölçüsü buraya girmez: sıfırlama çizime bakışı bozmaz.
+ */
+export const VARSAYILAN_GORUNUM_AYARLARI = {
   showGrid: true,
   showAxes: true,
   showQuadrants: false,
   showCoordinates: false,
   showMeasurements: true,
   snapToGrid: false,
+  pointSnapMode: 'off',
   gridStep: 1,
+  gridStepAuto: true,
+  gridStyle: 'kareli',
+  gridOpacity: 1,
+  backgroundColor: '#ffffff',
+  rightAngleStyle: 'square',
+  blackWhite: false,
+} satisfies Partial<ViewportTransform>;
+
+const DEFAULT_VIEWPORT: ViewportTransform = {
+  zoom: DEFAULT_ZOOM,
+  panX: 0,
+  panY: 0,
+  width: 1200,
+  height: 700,
+  ...VARSAYILAN_GORUNUM_AYARLARI,
 };
 
 const KNOWN_OBJECT_TYPES = new Set<string>([
@@ -857,9 +883,12 @@ const baginiCoz = (o: MathObject): MathObject => {
  * fonksiyondan geçer; aynı şekil hangi yoldan silinirse silinsin aynı noktalar gider.
  *
  * 0) Taban: collectDependentIds (bağımlılar, şekle ait etiketler, kolu kopan açı, açının kolları, çember merkezi).
- * 1) Tohumlar: YALNIZCA istenen nokta tanımlı şekiller (çokgen, parça, doğru, ışın, çember, elips, yay, dilim). Başka bir
- *    silmenin sonucu giden şekil ve istenen bir NOKTAYLA zaten gidecek şekil (çerçeve A noktasının çevresindeyse ABC
- *    üçgeni ve AD parçası) tohum değildir: nokta silmek başka noktaları silmez, açı/ölçüm silmek hiç nokta silmez.
+ * 1) Tohumlar: nokta tanımlı şekiller (çokgen, parça, doğru, ışın, çember, elips, yay, dilim). Açıkça istenen şekil her
+ *    zaman tohumdur - çerçeveyle seçimde şekil de seçimin içindedir (isObjectInMarquee bir köşe kutuya girince şekli
+ *    seçer), o yüzden kutu nereye denk gelirse gelsin aynı noktalar gider. İstenen bir ŞEKİL yüzünden zincirde giden
+ *    şekiller de tohumdur (çemberin üzerindeki noktaya bağlı parçanın öbür ucu ortada kalmasın). Şekil OLMAYAN bir
+ *    isteğin (nokta, açı, ölçüm, metin) zincirinde giden şekil tohum olmaz: nokta silmek başka noktaları, açı/ölçüm
+ *    silmek hiçbir noktayı silmez. |AB| ölçüm parçası da (Uzunluk/Birim ölç) etiket sayılır, tohum olmaz.
  * 2) Adaylar: tohumların tanım noktaları (köşe, uç, merkez, yarıçap noktası, geçtiği noktalar) ve bunların kurulum
  *    kaynakları (orta nokta, oran, ayak, açıortay, üçgen köşesi/merkezi...); gizli yardımcılar dâhil. Dönüşümlerin
  *    (yansıma, döndürme, öteleme, büyütme) GÖRÜNÜR SERBEST kaynakları (döndürme merkezi O, vektör uçları) aday olmaz.
@@ -878,6 +907,11 @@ export function planDeletion(objects: MathObject[], ids: string[], options: Dele
   const sekilMi = (id: string) => {
     const o = byId.get(id);
     return !!o && NOKTALI_SEKILLER.has(o.type);
+  };
+  /** Kendi noktaları toplanabilecek şekil: nokta tanımlı ve ölçüm etiketi olmayan (|AB| ölçüm parçası nokta silmez). */
+  const tohumOlabilir = (id: string) => {
+    const o = byId.get(id);
+    return !!o && NOKTALI_SEKILLER.has(o.type) && !olcumParcasiMi(o);
   };
 
   if (options.keepPoints) {
@@ -900,11 +934,13 @@ export function planDeletion(objects: MathObject[], ids: string[], options: Dele
   const istenen = new Set(ids);
   const removal = collectDependentIds(objects, ids);
   const bos: DeletionPlan = { removal, shapeIds: [], ownPointIds: [], keptPointIds: [], unbindIds: [] };
-  const istenenNoktalar = ids.filter(noktaMi);
-  const noktayla = istenenNoktalar.length ? collectDependentIds(objects, istenenNoktalar) : new Set<string>();
-  const tohumlar = [...istenen]
-    .map((id) => byId.get(id))
-    .filter((o): o is MathObject => !!o && NOKTALI_SEKILLER.has(o.type) && !noktayla.has(o.id));
+  // Şekil olmayan isteklerin (nokta, açı, ölçüm, metin...) zinciri: bunlar yüzünden giden şekil tohum olmaz, çünkü
+  // nokta silmek başka noktaları, açı/ölçüm silmek hiçbir noktayı silmez.
+  const sekilOlmayanlar = ids.filter((id) => byId.has(id) && !tohumOlabilir(id));
+  const yanSonuc = sekilOlmayanlar.length ? collectDependentIds(objects, sekilOlmayanlar) : new Set<string>();
+  const tohumlar = objects.filter(
+    (o) => removal.has(o.id) && tohumOlabilir(o.id) && (istenen.has(o.id) || !yanSonuc.has(o.id))
+  );
   if (!tohumlar.length) return bos;
 
   // 2) Adaylar: tanım noktaları ve kurulum kaynakları (yalnızca noktalar; şekil ve kaydırıcıya geçilmez)
@@ -994,7 +1030,8 @@ export function planDeletion(objects: MathObject[], ids: string[], options: Dele
   for (const id of gidecek) removal.add(id);
   return {
     ...bos,
-    shapeIds: tohumlar.map((o) => o.id),
+    // İpucu ve yanıt yalnızca AÇIKÇA istenen şekli anar; zincirde giden şekiller "Bağlı N nesne" sayısına girer.
+    shapeIds: tohumlar.filter((o) => istenen.has(o.id)).map((o) => o.id),
     ownPointIds: objects.filter((o) => adaylar.has(o.id) && removal.has(o.id)).map((o) => o.id),
   };
 }
@@ -1006,8 +1043,10 @@ export function collectDeletionIds(objects: MathObject[], ids: string[], options
 
 /** Planı uygular: silinecekleri çıkarır, keepPoints'te silinen şeklin üzerindeki noktaların bağını çözer. Saftır. */
 export function applyDeletionPlan(objects: MathObject[], plan: DeletionPlan): MathObject[] {
-  if (!plan.removal.size && !plan.unbindIds.length) return objects;
   const coz = new Set(plan.unbindIds);
+  // Sahnede gerçekten değişen bir şey yoksa AYNI dizi döner: eskimiş bir seçimle silme boş bir geçmiş adımı açmasın
+  // (docReducer, raw === prev olduğunda commit'i atar).
+  if (!objects.some((o) => plan.removal.has(o.id) || coz.has(o.id))) return objects;
   return objects.filter((o) => !plan.removal.has(o.id)).map((o) => (coz.has(o.id) ? baginiCoz(o) : o));
 }
 
@@ -1356,13 +1395,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     setStyleSettings(kayitli);
   }, []);
 
+  /** Kayıt state'e yansıdı mı? Yansımadan önce yazmak kullanıcının ayarlarını siliyordu. */
+  const stilYuklendiRef = useRef(false);
+
   useEffect(() => {
     const okunan = okunanStilRef.current;
     // Henüz okumadıysak yazma.
     if (!okunan) return;
+    if (styleSettings === okunan) stilYuklendiRef.current = true;
     // Okuma yapıldı ama state'e HENÜZ yansımadıysa yazma: aksi hâlde bu efekt,
     // aynı commit'te hâlâ varsayılan olan durumu kaydın üzerine yazıp ayarları siliyordu.
-    if (styleSettings === DEFAULT_STYLE_SETTINGS && okunan !== DEFAULT_STYLE_SETTINGS) return;
+    // (Kayıt yansıdıktan SONRA varsayılana dönmek kullanıcının "Varsayılana Sıfırla" isteğidir; yazılır.)
+    if (!stilYuklendiRef.current && styleSettings === DEFAULT_STYLE_SETTINGS) return;
     try {
       localStorage.setItem(STYLE_STORAGE_KEY, JSON.stringify(styleSettings));
     } catch {}
@@ -1471,7 +1515,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const saved = loadSavedSandboxProject();
         dispatch({ type: 'reset', objects: saved?.objects ?? [], description: saved ? 'Kayıtlı çalışma açıldı' : 'Boş çalışma alanı', persist: true });
         if (saved?.viewport) setViewport(prev => ({ ...prev, ...saved.viewport, width: prev.width, height: prev.height }));
-        if (saved?.styleSettings) setStyleSettings(saved.styleSettings);
+        if (saved?.styleSettings) setStyleSettings({ ...DEFAULT_STYLE_SETTINGS, ...saved.styleSettings });
         if (saved?.layoutMode) setLayoutMode(saved.layoutMode);
       } catch (error) {
         dispatch({ type: 'reset', objects: [], description: 'Kayıt açılamadı', persist: false });
@@ -2103,7 +2147,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
    * aralarında bir açı nesnesi oluşturur. Kullanıcıdan üç nokta seçmesi istenmez.
    */
   const measureAngleAtPoint = useCallback(
-    (pointId: string) => {
+    (pointId: string, armIds?: readonly [string, string]) => {
       // Karar ve doğrulama commit'ten ÖNCE, mevcut nesneler üzerinden verilir.
       // (Güncelleyicinin içinde yan etki üretmek StrictMode'da iki kez çalışır ve yanlış sonuç verir.)
       const vertex = objects.find((o) => o.id === pointId && o.type === 'point') as PointObject | undefined;
@@ -2113,7 +2157,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       // parça/doğru/ışın uçları ve çokgen komşu köşeleridir; çember merkezi kenar sayılmaz.
       // Yay / daire diliminin MERKEZİNE tıklandıysa merkez açıyı ŞEKLİN KENDİSİ gösterir;
       // burada ayrı bir AngleObject üretmek aynı açı için ikinci bir rozet doğuruyordu.
-      const aciEylemi = pointAngleAction(pointId, objects);
+      // KOLLAR VERİLDİYSE seçim menüde yapılmıştır (üç ve daha çok kollu köşede "Açı ölç"
+      // alt menüsü): merkez açı/komşu arama yapılmaz, doğrudan o açı kurulur.
+      const aciEylemi = armIds ? null : pointAngleAction(pointId, objects);
       if (aciEylemi?.kind === 'central') {
         // Bölünmüş çemberin merkezinde iki yay olabilir: merkez açıları birlikte açılıp kapanır
         const kimlikler = new Set(aciEylemi.shapes.map((s) => s.id));
@@ -2125,12 +2171,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setHintMessage(acik ? 'Merkez açı gizlendi.' : 'Merkez açı gösteriliyor.');
         return;
       }
-      if (!aciEylemi) {
+      const kollar = armIds ?? (aciEylemi?.kind === 'vertex' ? aciEylemi.neighbourIds : null);
+      if (!kollar) {
         setHintMessage(`${vertex.label || 'Bu'} noktasında açı yok: en az iki kenar gerekiyor.`);
         return;
       }
 
-      const [p1Id, p3Id] = aciEylemi.neighbourIds;
+      const [p1Id, p3Id] = kollar;
       const p1 = objects.find((o) => o.id === p1Id && o.type === 'point') as PointObject | undefined;
       const p3 = objects.find((o) => o.id === p3Id && o.type === 'point') as PointObject | undefined;
       if (!p1 || !p3) {
@@ -2153,12 +2200,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             ((o.point1Id === p1.id && o.point3Id === p3.id) ||
               (o.point1Id === p3.id && o.point3Id === p1.id))
         ) as AngleObject | undefined;
-        if (mevcut && mevcut.showValue === false) {
+        // Nesne listesindeki gözle ya da "… açısını gizle" komutuyla GİZLENMİŞ de olabilir: o zaman
+        // yalnız değeri açmak yetmez, açının kendisi de geri gelmeli (yoksa madde hiçbir şey yapmıyor gibi görünür).
+        if (mevcut && (mevcut.showValue === false || mevcut.visible === false)) {
           commit(
-            (prev) => prev.map((o) => (o.id === mevcut.id ? ({ ...o, showValue: true } as MathObject) : o)),
+            (prev) =>
+              prev.map((o) => (o.id === mevcut.id ? ({ ...o, showValue: true, visible: true } as MathObject) : o)),
             `${mevcut.label} yeniden gösterildi`
           );
-          setHintMessage('Açı etiketi yeniden gösteriliyor.');
+          setHintMessage(`${mevcut.label} yeniden gösteriliyor.`);
         } else {
           setHintMessage('Bu açı zaten ölçülmüş.');
         }
@@ -2410,6 +2460,84 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       setHintMessage(`${silinecek.length} doğru parçası kaldırıldı. Noktalar yerinde kaldı.`);
     },
     [objects, commit]
+  );
+
+  /**
+   * ÜST ÜSTE gelen iki noktayı TEK noktaya indirir (src/math/noktaBirlestir.ts).
+   *
+   * Biri kalır, diğeri gider; sahnedeki her başvuru kalan noktaya yönlendirilir. Birleşmeyle
+   * çizilemez duruma gelen nesneler (iki ucu aynı parça, köşesi yinelenen çokgen…) aynı adımda
+   * kaldırılır: tek Ctrl+Z hepsini geri getirir.
+   */
+  const mergePoints = useCallback(
+    (firstPointId: string, secondPointId: string) => {
+      const onizleme = noktalariBirlestir(latest.current.objects, firstPointId, secondPointId);
+      if (!onizleme.changed) {
+        setHintMessage(onizleme.hata ?? 'Noktalar birleştirilemedi.');
+        return;
+      }
+      // Adımın gerçekten uygulanacağından emin ol: commit'in çözümleme zinciri (resolveUpdater) hata
+      // verirse docReducer adımı sessizce reddeder; o hâlde "birleştirildi" demek yanlış olur, üstelik
+      // kullanıcı Ctrl+Z ile BAŞKA bir adımını geri alırdı.
+      try {
+        resolveUpdater(onizleme.objects, latest.current.objects);
+      } catch (error) {
+        setHintMessage(error instanceof Error ? error.message : 'Noktalar birleştirilemedi.');
+        return;
+      }
+      const giden = onizleme.dropId;
+      commit(
+        (prev) => {
+          const adim = noktalariBirlestir(prev, firstPointId, secondPointId);
+          return adim.changed ? adim.objects : prev;
+        },
+        `${onizleme.dropLabel} noktası ${onizleme.keepLabel} ile birleştirildi`
+      );
+      const dusenler = new Set([giden, ...onizleme.kaldirilanlar.map((o) => o.id)]);
+      setSelectedObjectIds((prev) => (prev.some((id) => dusenler.has(id)) ? prev.filter((id) => !dusenler.has(id)) : prev));
+      setPendingPointIds((prev) => (prev.some((id) => dusenler.has(id)) ? prev.filter((id) => !dusenler.has(id)) : prev));
+      setHintMessage(birlestirmeIpucu(onizleme));
+    },
+    [commit, setHintMessage]
+  );
+
+  /** Sahnedeki bütün üst üste gelen noktaları birleştirir ("üst üste gelen noktaları birleştir"). */
+  const mergeCoincidentPoints = useCallback(
+    (tolerance?: number) => {
+      const tol = tolerance ?? birlestirmeToleransi(latest.current.viewport.zoom);
+      const onizleme = ustUsteleriBirlestir(latest.current.objects, tol);
+      if (onizleme.birlesme === 0) {
+        setHintMessage(
+          onizleme.atlanan
+            ? 'Üst üste gelen noktalar birleştirilemedi: kurulumları bozulurdu.'
+            : 'Üst üste gelen nokta yok; bütün noktalar ayrı yerlerde.'
+        );
+        return;
+      }
+      try {
+        resolveUpdater(onizleme.objects, latest.current.objects);
+      } catch (error) {
+        setHintMessage(error instanceof Error ? error.message : 'Noktalar birleştirilemedi.');
+        return;
+      }
+      const kalanIdler = new Set(onizleme.objects.map((o) => o.id));
+      commit(
+        (prev) => {
+          const adim = ustUsteleriBirlestir(prev, tol);
+          return adim.birlesme ? adim.objects : prev;
+        },
+        `${onizleme.birlesme} nokta çifti birleştirildi`
+      );
+      setSelectedObjectIds((prev) => (prev.some((id) => !kalanIdler.has(id)) ? prev.filter((id) => kalanIdler.has(id)) : prev));
+      setPendingPointIds((prev) => (prev.some((id) => !kalanIdler.has(id)) ? prev.filter((id) => kalanIdler.has(id)) : prev));
+      setHintMessage(
+        `Üst üste gelen ${onizleme.birlesme} nokta çifti birleştirildi.` +
+          (onizleme.kaldirilan ? ` Çizilemez duruma gelen ${onizleme.kaldirilan} nesne kaldırıldı.` : '') +
+          (onizleme.atlanan ? ` ${onizleme.atlanan} çift birleştirilemedi (kurulumları bozulurdu).` : '') +
+          ` ${GERI_AL_IPUCU}`
+      );
+    },
+    [commit, setHintMessage]
   );
 
   /**
@@ -2911,13 +3039,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
    * `recordHistory=false` sürükleme sırasında kullanılır; bırakılınca tek adım kaydedilir.
    */
   const setLabelOffset = useCallback(
-    (objectId: string, kind: MeasurementKind | string, offset: Point2D, recordHistory = true) => {
+    (objectId: string, kind: MeasurementKind | string, offset: Point2D, recordHistory = true, anchor?: MeasurementLabelAnchor | null) => {
       const guncelle = (prev: MathObject[]) =>
-        prev.map((o) =>
-          o.id === objectId
-            ? ({ ...o, labelOffsets: { ...(o.labelOffsets || {}), [kind]: offset } } as MathObject)
-            : o
-        );
+        prev.map((o) => {
+          if (o.id !== objectId) return o;
+          const labelAnchors = { ...o.labelAnchors };
+          if (anchor === null) delete labelAnchors[kind];
+          else if (anchor !== undefined) labelAnchors[kind] = anchor;
+          return { ...o, labelOffsets: { ...o.labelOffsets, [kind]: offset }, labelAnchors } as MathObject;
+        });
       if (recordHistory) commit(guncelle, 'Ölçüm etiketi taşındı');
       else dispatch({ type: 'set', next: guncelle });
     },
@@ -3270,8 +3400,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           setPendingPointIds(nextPending);
           setHintMessageState(
             nextPending.length === 1
-              ? '📐 Açı ölçümü: şimdi köşe (tepe) noktasına tıklayın'
-              : '📐 Açı ölçümü: son olarak üçüncü noktaya tıklayın'
+              ? 'Açı ölçümü: şimdi köşe (tepe) noktasına tıklayın'
+              : 'Açı ölçümü: son olarak üçüncü noktaya tıklayın'
           );
           return;
         }
@@ -3285,9 +3415,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const measured = formatTurkishNumber(calculateAngleDegrees(mp1, mVertex, mp3), 1);
         setHintMessageState(
-          `📐 Açı Ölçümü: ∠${mp1.label}${mVertex.label}${mp3.label} = ${measured}°`
+          `Açı ölçümü: ${olcuMetni(aci(mp1, mVertex, mp3, calculateAngleDegrees(mp1, mVertex, mp3), { basamak: 1 }))}`
         );
         return;
       }
@@ -3891,7 +4020,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             commitWith([newSegment], `${segLabel} = ${distStr} ${unit} ölçüldü`);
             // İpucu kapsülü hem etkinlikte hem serbest masada görünür ve kendiliğinden
             // temizlenir; activeSuccessMessage yalnızca etkinlik başarı kutusuna aittir.
-            setHintMessageState(`📏 ${isCm ? 'Uzunluk' : 'Birim'} Ölçümü: ${distStr} ${unit} (${segLabel})`);
+            setHintMessageState(`${isCm ? 'Uzunluk' : 'Birim'} ölçümü: ${olcuMetni(uzunluk(p1, p2, rawDist, { birim: isCm ? 'cm' : 'br' }))}`);
           } else {
             commitPendingOnly();
           }
@@ -3906,8 +4035,6 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         // Çokgen köşe noktalarını topla; ilk noktaya tekrar tıklanınca kapat
         if (pending.length >= 3 && pending[0] === pointId) {
           const polyPoints = pending.map((id) => pointOf(id)).filter(Boolean) as PointObject[];
-          const areaVal = formatTurkishNumber(calculatePolygonArea(polyPoints));
-          const perimVal = formatTurkishNumber(calculatePolygonPerimeter(polyPoints));
           const isArea = tool === 'measure_area';
 
           const newPolygon: PolygonObject = {
@@ -3926,7 +4053,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           };
           commitWith(
             [newPolygon],
-            isArea ? `Çokgen alanı hesaplandı (${areaVal} br²)` : `Çokgen çevresi hesaplandı (${perimVal} br)`
+            isArea
+              ? `${olcuMetni(alan(polyPoints, calculatePolygonArea(polyPoints)))} hesaplandı`
+              : `${olcuMetni(cevre(polyPoints, calculatePolygonPerimeter(polyPoints)))} hesaplandı`
           );
           setPendingPointIds([]);
         } else if (!pending.includes(pointId)) {
@@ -4321,7 +4450,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const hasShape = currentObjects.some((o) => o.id === currentSelectedId && o.type === 'polygon');
         setHintMessageState(
           hasShape
-            ? 'Döndürmek için şeklin üzerindeki 🔄 tutamacını sürükleyin veya hazır derece düğmelerine tıklayın'
+            ? 'Döndürmek için şeklin üzerindeki döndürme tutamacını sürükleyin veya hazır derece düğmelerine tıklayın'
             : 'Önce bir şekil seçin'
         );
         return;
@@ -4388,7 +4517,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const applyProjectMetadata = useCallback((project: ProjectFile) => {
     setViewport(prev => ({ ...DEFAULT_VIEWPORT, ...project.viewport, width: prev.width, height: prev.height }));
-    setStyleSettings(project.styleSettings ?? DEFAULT_STYLE_SETTINGS);
+    setStyleSettings({ ...DEFAULT_STYLE_SETTINGS, ...(project.styleSettings ?? {}) });
     setLayoutMode(project.layoutMode ?? (project.solids.length ? '3d_only' : '2d_only'));
     documentRef.current.sceneBridge?.restore(project.solids, project.camera3D);
     setSelectedObjectIds([]); setPendingPointIds([]); setActiveToolState('select');
@@ -4605,6 +4734,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       splitPolygon,
       connectPoints,
       disconnectPoints,
+      mergePoints,
+      mergeCoincidentPoints,
       fitPolynomialToPoints,
       togglePolygonEdgeLabel,
       setAllPolygonEdgeLabels,
@@ -4702,6 +4833,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       splitPolygon,
       connectPoints,
       disconnectPoints,
+      mergePoints,
+      mergeCoincidentPoints,
       fitPolynomialToPoints,
       togglePolygonEdgeLabel,
       setAllPolygonEdgeLabels,

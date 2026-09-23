@@ -147,6 +147,13 @@ export function DaireGrafigi({
     etiket: satirEtiketi(tablo, d.satir),
     secili: seciliSatir === d.satir,
   }));
+  // Lejant kaba sığmalı: çok dilimde satır aralığı 17 px'e iner, yine sığmazsa kalanlar "… ve k dilim daha" olur
+  const lejantAlan = lejantSagda ? H - 36 - ustEk - 6 : lejantY - 4;
+  const lejantSatirSayisi = Math.max(1, lejantSagda ? lejantOgeleri.length : Math.ceil(lejantOgeleri.length / 2));
+  const lejantSatirYuk = Math.min(24, Math.max(17, Math.floor(lejantAlan / lejantSatirSayisi)));
+  const sigacakOge = Math.max(1, Math.floor(lejantAlan / lejantSatirYuk)) * (lejantSagda ? 1 : 2);
+  const lejantKirpildi = lejantOgeleri.length > sigacakOge;
+  const gosterilenLejant = lejantKirpildi ? lejantOgeleri.slice(0, Math.max(1, sigacakOge - (lejantSagda ? 1 : 2))) : lejantOgeleri;
 
   return (
     <svg
@@ -319,8 +326,8 @@ export function DaireGrafigi({
 
       {/* Lejant */}
       <g transform={lejantSagda ? `translate(${W - lejantG + 8}, ${36 + ustEk})` : `translate(16, ${H - lejantY + 4})`}>
-        {lejantOgeleri.map((o, k) => {
-          const satirYuk = 24;
+        {gosterilenLejant.map((o, k) => {
+          const satirYuk = lejantSatirYuk;
           const x = lejantSagda ? 0 : (k % 2) * ((W - 32) / 2);
           const y = lejantSagda ? k * satirYuk : Math.floor(k / 2) * satirYuk;
           const metin = `${o.etiket}: ${sayiYaz(o.d.deger)} (${sayiYaz(o.d.aci, 1)}°, %${sayiYaz(o.d.yuzde, 1)})`;
@@ -341,6 +348,18 @@ export function DaireGrafigi({
             </g>
           );
         })}
+        {lejantKirpildi && (
+          <text
+            x={0}
+            y={(lejantSagda ? gosterilenLejant.length : Math.ceil(gosterilenLejant.length / 2)) * lejantSatirYuk + 12}
+            fontSize={13}
+            fontWeight={600}
+            fill={RENK.solukMetin}
+            data-lejant-kirpildi
+          >
+            … ve {lejantOgeleri.length - gosterilenLejant.length} dilim daha
+          </text>
+        )}
       </g>
     </svg>
   );

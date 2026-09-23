@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useWorkspace } from '@/state/WorkspaceContext';
+import { VARSAYILAN_GORUNUM_AYARLARI, useWorkspace } from '@/state/WorkspaceContext';
 import { useTheme } from '@/state/ThemeContext';
-import { ToolMode } from '@/types/workspace';
+import { DEFAULT_STYLE_SETTINGS, ToolMode } from '@/types/workspace';
 import { LayoutMode } from './PropertiesPanel';
 import { exportPng, exportSvg, exportPdf, exportWord, printSvg } from '@/utils/exportCanvas';
 import { parseProjectFile } from '@/math/projectFile';
@@ -85,6 +85,8 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const [infoModalType, setInfoModalType] = useState<'shortcuts' | 'about' | 'guide' | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'stil' | 'duzlem' | 'genel'>('stil');
+  /** "Varsayılana Sıfırla" iki adımlıdır: ilk basış onay ister, 4 saniye içinde ikinci basış uygular. */
+  const [sifirlamaOnayi, setSifirlamaOnayi] = useState(false);
   // Ayarlar > Düzlem > Izgara aralığı: özel değer kutusu
   const [ozelAralik, setOzelAralik] = useState('');
   const [ozelAralikHata, setOzelAralikHata] = useState<string | null>(null);
@@ -146,6 +148,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
     activateTool,
     requestClearAll,
     studioDimension,
+    setStyleSettings,
   } = useWorkspace();
 
   const layoutMode = props.layoutMode ?? ctxLayoutMode;
@@ -1800,8 +1803,32 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
               )}
             </div>
 
-            {/* Modal Alt Buton */}
-            <div className="px-5 py-3 border-t border-border/70 bg-muted/20 flex justify-end shrink-0">
+            {/* Modal Alt Butonlar */}
+            <div className="px-5 py-3 border-t border-border/70 bg-muted/20 flex items-center justify-between gap-3 shrink-0">
+              {/* Bütün ayarları varsayılana döndürür; yanlışlıkla basmaya karşı iki adımlıdır.
+                  Çizime bakış (yakınlaştırma, kaydırma) korunur; nesneler silinmez. */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!sifirlamaOnayi) {
+                    setSifirlamaOnayi(true);
+                    window.setTimeout(() => setSifirlamaOnayi(false), 4000);
+                    return;
+                  }
+                  setSifirlamaOnayi(false);
+                  setStyleSettings(DEFAULT_STYLE_SETTINGS);
+                  setViewport((prev) => ({ ...prev, ...VARSAYILAN_GORUNUM_AYARLARI }));
+                }}
+                aria-label="Bütün ayarları varsayılana döndür"
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
+                  sifirlamaOnayi
+                    ? 'bg-destructive/10 border-destructive text-destructive'
+                    : 'bg-card border-border text-muted-foreground hover:text-foreground hover:border-primary/50'
+                }`}
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>{sifirlamaOnayi ? 'Emin misiniz? Sıfırla' : 'Varsayılana Sıfırla'}</span>
+              </button>
               <button
                 onClick={() => setIsSettingsModalOpen(false)}
                 className="px-4 py-2 rounded-xl bg-primary text-primary-foreground font-bold text-xs hover:bg-primary/90 transition-colors cursor-pointer shadow-xs"

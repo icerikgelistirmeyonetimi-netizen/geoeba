@@ -5,6 +5,7 @@ import type { AngleObject, ArcObject, CircleObject, EllipseObject, MathObject, P
 vi.mock('../handlers', () => ({ HANDLERS: [], COMMAND_CATALOG: [] }));
 import { reflectAcross, resolveCommandBindings, rotateAround } from '@/math/commandBindings';
 import { handlers } from '../handlers/transforms';
+import { createImages, translateMap } from '../handlers/transforms/core';
 import { rankHandlers } from '../engine';
 import { COLORS, CommandScene } from '../scene';
 import { parseClause } from '../text';
@@ -66,6 +67,95 @@ function rich(): MathObject[] {
     s.addEllipse(H.id, 3, 1.5, { rotation: 20 });
   });
 }
+
+describe('dönüşüm görüntüsünde ölçüm etiketi çapaları', () => {
+  it('çapayı görüntü noktalarına bağlar; hizalama, kayıklık ve kaynak korunur', () => {
+    const source = triangle((s, ids) => s.update(ids.poly, {
+      labelAnchors: { area: { pointIds: [ids.A, ids.B, ids.C], offset: { x: 3, y: -2 }, alignment: 'left' } },
+      labelOffsets: { area: { x: 1, y: 2 } },
+    }));
+    const original = byType(source, 'polygon')[0];
+    const result = expectOk(handlers, "ABC'yi (2, 3) vektörüyle ötele", source);
+    const image = byLabel(result.objects, "A'B'C'") as PolygonObject;
+    expect(image.labelAnchors?.area).toEqual({
+      pointIds: ["A'", "B'", "C'"].map(label => point(result.objects, label).id),
+      offset: { x: 3, y: -2 }, alignment: 'left',
+    });
+    expect(image.labelOffsets).toEqual(original.labelOffsets);
+    expect(original.labelAnchors?.area.pointIds).toEqual(original.pointIds);
+    expect(byLabel(result.objects, 'ABC')?.labelAnchors).toEqual(original.labelAnchors);
+  });
+
+  it.each([false, true])('ortak çapanın bütün hedefler tamamlanınca eşlenmesi hedef sırasından bağımsızdır (%s)', (ters) => {
+    const source = triangle((s, ids) => {
+      const ab = s.addSegment(ids.A, ids.B);
+      s.addSegment(ids.B, ids.C);
+      s.update(ab.id, {
+        labelAnchors: { length: { pointIds: [ids.A, ids.B, ids.C], offset: { x: 2, y: 3 }, alignment: 'right' } },
+      });
+    });
+    const scene = new CommandScene(source);
+    const targets = byType(scene.objects, 'segment');
+    const result = createImages(scene, ters ? [...targets].reverse() : targets, translateMap(scene, { v: { x: 1, y: 1 } }));
+    const image = result.images.find(o => o.label === "[A'B']")!;
+    expect(image.labelAnchors?.length.pointIds).toEqual(["A'", "B'", "C'"].map(label => point(scene.objects, label).id));
+    expect(scene.get(image.id)?.labelAnchors).toEqual(image.labelAnchors);
+    expect(result.created).toBe(5); // Üç ortak nokta, iki parça.
+    expect(byType(scene.objects, 'point')).toHaveLength(6);
+  });
+
+  it('eşlenmeyen ortak çapa düşer; bağımsız çapa ve eski kayıklık kalır, fazladan nokta oluşmaz', () => {
+    const source = triangle((s, ids) => {
+      const ab = s.addSegment(ids.A, ids.B);
+      s.update(ab.id, {
+        labelAnchors: {
+          length: { pointIds: [ids.A, ids.B, ids.C], offset: { x: 2, y: 3 }, alignment: 'left' },
+          pointLabel: { pointIds: [ids.A, ids.B], offset: { x: 0, y: 1 }, alignment: 'center' },
+        },
+        labelOffsets: { length: { x: 4, y: -2 } },
+      });
+    });
+    const scene = new CommandScene(source);
+    const [image] = createImages(scene, byType(scene.objects, 'segment'), translateMap(scene, { v: { x: 1, y: 1 } })).images;
+    expect(image.labelAnchors?.length).toBeUndefined();
+    expect(image.labelAnchors?.pointLabel.pointIds).toEqual(["A'", "B'"].map(label => point(scene.objects, label).id));
+    expect(image.labelOffsets).toEqual({ length: { x: 4, y: -2 } });
+    expect(scene.objects.some(o => o.label === "C'")).toBe(false);
+    expect(byType(scene.objects, 'point')).toHaveLength(5);
+    expect(byType(source, 'segment')[0].labelAnchors?.length.pointIds).toContain(point(source, 'C').id);
+  });
+
+  it('hiçbir çapa tamamlanamıyorsa eski noktalara bağlı boş bir çapa bırakmaz', () => {
+    const source = triangle((s, ids) => {
+      const ab = s.addSegment(ids.A, ids.B);
+      s.update(ab.id, {
+        labelAnchors: { length: { pointIds: [ids.A, ids.C], offset: { x: 2, y: 3 }, alignment: 'left' } },
+        labelOffsets: { length: { x: 4, y: -2 } },
+      });
+    });
+    const scene = new CommandScene(source);
+    const [image] = createImages(scene, byType(scene.objects, 'segment'), translateMap(scene, { v: { x: 1, y: 1 } })).images;
+    expect(image.labelAnchors).toBeUndefined();
+    expect(image.labelOffsets).toEqual({ length: { x: 4, y: -2 } });
+  });
+
+  it('yeniden kullanılan görüntünün sonradan düzenlenmiş çapası ezilmez', () => {
+    const source = triangle((s, ids) => s.update(ids.poly, {
+      labelAnchors: { area: { pointIds: [ids.A, ids.B, ids.C], offset: { x: 1, y: 1 }, alignment: 'left' } },
+    }));
+    const scene = new CommandScene(source);
+    const targets = byType(scene.objects, 'polygon');
+    const map = translateMap(scene, { v: { x: 1, y: 1 } });
+    const [image] = createImages(scene, targets, map).images;
+    const changed = { area: { pointIds: [point(scene.objects, "A'").id], offset: { x: 8, y: 9 }, alignment: 'right' as const } };
+    scene.update(image.id, { labelAnchors: changed });
+    const repeated = createImages(scene, targets, map);
+    expect(repeated.created).toBe(0);
+    expect(repeated.reused).toBe(1);
+    expect(repeated.images[0].labelAnchors).toEqual(changed);
+    expect(scene.get(image.id)?.labelAnchors).toEqual(changed);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Örnekler

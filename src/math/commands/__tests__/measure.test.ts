@@ -81,7 +81,7 @@ describe('legacy measure behaviour', () => {
     expect([angle.point1Id, angle.vertexPointId, angle.point3Id]).toEqual(['C', 'A', 'B'].map(l => point(b.objects, l).id));
     expect(angle.reflex).toBeFalsy();
     expect(angle.showValue).toBe(true);
-    expect(a.message).toContain('∠CAB = 90°');
+    expect(a.message).toContain('m(∠CAB) = 90°');
     expect(a.selectedIds).toEqual([angle.id]);
     expect(byType(a.objects, 'segment')).toHaveLength(0);
   });
@@ -110,7 +110,7 @@ describe('legacy measure behaviour', () => {
     const per = expectOk(handlers, 'ABC çevresini ölç', triangle());
     expect(poly(per.objects).showPerimeter).toBe(true);
     expect(poly(per.objects).showArea).toBe(false);
-    expect(per.message).toContain('çevre = 12 br');
+    expect(per.message).toContain('Ç(ABC) = 12 br');
     const edges = expectOk(handlers, 'Üçgenin tüm kenarlarını ölç', triangle());
     expect(poly(edges.objects).edgeLabels).toEqual([0, 1, 2]);
     expect(edges.message).toContain('|AB| = 4 br, |BC| = 5 br, |CA| = 3 br');
@@ -132,7 +132,7 @@ describe('area and perimeter', () => {
     const scene = triangle();
     const r = expectOk(handlers, text, scene);
     expect(poly(r.objects).showArea).toBe(true);
-    expect(r.message).toContain('alan = 6 br²');
+    expect(r.message).toContain('A(ABC) = 6 br²');
     expect(r.selectedIds).toEqual([poly(scene).id]);
   });
 
@@ -148,7 +148,7 @@ describe('area and perimeter', () => {
     expect(byType(c.objects, 'circle')[0].showArea).toBe(true);
     expect(c.message).toContain('≈ 28,27 br²');
     const byName = expectOk(handlers, "c1'in alanı nedir", circle());
-    expect(byName.message).toContain('c1: alan = ≈ 28,27 br²');
+    expect(byName.message).toContain('Ç(M, r): alan = πr² ≈ 28,27 br²');
     const centre = expectOk(handlers, "M merkezli çemberin çevresi ne kadar", circle());
     expect(centre.message).toContain('≈ 18,85 br');
     const e = expectOk(handlers, 'Elipsin alanını göster', ellipse());
@@ -161,14 +161,14 @@ describe('area and perimeter', () => {
     expect(sp.message).toContain(`≈ ${(Math.PI + 4).toFixed(2).replace('.', ',')} br`);
     const both = expectOk(handlers, 'ABC üçgeninin alanını ve çevresini hesapla', triangle());
     expect(poly(both.objects)).toMatchObject({ showArea: true, showPerimeter: true });
-    expect(both.message).toContain('çevre = 12 br');
+    expect(both.message).toContain('Ç(ABC) = 12 br');
     const perimeter = expectOk(handlers, 'Şeklin etrafının toplamı ne kadar', triangle());
     expect(poly(perimeter.objects).showPerimeter).toBe(true);
   });
 
   it('answers for bare points without a polygon', () => {
     const r = unchanged(pointsOnly(), "ABC'nin alanı kaç?");
-    expect(r.message).toContain('alan = 6 br²');
+    expect(r.message).toContain('A(ABC) = 6 br²');
     expect(r.message).toContain('çizili çokgen yok');
   });
 
@@ -292,7 +292,7 @@ describe('angles', () => {
     expect(angle).toMatchObject({ label: '∠ABC', color: '#f59e0b', showValue: true });
     expect(angle.vertexPointId).toBe(point(r.objects, 'B').id);
     expect(byType(r.objects, 'segment')).toHaveLength(0);
-    expect(r.message).toContain('∠ABC = 90°');
+    expect(r.message).toContain('m(∠ABC) = 90°');
     const again = expectOk(handlers, 'CBA açısını göster', r.objects);
     expect(byType(again.objects, 'angle')).toHaveLength(1);
     const three = expectOk(handlers, 'A, B ve C noktalarının oluşturduğu açıyı ölç', pointsOnly());
@@ -311,7 +311,7 @@ describe('angles', () => {
 
   it('answers questions without creating angles', () => {
     const r = unchanged(triangle(), 'A köşesi kaç derecedir');
-    expect(r.message).toContain('∠CAB = 90°');
+    expect(r.message).toContain('m(∠CAB) = 90°');
     const q = unchanged(pointsOnly(), 'ABC açısı kaç derece?');
     expect(q.message).toContain('90°');
     const existing = expectOk(handlers, 'B açısını ölç', triangle());
@@ -324,7 +324,7 @@ describe('angles', () => {
     const r = expectOk(handlers, 'M açısını ölç', arc().map(o => o.type === 'arc' ? { ...o, showCentralAngle: false } as MathObject : o));
     expect(byType(r.objects, 'angle')).toHaveLength(0);
     expect(byType(r.objects, 'arc')[0].showCentralAngle).toBe(true);
-    expect(r.message).toContain('merkez açı = 90°');
+    expect(r.message).toContain('m(S͡D) = 90°');
     const three = expectOk(handlers, 'SMD açısını ölç', arc());
     expect(byType(three.objects, 'angle')).toHaveLength(0);
   });
@@ -339,6 +339,66 @@ describe('angles', () => {
     expect(r.message).toContain('90°');
   });
 
+  // E köşesinde üç kol (I yukarı, F sağda, G sol-aşağı): "E açısı" tek başına belirsizdir.
+  const ucKollu = () => build(s => {
+    const E = s.addPoint({ x: 0, y: 0 }, { label: 'E' });
+    const I = s.addPoint({ x: 0, y: 3 }, { label: 'I' });
+    const F = s.addPoint({ x: 4, y: 0 }, { label: 'F' });
+    const G = s.addPoint({ x: -3, y: -3 }, { label: 'G' });
+    s.addSegment(E.id, I.id); s.addSegment(E.id, F.id); s.addSegment(E.id, G.id);
+  });
+
+  it('asks which angle when a vertex has three or more arms', () => {
+    const mesaj = expectFail(handlers, 'E açısını ölç', ucKollu());
+    expect(mesaj).toMatch(/E noktasında üç açı var/);
+    expect(mesaj).toContain('FEI');
+    expect(mesaj).toContain('IEG');
+    expect(mesaj).toContain('GEF');
+    expect(mesaj).toMatch(/Hangisini ölçeyim/);
+    // Üç harfle yazmak hâlâ çalışır ve TAM o açıyı ölçer
+    const r = expectOk(handlers, 'IEF açısını ölç', ucKollu());
+    expect(byType(r.objects, 'angle')).toHaveLength(1);
+    expect(r.message).toContain('90°');
+  });
+
+  it('measures every angle at a vertex on request', () => {
+    const r = expectOk(handlers, 'E noktasındaki açıları ölç', ucKollu());
+    const acilar = angleAt(r.objects, 'E');
+    expect(acilar).toHaveLength(3);
+    expect(r.message).toContain('E noktasındaki açılar');
+    expect(r.message).toContain('m(∠FEI) = 90°');
+    expect(r.message).toContain('135°');
+    // Soru biçimi sahneyi değiştirmez
+    const soru = unchanged(ucKollu(), 'E noktasındaki açılar kaç derece');
+    expect(soru.message).toContain('m(∠FEI) = 90°');
+  });
+
+  // A köşesinden BC'ye inen bir çevian (yükseklik/açıortay): köşede üç açı olur, "A açısı" yine belirsizdir.
+  const cevianli = () => build(s => {
+    const A = s.addPoint({ x: 0, y: 4 }, { label: 'A' });
+    const B = s.addPoint({ x: 0, y: 0 }, { label: 'B' });
+    const C = s.addPoint({ x: 6, y: 0 }, { label: 'C' });
+    const H = s.addPoint({ x: 3, y: 0 }, { label: 'H' });
+    s.addPolygon([A.id, B.id, C.id], { kind: 'triangle' });
+    s.addSegment(A.id, H.id);
+  });
+
+  it('asks at a polygon corner too when extra arms add angles', () => {
+    const mesaj = expectFail(handlers, 'A açısını ölç', cevianli());
+    expect(mesaj).toMatch(/A noktasında üç açı var/);
+    expect(mesaj).toContain('BAH');
+    expect(mesaj).toContain('HAC');
+    expect(mesaj).toContain('CAB');
+    // Çokgen adı yazılırsa köşe açısı eskisi gibi tek adımda ölçülür
+    const r = expectOk(handlers, 'ABC üçgeninin A açısını ölç', cevianli());
+    expect(angleAt(r.objects, 'A')).toHaveLength(1);
+    // Üç harf de tek adımda ölçer
+    const uc = expectOk(handlers, 'BAH açısını ölç', cevianli());
+    expect(angleAt(uc.objects, 'A')).toHaveLength(1);
+    // Fazladan kol yoksa (düz üçgen) soru sorulmaz
+    expect(angleAt(expectOk(handlers, 'A açısını ölç', triangle()).objects, 'A')).toHaveLength(1);
+  });
+
   it('fails clearly', () => {
     const shared = build(s => {
       const [A, B, C, D] = ([[0, 0], [4, 0], [0, 3], [4, 3]] as const).map(([x, y], i) => s.addPoint({ x, y }, { label: 'ABCD'[i] }));
@@ -348,7 +408,7 @@ describe('angles', () => {
     expect(expectFail(handlers, 'B açısını ölç', shared)).toMatch(/birden fazla çokgende/);
     expect(expectOk(handlers, 'B açısını ölç', shared, [byType(shared, 'polygon')[1].id]).objects.filter(o => o.type === 'angle')).toHaveLength(1);
     expect(expectFail(handlers, 'açıyı ölç', triangle())).toMatch(/Hangi açı/);
-    expect(expectOk(handlers, 'B açısını ölç', pointsOnly()).message).toContain('∠ABC = 90°');
+    expect(expectOk(handlers, 'B açısını ölç', pointsOnly()).message).toContain('m(∠ABC) = 90°');
     expect(expectFail(handlers, 'ABC üçgeninin D açısını ölç', twoTriangles())).toMatch(/köşesi değil/);
   });
 });
@@ -357,7 +417,7 @@ describe('angles', () => {
 
 describe('circle, arc and sector parts', () => {
   it('answers radius and diameter', () => {
-    expect(unchanged(circle(), "c1'in yarıçapı kaç").message).toContain('yarıçap = 3 br');
+    expect(unchanged(circle(), "c1'in yarıçapı kaç").message).toContain('r = 3 br');
     expect(unchanged(circle(), 'Çemberin çapı nedir').message).toContain('çap = 6 br');
     expect(unchanged(ellipse(), 'elipsin yarıçapları ne kadar').message).toContain('yatay yarıçap = 3 br, dikey yarıçap = 2 br');
     // C, A, P noktaları varken "çapı" etiket sanılmamalı
@@ -372,10 +432,10 @@ describe('circle, arc and sector parts', () => {
   it('sets arc and sector flags', () => {
     const len = expectOk(handlers, 'Yay uzunluğunu göster', arc().map(o => o.type === 'arc' ? { ...o, showArcLength: false } as MathObject : o));
     expect(byType(len.objects, 'arc')[0].showArcLength).toBe(true);
-    expect(len.message).toContain('yay uzunluğu = ≈ 3,14 br');
+    expect(len.message).toContain('|S͡D| ≈ 3,14 br');
     const central = expectOk(handlers, 'Merkez açısını göster', arc().map(o => o.type === 'arc' ? { ...o, showCentralAngle: false } as MathObject : o));
     expect(byType(central.objects, 'arc')[0].showCentralAngle).toBe(true);
-    expect(central.message).toContain('merkez açı = 90°');
+    expect(central.message).toContain('m(S͡D) = 90°');
     const chord = expectOk(handlers, 'Kirişin uzunluğu', arc());
     expect(byType(chord.objects, 'arc')[0].showChordLength).toBe(true);
     expect(chord.message).toContain('≈ 2,83 br');
@@ -506,7 +566,7 @@ describe('show and hide an object’s measurements', () => {
   it('shows every measurement of a named, selected or described object', () => {
     const r = expectOk(handlers, "ABC'nin ölçülerini göster", triangle());
     expect(poly(r.objects)).toMatchObject({ showArea: true, showPerimeter: true, edgeLabels: [0, 1, 2] });
-    expect(r.message).toContain('alan = 6 br²');
+    expect(r.message).toContain('A(ABC) = 6 br²');
     const a = expectOk(handlers, 'Yayın tüm ölçülerini göster', arc());
     expect(byType(a.objects, 'arc')[0] as ArcObject).toMatchObject({ showArcLength: true, showRadius: true, showChordLength: true, showCentralAngle: true });
     const scene = triangle();
@@ -560,13 +620,13 @@ describe('catalog phrasings', () => {
     const scene = build(s => { s.addPoint({ x: 4, y: 0 }, { label: 'A' }); s.addPoint({ x: 0, y: 0 }, { label: 'B' }); s.addPoint({ x: 0, y: 3 }, { label: 'C' }); });
     const r = expectOk(handlers, 'B açısının sin cos tan değerlerini hesapla', scene);
     expect((byType(r.objects, 'measurement')[0] as MeasurementObject).pointIds).toEqual(['A', 'B', 'C'].map(l => point(r.objects, l).id));
-    expect(r.message).toContain('∠ABC = 90°');
+    expect(r.message).toContain('m(∠ABC) = 90°');
     expect(expectOk(handlers, 'ABC açısının trigonometrik oranlarını göster', scene).message).toContain('sin = 1, cos = 0, tan = tanımsız');
     expect(expectOk(handlers, 'AB eğimini ölç', scene).message).toContain('AB eğimi = 0');
     const q = unchanged(scene, 'A ile B arasındaki doğrunun eğimi kaç?');
     expect(q.message).toBe('AB eğimi = 0.');
-    expect(expectOk(handlers, 'ABC üçgeninin çevresini hesapla', triangle()).message).toContain('çevre = 12 br');
-    expect(expectOk(handlers, 'üçgenin çevresini göster', triangle()).message).toContain('çevre = 12 br');
+    expect(expectOk(handlers, 'ABC üçgeninin çevresini hesapla', triangle()).message).toContain('Ç(ABC) = 12 br');
+    expect(expectOk(handlers, 'üçgenin çevresini göster', triangle()).message).toContain('Ç(ABC) = 12 br');
     expect(expectFail(handlers, 'B açısını ölç', build(s => { for (const [l, x] of [['A', 0], ['B', 1], ['C', 2], ['D', 3]] as const) s.addPoint({ x, y: x * x }, { label: l }); }))).toMatch(/kolları/);
   });
 });
@@ -619,20 +679,20 @@ describe('arc between two points (circle is not split)', () => {
     expect(m).toMatchObject({ kind: 'arc', circleId: byType(scene, 'circle')[0].id, pointIds: [point(scene, 'B').id, point(scene, 'D').id], label: 'BD yayı', showValue: true, visible: true });
     expect(byType(r.objects, 'segment')).toEqual([]);
     expect(byType(r.objects, 'circle')).toEqual(byType(scene, 'circle'));
-    expect(r.message).toBe('BD yayı: uzunluk 4,71 br, ölçü 90°.');
+    expect(r.message).toBe('BD yayı: |B͡D| ≈ 4,71 br, m(B͡D) = 90°.');
     expect(r.selectedIds).toEqual([m.id]);
   });
 
   it('BCD yayı (ara nokta), büyük yay, "B ile D arasındaki yay" ve küçük harfli yazım', () => {
     const through = expectOk(handlers, 'BCD yayını ölç', circlePoints());
     expect(arcMeasures(through.objects)[0]).toMatchObject({ throughPointId: point(through.objects, 'C').id, label: 'BCD yayı' });
-    expect(through.message).toBe('BCD yayı: uzunluk 14,14 br, ölçü 270°.');
+    expect(through.message).toBe('BCD yayı: |B͡C͡D| ≈ 14,14 br, m(B͡C͡D) = 270°.');
     const major = expectOk(handlers, 'BD büyük yayını ölç', circlePoints());
     expect(arcMeasures(major.objects)[0]).toMatchObject({ major: true, label: 'BCD yayı' });
-    expect(major.message).toBe('BCD yayı: uzunluk 14,14 br, ölçü 270°.');
-    expect(expectOk(handlers, 'B ile D arasındaki yayı ölç', circlePoints()).message).toBe('BD yayı: uzunluk 4,71 br, ölçü 90°.');
-    expect(expectOk(handlers, 'bd yayını ölç', circlePoints()).message).toBe('BD yayı: uzunluk 4,71 br, ölçü 90°.');
-    expect(expectOk(handlers, 'B D yayını ölç', circlePoints()).message).toBe('BD yayı: uzunluk 4,71 br, ölçü 90°.');
+    expect(major.message).toBe('BCD yayı: |B͡C͡D| ≈ 14,14 br, m(B͡C͡D) = 270°.');
+    expect(expectOk(handlers, 'B ile D arasındaki yayı ölç', circlePoints()).message).toBe('BD yayı: |B͡D| ≈ 4,71 br, m(B͡D) = 90°.');
+    expect(expectOk(handlers, 'bd yayını ölç', circlePoints()).message).toBe('BD yayı: |B͡D| ≈ 4,71 br, m(B͡D) = 90°.');
+    expect(expectOk(handlers, 'B D yayını ölç', circlePoints()).message).toBe('BD yayı: |B͡D| ≈ 4,71 br, m(B͡D) = 90°.');
   });
 
   it('"ölçüsü", "uzunluğu", "uzunluğunu bul" oluşturur; soru yalnızca yanıtlar; ikinci kez ölçmek kopya üretmez', () => {
@@ -640,7 +700,7 @@ describe('arc between two points (circle is not split)', () => {
       expect(arcMeasures(expectOk(handlers, text, circlePoints()).objects)).toHaveLength(1);
     }
     const q = unchanged(circlePoints(), 'BD yayı kaç derece');
-    expect(q.message).toBe('BD yayı: uzunluk 4,71 br, ölçü 90°.');
+    expect(q.message).toBe('BD yayı: |B͡D| ≈ 4,71 br, m(B͡D) = 90°.');
     const again = expectOk(handlers, 'BD yayını ölç', measuredArc());
     expect(again.sceneChanged).toBe(false);
     expect(arcMeasures(again.objects)).toHaveLength(1);
@@ -659,7 +719,7 @@ describe('arc between two points (circle is not split)', () => {
       const [A, B, C] = ([[1, 0], [0, 1], [-1, 0]] as const).map(([x, y], i) => s.addPoint({ x, y }, { label: 'ABC'[i] }));
       s.addCircle({ throughIds: [A.id, B.id, C.id] });
     });
-    expect(expectOk(handlers, 'AB yayını ölç', three).message).toBe('AB yayı: uzunluk 1,57 br, ölçü 90°.');
+    expect(expectOk(handlers, 'AB yayını ölç', three).message).toBe('AB yayı: |A͡B| ≈ 1,57 br, m(A͡B) = 90°.');
     const two = build(s => {
       const O1 = s.addPoint({ x: 0, y: 0 }, { label: 'M' });
       const O2 = s.addPoint({ x: 6, y: 0 }, { label: 'N' });
@@ -669,7 +729,7 @@ describe('arc between two points (circle is not split)', () => {
       s.addPoint({ x: 3, y: -4 }, { label: 'Q' });
     });
     const r = expectOk(handlers, 'PQ yayını ölç', two);
-    expect(r.message).toMatch(/^PQ yayı \(c[12] üzerinde\): uzunluk/);
+    expect(r.message).toMatch(/^PQ yayı \(c[12] üzerinde\): \|P͡Q\| ≈ /);
   });
 
   it('gerçek yay nesneleri ve diğer ölçüler eskisi gibi kalır (tüm aileler)', () => {

@@ -5,9 +5,13 @@ import { type CommandScene, fail, skip, trNum } from '../../scene';
 import type { LabelRef } from '../../text';
 import type { Ctx } from './angles';
 import {
-  P, SLOPE_ANGLE, areaOf, arcGeometry, br, br2, coord, corner, deg, distance, edgeIndex, fmt, nameOf, nounFilter, onlyPoint, perimeterOf, pick, setFlags, wantsMany,
+  P, SLOPE_ANGLE, adli, alanOlcusu, areaOf, arcGeometry, br, cemberAdi, cevreOlcusu, coord, corner, distance, edgeIndex, esit, esitBr, esitDeg,
+  merkezAciOlcusu, nameOf, nounFilter, onlyPoint, perimeterOf, pick, setFlags, wantsMany, yaz, yayOlcumUclari, yayUclariOf,
 } from './common';
 import { resolveArc } from '@/math/arcMeasure';
+import {
+  type Olcu, alan, aci, cevre, egim, kiris, merkezAci, uzunluk, yaricap, yayOlcusu, yayUzunlugu,
+} from '@/math/matematikYazimi';
 
 const AREA_TYPES: ObjectType[] = ['polygon', 'circle', 'ellipse', 'sector'];
 const LINEAR: ObjectType[] = ['segment', 'line', 'ray'];
@@ -40,8 +44,8 @@ export function areaPerimeter(x: Ctx) {
     const pts = scene.pointsFromLabel(x.labels[0].text);
     if (pts && pts.length >= 3 && new Set(pts).size === pts.length) {
       const parts = [
-        ...(wantArea ? [`alan = ${br2(calculatePolygonArea(pts.map(P)))}`] : []),
-        ...(wantPerimeter ? [`çevre = ${br(calculatePolygonPerimeter(pts.map(P)))}`] : []),
+        ...(wantArea ? [yaz(alan(pts, calculatePolygonArea(pts.map(P))), true)] : []),
+        ...(wantPerimeter ? [yaz(cevre(pts, calculatePolygonPerimeter(pts.map(P))), true)] : []),
       ];
       x.focus.push(...pts.map(p => p.id));
       x.out.push(`${pointNames(pts)} (çizili çokgen yok): ${parts.join(', ')}. Tuvalde göstermek için önce “${pointNames(pts)} çokgenini çiz” yazın.`);
@@ -50,13 +54,17 @@ export function areaPerimeter(x: Ctx) {
   }
   const targets = pick(x.c, scene, { types, noun: nf?.noun ?? 'şekil', filter: nf?.filter, many: wantsMany(x.text, x.labels) });
   for (const o of targets) {
-    const parts: string[] = [];
+    const olculer: Olcu[] = [];
     const patch: Record<string, unknown> = {};
-    if (wantArea) { parts.push(`alan = ${br2(areaOf(scene, o)!)}`); patch.showArea = true; x.answers.push(areaOf(scene, o)!); }
-    if (wantPerimeter) { parts.push(`çevre = ${br(perimeterOf(scene, o)!)}`); patch.showPerimeter = true; x.answers.push(perimeterOf(scene, o)!); }
+    if (wantArea) { olculer.push(alanOlcusu(scene, o)); patch.showArea = true; x.answers.push(areaOf(scene, o)!); }
+    if (wantPerimeter) { olculer.push(cevreOlcusu(scene, o)); patch.showPerimeter = true; x.answers.push(perimeterOf(scene, o)!); }
     setFlags(scene, o, patch);
     x.focus.push(o.id);
-    x.out.push(`${nameOf(o)}: ${parts.join(', ')}.`);
+    // Yazım şeklin adını taşıyorsa (A(ABC), Ç(SMD dilimi)) ayrıca "ABC:" öneki yazılmaz;
+    // çember ve elipste ad başlıkta durur: "Ç(M, r): alan = πr² ≈ 28,27 br²".
+    x.out.push(olculer.every(adli)
+      ? `${olculer.map(m => yaz(m)).join(', ')}.`
+      : `${cemberAdi(scene, o) ?? nameOf(o)}: ${olculer.map(m => yaz(m, true)).join(', ')}.`);
   }
 }
 
@@ -68,7 +76,7 @@ function lineLength(x: Ctx, o: MathObject) {
   x.focus.push(o.id);
   x.answers.push(distance(a, b));
   const note = o.type === 'segment' ? '' : ` (${o.type === 'line' ? 'doğrunun' : 'ışının'} tanım noktaları arası)`;
-  x.out.push(`|${a.label}${b.label}| = ${br(distance(a, b))}${note}.`);
+  x.out.push(`${yaz(uzunluk(a, b, distance(a, b)))}${note}.`);
 }
 
 function showEdges(x: Ctx, polygon: PolygonObject, indices: number[], title?: string) {
@@ -80,7 +88,7 @@ function showEdges(x: Ctx, polygon: PolygonObject, indices: number[], title?: st
   const parts = indices.map(i => {
     const a = scene.point(polygon.pointIds[i]), b = scene.point(polygon.pointIds[(i + 1) % n]);
     x.answers.push(distance(a, b));
-    return `|${a.label}${b.label}| = ${br(distance(a, b))}`;
+    return yaz(uzunluk(a, b, distance(a, b)));
   });
   x.out.push(`${polygon.label} ${title ?? (indices.length === n && n > 1 ? 'kenarları' : 'kenarı')}: ${parts.join(', ')}.`);
 }
@@ -117,22 +125,23 @@ function pointDistance(x: Ctx, a: PointObject, b: PointObject) {
   if (a.id === b.id) fail('Mesafe için iki farklı nokta yazın: “A ile B arasındaki mesafe”.');
   const d = distance(a, b);
   x.answers.push(d);
+  const metin = yaz(uzunluk(a, b, d));
   const segment = scene.shapesWithPoints([a.id, b.id], ['segment'])[0];
   if (segment) {
     setFlags(scene, segment, { showLength: true });
     x.focus.push(segment.id);
-    x.out.push(`|${a.label}${b.label}| = ${br(d)}.`);
+    x.out.push(`${metin}.`);
     return;
   }
   if (x.it.showOrMeasure) {
     // "Uzunluk Ölç (br)" aracıyla aynı ölçüm parçası
     const s = scene.addSegment(a.id, b.id, { label: `|${a.label}${b.label}|`, color: '#059669', thickness: 3, unit: 'br', showLength: true });
     x.focus.push(s.id);
-    x.out.push(`|${a.label}${b.label}| = ${br(d)}. Ölçüm doğru parçası çizildi.`);
+    x.out.push(`${metin}. Ölçüm doğru parçası çizildi.`);
     return;
   }
   x.focus.push(a.id, b.id);
-  x.out.push(`${a.label} ile ${b.label} arasındaki mesafe ${br(d)}.`);
+  x.out.push(`${metin}.`);
 }
 
 function pointLineDistance(x: Ctx, p: PointObject, a: PointObject, b: PointObject, name: string, object?: MathObject) {
@@ -167,7 +176,7 @@ function lengthOf(x: Ctx, o: MathObject, plural: boolean) {
     case 'circle': case 'ellipse': {
       setFlags(scene, o, { showPerimeter: true });
       x.focus.push(o.id);
-      x.out.push(`${nameOf(o)}: çevre = ${br(perimeterOf(scene, o)!)}.`);
+      x.out.push(`${cemberAdi(scene, o) ?? nameOf(o)}: ${yaz(cevreOlcusu(scene, o), true)}.`);
       return;
     }
     case 'polygon': {
@@ -292,38 +301,45 @@ type ArcKind = 'radius' | 'diameter' | 'chord' | 'arcLength' | 'centralAngle';
 function arcPart(x: Ctx, o: MathObject, kind: ArcKind) {
   const { scene } = x;
   x.focus.push(o.id);
+  const say = (metin: string) => x.out.push(`${cemberAdi(scene, o) ?? nameOf(o)}: ${metin}.`);
   if (o.type === 'circle') {
-    const r = scene.circleOf(o)!.radius;
-    x.out.push(kind === 'radius' ? `${nameOf(o)}: yarıçap = ${br(r)}.` : `${nameOf(o)}: çap = ${br(2 * r)}.`);
+    const g = scene.circleOf(o)!;
+    const merkez = g.centerId ? scene.point(g.centerId) : null;
+    const rNokta = o.radiusPointId ? scene.get(o.radiusPointId) : undefined;
+    say(kind === 'radius'
+      ? yaz(yaricap(merkez, rNokta?.type === 'point' ? rNokta : null, g.radius), true)
+      : yaz(kiris(null, null, 2 * g.radius, true), true));
     return;
   }
   if (o.type === 'ellipse') {
     const f = kind === 'radius' ? 1 : 2, word = kind === 'radius' ? 'yarıçap' : 'eksen uzunluğu';
-    x.out.push(`${nameOf(o)}: yatay ${word} = ${br(f * Math.abs(o.radiusX))}, dikey ${word} = ${br(f * Math.abs(o.radiusY))}.`);
+    say(`yatay ${word} ${esitBr(f * Math.abs(o.radiusX))}, dikey ${word} ${esitBr(f * Math.abs(o.radiusY))}`);
     return;
   }
   const g = arcGeometry(scene, o);
+  const uclar = yayUclariOf(scene, o);
+  const merkez = scene.point((o as { centerPointId: string }).centerPointId);
   switch (kind) {
     case 'radius':
       setFlags(scene, o, { showRadius: true });
-      x.out.push(`${nameOf(o)}: yarıçap = ${br(g.radius)}.`);
+      say(yaz(yaricap(merkez, uclar.bas, g.radius), true));
       return;
     case 'diameter':
-      x.out.push(`${nameOf(o)}: çap = ${br(2 * g.radius)}.`);
+      say(yaz(kiris(null, null, 2 * g.radius, true), true));
       return;
     case 'chord': {
       setFlags(scene, o, { showChordLength: true });
-      const word = Math.abs(g.sweep - Math.PI) < 1e-6 ? 'çap (kiriş)' : 'kiriş';
-      x.out.push(`${nameOf(o)}: ${word} = ${br(2 * g.radius * Math.sin(g.sweep / 2))}.`);
+      const capMi = Math.abs(g.sweep - Math.PI) < 1e-6;
+      say(yaz(kiris(uclar.bas, uclar.son, 2 * g.radius * Math.sin(g.sweep / 2), capMi), true));
       return;
     }
     case 'arcLength':
       setFlags(scene, o, { showArcLength: true });
-      x.out.push(`${nameOf(o)}: yay uzunluğu = ${br(g.radius * g.sweep)}.`);
+      say(yaz(yayUzunlugu(uclar, g.radius * g.sweep), true));
       return;
     case 'centralAngle':
       setFlags(scene, o, { showCentralAngle: true });
-      x.out.push(`${nameOf(o)}: merkez açı = ${deg(g.sweep * 180 / Math.PI)}.`);
+      say(yaz(merkezAciOlcusu(scene, o, g.sweep * 180 / Math.PI), true));
       return;
   }
 }
@@ -519,7 +535,7 @@ function functionSlope(x: Ctx, src: Extract<SlopeSource, { kind: 'function' }>) 
   const withAngle = SLOPE_ANGLE.test(x.text);
   const angle = ((Math.atan(coef.m) * 180 / Math.PI) + 180) % 180;
   x.answers.push(withAngle ? angle : coef.m);
-  x.out.push(`${src.name}: eğim = ${fmt(coef.m, 4)}${withAngle ? `, eğim açısı (x ekseniyle) = ${deg(angle)}` : ''}.`);
+  x.out.push(`${src.name}: eğim ${esit(coef.m, 4)}${withAngle ? `, eğim açısı (x ekseniyle) ${esitDeg(angle)}` : ''}.`);
 }
 
 export function slopes(x: Ctx) {
@@ -538,13 +554,13 @@ export function slopes(x: Ctx) {
   else if (!x.it.question) object = scene.addMeasurement('slope', [a.id, b.id]);
   // Doğru (parça/ışın) varsa odakta o kalır: "AB doğrusunun eğimini hesapla ve kırmızı yap" doğruyu boyar, eğim etiketini değil.
   x.focus.push(...(src.line ? [src.line.id] : object ? [object.id] : [a.id, b.id]));
-  const text = m === null ? `${a.label}${b.label} eğimi tanımsız (dikey doğru).` : `${a.label}${b.label} eğimi = ${fmt(m, 4)}.`;
+  const text = m === null ? `${yaz(egim(a, b, null))} (dikey doğru).` : `${yaz(egim(a, b, m))}.`;
   // "eğim açısı", "x ekseniyle yaptığı açı": 0° ≤ α < 180°
   const withAngle = SLOPE_ANGLE.test(x.text);
   const angle = m === null ? 90 : ((Math.atan(m) * 180 / Math.PI) + 180) % 180;
   if (withAngle) x.answers.push(angle);
   else if (m !== null) x.answers.push(m);
-  x.out.push(`${text}${withAngle ? ` Eğim açısı (x ekseniyle) = ${deg(angle)}.` : ''}${object && !existing ? ' Eğim tuvale eklendi.' : ''}`);
+  x.out.push(`${text}${withAngle ? ` Eğim açısı (x ekseniyle) ${esitDeg(angle)}.` : ''}${object && !existing ? ' Eğim tuvale eklendi.' : ''}`);
 }
 
 // ---------------------------------------------------------------------------------------------------------------- koordinat
@@ -613,7 +629,7 @@ function diagonalLength(x: Ctx, a: PointObject, b: PointObject): string {
     const s = scene.addSegment(a.id, b.id, { label: `|${a.label}${b.label}|`, color: '#059669', thickness: 3, unit: 'br', showLength: true });
     x.focus.push(s.id);
   }
-  return `|${a.label}${b.label}| = ${br(d)}`;
+  return yaz(uzunluk(a, b, d));
 }
 
 export function diagonals(x: Ctx) {
@@ -672,46 +688,62 @@ export function allMeasures(x: Ctx) {
       case 'polygon': {
         const n = o.pointIds.length;
         setFlags(scene, o, { showArea: true, showPerimeter: true, edgeLabels: o.pointIds.map((_, i) => i) });
-        parts.push(`alan = ${br2(areaOf(scene, o)!)}`, `çevre = ${br(perimeterOf(scene, o)!)}`);
-        o.pointIds.forEach((id, i) => { const a = scene.point(id), b = scene.point(o.pointIds[(i + 1) % n]); parts.push(`|${a.label}${b.label}| = ${br(distance(a, b))}`); });
+        parts.push(yaz(alanOlcusu(scene, o), true), yaz(cevreOlcusu(scene, o), true));
+        o.pointIds.forEach((id, i) => { const a = scene.point(id), b = scene.point(o.pointIds[(i + 1) % n]); parts.push(yaz(uzunluk(a, b, distance(a, b)))); });
         break;
       }
-      case 'circle': case 'ellipse':
+      case 'circle': case 'ellipse': {
         setFlags(scene, o, { showArea: true, showPerimeter: true });
-        parts.push(`alan = ${br2(areaOf(scene, o)!)}`, `çevre = ${br(perimeterOf(scene, o)!)}`);
-        if (o.type === 'circle') parts.push(`yarıçap = ${br(scene.circleOf(o)!.radius)}`);
+        parts.push(yaz(alanOlcusu(scene, o), true), yaz(cevreOlcusu(scene, o), true));
+        if (o.type === 'circle') {
+          const g = scene.circleOf(o)!;
+          const merkez = g.centerId ? scene.point(g.centerId) : null;
+          const rNokta = o.radiusPointId ? scene.get(o.radiusPointId) : undefined;
+          parts.push(yaz(yaricap(merkez, rNokta?.type === 'point' ? rNokta : null, g.radius), true));
+        }
         break;
+      }
       case 'sector': case 'arc': {
         const g = arcGeometry(scene, o);
+        const uclar = yayUclariOf(scene, o);
+        const merkez = scene.point(o.centerPointId);
         if (o.type === 'sector') {
           setFlags(scene, o, { showArea: true, showPerimeter: true, showArcLength: true, showRadius: true, showCentralAngle: true });
-          parts.push(`alan = ${br2(areaOf(scene, o)!)}`, `çevre = ${br(perimeterOf(scene, o)!)}`);
+          parts.push(yaz(alanOlcusu(scene, o), true), yaz(cevreOlcusu(scene, o), true));
         } else {
           setFlags(scene, o, { showArcLength: true, showRadius: true, showChordLength: true, showCentralAngle: true });
-          parts.push(`kiriş = ${br(2 * g.radius * Math.sin(g.sweep / 2))}`);
+          parts.push(yaz(kiris(uclar.bas, uclar.son, 2 * g.radius * Math.sin(g.sweep / 2), Math.abs(g.sweep - Math.PI) < 1e-6), true));
         }
-        parts.push(`yay uzunluğu = ${br(g.radius * g.sweep)}`, `yarıçap = ${br(g.radius)}`, `merkez açı = ${deg(g.sweep * 180 / Math.PI)}`);
+        parts.push(
+          yaz(yayUzunlugu(uclar, g.radius * g.sweep), true),
+          yaz(yaricap(merkez, uclar.bas, g.radius), true),
+          yaz(merkezAciOlcusu(scene, o, g.sweep * 180 / Math.PI), true),
+        );
         break;
       }
       case 'segment': case 'ray': case 'line': {
         const [a, b] = scene.lineOf(o)!;
         setFlags(scene, o, o.type === 'line' ? { showLength: true, showEquation: true } : { showLength: true });
-        parts.push(`|${a.label}${b.label}| = ${br(distance(a, b))}`);
+        parts.push(yaz(uzunluk(a, b, distance(a, b))));
         if (o.type === 'line' && distance(a, b) > 1e-9) parts.push(calculateLineEquation(a, b).equationText);
         break;
       }
       case 'angle': {
         const a = o as AngleObject;
         setFlags(scene, o, { showValue: true });
-        const inner = calculateAngleDegrees(scene.point(a.point1Id), scene.point(a.vertexPointId), scene.point(a.point3Id));
-        parts.push(`değer = ${deg(a.reflex ? 360 - inner : inner)}`);
+        const [p1, v, p3] = [a.point1Id, a.vertexPointId, a.point3Id].map(id => scene.point(id));
+        const inner = calculateAngleDegrees(p1, v, p3);
+        parts.push(yaz(aci(p1, v, p3, a.reflex ? 360 - inner : inner, { disAci: !!a.reflex }), true));
         break;
       }
       case 'measurement': {
         setFlags(scene, o, { showValue: true });
-        const yay = o.kind === 'arc' && o.circleId ? resolveArc({ circleId: o.circleId, pointIds: o.pointIds, throughPointId: o.throughPointId, major: o.major }, scene.objects) : null;
-        if (yay) parts.push(`uzunluk = ${br(yay.length)}`, `ölçü = ${deg(yay.degrees)}`);
-        else parts.push('değer gösterildi');
+        const spec = { circleId: o.circleId!, pointIds: o.pointIds, startPointId: o.startPointId, throughPointId: o.throughPointId, major: o.major };
+        const yay = o.kind === 'arc' && o.circleId ? resolveArc(spec, scene.objects) : null;
+        if (yay) {
+          const uclar = yayOlcumUclari(spec, scene, yay);
+          parts.push(yaz(yayUzunlugu(uclar, yay.length), true), yaz(yayOlcusu(uclar, yay.degrees), true));
+        } else parts.push('değer gösterildi');
         break;
       }
       default:

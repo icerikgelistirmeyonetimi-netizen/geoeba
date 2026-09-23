@@ -716,7 +716,7 @@ export function Toolbar({
         const m = obj as MeasurementObject;
         const nk = (id: string) => objects.find((o) => o.id === id && o.type === 'point') as PointObject | undefined;
         if (m.kind === 'arc') {
-          const y = m.circleId ? resolveArc({ circleId: m.circleId, pointIds: m.pointIds, throughPointId: m.throughPointId, major: m.major }, objects) : null;
+          const y = m.circleId ? resolveArc({ circleId: m.circleId, pointIds: m.pointIds, startPointId: m.startPointId, throughPointId: m.throughPointId, major: m.major }, objects) : null;
           return y ? arcDetachedText(y, objects) ?? arcValueText(y) : 'Yay ölçümü';
         }
         if (m.kind === 'distance') {

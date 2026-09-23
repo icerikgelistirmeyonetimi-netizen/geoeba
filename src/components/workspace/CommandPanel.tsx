@@ -77,11 +77,16 @@ export function CommandPanel({ onSelectTool, variant = 'bar', incoming, onIncomi
   }, [helpFilter]);
 
   // Çok satırlı giriş: yazdıkça büyür (en fazla MAX_INPUT_HEIGHT), sonra kaydırılır.
+  // Kutu border-box olduğu için yüksekliğe KENARLIK payı eklenir; eklenmeyince içerik 2 px taşıyor
+  // ve tek satırlık komutta bile kaydırma çubuğu görünüyordu. Sığdığı sürece çubuk hiç çizilmez.
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, MAX_INPUT_HEIGHT)}px`;
+    const kenarlik = el.offsetHeight - el.clientHeight; // üst + alt kenarlık
+    const istenen = el.scrollHeight + kenarlik;
+    el.style.height = `${Math.min(istenen, MAX_INPUT_HEIGHT)}px`;
+    el.style.overflowY = istenen > MAX_INPUT_HEIGHT ? 'auto' : 'hidden';
   }, [text]);
 
   // Kutu açılınca yazmaya hazır olsun.

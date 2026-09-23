@@ -15,6 +15,7 @@ import {
   cetvelBoyunuDegistir,
   cetvelCentikDuzeni,
   cetvelCentikYollari,
+  cetvelDonusunuDegistir,
   cetvelEtiketleri,
   cetvelKoseleri,
   cetvelMenusu,
@@ -26,6 +27,9 @@ import {
   donusOkumasi,
   donusYakala,
   gonyeBoyuSigdir,
+  gonyeDonusunuDegistir,
+  gonyeKonumuMerkezden,
+  gonyeKoseleri,
   gonyeMenusu,
   gonyeMerkezi,
   gonyeyiYerlestir,
@@ -43,6 +47,7 @@ import {
   okumaKonumu,
   olcmeAraciMi,
   tabanOkumasi,
+  tutamactanUzaklastir,
   yereldenEkrana,
   type OlcmeMenuMaddesi,
 } from '../olcmeAraclari';
@@ -276,6 +281,76 @@ describe('ölçme araçları: görünüme sığdırma', () => {
     const b = alanBoyutunuDegistir(a.konum, { sutun: 4, satir: 3 }, { sutun: 15, satir: 15 }, v);
     expect(b.x + 15 / 2).toBeCloseTo(a.konum.x + 2, 9);
     expect(b.y + 15 / 2).toBeCloseTo(a.konum.y + 1.5, 9);
+  });
+
+  it('menüden açı değişince cetvel görünümden çıkmaz', () => {
+    const v = vp();
+    // Ortadaki cetvel dikeye dönünce de ekranda: 0 ucu yerinde kalır
+    const { konum, boy } = cetveliYerlestir(8, 0, v);
+    expect(cetvelDonusunuDegistir(konum, boy, 0, 270, v)).toEqual(konum);
+
+    // Alt kenara itilmiş 20 br cetvel dikeye dönünce taşardı: döndükten sonra görünür alana sokulur
+    const alt = { x: konum.x, y: konum.y - 4 };
+    const yeni = cetvelDonusunuDegistir(alt, 20, 0, 270, v);
+    expect(yeni).not.toEqual(alt);
+    for (const p of cetvelKoseleri(yeni, 270, 20, v)) {
+      expect(p.x).toBeGreaterThanOrEqual(-1e-6);
+      expect(p.y).toBeGreaterThanOrEqual(-1e-6);
+      expect(p.x).toBeLessThanOrEqual(v.width + 1e-6);
+      expect(p.y).toBeLessThanOrEqual(v.height + 1e-6);
+    }
+
+    // Basık görünümde (yükseklik 300 px) 8 br hiç sığmaz: o eksende ortalanır
+    const basik = vp({ height: 300 });
+    const d = cetveliYerlestir(8, 0, basik);
+    const k = cetvelKoseleri(cetvelDonusunuDegistir(d.konum, d.boy, 0, 270, basik), 270, d.boy, basik);
+    const ys = k.map((p) => p.y);
+    expect((Math.min(...ys) + Math.max(...ys)) / 2).toBeCloseTo(basik.height / 2, 6);
+  });
+
+  it('menüden açı değişince gönye görünümden çıkmaz', () => {
+    const v = vp();
+    const { konum, boy } = gonyeyiYerlestir(4, 0, v);
+    expect(gonyeDonusunuDegistir(konum, boy, 0, 180, v)).toEqual(konum);
+
+    // Basık görünümün alt kenarındaki gönye 180°'ye dönünce aşağı taşar: görünür alana sokulur
+    const basik = vp({ height: 300 });
+    const g = gonyeyiYerlestir(4, 0, basik);
+    const kenar = { x: g.konum.x, y: g.konum.y - 3 };
+    const yeni = gonyeDonusunuDegistir(kenar, g.boy, 0, 180, basik);
+    expect(yeni).not.toEqual(kenar);
+    for (const p of gonyeKoseleri(yeni, 180, g.boy, basik)) {
+      expect(p.x).toBeGreaterThanOrEqual(-1e-6);
+      expect(p.y).toBeGreaterThanOrEqual(-1e-6);
+      expect(p.x).toBeLessThanOrEqual(basik.width + 1e-6);
+      expect(p.y).toBeLessThanOrEqual(basik.height + 1e-6);
+    }
+  });
+
+  it('gönye köşeleri ve merkezden konum birbirinin tersi', () => {
+    const v = vp();
+    for (const donus of [0, 45, 90, 135, 180, 225, 270, 315]) {
+      const { konum, boy } = gonyeyiYerlestir(4, donus, v);
+      const geri = gonyeKonumuMerkezden(gonyeMerkezi(konum, donus, boy), donus, boy);
+      expect(geri.x).toBeCloseTo(konum.x, 9);
+      expect(geri.y).toBeCloseTo(konum.y, 9);
+      expect(gonyeKoseleri(konum, donus, boy, v)).toHaveLength(4);
+    }
+  });
+});
+
+describe('ölçme araçları: okuma hapı konumu', () => {
+  it('okuma komşu tutamaçtan uzağa itilir', () => {
+    const don = { x: 400, y: 300 };
+    const boy = { x: 460, y: 260 };
+    const itilmis = tutamactanUzaklastir(don, boy, 56);
+    const oncekiUzaklik = Math.hypot(don.x - boy.x, don.y - boy.y);
+    const sonrakiUzaklik = Math.hypot(itilmis.x - boy.x, itilmis.y - boy.y);
+    expect(sonrakiUzaklik).toBeCloseTo(oncekiUzaklik + 56, 9);
+    // Yönü değişmez: itilen nokta hâlâ aynı doğrultudadır
+    expect((itilmis.x - don.x) * (don.y - boy.y) - (itilmis.y - don.y) * (don.x - boy.x)).toBeCloseTo(0, 9);
+    // Üst üste binen noktalarda sonsuzluk üretmez
+    expect(tutamactanUzaklastir(don, { ...don }, 56)).toEqual(don);
   });
 });
 
