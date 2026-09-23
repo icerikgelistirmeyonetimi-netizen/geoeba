@@ -114,6 +114,7 @@ import { contextMenuSelection } from './contextMenuSelection';
 import { contextMenuTargets } from './contextMenuTargets';
 import { labelAnchorPointIds, shapeAnchorCenter, anchoredLabelPosition } from '@/math/labelAnchors';
 import { LABEL_LAYOUT_ZOOM, labelLayoutViewport, labelZoomScale, projectLabelPoint } from '@/math/labelViewport';
+import { sliderIsBound, snapSliderValue } from '@/math/sliderBindings';
 import { etiketHizalama } from './etiketHizalama';
 import { pointLockCandidates, isPointLocked } from '@/math/pointLock';
 import { birlestirmeMaddesi, birlestirmeToleransi, ustUsteNoktalar } from '@/math/noktaBirlestir';
@@ -340,6 +341,7 @@ export function Canvas({
     isConfirmClearOpen,
     isRegularPolygonDialogOpen,
     handleSliderChange,
+    setSliderSettingsId,
     setSliderValues,
     measureLength,
     measureArea,
@@ -1075,6 +1077,14 @@ export function Canvas({
 
   // Tuval üstü kaydırıcı tutamağının sürüklenmesi
   const sliderDragRef = useRef<{ id: string } | null>(null);
+  // Dişli: kısa basış ayarları açar; sürükleme çubuğun konumunu değiştirir.
+  const sliderPositionDragRef = useRef<{
+    id: string;
+    pointerId: number;
+    startClient: Point2D;
+    startPosition: Point2D;
+    moved: boolean;
+  } | null>(null);
   // Pencere dinleyicileri her zaman güncel nesne/görünüm değerlerini görsün
   const latestObjectsRef = useRef(objects);
   latestObjectsRef.current = objects;
@@ -1092,9 +1102,7 @@ export function Canvas({
       const uzunluk = s.length ?? 4;
       // Fare konumunu çubuk üzerinde [0, 1] orana çevir
       const t = Math.max(0, Math.min(1, (world.x - s.x) / (uzunluk || 1)));
-      let deger = s.min + t * (s.max - s.min);
-      if (s.step > 0) deger = Math.round(deger / s.step) * s.step;
-      deger = Math.max(s.min, Math.min(s.max, Number(deger.toFixed(4))));
+      const deger = snapSliderValue(s.min + t * (s.max - s.min), s.min, s.max, s.step);
       handleSliderChange(s.id, deger);
     };
     const onUp = () => {
@@ -1112,6 +1120,38 @@ export function Canvas({
       window.removeEventListener('pointerup', onUp);
     };
   }, [handleSliderChange, recordHistory]);
+
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const drag = sliderPositionDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      const slider = latestObjectsRef.current.find(o => o.id === drag.id);
+      if (slider?.type !== 'slider' || slider.locked) return;
+      const dx = e.clientX - drag.startClient.x, dy = e.clientY - drag.startClient.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+      drag.moved = true;
+      const zoom = viewportRef.current.zoom || 1;
+      updateObject(drag.id, { x: drag.startPosition.x + dx / zoom, y: drag.startPosition.y - dy / zoom } as Partial<MathObject>, false);
+    };
+    const onUp = (e: PointerEvent) => {
+      const drag = sliderPositionDragRef.current;
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      if (e.type === 'pointerup') flushSync(() => onMove(e));
+      sliderPositionDragRef.current = null;
+      const slider = latestObjectsRef.current.find(o => o.id === drag.id);
+      if (slider?.type !== 'slider') return;
+      if (drag.moved) recordHistory(`${slider.variableName} kaydırıcısı taşındı`);
+      else if (e.type === 'pointerup') setSliderSettingsId(drag.id);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [updateObject, recordHistory, setSliderSettingsId]);
 
   // Ölçüm etiketi sürükleme: fare hareketi boyunca geçmişe yazmadan güncelle,
   // bırakıldığında TEK adım kaydet. Kayıklık dünya biriminde tutulur; şekil taşındığında
@@ -1775,6 +1815,7 @@ export function Canvas({
   // screenPoint verilmezse görünümün merkezi kullanılır.
   const zoomAt = useCallback(
     (screenPoint: Point2D | null, factor: number) => {
+      if (sliderPositionDragRef.current) return;
       setViewport((prev) => {
         const newZoom = Math.max(5, Math.min(300, prev.zoom * factor));
         if (newZoom === prev.zoom) return prev;
@@ -5300,13 +5341,28 @@ export function Canvas({
             const tutamakX = sol.x + (sag.x - sol.x) * oran;
             const isSelected = selectedObjectIds.includes(s.id);
             const renk = s.color || '#8b5cf6';
+            const bagli = sliderIsBound(objects, s.id);
+            const ayarlariAc = () => {
+              setSelectedObjectIds([s.id]);
+              setSliderSettingsId(s.id);
+            };
 
             return (
               <g
                 key={s.id}
                 data-object-id={s.id} onContextMenu={(e) => openContextMenu(e, s)}
                 className="select-none"
+                onPointerDown={(e) => {
+                  if (!nesneBasisiIslenmeli(activeTool, e) || e.button !== 0) return;
+                  if (activeTool === 'select' && !bagli) {
+                    e.stopPropagation();
+                    ayarlariAc();
+                  } else {
+                    handleObjectMouseDown(e, s);
+                  }
+                }}
               >
+                <rect x={sol.x - 10} y={sol.y - 27} width={sag.x - sol.x + 20} height={51} fill="transparent" />
                 {/* Taşıyıcı çizgi */}
                 <line
                   x1={sol.x}
@@ -5369,6 +5425,9 @@ export function Canvas({
                     if (!nesneBasisiIslenmeli(activeTool, e)) return;
                     if (e.button !== 0) return;
                     e.stopPropagation();
+                    if (activeTool === 'delete') { deleteObject(s.id); return; }
+                    if (activeTool !== 'select') return;
+                    if (!bagli) { ayarlariAc(); return; }
                     setSelectedObjectId(s.id);
                     setSelectedObjectIds([s.id]);
                     sliderDragRef.current = { id: s.id };
@@ -5377,6 +5436,35 @@ export function Canvas({
                     }
                   }}
                 />
+                <g
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${s.variableName} kaydırıcısı ayarları`}
+                  transform={`translate(${sag.x + 18} ${sol.y - 9})`}
+                  className={`text-muted-foreground hover:text-primary ${imlecSinifi(activeTool, 'nesne')}`}
+                  style={{ touchAction: 'none' }}
+                  onPointerDown={(e) => {
+                    if (!nesneBasisiIslenmeli(activeTool, e) || e.button !== 0) return;
+                    e.stopPropagation();
+                    if (activeTool === 'delete') { deleteObject(s.id); return; }
+                    if (activeTool !== 'select') return;
+                    e.preventDefault();
+                    setSelectedObjectIds([s.id]);
+                    sliderPositionDragRef.current = {
+                      id: s.id, pointerId: e.pointerId,
+                      startClient: { x: e.clientX, y: e.clientY },
+                      startPosition: { x: s.x as number, y: s.y as number }, moved: false,
+                    };
+                    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* Pencere dinleyicileri sürüklemeyi sürdürür. */ }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); ayarlariAc(); }
+                  }}
+                >
+                  <title>Ayarlar için tıklayın; taşımak için sürükleyin</title>
+                  <rect x={-4} y={-4} width={26} height={26} rx={5} fill="transparent" />
+                  <Settings width={18} height={18} />
+                </g>
                 {isSelected && (
                   <circle
                     cx={tutamakX}

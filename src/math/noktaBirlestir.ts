@@ -12,7 +12,7 @@
  */
 import type { MathObject, PointObject, SegmentObject } from '@/types/math';
 import { GERI_AL_IPUCU, describeList } from '@/math/nesneAdlari';
-import { resolveCommandBindings } from '@/math/commandBindings';
+import { constructionDependencies, resolveCommandBindings } from '@/math/commandBindings';
 
 /** "Üst üste" sayılma sınırı: ekranda bu kadar piksele kadar yakın noktalar bir aradadır. */
 export const BIRLESTIRME_PIKSELI = 12;
@@ -42,10 +42,10 @@ export function bagimliliklar(o: MathObject): string[] {
       return o.throughPointIds && o.throughPointIds.length > 0
         ? [...o.throughPointIds, ...(o.radiusPointId ? [o.radiusPointId] : [])]
         : [o.centerPointId, ...(o.radiusPointId ? [o.radiusPointId] : [])];
-    case 'ellipse': return [o.centerPointId];
+    case 'ellipse': return [o.centerPointId, ...Object.values(o.sliderBindings ?? {})];
     case 'arc':
     case 'sector': return [o.centerPointId, o.startPointId, o.directionPointId];
-    case 'angle': return [o.point1Id, o.vertexPointId, o.point3Id];
+    case 'angle': return [o.point1Id, o.vertexPointId, o.point3Id, ...(o.valueSliderId ? [o.valueSliderId] : [])];
     case 'polygon': return o.pointIds;
     case 'measurement':
       return o.kind === 'arc'
@@ -68,24 +68,7 @@ export function bagimliliklar(o: MathObject): string[] {
 
 /** Kurulumlu (türetilmiş) bir noktanın kaynak kimlikleri. */
 export function kurulumKaynaklari(point: PointObject): string[] {
-  const rule = point.construction;
-  if (!rule) return [];
-  switch (rule.kind) {
-    case 'foot': return [rule.sourceId, ...rule.linePointIds];
-    case 'midpoint': return rule.pointIds;
-    case 'tangent': return [rule.circleId, rule.sourceId];
-    case 'triangleVertex': return [rule.anchorId, ...rule.sliderIds];
-    case 'ratio': return rule.pointIds;
-    case 'direction': return [rule.throughId, ...rule.linePointIds];
-    case 'bisector': return rule.pointIds;
-    case 'intersection': return rule.objectIds;
-    case 'reflect': return [rule.sourceId, ...(rule.axisPointIds ?? []), ...(rule.centerId ? [rule.centerId] : [])];
-    case 'rotate': return [rule.sourceId, ...(rule.centerId ? [rule.centerId] : []), ...(rule.sliderId ? [rule.sliderId] : [])];
-    case 'translate': return [rule.sourceId, ...(rule.vectorPointIds ?? [])];
-    case 'dilate': return [rule.sourceId, ...(rule.centerId ? [rule.centerId] : [])];
-    case 'triangleCenter': return rule.pointIds;
-    default: return [];
-  }
+  return constructionDependencies(point);
 }
 
 // --------------------------------------------------------------------------- üst üste gelme
@@ -259,6 +242,10 @@ function kurulumuYonlendir(rule: NonNullable<PointObject['construction']>, r: (i
     case 'midpoint': return { ...rule, pointIds: [r(rule.pointIds[0]), r(rule.pointIds[1])] };
     case 'tangent': return { ...rule, circleId: r(rule.circleId), sourceId: r(rule.sourceId) };
     case 'triangleVertex': return { ...rule, anchorId: r(rule.anchorId) };
+    case 'sliderPoint':
+      if (rule.mode === 'angle') return { ...rule, anchorId: r(rule.anchorId), referenceId: r(rule.referenceId) };
+      if (rule.mode === 'length') return { ...rule, anchorId: r(rule.anchorId) };
+      return rule;
     case 'ratio': return { ...rule, pointIds: [r(rule.pointIds[0]), r(rule.pointIds[1])] };
     case 'direction': return { ...rule, throughId: r(rule.throughId), linePointIds: [r(rule.linePointIds[0]), r(rule.linePointIds[1])] };
     case 'bisector': return { ...rule, pointIds: [r(rule.pointIds[0]), r(rule.pointIds[1]), r(rule.pointIds[2])] };
@@ -330,6 +317,8 @@ function kurulumCokmusMu(p: PointObject, byId?: ReadonlyMap<string, MathObject>)
     case 'rotate':
     case 'dilate':
       return !!rule.centerId && rule.centerId === rule.sourceId;
+    case 'sliderPoint':
+      return rule.mode === 'angle' && rule.anchorId === rule.referenceId;
     case 'tangent': {
       // Teğetin çıkış noktası çemberin MERKEZİ olduysa teğet çizilemez (merkez çemberin içindedir)
       const cember = byId?.get(rule.circleId);

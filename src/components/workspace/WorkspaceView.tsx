@@ -12,6 +12,7 @@ import { PropertiesPanel } from './PropertiesPanel';
 import { ActivityPanel } from './ActivityPanel';
 import { FunctionDialog } from './FunctionDialog';
 import { SliderDialog } from './SliderDialog';
+import { SliderSettingsDialog } from './SliderSettingsDialog';
 import { RegularPolygonDialog } from './RegularPolygonDialog';
 import { CircleRadiusDialog } from './CircleRadiusDialog';
 import { ValuePromptDialog } from './ValuePromptDialog';
@@ -249,6 +250,8 @@ export function WorkspaceView() {
     setIsFunctionDialogOpen,
     isSliderDialogOpen,
     setIsSliderDialogOpen,
+    sliderSettingsId,
+    setSliderSettingsId,
     isAddObjectDialogOpen,
     setIsAddObjectDialogOpen,
   } = useWorkspace();
@@ -977,6 +980,7 @@ export function WorkspaceView() {
       />
       <FunctionDialog isOpen={isFunctionDialogOpen} onClose={() => setIsFunctionDialogOpen(false)} />
       <SliderDialog isOpen={isSliderDialogOpen} onClose={() => setIsSliderDialogOpen(false)} />
+      <SliderSettingsDialog sliderId={sliderSettingsId} onClose={() => setSliderSettingsId(null)} />
       <RegularPolygonDialog
         isOpen={isRegularPolygonDialogOpen}
         onClose={() => setIsRegularPolygonDialogOpen(false)}
@@ -998,4 +1002,3 @@ export function WorkspaceView() {
     </div>
   );
 }
-

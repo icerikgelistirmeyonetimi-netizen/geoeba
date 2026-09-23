@@ -22,7 +22,7 @@ export function shiftFunction(s: CommandScene, fn: FunctionObject, d: Point2D) {
 const CONSTRUCTION_NAMES: Record<NonNullable<PointObject['construction']>['kind'], string> = {
   foot: 'dikme ayağı', midpoint: 'orta nokta', tangent: 'teğet noktası', triangleVertex: 'kaydırıcılara bağlı üçgen köşesi', ratio: 'oranda bölme noktası',
   direction: 'paralel/dik doğrunun noktası', bisector: 'açıortay noktası', intersection: 'kesişim noktası', reflect: 'yansıma görüntüsü', rotate: 'döndürme görüntüsü',
-  translate: 'öteleme görüntüsü', dilate: 'homotete görüntüsü', triangleCenter: 'üçgen merkezi',
+  sliderPoint: 'kaydırıcıya bağlı nokta', translate: 'öteleme görüntüsü', dilate: 'homotete görüntüsü', triangleCenter: 'üçgen merkezi',
 };
 export function constructionName(p: PointObject): string {
   return p.construction ? CONSTRUCTION_NAMES[p.construction.kind] ?? 'bağlı nokta' : 'bağımsız nokta';

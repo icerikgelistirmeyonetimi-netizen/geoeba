@@ -87,6 +87,10 @@ export interface PointObject extends BaseMathObject {
     | { kind: 'midpoint'; pointIds: [string, string] }
     | { kind: 'tangent'; circleId: string; sourceId: string; branch: -1 | 1; direction?: boolean }
     | { kind: 'triangleVertex'; anchorId: string; sliderIds: [string, string, string]; vertex: 1 | 2; rotation: number; orientation: 1 | -1 }
+    /** Kaydırıcının canlı yönettiği koordinat, uzunluk veya yönlü açı. */
+    | { kind: 'sliderPoint'; sliderId: string; mode: 'x' | 'y' }
+    | { kind: 'sliderPoint'; sliderId: string; mode: 'length'; anchorId: string; direction: Point2D }
+    | { kind: 'sliderPoint'; sliderId: string; mode: 'angle'; anchorId: string; referenceId: string; radius: number; orientation: 1 | -1; maximumDegrees?: number }
     /** A + t·(B − A); t = m/(m+n) oranında bölme. */
     | { kind: 'ratio'; pointIds: [string, string]; t: number }
     /** throughId noktasından geçen, AB'ye paralel/dik doğrunun ikinci noktası (|AB| kadar ötede). */
@@ -200,6 +204,8 @@ export interface EllipseObject extends BaseMathObject {
   radiusY: number;
   /** Saat yönünün tersine dönme açısı (derece) */
   rotation?: number;
+  /** Özelliği canlı belirleyen kaydırıcının kimliği. */
+  sliderBindings?: Partial<Record<'radiusX' | 'radiusY' | 'rotation', string>>;
   fillColor?: string;
   fillOpacity?: number;
   showArea?: boolean;
@@ -246,6 +252,8 @@ export interface SectorObject extends BaseMathObject {
 
 export interface AngleObject extends BaseMathObject {
   type: 'angle';
+  /** Bu açı ölçüsünü yöneten kaydırıcı; aynı kollardaki diğer açı ölçümlerini değiştirmez. */
+  valueSliderId?: string;
   point1Id: string; // Açının bir kolundaki nokta
   vertexPointId: string; // Açının köşe noktası
   point3Id: string; // Açının diğer kolundaki nokta

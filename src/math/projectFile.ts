@@ -53,6 +53,14 @@ export function validateProjectObjects(input: unknown): MathObject[] {
     for (const key of ['locked', 'selected', 'showTrace', 'animating', 'showLength', 'showEquation', 'showArea', 'showPerimeter', 'showRadius', 'showChordLength', 'showArcLength', 'showCentralAngle', 'showValue', 'reflex', 'major']) if (o[key] !== undefined && typeof o[key] !== 'boolean') fail(`${key} geçersiz`);
     if (o.fillColor !== undefined && !str(o.fillColor)) fail('dolgu rengi geçersiz');
     if (o.dependsOn !== undefined) ids(o, 'dependsOn', 0);
+    if (o.sliderBindings !== undefined) {
+      if (o.type !== 'ellipse') fail('bu nesnenin kaydırıcı özellikleri desteklenmiyor');
+      const bindings = row(o.sliderBindings);
+      for (const key of Object.keys(bindings)) {
+        if (!['radiusX', 'radiusY', 'rotation'].includes(key)) fail('elipsin kaydırıcı özelliği geçersiz');
+        id(bindings, key);
+      }
+    }
     if (o.onObjectId !== undefined) id(o, 'onObjectId');
     if (['point', 'text', 'image', 'checkbox', 'button', 'input_box', 'fraction'].includes(o.type)) numbers(o, ['x', 'y']);
     if (o.labelOffsets !== undefined) for (const v of Object.values(row(o.labelOffsets))) numbers(row(v), ['x', 'y']);
@@ -82,7 +90,10 @@ export function validateProjectObjects(input: unknown): MathObject[] {
         break;
       case 'ellipse': id(o, 'centerPointId'); numbers(o, ['radiusX', 'radiusY'], true); break;
       case 'arc': case 'sector': id(o, 'centerPointId'); id(o, 'startPointId'); id(o, 'directionPointId'); break;
-      case 'angle': id(o, 'point1Id'); id(o, 'vertexPointId'); id(o, 'point3Id'); break;
+      case 'angle':
+        id(o, 'point1Id'); id(o, 'vertexPointId'); id(o, 'point3Id');
+        if (o.valueSliderId !== undefined) id(o, 'valueSliderId');
+        break;
       case 'polygon':
         ids(o, 'pointIds', 3);
         if (o.edgeLabels !== undefined && (!Array.isArray(o.edgeLabels) || !o.edgeLabels.every((i: unknown) => Number.isInteger(i) && Number(i) >= 0 && Number(i) < o.pointIds.length))) fail('kenar etiketleri geçersiz');
@@ -152,6 +163,21 @@ export function validateProjectObjects(input: unknown): MathObject[] {
         case 'intersection': ids(c, 'objectIds', 2, 2); numbers(c, ['index']); break;
         case 'tangent': id(c, 'circleId'); id(c, 'sourceId'); if (![1, -1].includes(c.branch)) fail('teğet dalı geçersiz'); break;
         case 'triangleVertex': id(c, 'anchorId'); ids(c, 'sliderIds', 3, 3); numbers(c, ['rotation']); if (![1, 2].includes(c.vertex) || ![1, -1].includes(c.orientation)) fail('üçgen inşası geçersiz'); break;
+        case 'sliderPoint':
+          if (o.type !== 'point') fail('kaydırıcı inşası bir noktaya ait olmalı');
+          id(c, 'sliderId');
+          if (c.mode === 'length') {
+            id(c, 'anchorId');
+            const direction = row(c.direction);
+            numbers(direction, ['x', 'y']);
+            const magnitude = Math.hypot(direction.x, direction.y);
+            if (!(magnitude > 1e-12) || !Number.isFinite(magnitude)) fail('kaydırıcı uzunluğunun yönü geçersiz');
+          } else if (c.mode === 'angle') {
+            id(c, 'anchorId'); id(c, 'referenceId'); numbers(c, ['radius'], true);
+            if (![1, -1].includes(c.orientation)) fail('kaydırıcı açısının yönü geçersiz');
+            if (c.maximumDegrees !== undefined && (!finite(c.maximumDegrees) || c.maximumDegrees <= 0 || c.maximumDegrees > 360)) fail('kaydırıcı açısının üst sınırı geçersiz');
+          } else if (!['x', 'y'].includes(c.mode)) fail('kaydırıcı inşasının özelliği geçersiz');
+          break;
         case 'triangleCenter': ids(c, 'pointIds', 3, 3); if (!['centroid', 'circumcenter', 'incenter', 'orthocenter'].includes(c.center)) fail('üçgen merkezi geçersiz'); break;
         case 'reflect': id(c, 'sourceId'); if (c.axisPointIds) ids(c, 'axisPointIds', 2, 2); else if (!c.centerId && !['x', 'y', 'y=x', 'y=-x'].includes(c.axis)) fail('yansıma ekseni eksik'); break;
         case 'rotate': id(c, 'sourceId'); numbers(c, ['degrees']); if (!c.centerId) numbers(row(c.center), ['x', 'y']); break;
@@ -178,12 +204,13 @@ export function validateProjectObjects(input: unknown): MathObject[] {
     // bu yüzden eksik hedefi kaydı reddettirmemeli (reddedilince kayıtlı çizim boş açılıyordu).
     if (key === 'id' || key === 'releasedRadiusPointId' || key === 'armOfAngleId' || key === 'labelAnchors') return [];
     if (key === 'centerPointId' && parent?.type === 'circle' && parent.throughPointIds?.length) return [];
+    if (key === 'sliderBindings') return Object.values(row(value)).flatMap(sliderId => references(sliderId, 'sliderId'));
     if (typeof value === 'string' && (/Ids?$/.test(key) || key === 'dependsOn')) {
       const target = byId.get(value);
       if (!target) fail(`bulunamayan nesne başvurusu: ${value}`);
       if (/PointIds?$/.test(key) || key === 'pointIds') if (target.type !== 'point') fail('nokta başvurusu başka bir nesneye gidiyor');
-      if (['sourceId', 'anchorId', 'throughId', 'centerId'].includes(key) && target.type !== 'point') fail('inşa noktası geçersiz');
-      if (/^sliderIds?$/.test(key) && target.type !== 'slider') fail('kaydırıcı başvurusu geçersiz');
+      if (['sourceId', 'anchorId', 'referenceId', 'throughId', 'centerId'].includes(key) && target.type !== 'point') fail('inşa noktası geçersiz');
+      if ((/^sliderIds?$/.test(key) || key === 'valueSliderId') && target.type !== 'slider') fail('kaydırıcı başvurusu geçersiz');
       if (key === 'circleId' && target.type !== 'circle') fail('çember başvurusu geçersiz');
       return [value];
     }

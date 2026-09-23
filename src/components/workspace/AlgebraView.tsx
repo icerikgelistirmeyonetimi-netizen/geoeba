@@ -26,6 +26,7 @@ import {
   calculateLineEquation,
 } from '@/math/geometry';
 import { formatTurkishNumber, formatCoordinate } from '@/math/coordinates';
+import { sliderIsBound } from '@/math/sliderBindings';
 import { executeTurkishCommand, normalizeCommand } from '@/math/turkishCommands';
 import { searchCommands, CommandSuggestion } from '@/math/commandSearch';
 import { interpretSemanticMatch } from '@/math/semanticCommands';
@@ -81,6 +82,7 @@ export function AlgebraView({
     updateObject,
     deleteObject,
     handleSliderChange,
+    setSliderSettingsId,
     setSliderValues,
     viewport,
     styleSettings,
@@ -470,11 +472,15 @@ export function AlgebraView({
                       const isSelected = selectedObjectIds.includes(obj.id);
                       const expr = formatObjectExpression(obj);
                       const isVisible = obj.visible !== false;
+                      const sliderBound = obj.type === 'slider' && sliderIsBound(objects, obj.id);
 
                       return (
                         <div
                           key={obj.id}
-                          onClick={() => setSelectedObjectIds([obj.id])}
+                          onClick={() => {
+                            setSelectedObjectIds([obj.id]);
+                            if (obj.type === 'slider' && !sliderBound) setSliderSettingsId(obj.id);
+                          }}
                           className={`group flex flex-col px-2.5 py-1.5 rounded-lg text-xs transition-all cursor-pointer border ${
                             isSelected
                               ? 'bg-primary/15 border-primary/40 shadow-sm'
@@ -510,8 +516,22 @@ export function AlgebraView({
                               </div>
                             </div>
 
-                            {/* Sağ Eylemler (Sil / Oynat) */}
+                            {/* Sağ Eylemler (Ayarlar / Sil / Oynat) */}
                             <div className="flex items-center gap-1">
+                              {obj.type === 'slider' && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSliderSettingsId(obj.id);
+                                  }}
+                                  aria-label={`${expr.header} kaydırıcısı ayarları`}
+                                  title={`${expr.header} kaydırıcısı ayarları`}
+                                  className="p-1 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                                >
+                                  <Sliders className="w-3 h-3" aria-hidden="true" />
+                                </button>
+                              )}
                               {obj.type === 'slider' && (
                                 <button
                                   type="button"
@@ -548,7 +568,22 @@ export function AlgebraView({
                                 max={(obj as SliderObject).max}
                                 step={(obj as SliderObject).step}
                                 value={(obj as SliderObject).value}
-                                onChange={(e) => handleSliderChange(obj.id, parseFloat(e.target.value))}
+                                aria-label={`${expr.header} değeri`}
+                                onPointerDown={(e) => {
+                                  if (sliderBound) return;
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setSliderSettingsId(obj.id);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (sliderBound || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown', 'Enter', ' '].includes(e.key)) return;
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setSliderSettingsId(obj.id);
+                                }}
+                                onChange={(e) => {
+                                  if (sliderBound) handleSliderChange(obj.id, parseFloat(e.target.value));
+                                }}
                                 className="w-full h-1.5 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
                               />
                             </div>

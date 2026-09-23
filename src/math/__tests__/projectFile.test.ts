@@ -5,6 +5,110 @@ import { executeTurkishCommand } from '../turkishCommands';
 const p = (id: string, x = 0, y = 0) => ({ id, type: 'point', x, y });
 const base = { id: 'triangle', type: 'polygon', pointIds: ['A', 'B', 'C'] };
 
+describe('slider point construction persistence', () => {
+  const slider = { id: 's', type: 'slider', variableName: 'a', min: -10, max: 180, step: 1, value: 5 };
+  const length = { kind: 'sliderPoint', sliderId: 's', mode: 'length', anchorId: 'A', direction: { x: 0.6, y: 0.8 } };
+  const angle = { kind: 'sliderPoint', sliderId: 's', mode: 'angle', anchorId: 'A', referenceId: 'R', radius: 3, orientation: -1 };
+  const file = (construction: unknown) => ({ objects: [p('A'), p('R', 4), slider, { ...p('B', 3, 4), construction }] });
+
+  it.each([
+    { kind: 'sliderPoint', sliderId: 's', mode: 'x' },
+    { kind: 'sliderPoint', sliderId: 's', mode: 'y' },
+    length,
+    angle,
+    { ...angle, maximumDegrees: 180 },
+  ])('round trips %j without changing the binding or source document', construction => {
+    const input = file(construction), snapshot = JSON.stringify(input);
+    const loaded = parseProjectFile(input);
+    expect(loaded.objects[3]).toMatchObject({ construction });
+    expect(parseProjectFile(JSON.parse(JSON.stringify(loaded)))).toEqual(loaded);
+    expect(JSON.stringify(input)).toBe(snapshot);
+  });
+
+  it.each([
+    { ...length, mode: 'radius' },
+    { ...length, sliderId: undefined },
+    { ...length, anchorId: undefined },
+    { ...length, direction: null },
+    { ...length, direction: { x: 0, y: 0 } },
+    { ...length, direction: { x: 1e-13, y: 0 } },
+    { ...length, direction: { x: Number.MAX_VALUE, y: Number.MAX_VALUE } },
+    { ...length, direction: { x: '1', y: 0 } },
+    { ...length, direction: { x: Infinity, y: 0 } },
+    { ...angle, referenceId: undefined },
+    { ...angle, radius: 0 },
+    { ...angle, radius: -1 },
+    { ...angle, radius: NaN },
+    { ...angle, orientation: 0 },
+    { ...angle, maximumDegrees: 0 },
+    { ...angle, maximumDegrees: 361 },
+    { ...angle, maximumDegrees: Infinity },
+    { ...angle, maximumDegrees: '180' },
+  ])('rejects malformed slider point construction: %j', construction => {
+    expect(() => parseProjectFile(file(construction))).toThrow();
+  });
+
+  it.each([
+    { ...length, sliderId: 'missing' },
+    { ...length, sliderId: 'A' },
+    { ...length, anchorId: 's' },
+    { ...angle, referenceId: 'missing' },
+    { ...angle, referenceId: 's' },
+  ])('rejects missing references and the wrong target type: %j', construction => {
+    expect(() => parseProjectFile(file(construction))).toThrow();
+  });
+
+  it('rejects self references and indirect cycles through the angle reference point', () => {
+    expect(() => parseProjectFile(file({ ...length, anchorId: 'B' }))).toThrow(/döngü/);
+    const input = file(angle);
+    input.objects[1] = { ...p('R', 4), construction: { kind: 'midpoint', pointIds: ['A', 'B'] } };
+    expect(() => parseProjectFile(input)).toThrow(/döngü/);
+  });
+
+  it('round trips the owning angle reference without introducing a dependency cycle', () => {
+    const input = { objects: [...file(angle).objects,
+      { id: 'angle', type: 'angle', point1Id: 'R', vertexPointId: 'A', point3Id: 'B', valueSliderId: 's' }] };
+    const loaded = parseProjectFile(input);
+    expect(loaded.objects[4]).toMatchObject({ valueSliderId: 's' });
+    expect(parseProjectFile(JSON.parse(JSON.stringify(loaded)))).toEqual(loaded);
+  });
+
+  it.each(['', 3, 'missing', 'A'])('rejects an invalid owning angle slider reference: %j', valueSliderId => {
+    expect(() => parseProjectFile({ objects: [...file(angle).objects,
+      { id: 'angle', type: 'angle', point1Id: 'R', vertexPointId: 'A', point3Id: 'B', valueSliderId }] })).toThrow();
+  });
+});
+
+describe('ellipse slider binding persistence', () => {
+  const ellipse = { id: 'ellipse', type: 'ellipse', centerPointId: 'O', radiusX: 4, radiusY: 2, rotation: 25 };
+  const sliders = ['rx', 'ry', 'turn'].map(id => ({ id, type: 'slider', variableName: id, min: 1, max: 90, step: 1, value: 5 }));
+  const file = (sliderBindings: unknown) => ({ objects: [p('O'), ...sliders, { ...ellipse, sliderBindings }] });
+
+  it('round trips all three property bindings without changing their target identities', () => {
+    const bindings = { radiusX: 'rx', radiusY: 'ry', rotation: 'turn' };
+    const input = file(bindings), snapshot = JSON.stringify(input);
+    const loaded = parseProjectFile(input);
+    expect(loaded.objects[4]).toMatchObject({ ...ellipse, sliderBindings: bindings });
+    expect(parseProjectFile(JSON.parse(JSON.stringify(loaded)))).toEqual(loaded);
+    expect(JSON.stringify(input)).toBe(snapshot);
+  });
+
+  it.each([null, [], 'rx', { area: 'rx' }, { radiusX: '' }, { radiusX: 5 }, { radiusY: 'missing' }, { rotation: 'O' }])(
+    'rejects malformed maps, unsupported properties and invalid slider targets: %j', bindings => {
+      expect(() => parseProjectFile(file(bindings))).toThrow();
+    });
+
+  it('rejects a binding map attached to a different shape type', () => {
+    expect(() => parseProjectFile({ objects: [p('O'), ...sliders, { ...p('P'), sliderBindings: { radiusX: 'rx' } }] })).toThrow();
+  });
+
+  it('includes map values when detecting dependency cycles', () => {
+    const input = file({ radiusX: 'rx' });
+    const objects = input.objects.map(o => o.id === 'rx' ? { ...o, dependsOn: ['ellipse'] } : o);
+    expect(() => parseProjectFile({ objects })).toThrow(/döngü/);
+  });
+});
+
 describe('measurement label anchors', () => {
   const anchor = { pointIds: ['A', 'B', 'C'], offset: { x: 6, y: 2 }, alignment: 'left' };
 

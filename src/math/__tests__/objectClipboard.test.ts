@@ -4,8 +4,88 @@ import { executeTurkishCommand } from '../turkishCommands';
 import { objectDependencies } from '@/state/WorkspaceContext';
 import type { MathObject, PointObject, PolygonObject, SegmentObject } from '@/types/math';
 import { parseProjectFile } from '../projectFile';
+import { resolveCommandBindings } from '../commandBindings';
 
 describe('object clipboard', () => {
+  it('copies ellipse property sliders and remaps the values inside the property map', () => {
+    const original = parseProjectFile({ objects: [
+      { id: 'O', type: 'point', x: 2, y: 1 },
+      { id: 'rx', type: 'slider', variableName: 'a', min: 1, max: 10, step: 1, value: 5 },
+      { id: 'turn', type: 'slider', variableName: 'b', min: -180, max: 180, step: 1, value: 30 },
+      { id: 'ellipse', type: 'ellipse', centerPointId: 'O', radiusX: 5, radiusY: 2, rotation: 30, sliderBindings: { radiusX: 'rx', rotation: 'turn' } },
+    ] }).objects;
+    const snapshot = JSON.stringify(original);
+    const clipboard = copyObjects(original, ['ellipse']);
+    expect(clipboard.objects).toHaveLength(4);
+    const pasted = pasteObjects(clipboard, original, { x: 12, y: 8 });
+    const ellipse = pasted.objects.find(o => o.type === 'ellipse');
+    if (ellipse?.type !== 'ellipse') throw Error('fixture');
+    const radiusId = ellipse.sliderBindings!.radiusX!, rotationId = ellipse.sliderBindings!.rotation!;
+    expect(radiusId).not.toBe('rx');
+    expect(rotationId).not.toBe('turn');
+    expect(pasted.objects.find(o => o.id === radiusId)).toMatchObject({ type: 'slider', variableName: 'a2' });
+    expect(pasted.objects.find(o => o.id === rotationId)).toMatchObject({ type: 'slider', variableName: 'b2' });
+    expect(objectDependencies(ellipse)).toEqual([ellipse.centerPointId, radiusId, rotationId]);
+    expect(parseProjectFile({ objects: pasted.objects }).objects).toEqual(pasted.objects);
+    const combined = resolveCommandBindings([...original, ...pasted.objects].map(o =>
+      o.id === radiusId && o.type === 'slider' ? { ...o, value: 8 } : o));
+    expect(combined.find(o => o.id === ellipse.id)).toMatchObject({ radiusX: 8, radiusY: 2, rotation: 30 });
+    expect(combined.find(o => o.id === 'ellipse')).toMatchObject({ radiusX: 5 });
+    expect(JSON.stringify(original)).toBe(snapshot);
+  });
+
+  it('remaps an angle owner and its point construction to the same copied slider', () => {
+    const original = parseProjectFile({ objects: [
+      { id: 'A', type: 'point', x: 0, y: 0 },
+      { id: 'R', type: 'point', x: 4, y: 0 },
+      { id: 'B', type: 'point', x: 3, y: 0, construction: { kind: 'sliderPoint', sliderId: 's', mode: 'angle', anchorId: 'A', referenceId: 'R', radius: 3, orientation: -1 } },
+      { id: 's', type: 'slider', variableName: 'a', min: 0, max: 360, step: 1, value: 0 },
+      { id: 'angle', type: 'angle', point1Id: 'R', vertexPointId: 'A', point3Id: 'B', valueSliderId: 's' },
+    ] }).objects;
+    const pasted = pasteObjects(copyObjects(original, ['angle']), original, { x: 12, y: 8 });
+    expect(pasted.objects).toHaveLength(5);
+    const angle = pasted.objects.find(o => o.type === 'angle')!;
+    const slider = pasted.objects.find(o => o.type === 'slider')!;
+    expect(angle).toMatchObject({ valueSliderId: slider.id });
+    if (angle.type !== 'angle') throw Error('fixture');
+    expect(pasted.objects.find(o => o.id === angle.point3Id)).toMatchObject({ construction: { sliderId: slider.id } });
+    expect(parseProjectFile({ objects: pasted.objects }).objects).toEqual(pasted.objects);
+  });
+
+  it.each([
+    { kind: 'sliderPoint', sliderId: 's', mode: 'x' },
+    { kind: 'sliderPoint', sliderId: 's', mode: 'y' },
+    { kind: 'sliderPoint', sliderId: 's', mode: 'length', anchorId: 'A', direction: { x: 0.6, y: 0.8 } },
+    { kind: 'sliderPoint', sliderId: 's', mode: 'angle', anchorId: 'A', referenceId: 'R', radius: 3, orientation: -1 },
+  ])('copies and remaps every dependency of a slider-driven point: %j', construction => {
+    const original = parseProjectFile({ objects: [
+      { id: 'A', type: 'point', x: 0, y: 0 },
+      { id: 'R', type: 'point', x: 4, y: 0 },
+      { id: 'B', type: 'point', x: 3, y: 4, construction },
+      { id: 's', type: 'slider', variableName: 'a', min: -10, max: 180, step: 1, value: 5 },
+    ] }).objects;
+    const snapshot = JSON.stringify(original);
+    const clipboard = copyObjects(original, ['B']);
+    const expectedIds = construction.mode === 'angle' ? ['A', 'R', 'B', 's']
+      : construction.mode === 'length' ? ['A', 'B', 's'] : ['B', 's'];
+    expect(clipboard.objects.map(o => o.id)).toEqual(expectedIds);
+    const pasted = pasteObjects(clipboard, original, { x: 12, y: 8 });
+    const target = pasted.objects.find((o): o is PointObject => o.id === pasted.selectedIds[0] && o.type === 'point')!;
+    const slider = pasted.objects.find(o => o.type === 'slider')!;
+    expect(slider).toMatchObject({ type: 'slider', variableName: 'a2' });
+    expect(target.construction).toMatchObject({ kind: 'sliderPoint', sliderId: slider.id, mode: construction.mode });
+    const dependencies = objectDependencies(target);
+    expect(dependencies.length).toBe(expectedIds.length - 1);
+    for (const id of dependencies) {
+      expect(original.some(o => o.id === id)).toBe(false);
+      expect(pasted.objects.some(o => o.id === id)).toBe(true);
+    }
+    if ('direction' in construction) expect(target.construction).toMatchObject({ direction: construction.direction });
+    if ('radius' in construction) expect(target.construction).toMatchObject({ radius: construction.radius, orientation: -1 });
+    expect(parseProjectFile({ objects: pasted.objects }).objects).toEqual(pasted.objects);
+    expect(JSON.stringify(original)).toBe(snapshot);
+  });
+
   it('copies a polygon with its points and creates independent identities', () => {
     const original = executeTurkishCommand('3 4 5 üçgen çiz', []);
     if (!original.ok) throw Error('fixture');

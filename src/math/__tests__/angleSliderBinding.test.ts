@@ -4,6 +4,26 @@ import { resolveCommandBindings } from '../commandBindings';
 import { calculateAngleDegrees } from '../geometry';
 
 describe('angle slider binding and animation', () => {
+  it.each(['first', 'third'] as const)('updates only the tagged angle when its %s arm is slider driven', arm => {
+    const base = (id: string) => ({ id, label: id, color: '#000', visible: true, showLabel: true, createdAt: 0 });
+    const point = (id: string, x: number, y: number): PointObject => ({ ...base(id), type: 'point', x, y, isIndependent: true });
+    const vertex = point('V', 0, 0), first = point('A', 3, 0), third = point('B', 0, 2), other = point('C', -2, 0);
+    const moving = arm === 'first' ? first : third;
+    const reference = arm === 'first' ? third : first;
+    moving.construction = { kind: 'sliderPoint', sliderId: 's', mode: 'angle', anchorId: 'V', referenceId: reference.id, radius: 2, orientation: 1 };
+    const slider: SliderObject = { ...base('s'), type: 'slider', variableName: 'a', min: 0, max: 360, step: 1, value: 270 };
+    const selected: AngleObject = { ...base('selected'), type: 'angle', vertexPointId: 'V', point1Id: 'A', point3Id: 'B', valueSliderId: 's', reflex: false };
+    const unrelated: AngleObject = { ...selected, id: 'unrelated', point1Id: arm === 'first' ? 'A' : 'C', point3Id: arm === 'first' ? 'C' : 'B' };
+    const untagged: AngleObject = { ...selected, id: 'untagged', valueSliderId: undefined };
+    const scene: MathObject[] = [selected, unrelated, untagged, vertex, first, third, other, slider];
+    const exterior = resolveCommandBindings(scene);
+    expect(exterior.find(o => o.id === 'selected')).toMatchObject({ reflex: true });
+    expect(exterior.find(o => o.id === 'unrelated')).toBe(unrelated);
+    expect(exterior.find(o => o.id === 'untagged')).toBe(untagged);
+    const interior = resolveCommandBindings(exterior.map(o => o.id === 's' ? { ...o, value: 45 } as SliderObject : o));
+    expect(interior.find(o => o.id === 'selected')).toMatchObject({ reflex: false });
+  });
+
   it('dynamically rotates point3 and updates angle measurement when slider value changes', () => {
     // V at (0, 0), P1 at (4, 0) -> initial arm along positive X axis
     const V: PointObject = {

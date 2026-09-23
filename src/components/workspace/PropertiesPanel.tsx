@@ -25,6 +25,7 @@ import {
 } from '@/math/geometry';
 import { formatTurkishNumber, formatCoordinate } from '@/math/coordinates';
 import { noktaZ } from '@/math/zEkseni';
+import { sliderIsBound } from '@/math/sliderBindings';
 import {
   Settings,
   Trash2,
@@ -97,6 +98,7 @@ export function PropertiesPanel({
     deleteObject,
     setViewport,
     handleSliderChange,
+    setSliderSettingsId,
     recordHistory,
   } = useWorkspace();
 
@@ -1406,7 +1408,9 @@ export function PropertiesPanel({
                 {sliders.map((s) => (
                   <div key={s.id} className="p-3 bg-muted/40 rounded-xl border border-border/40 space-y-2">
                     <div className="flex items-center justify-between text-xs font-semibold">
-                      <span className="text-foreground">{s.variableName} =</span>
+                      <button type="button" onClick={() => setSliderSettingsId(s.id)} className="flex items-center gap-1 text-foreground hover:text-primary" aria-label={`${s.variableName} kaydırıcısı ayarları`}>
+                        {s.variableName} = <Settings className="w-3.5 h-3.5" />
+                      </button>
                       <span className="font-mono text-primary font-bold">{formatTurkishNumber(s.value)}</span>
                     </div>
                     <input
@@ -1415,7 +1419,16 @@ export function PropertiesPanel({
                       max={s.max}
                       step={s.step}
                       value={s.value}
+                      onPointerDown={(e) => {
+                        if (!sliderIsBound(objects, s.id)) { e.preventDefault(); setSliderSettingsId(s.id); }
+                      }}
+                      onKeyDown={(e) => {
+                        if (!sliderIsBound(objects, s.id) && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
+                          e.preventDefault(); setSliderSettingsId(s.id);
+                        }
+                      }}
                       onChange={(e) => {
+                        if (!sliderIsBound(objects, s.id)) return;
                         beginEdit(`slider-${s.id}`, String(s.value));
                         handleSliderChange(s.id, parseFloat(e.target.value));
                       }}

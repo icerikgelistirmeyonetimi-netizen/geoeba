@@ -148,11 +148,13 @@ function isleyiciGovdeleri(
   return bulunan;
 }
 
-/** `ad` ile başlayan işlevin gövdesi (ilk `{`'ten eşleşen `}`'e). */
+/** `ad` ile başlayan ok işlevinin gövdesi; parametre türündeki nesne parantezlerini atlar. */
 function islevGovdesi(kaynak: string, ad: string): string {
   const i = kaynak.indexOf(ad);
   expect(i, `${ad} bulunamadı`).toBeGreaterThan(-1);
-  const suslu = kaynak.indexOf('{', i);
+  const ok = kaynak.indexOf('=>', i);
+  expect(ok, ad + ' ok işlevi bulunamadı').toBeGreaterThan(i);
+  const suslu = kaynak.indexOf('{', ok + 2);
   return kaynak.slice(suslu, kapanisSuslu(kaynak, suslu) + 1);
 }
 

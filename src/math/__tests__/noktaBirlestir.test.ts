@@ -205,6 +205,8 @@ describe('bütün başvuru türleri kalan noktaya yönlendirilir', () => {
     ['midpoint', { kind: 'midpoint', pointIds: ['C', 'D'] }],
     ['tangent', { kind: 'tangent', circleId: 'cem', sourceId: 'C', branch: 1 }],
     ['triangleVertex', { kind: 'triangleVertex', anchorId: 'C', sliderIds: ['s1', 's2', 's3'], vertex: 1, rotation: 0, orientation: 1 }],
+    ['sliderPoint length', { kind: 'sliderPoint', sliderId: 's1', mode: 'length', anchorId: 'C', direction: { x: 1, y: 0 } }],
+    ['sliderPoint angle', { kind: 'sliderPoint', sliderId: 's1', mode: 'angle', anchorId: 'C', referenceId: 'C', radius: 2, orientation: 1 }],
     ['ratio', { kind: 'ratio', pointIds: ['C', 'D'], t: 0.5 }],
     ['direction', { kind: 'direction', throughId: 'C', linePointIds: ['C', 'D'], mode: 'parallel' }],
     ['bisector', { kind: 'bisector', pointIds: ['C', 'D', 'C'] }],
@@ -430,6 +432,38 @@ describe('kaynakları çöken kurulumlar', () => {
     expect(() => validateProjectObjects(JSON.parse(JSON.stringify(objects)))).not.toThrow();
   };
 
+  it('kaydırıcı açısının köşesi ve referansı birleşirse açıyı ve bağlı parçayı kaldırır', () => {
+    const s = [nokta('A', 0, 0), nokta('R', 0.05, 0),
+      yap({ id: 'sl', type: 'slider', variableName: 'a', min: 0, max: 180, step: 1, value: 60 }),
+      nokta('B', 1, Math.sqrt(3), { construction: { kind: 'sliderPoint', sliderId: 'sl', mode: 'angle', anchorId: 'A', referenceId: 'R', radius: 2, orientation: 1 } }),
+      yap({ id: 'sAB', type: 'segment', startPointId: 'A', endPointId: 'B' })];
+    const r = noktalariBirlestir(s, 'A', 'R');
+    expect(r.changed).toBe(true);
+    expect(r.kaldirilanlar.map(o => o.id).sort()).toEqual(['B', 'sAB']);
+    expect(r.objects.find(o => o.id === 'sl')).toBeDefined();
+    expect(sarkikBasvurular(r.objects)).toEqual([]);
+    cozulur(r.objects);
+  });
+
+  it('kaydırıcı uzunluğunun dayandığı nokta birleşince bağ yeni noktada canlı kalır', () => {
+    const s = [nokta('A', 0, 0), nokta('C', 0.03, 0),
+      yap({ id: 'sl', type: 'slider', variableName: 'a', min: 1, max: 10, step: 1, value: 5 }),
+      nokta('B', 3.03, 4, { construction: { kind: 'sliderPoint', sliderId: 'sl', mode: 'length', anchorId: 'C', direction: { x: 0.6, y: 0.8 } } })];
+    const r = noktalariBirlestir(s, 'A', 'C');
+    expect(r.changed).toBe(true);
+    const target = r.objects.find((o): o is PointObject => o.id === 'B' && o.type === 'point')!;
+    expect(target.construction).toMatchObject({ sliderId: 'sl', anchorId: r.keepId });
+    expect(bagimliliklar(target).sort()).toEqual([r.keepId, 'sl'].sort());
+    expect(birlesmeSirasi(r.objects, r.keepId, 'B')).toMatchObject({ keepId: r.keepId, dropId: 'B', reason: 'bagimlilik' });
+    expect(sarkikBasvurular(r.objects)).toEqual([]);
+    cozulur(r.objects);
+    const changed = resolveCommandBindings(r.objects.map(o => o.id === 'sl' ? { ...o, value: 10 } : o));
+    const anchor = changed.find(o => o.id === r.keepId) as PointObject;
+    const end = changed.find(o => o.id === 'B') as PointObject;
+    expect(end.x - anchor.x).toBeCloseTo(6);
+    expect(end.y - anchor.y).toBeCloseTo(8);
+  });
+
   it('yansıma ekseninin iki noktası birleşince yansıma noktası kaldırılır (adım reddedilmez)', () => {
     const s = [nokta('A', 2, 2), nokta('B', 2.06, 2), nokta('P', -1, 3),
       nokta('Q', 5, 5, { construction: { kind: 'reflect', sourceId: 'P', axisPointIds: ['A', 'B'] } }),
@@ -610,6 +644,10 @@ describe('bağımlılık listesi WorkspaceContext ile aynı kalmalı', () => {
     nokta('V', 0, 0, { construction: { kind: 'foot', sourceId: 'A', linePointIds: ['A', 'B'] } }),
     nokta('W', 0, 0, { construction: { kind: 'tangent', circleId: 'cem', sourceId: 'A', branch: 1 } }),
     nokta('Y', 0, 0, { construction: { kind: 'triangleVertex', anchorId: 'A', sliderIds: ['s1', 's2', 's3'], vertex: 1, rotation: 0, orientation: 1 } }),
+    nokta('SX', 0, 0, { construction: { kind: 'sliderPoint', sliderId: 'sl', mode: 'x' } }),
+    nokta('SY', 0, 0, { construction: { kind: 'sliderPoint', sliderId: 'sl', mode: 'y' } }),
+    nokta('SL', 0, 0, { construction: { kind: 'sliderPoint', sliderId: 'sl', mode: 'length', anchorId: 'A', direction: { x: 1, y: 0 } } }),
+    nokta('SA', 0, 0, { construction: { kind: 'sliderPoint', sliderId: 'sl', mode: 'angle', anchorId: 'A', referenceId: 'B', radius: 2, orientation: -1 } }),
     nokta('Z', 0, 0, { construction: { kind: 'direction', throughId: 'A', linePointIds: ['A', 'B'], mode: 'parallel' } }),
     nokta('T', 0, 0, { construction: { kind: 'bisector', pointIds: ['A', 'B', 'C'] } }),
     nokta('N', 0, 0, { construction: { kind: 'dilate', sourceId: 'A', centerId: 'B', factor: 2 } }),
@@ -621,9 +659,11 @@ describe('bağımlılık listesi WorkspaceContext ile aynı kalmalı', () => {
     yap({ id: 'cem', type: 'circle', centerPointId: 'A', radiusPointId: 'B' }),
     yap({ id: 'cev', type: 'circle', centerPointId: '', throughPointIds: ['A', 'B', 'C'] }),
     yap({ id: 'elp', type: 'ellipse', centerPointId: 'A', radiusX: 1, radiusY: 2 }),
+    yap({ id: 'sliderElp', type: 'ellipse', centerPointId: 'A', radiusX: 1, radiusY: 2, sliderBindings: { radiusX: 'sl', radiusY: 'sl', rotation: 'turn' } }),
     yap({ id: 'yay', type: 'arc', centerPointId: 'A', startPointId: 'B', directionPointId: 'C' }),
     yap({ id: 'dlm', type: 'sector', centerPointId: 'A', startPointId: 'B', directionPointId: 'C' }),
     yap({ id: 'aci', type: 'angle', point1Id: 'A', vertexPointId: 'B', point3Id: 'C' }),
+    yap({ id: 'sliderAci', type: 'angle', point1Id: 'A', vertexPointId: 'B', point3Id: 'C', valueSliderId: 'sl' }),
     yap({ id: 'cok', type: 'polygon', pointIds: ['A', 'B', 'C'] }),
     yap({ id: 'egm', type: 'measurement', kind: 'slope', pointIds: ['A', 'B'] }),
     yap({ id: 'ykl', type: 'measurement', kind: 'arc', pointIds: ['A', 'B'], circleId: 'cem', throughPointId: 'C' }),

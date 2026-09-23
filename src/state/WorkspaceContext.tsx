@@ -1,5 +1,6 @@
 'use client';
 import { resolveCommandBindings, constructionDependencies, commandCircleGeometry } from '@/math/commandBindings';
+import { detachSliderBindings } from '@/math/sliderBindings';
 import type { PointAnimUpdate } from '@/math/pathAnimation';
 import { bagimliZleriHesapla, nesneleriZdeOtele } from '@/math/zEkseni';
 import { ortakGeriAlmaHedefi, ortakYinelemeHedefi } from '@/math/ortakGecmis';
@@ -155,6 +156,8 @@ interface WorkspaceContextType {
   setIsFunctionDialogOpen: (open: boolean) => void;
   isSliderDialogOpen: boolean;
   setIsSliderDialogOpen: (open: boolean) => void;
+  sliderSettingsId: string | null;
+  setSliderSettingsId: (id: string | null) => void;
   isAddObjectDialogOpen: boolean;
   setIsAddObjectDialogOpen: (open: boolean) => void;
   activateTool: (tool: ToolMode) => void;
@@ -675,12 +678,12 @@ export function objectDependencies(o: MathObject): string[] {
         ? [...o.throughPointIds, ...(o.radiusPointId ? [o.radiusPointId] : [])]
         : [o.centerPointId, ...(o.radiusPointId ? [o.radiusPointId] : [])];
     case 'ellipse':
-      return [o.centerPointId];
+      return [o.centerPointId, ...Object.values(o.sliderBindings ?? {})];
     case 'arc':
     case 'sector':
       return [o.centerPointId, o.startPointId, o.directionPointId];
     case 'angle':
-      return [o.point1Id, o.vertexPointId, o.point3Id];
+      return [o.point1Id, o.vertexPointId, o.point3Id, ...(o.valueSliderId ? [o.valueSliderId] : [])];
     case 'polygon':
       return o.pointIds;
     case 'measurement':
@@ -1426,6 +1429,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('2d_only');
   const [isFunctionDialogOpen, setIsFunctionDialogOpen] = useState<boolean>(false);
   const [isSliderDialogOpen, setIsSliderDialogOpen] = useState<boolean>(false);
+  const [sliderSettingsId, setSliderSettingsId] = useState<string | null>(null);
   const [isAddObjectDialogOpen, setIsAddObjectDialogOpen] = useState<boolean>(false);
 
   const activateTool = useCallback((tool: ToolMode) => {
@@ -1678,7 +1682,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       if (ids.length === 0) return;
       const { objects: currentObjects, pendingPointIds: bekleyen } = latest.current;
       const secenek: DeletionOptions = { keepPoints: tercih.keepPoints, protectedIds: bekleyen };
-      const plan = planDeletion(currentObjects, ids, secenek);
+      const requestedSliderIds = currentObjects.filter(o => o.type === 'slider' && ids.includes(o.id)).map(o => o.id);
+      let prepared: MathObject[];
+      try {
+        prepared = detachSliderBindings(currentObjects, requestedSliderIds);
+      } catch (error) {
+        setHintMessage(error instanceof Error ? error.message : 'Kaydırıcının bağlı değerleri sabitlenemedi.');
+        return;
+      }
+      const plan = planDeletion(prepared, ids, secenek);
       const removal = plan.removal;
       if (removal.size === 0) return;
 
@@ -1691,8 +1703,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           : `${targets.length || ids.length} nesne silindi`);
 
       commit((prev) => {
-        const plan2 = planDeletion(prev, ids, secenek);
-        return applyDeletionPlan(prev, plan2);
+        const prepared2 = detachSliderBindings(prev, requestedSliderIds);
+        const plan2 = planDeletion(prepared2, ids, secenek);
+        return applyDeletionPlan(prepared2, plan2);
       }, desc);
 
       setSelectedObjectIds((prev) => (prev.some((id) => removal.has(id)) ? prev.filter((id) => !removal.has(id)) : prev));
@@ -4687,6 +4700,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       setIsFunctionDialogOpen,
       isSliderDialogOpen,
       setIsSliderDialogOpen,
+      sliderSettingsId,
+      setSliderSettingsId,
       isAddObjectDialogOpen,
       setIsAddObjectDialogOpen,
       activateTool,
@@ -4789,6 +4804,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       setIsFunctionDialogOpen,
       isSliderDialogOpen,
       setIsSliderDialogOpen,
+      sliderSettingsId,
+      setSliderSettingsId,
       isAddObjectDialogOpen,
       setIsAddObjectDialogOpen,
       activateTool,

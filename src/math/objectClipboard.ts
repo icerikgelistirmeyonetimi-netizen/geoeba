@@ -11,6 +11,7 @@ function references(value: unknown, key = ''): string[] {
   // armOfAngleId de bağımlılık değildir: tek bir kolu kopyalamak açının tamamını panoya çekmemeli.
   // Yazının hizalama grubu yalnızca görünümü belirler; tek kenarı kopyalamak grubun tamamını çekmez.
   if (key === 'releasedRadiusPointId' || key === 'armOfAngleId' || key === 'labelAnchors') return [];
+  if (key === 'sliderBindings' && value && typeof value === 'object') return Object.values(value).flatMap(v => references(v, 'sliderId'));
   if (typeof value === 'string') return /Ids?$/.test(key) ? [value] : [];
   if (Array.isArray(value)) return value.flatMap(v => references(v, key));
   if (value && typeof value === 'object') return Object.entries(value).flatMap(([k, v]) => references(v, k));
@@ -60,6 +61,7 @@ export function pasteObjects(clipboard: ObjectClipboard, scene: MathObject[], lo
   const center = positions.length ? { x: positions.reduce((sum, p) => sum + p.x, 0) / positions.length, y: positions.reduce((sum, p) => sum + p.y, 0) / positions.length } : location;
   const offset = { x: location.x - center.x, y: location.y - center.y };
   function remap(value: unknown, key = ''): unknown {
+    if (key === 'sliderBindings' && value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([property, sliderId]) => [property, remap(sliderId, 'sliderId')]));
     if (typeof value === 'string') return key === 'id' || /Ids?$/.test(key) ? idMap.get(value) ?? value : value;
     if (Array.isArray(value)) return value.map(v => remap(v, key));
     if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, remap(v, k)]));

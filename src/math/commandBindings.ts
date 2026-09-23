@@ -29,6 +29,7 @@ export function constructionDependencies(point: PointObject): string[] {
     case 'midpoint': return rule.pointIds;
     case 'tangent': return [rule.circleId, rule.sourceId];
     case 'triangleVertex': return [rule.anchorId, ...rule.sliderIds];
+    case 'sliderPoint': return [rule.sliderId, ...('anchorId' in rule ? [rule.anchorId] : []), ...('referenceId' in rule ? [rule.referenceId] : [])];
     case 'ratio': return rule.pointIds;
     case 'direction': return [rule.throughId, ...rule.linePointIds];
     case 'bisector': return rule.pointIds;
@@ -105,8 +106,23 @@ export function rotateAround(p: Point2D, center: Point2D, degrees: number): Poin
 
 /** Atomik: geçersiz bir ilişki varsa hiçbir koordinat/parametre güncellemesi uygulanmaz. */
 export function resolveCommandBindings(objects: MathObject[]): MathObject[] {
-  if (!objects.some(o => o.type === 'point' && o.construction)) return objects;
+  if (!objects.some(o => (o.type === 'point' && o.construction) || (o.type === 'ellipse' && o.sliderBindings))) return objects;
   const byId = new Map(objects.map(o => [o.id, o]));
+  // Şekil parametreleri nokta inşalarından önce çözülür: elips kesişimleri aynı
+  // işlemde yeni yarıçapları görür, sahnedeki nesne sırası sonucu değiştirmez.
+  for (const object of objects) if (object.type === 'ellipse' && object.sliderBindings) {
+    let ellipse = object;
+    for (const [key, sliderId] of Object.entries(object.sliderBindings)) {
+      if (!['radiusX', 'radiusY', 'rotation'].includes(key)) throw new Error('Elipsin kaydırıcı özelliği geçersiz.');
+      const slider = byId.get(sliderId);
+      if (!slider || slider.type !== 'slider') throw new Error('Elipsin bağlı olduğu kaydırıcı bulunamadı.');
+      if (!Number.isFinite(slider.value)) throw new Error('Kaydırıcı değeri sonlu bir sayı olmalı.');
+      if (key !== 'rotation' && !(slider.value > 0)) throw new Error('Elips yarıçapı için kaydırıcı değeri sıfırdan büyük olmalı.');
+      const property = key as 'radiusX' | 'radiusY' | 'rotation';
+      if (ellipse[property] !== slider.value) ellipse = { ...ellipse, [property]: slider.value };
+    }
+    byId.set(ellipse.id, ellipse);
+  }
   const solved = new Map<string, PointObject>();
   const visiting = new Set<string>();
   const point = (id: string): PointObject => {
@@ -119,6 +135,31 @@ export function resolveCommandBindings(objects: MathObject[]): MathObject[] {
     const r = original.construction;
     let position: Point2D;
     switch (r.kind) {
+      case 'sliderPoint': {
+        const slider = byId.get(r.sliderId);
+        if (!slider || slider.type !== 'slider') throw new Error('Noktanın bağlı olduğu kaydırıcı bulunamadı.');
+        const value = slider.value;
+        if (!Number.isFinite(value)) throw new Error('Kaydırıcı değeri sonlu bir sayı olmalı.');
+        if (r.mode === 'x') position = { x: value, y: original.y };
+        else if (r.mode === 'y') position = { x: original.x, y: value };
+        else if (r.mode === 'length') {
+          if (!(value > 0)) throw new Error('Uzunluk için kaydırıcı değeri sıfırdan büyük olmalı.');
+          const anchor = point(r.anchorId);
+          const length = Math.hypot(r.direction.x, r.direction.y);
+          if (!(length > 1e-12) || !Number.isFinite(length)) throw new Error('Uzunluğun doğrultusu geçersiz.');
+          position = { x: anchor.x + value * r.direction.x / length, y: anchor.y + value * r.direction.y / length };
+        } else if (r.mode === 'angle') {
+          const maximum = r.maximumDegrees ?? 360;
+          if (!Number.isFinite(maximum) || maximum <= 0 || maximum > 360) throw new Error('Kaydırıcı açısının üst sınırı geçersiz.');
+          if (value < 0 || value > maximum) throw new Error(`Açı için kaydırıcı değeri 0 ile ${maximum} derece arasında olmalı.`);
+          if (!(r.radius > 0) || !Number.isFinite(r.radius) || ![1, -1].includes(r.orientation)) throw new Error('Açının kol uzunluğu veya yönü geçersiz.');
+          const anchor = point(r.anchorId), reference = point(r.referenceId);
+          if (Math.hypot(reference.x - anchor.x, reference.y - anchor.y) < 1e-12) throw new Error('Açının referans kolu köşeyle çakışamaz.');
+          const theta = Math.atan2(reference.y - anchor.y, reference.x - anchor.x) + r.orientation * value * Math.PI / 180;
+          position = { x: anchor.x + r.radius * Math.cos(theta), y: anchor.y + r.radius * Math.sin(theta) };
+        } else throw new Error('Kaydırıcı ilişkisi geçersiz.');
+        break;
+      }
       case 'triangleVertex': {
         const lengths = r.sliderIds.map(sid => {
           const slider = byId.get(sid);
@@ -237,5 +278,19 @@ export function resolveCommandBindings(objects: MathObject[]): MathObject[] {
     visiting.delete(id);
     return result;
   };
-  return objects.map(o => o.type === 'point' ? point(o.id) : o);
+  return objects.map(o => {
+    if (o.type === 'point') return point(o.id);
+    if (o.type === 'ellipse') return byId.get(o.id)!;
+    if (o.type === 'angle') {
+      for (const [movingId, referenceId] of [[o.point3Id, o.point1Id], [o.point1Id, o.point3Id]]) {
+        const moving = byId.get(movingId);
+        const rule = moving?.type === 'point' ? moving.construction : undefined;
+        if (rule?.kind === 'sliderPoint' && rule.mode === 'angle' && o.valueSliderId === rule.sliderId && rule.anchorId === o.vertexPointId && rule.referenceId === referenceId) {
+          const slider = byId.get(rule.sliderId);
+          if (slider?.type === 'slider' && !!o.reflex !== (slider.value > 180)) return { ...o, reflex: slider.value > 180 };
+        }
+      }
+    }
+    return o;
+  });
 }
