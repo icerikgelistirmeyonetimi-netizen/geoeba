@@ -114,6 +114,8 @@ const COK_NOKTA = 400;
  * sınırıdır (akıllı tahtada 18 px çaplı nokta): 9,9 px sığan yerde nokta 8'e inmez.
  */
 const YARICAP_BASAMAKLARI = [18, 15, 12, 10, 9, 8, 6];
+/** Komşu yığınlar sıkışıkken bile noktaların inebileceği okunur yarıçap (hafif örtüşmeye izin verilir) */
+const OKUNUR_YARICAP = 9;
 const basamakla = (r: number) => YARICAP_BASAMAKLARI.find((b) => b <= r) ?? r;
 
 /** Yoğun yığın (yan yana sıralar ya da küçücük noktalar): tek tek etiket yerine yığın başına sayı yazılır */
@@ -623,8 +625,11 @@ export function NoktaGrafigi({
     let birimSutun = 0;
     const yiginTepeleri: { x: number; y: number; adet: number }[] = [];
     const sayisalYigin = sayisal && olcek !== null && yiginlar.length > 0;
-    // Komşu yığınlar çakışmaz: yarıçap en yakın iki yığının arasının yarısını aşmaz; tek yığında yalnız dikey alan sınırlar
-    const rYatay = yiginlar.length > 1 ? enKucukUzaklik / 2 - 0.5 : alanG / 2;
+    // Komşu yığınlar çakışmaz: yarıçap en yakın iki yığının arasının yarısını aşmaz; tek yığında yalnız dikey alan sınırlar.
+    // Geniş eksende (ör. toplama sırasında sabit tutulan 60–120 ölçüm penceresi, 1 birim ≈ 15 px) bu kural noktaları
+    // okunmaz kılar: o durumda yarıçap OKUNUR_YARICAP'a kadar büyür, komşu yığınlar en çok aralığın ~%24'ü kadar örtüşür.
+    const rYatay =
+      yiginlar.length > 1 ? Math.max(enKucukUzaklik / 2 - 0.5, Math.min(OKUNUR_YARICAP, enKucukUzaklik * 0.62)) : alanG / 2;
     /** Verilen dikey alanda sayısal yığınların yarıçapı, adımı ve sıra genişliği */
     const yaricapBul = (dikeyAlan: number): { r: number; adim: number; yiginSutunu: number } => {
       if (!sayisalYigin) return { r: 8, adim: 17, yiginSutunu: 1 };

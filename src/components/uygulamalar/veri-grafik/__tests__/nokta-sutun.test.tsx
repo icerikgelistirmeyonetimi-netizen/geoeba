@@ -440,8 +440,13 @@ describe('D1: nokta, sütun ve kategorik grafikler (kabul ölçütleri)', () => 
     const x = xler(html);
     expect(x).toHaveLength(11);
     for (let i = 1; i < x.length; i++) expect(x[i] - x[i - 1]).toBeGreaterThanOrEqual(2 * r);
-    // Beklenen aralığın tamamı (60–120) eksen olsaydı noktalar küçük kalırdı
-    expect(yaricap(noktaCiz(t, 1, { genislik: 956, yukseklik: 480, eksenAlani: { min: 60, max: 120 } }))).toBeLessThan(9);
+    // Beklenen aralığın tamamı (60–120) eksen olsa da (toplama sırasında eksen sabit) noktalar okunur kalır (r ≥ 8);
+    // bunun için komşu yığınlar hafifçe örtüşebilir: iki yığın merkezi arası ≥ 2r / 1,24 (örtüşme aralığın en çok ~%24'ü)
+    const genis = noktaCiz(t, 1, { genislik: 956, yukseklik: 480, eksenAlani: { min: 60, max: 120 } });
+    const rGenis = yaricap(genis);
+    expect(rGenis).toBeGreaterThanOrEqual(8);
+    const xGenis = xler(genis);
+    for (let i = 1; i < xGenis.length; i++) expect(xGenis[i] - xGenis[i - 1]).toBeGreaterThanOrEqual((2 * rGenis) / 1.24 - 0.01);
     // Boş eksen beklenen aralıkta biter (55–125 değil); sayı küpü 1–6, iki küp 2–12: fazladan 0 / 7 işareti yok
     const bosT: Tablo = { sutunlar: [{ id: 'ar1-abcd-deger', ad: 'Nabız (atım/dk)', tur: 'sayi' }], satirlar: [] };
     const bosHtml = noktaCiz(bosT, 0, { bosIpucu: 'İlk ölçümle noktalar burada belirir.', eksenAlani: { min: 60, max: 120 } });
