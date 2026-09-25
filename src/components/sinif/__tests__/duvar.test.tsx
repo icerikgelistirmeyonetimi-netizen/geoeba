@@ -59,7 +59,7 @@ describe('EBA logolu duvar kâğıdı', () => {
     expect(() => duvarVarliklariniOnYukle()).not.toThrow();
   });
 
-  it('masaüstü: duvar katmanı aria-hidden, halka + logo, eski ada görüntüsü yok; Etkinlikler görev çubuğunda', () => {
+  it('masaüstü: duvar katmanı aria-hidden, halka + logo, eski ada görüntüsü yok; görev çubuğunda Etkinlikler yok', () => {
     const html = renderToStaticMarkup(
       <ThemeProvider>
         <Masaustu
@@ -79,7 +79,9 @@ describe('EBA logolu duvar kâğıdı', () => {
     expect(html).toContain(`src="${DUVAR_LOGOSU.yazi[0]}"`);
     const duvar = html.slice(0, html.indexOf(DUVAR_LOGOSU.yazi[0]));
     expect(duvar.lastIndexOf('aria-hidden="true"')).toBeGreaterThan(-1);
-    expect(html).toMatch(/Etkinlikler/);
+    // Etkinlikler düğmesi kullanıcının isteğiyle çubuktan kaldırıldı; ana girişe dönüş Başlat → "Adalara dön"
+    expect(html).not.toContain('data-gorev="etkinlikler"');
+    expect(html).not.toMatch(/Etkinlikler/);
     expect(html).not.toMatch(/\p{Extended_Pictographic}/u);
     // Açık/koyu tema düğmesi görev çubuğunun sağ köşesinde, saatten sonra
     expect(html).toMatch(/data-tema-dugmesi/);

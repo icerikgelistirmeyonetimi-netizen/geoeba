@@ -1,4 +1,5 @@
 import type { Point2D } from '@/types/math';
+import { regularPolygonVertices } from '@/math/regularPolygon';
 import { fail, polygonName, trNum } from '../../scene';
 import { D, L, Reader, SEP, checkAngle, checkLength, ngonWord, toDeg, toRad } from './analyze';
 import { type PolyKind, VERTEX_COLORS } from './place';
@@ -147,10 +148,8 @@ export function readRegular(r: Reader, nameCount?: number): LocalShape {
   const explicit = radius !== undefined;
   const R = radius ?? 3;
   if (R > 1000) fail('Düzgün çokgenin yarıçapı en fazla 1000 olabilir.');
-  const local = Array.from({ length: n }, (_, i) => {
-    const angle = i * 2 * Math.PI / n - Math.PI / 2;
-    return { x: R * Math.cos(angle), y: R * Math.sin(angle) };
-  });
+  // Düzgün Çokgen penceresiyle aynı düzen: yatay taban, A sol alt köşe, saat yönünün tersine
+  const local = regularPolygonVertices(n, R);
   const side = 2 * R * sin;
   const summary = how === 'side' ? `kenar ${trNum(side)} br` : how === 'perimeter' ? `kenar ${trNum(side)} br, çevre ${trNum(side * n)}` : how === 'area' ? `kenar ${trNum(side)} br, yarıçap ${trNum(R)}` : `yarıçap ${trNum(R)} br, kenar ${trNum(side)} br`;
   return { local, notes, explicit, summary, kind: 'regular', noun: polygonName(n).toLocaleLowerCase('tr'), label: polygonName(n), pointColor: VERTEX_COLORS.regular, originCentered: true };
@@ -318,10 +317,6 @@ export function defaultQuad(r: Reader): LocalShape {
 
 /** "ABCDE çokgeni" yeni köşelerle: düzgün çokgen düzeninde */
 export function namedPolygonLayout(n: number): LocalShape {
-  const R = 3;
-  const local = Array.from({ length: n }, (_, i) => {
-    const angle = i * 2 * Math.PI / n - Math.PI / 2;
-    return { x: R * Math.cos(angle), y: R * Math.sin(angle) };
-  });
+  const local = regularPolygonVertices(n, 3);
   return { local, notes: ['Köşeler düzgün çokgen düzeninde yerleştirildi.'], explicit: false, summary: `${n} köşe`, kind: 'polygon', noun: 'çokgen', originCentered: true };
 }

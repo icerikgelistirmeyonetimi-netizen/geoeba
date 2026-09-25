@@ -425,7 +425,11 @@ describe('polygons: regular polygons', () => {
     pts.forEach(p => close(dist(p, centre), radius));
     const s = sides(pts);
     s.forEach(x => close(x, s[0]));
-    close(pts[0].x, centre.x); close(pts[0].y, centre.y - radius);
+    // Ders kitabı düzeni: yatay tabana oturur, A sol alt köşede, köşeler saat yönünün tersine
+    close(pts[0].x, centre.x - radius * Math.sin(Math.PI / n)); close(pts[0].y, centre.y - radius * Math.cos(Math.PI / n));
+    expect(pts[1].y).toBe(pts[0].y);
+    expect(pts[1].x).toBeGreaterThan(pts[0].x);
+    expect(Math.min(...pts.map(p => p.y))).toBe(pts[0].y);
     expect(area(pts)).toBeGreaterThan(0);
   };
 
@@ -574,6 +578,9 @@ describe('polygons: general polygons', () => {
     const fresh = shapeOf('ABCDE çokgenini çiz');
     expect(fresh.pts).toHaveLength(5);
     expect(fresh.r.message).toContain('düzgün çokgen düzeninde');
+    expect(fresh.pts[1].y).toBe(fresh.pts[0].y); // A sol alt, B sağ alt: yatay taban
+    expect(fresh.pts[1].x).toBeGreaterThan(fresh.pts[0].x);
+    expect(area(fresh.pts)).toBeGreaterThan(0);
   });
 
   it('errors and the polygon tool fallback', () => {

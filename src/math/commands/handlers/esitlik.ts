@@ -3,7 +3,7 @@ import { type Clause, type LabelRef, labelKey } from '../text';
 import { type CommandScene, fail, trNum } from '../scene';
 import type { CommandHandler } from '../types';
 import {
-  CIZGI_ADLARI, esitlikHedefleri, esitlikIsaretleri, esitlikOgesiAdi, esitlikYamalari, kenarAnahtari, parcaAnahtari,
+  CIZGI_ADLARI, ESITLIK_EN_COK, esitlikHedefleri, esitlikIsaretleri, esitlikOgesiAdi, esitlikYamalari, kenarAnahtari, parcaAnahtari,
   sonrakiEsitlikSayisi, tumElleIsaretleriniTemizle, uzunlukEsit, yayAnahtari,
   type EsitlikGrubu, type EsitlikSonucu, type EsitlikTuru, type EsitlikYamasi,
 } from '../../esitlikIsaretleri';
@@ -45,8 +45,6 @@ const ETIKETLI_SAYI = /\$(\d+)([a-z]*)((?: (?:dogru )?(?:kenar|parca|yay)[a-z]*)
 /** "seçili parçaya iki çizgi" */
 const SECILI_SAYI = /\bsecil\w* ((?:dogru )?(?:kenar|parca|yay)[a-z]*) (?:(tek|bir|cift|#\d+) )?(cizgi|centik)[a-z]*/;
 const YONELME = new Set(['e', 'a', 'ye', 'ya', 'ne', 'na']);
-
-const CIZGIYLE = ['işaretsiz', 'tek çizgiyle', 'iki çizgiyle', 'üç çizgiyle', 'dört çizgiyle'];
 
 // ------------------------------------------------------------------ yardımcılar
 const benzersiz = <T,>(l: T[]) => [...new Set(l)];
@@ -244,7 +242,7 @@ const toggle: CommandHandler = {
     const fazla = gruplar.length > 4 ? '; …' : '';
     // Kalabalık gruplar ve dolmuş numaralama alanları sessizce atlanmasın.
     const atlanan = sonuc.atlananGruplar
-      ? ` ${sonuc.atlananGruplar} grup işaretlenmedi (çok kalabalık ya da dört çizgi sayısı da dolu); elle işaretleyebilirsiniz.`
+      ? ` ${sonuc.atlananGruplar} grup işaretlenmedi (çok kalabalık ya da tüm ${ESITLIK_EN_COK} işaret türü kullanılıyor); elle işaretleyebilirsiniz.`
       : '';
     scene.say((yay ? `Eşit yaylar işaretlendi: ${gruplar.length} grup (${ilk}${fazla}).` : `Eşitlik işaretleri açık: ${gruplar.length} grup (${ilk}${fazla}).`) + atlanan);
   },
@@ -267,13 +265,13 @@ const equal: CommandHandler = {
     const turler = new Set(anahtarlar.map(turOf));
     if (turler.size > 1) fail('Doğru parçaları ile yaylar birbirine eşit işaretlenemez.');
     const tur = turOf(anahtarlar[0]);
-    const k = sonrakiEsitlikSayisi(sonuc, tur, anahtarlar) ?? fail('Dört farklı eşitlik işaretinin hepsi kullanılıyor. Önce birinin işaretini kaldırın.');
+    const k = sonrakiEsitlikSayisi(sonuc, tur, anahtarlar) ?? fail(`${ESITLIK_EN_COK} farklı eşitlik işaretinin hepsi kullanılıyor. Önce birinin işaretini kaldırın.`);
     yamalariUygula(scene, esitlikYamalari(scene.objects, sonuc, anahtarlar.map((anahtar) => ({ anahtar, deger: k }))));
     const uzunluklar = anahtarlar.map((a) => sonuc.ogeler.get(a)?.uzunluk ?? 0);
     const enBuyuk = Math.max(...uzunluklar), enKucuk = Math.min(...uzunluklar);
     const esit = uzunlukEsit(enKucuk, enBuyuk);
     const not = esit ? '' : ` Not: ${tur === 'yay' ? 'yay uzunlukları' : 'uzunlukları'} şu an eşit değil (${uzunluklar.map((u) => `${trNum(u)} br`).join('; ')}).`;
-    scene.say(`${birlestir(adlar(scene, anahtarlar))} ${CIZGIYLE[k]} eşit işaretlendi.${not}`);
+    scene.say(`${birlestir(adlar(scene, anahtarlar))} ${CIZGI_ADLARI[k]}yle eşit işaretlendi.${not}`);
   },
 };
 
@@ -308,7 +306,7 @@ const set: CommandHandler = {
     else if (ad && OTOMATIK.test(t)) deger = undefined;
     else if (istek) {
       deger = istek.deger;
-      if (!Number.isInteger(deger) || deger < 0 || deger > 4) fail('Çizgi sayısı 1 ile 4 arasında olmalı.');
+      if (!Number.isInteger(deger) || deger < 0 || deger > ESITLIK_EN_COK) fail(`Çizgi sayısı 1 ile ${ESITLIK_EN_COK} arasında olmalı.`);
     } else if (ad && KAPAT.test(t)) deger = 0;
     else if (ad && AC_GOSTER.test(t)) { deger = undefined; ac = true; }
     else fail('Kaç çizgi olsun? Örneğin “AB kenarına iki çizgi koy” yazın.');

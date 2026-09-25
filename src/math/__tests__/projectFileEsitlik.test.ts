@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseProjectFile } from '../projectFile';
+import { ESITLIK_EN_COK } from '../esitlikIsaretleri';
 
 const p = (id: string, x = 0, y = 0) => ({ id, type: 'point', x, y });
 const tri = (extra: Record<string, unknown> = {}) => ({ id: 'T', type: 'polygon', pointIds: ['A', 'B', 'C'], ...extra });
@@ -33,6 +34,22 @@ describe('proje dosyası: eşitlik işaretleri', () => {
     expect((loaded.objects.find((o) => o.id === 'm') as unknown as { equalityMark: number }).equalityMark).toBe(1);
   });
 
+  it.each([4, 5, 8])('%i çizgili işareti bütün desteklenen nesnelerde kaydedip açar', (sayi) => {
+    const file = {
+      version: '2.0', solids: [],
+      objects: [...noktalar, seg({ equalityMark: sayi }), tri({ edgeEqualityMarks: { 0: sayi, 2: 0 } }),
+        { id: 'y', type: 'arc', centerPointId: 'A', startPointId: 'B', directionPointId: 'C', equalityMark: sayi },
+        { id: 'd', type: 'sector', centerPointId: 'A', startPointId: 'B', directionPointId: 'C', equalityMark: sayi },
+        { id: 'c', type: 'circle', centerPointId: 'A', radiusPointId: 'B' },
+        { id: 'm', type: 'measurement', kind: 'arc', pointIds: ['B', 'C'], circleId: 'c', equalityMark: sayi }],
+    };
+    const loaded = parseProjectFile(JSON.parse(JSON.stringify(file)));
+    const reopened = parseProjectFile(JSON.parse(JSON.stringify(loaded)));
+    const byId = new Map(reopened.objects.map((o) => [o.id, o as unknown as Record<string, unknown>]));
+    for (const id of ['s', 'y', 'd', 'm']) expect(byId.get(id)!.equalityMark).toBe(sayi);
+    expect(byId.get('T')!.edgeEqualityMarks).toEqual({ 0: sayi, 2: 0 });
+  });
+
   it('artık olmayan kenarın işareti düşer, dosya yine açılır', () => {
     const loaded = parseProjectFile({ objects: [...noktalar, tri({ edgeEqualityMarks: { 1: 2, 5: 1 } })] });
     expect((loaded.objects.find((o) => o.id === 'T') as unknown as { edgeEqualityMarks: unknown }).edgeEqualityMarks).toEqual({ 1: 2 });
@@ -41,13 +58,13 @@ describe('proje dosyası: eşitlik işaretleri', () => {
   });
 
   it.each([
-    { objects: [...noktalar, seg({ equalityMark: 5 })] },
+    { objects: [...noktalar, seg({ equalityMark: ESITLIK_EN_COK + 1 })] },
     { objects: [...noktalar, seg({ equalityMark: 1.5 })] },
     { objects: [...noktalar, seg({ equalityMark: -1 })] },
     { objects: [...noktalar, seg({ equalityMark: '2' })] },
     { objects: [{ ...p('A'), equalityMark: 1 }] },
     { objects: [...noktalar, { id: 'm', type: 'measurement', kind: 'distance', pointIds: ['A', 'B'], equalityMark: 1 }] },
-    { objects: [...noktalar, tri({ edgeEqualityMarks: { 0: 7 } })] },
+    { objects: [...noktalar, tri({ edgeEqualityMarks: { 0: ESITLIK_EN_COK + 1 } })] },
     { objects: [...noktalar, tri({ edgeEqualityMarks: { x: 1 } })] },
     { objects: [...noktalar, tri({ edgeEqualityMarks: [1, 2] })] },
     { objects: [...noktalar, seg({ edgeEqualityMarks: { 0: 1 } })] },

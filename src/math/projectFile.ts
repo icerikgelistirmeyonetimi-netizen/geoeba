@@ -2,6 +2,7 @@ import type { MathObject, ViewportTransform } from '@/types/math';
 import type { LayoutMode, StyleSettings } from '@/types/workspace';
 import { DEFAULT_STYLE_SETTINGS, STYLE_SECENEKLERI } from '@/types/workspace';
 import type { Camera3D, Solid3DObject } from '@/types/workspace3d';
+import { ESITLIK_EN_COK } from './esitlikIsaretleri';
 
 export interface ProjectFile {
   version: '2.0';
@@ -50,9 +51,14 @@ export function validateProjectObjects(input: unknown): MathObject[] {
     for (const key of ['size', 'thickness', 'arcRadius', 'fontSize', 'length', 'width', 'height']) if (o[key] !== undefined) numbers(o, [key], true);
     for (const key of ['rotation', 'animSpeed', 'animProgress', 'fillOpacity']) if (o[key] !== undefined) numbers(o, [key]);
     if (o.fillOpacity !== undefined && (o.fillOpacity < 0 || o.fillOpacity > 1)) fail('dolgu saydamlığı geçersiz');
-    for (const key of ['locked', 'selected', 'showTrace', 'animating', 'showLength', 'showEquation', 'showArea', 'showPerimeter', 'showRadius', 'showChordLength', 'showArcLength', 'showCentralAngle', 'showValue', 'reflex', 'major']) if (o[key] !== undefined && typeof o[key] !== 'boolean') fail(`${key} geçersiz`);
+    for (const key of ['locked', 'selected', 'showTrace', 'animating', 'showLength', 'showEquation', 'showArea', 'showPerimeter', 'showRadius', 'showChordLength', 'showArcLength', 'showCentralAngle', 'showValue', 'reflex', 'major', 'olcumSekli']) if (o[key] !== undefined && typeof o[key] !== 'boolean') fail(`${key} geçersiz`);
     if (o.fillColor !== undefined && !str(o.fillColor)) fail('dolgu rengi geçersiz');
     if (o.dependsOn !== undefined) ids(o, 'dependsOn', 0);
+    if (o.bindingTarget !== undefined) {
+      if (o.type !== 'slider') fail('ölçü adı yalnızca kaydırıcıya ait olabilir');
+      const target = row(o.bindingTarget);
+      o.bindingTarget = { objectId: id(target, 'objectId'), propertyKey: id(target, 'propertyKey') };
+    }
     if (o.sliderBindings !== undefined) {
       if (o.type !== 'ellipse') fail('bu nesnenin kaydırıcı özellikleri desteklenmiyor');
       const bindings = row(o.sliderBindings);
@@ -63,7 +69,11 @@ export function validateProjectObjects(input: unknown): MathObject[] {
     }
     if (o.onObjectId !== undefined) id(o, 'onObjectId');
     if (['point', 'text', 'image', 'checkbox', 'button', 'input_box', 'fraction'].includes(o.type)) numbers(o, ['x', 'y']);
-    if (o.labelOffsets !== undefined) for (const v of Object.values(row(o.labelOffsets))) numbers(row(v), ['x', 'y']);
+    if (o.labelOffsets !== undefined) for (const v of Object.values(row(o.labelOffsets))) {
+      const k = row(v);
+      numbers(k, ['x', 'y']);
+      for (const alan of ['eksenBoyunca', 'eksenDik']) if (k[alan] !== undefined && !Number.isFinite(k[alan])) fail('etiket kayıklığı geçersiz');
+    }
     if (o.labelAnchors !== undefined) {
       o.labelAnchors = Object.fromEntries(Object.entries(row(o.labelAnchors)).map(([kind, value]) => {
         const anchor = row(value);
@@ -72,7 +82,14 @@ export function validateProjectObjects(input: unknown): MathObject[] {
         const offset = row(anchor.offset);
         numbers(offset, ['x', 'y']);
         if (!['left', 'center', 'right'].includes(anchor.alignment)) fail('etiket hizalaması geçersiz');
-        return [kind, { pointIds: [...pointIds], offset: { x: offset.x, y: offset.y }, alignment: anchor.alignment }];
+        const temiz: Row = { pointIds: [...pointIds], offset: { x: offset.x, y: offset.y }, alignment: anchor.alignment };
+        // Bırakıldığı yer + o anki nokta konumları: şekil bozulunca yazı yerinde kalsın
+        if (anchor.base !== undefined) { const b = row(anchor.base); numbers(b, ['x', 'y']); temiz.base = { x: b.x, y: b.y }; }
+        if (anchor.ref !== undefined) {
+          if (!Array.isArray(anchor.ref)) fail('etiket çapası referansı geçersiz');
+          temiz.ref = anchor.ref.map((item: unknown) => { const r = row(item); id(r, 'id'); numbers(r, ['x', 'y']); return { id: r.id, x: r.x, y: r.y }; });
+        }
+        return [kind, temiz];
       }));
     }
     switch (o.type) {
@@ -128,6 +145,9 @@ export function validateProjectObjects(input: unknown): MathObject[] {
       case 'measurement':
         if (!['distance', 'slope', 'trig', 'arc'].includes(o.kind)) fail('ölçüm türü geçersiz');
         ids(o, 'pointIds', o.kind === 'trig' ? 3 : 2, o.kind === 'trig' ? 3 : 2);
+        // Trig ölçümünün tek tek gizlenen etiketleri (açı, sin, cos, tan)
+        if (o.hiddenRatios !== undefined && (o.kind !== 'trig' || !Array.isArray(o.hiddenRatios)
+          || o.hiddenRatios.some((x: unknown) => !['angle', 'sin', 'cos', 'tan'].includes(x as string)))) fail('gizli oran etiketleri geçersiz');
         // Yay ölçümü: çember + iki uç (+ isteğe bağlı ara nokta). Başvuruların türü aşağıdaki references() ile denetlenir.
         if (o.kind === 'arc') {
           id(o, 'circleId');
@@ -139,15 +159,15 @@ export function validateProjectObjects(input: unknown): MathObject[] {
         break;
       default: fail(`tanınmayan nesne türü: ${o.type}`);
     }
-    // Eşitlik çentikleri (elle): 0 = işaretsiz, 1–4 çizgi; parça, yay, dilim, yay ölçümü ve çokgen kenarlarında.
+    // Eşitlik çentikleri (elle): 0 = işaretsiz; üst sınır otomatik işaretlerle aynıdır.
     // Artık var olmayan bir kenarın işareti kaydı reddettirmez, sessizce düşer (süs alanı çizimi açmayı engellemesin).
-    if (o.equalityMark !== undefined && (!(['segment', 'arc', 'sector'].includes(o.type) || (o.type === 'measurement' && o.kind === 'arc'))
-      || !Number.isInteger(o.equalityMark) || o.equalityMark < 0 || o.equalityMark > 4)) fail('eşitlik işareti geçersiz');
+    if (o.equalityMark !== undefined && (!(['segment', 'arc', 'sector', 'angle'].includes(o.type) || (o.type === 'measurement' && o.kind === 'arc'))
+      || !Number.isInteger(o.equalityMark) || o.equalityMark < 0 || o.equalityMark > ESITLIK_EN_COK)) fail('eşitlik işareti geçersiz');
     if (o.edgeEqualityMarks !== undefined) {
       if (o.type !== 'polygon') fail('eşitlik işareti geçersiz');
       const kenarlar: Row = {};
       for (const [k, v] of Object.entries(row(o.edgeEqualityMarks))) {
-        if (!/^\d+$/.test(k) || !Number.isInteger(v) || (v as number) < 0 || (v as number) > 4) fail('kenar eşitlik işaretleri geçersiz');
+        if (!/^\d+$/.test(k) || !Number.isInteger(v) || (v as number) < 0 || (v as number) > ESITLIK_EN_COK) fail('kenar eşitlik işaretleri geçersiz');
         if (Number(k) < o.pointIds.length) kenarlar[k] = v;
       }
       if (Object.keys(kenarlar).length) o.edgeEqualityMarks = kenarlar; else delete o.edgeEqualityMarks;
@@ -190,6 +210,8 @@ export function validateProjectObjects(input: unknown): MathObject[] {
   });
   const byId = new Map(objects.map(o => [o.id, o]));
   if (byId.size !== objects.length) fail('aynı kimliği kullanan birden çok nesne var');
+  // Ölçü adı görsel bilgidir; silinmiş hedef eski çizimin açılmasını engellemez.
+  for (const o of objects) if (o.bindingTarget && !byId.has(o.bindingTarget.objectId)) delete o.bindingTarget;
   // Etiket çapası süs bilgisidir: eski gruptan bir nokta silinmişse çizim yine açılır.
   // Kısmi bir grubun merkezini kullanmak yazıyı sıçratır; o kayıtta eski kayıklığa dönülür.
   for (const o of objects) if (o.labelAnchors) {
@@ -202,7 +224,7 @@ export function validateProjectObjects(input: unknown): MathObject[] {
   function references(value: unknown, key = '', parent?: Row): string[] {
     // armOfAngleId yalnızca "bu parça şu açının kolu" hatırlatmasıdır: açı silinince parça kalabilir,
     // bu yüzden eksik hedefi kaydı reddettirmemeli (reddedilince kayıtlı çizim boş açılıyordu).
-    if (key === 'id' || key === 'releasedRadiusPointId' || key === 'armOfAngleId' || key === 'labelAnchors') return [];
+    if (key === 'id' || key === 'releasedRadiusPointId' || key === 'armOfAngleId' || key === 'labelAnchors' || key === 'bindingTarget') return [];
     if (key === 'centerPointId' && parent?.type === 'circle' && parent.throughPointIds?.length) return [];
     if (key === 'sliderBindings') return Object.values(row(value)).flatMap(sliderId => references(sliderId, 'sliderId'));
     if (typeof value === 'string' && (/Ids?$/.test(key) || key === 'dependsOn')) {
@@ -268,7 +290,8 @@ export function parseProjectFile(input: unknown): ProjectFile {
   }
   if (data.styleSettings !== undefined) {
     const s = row(data.styleSettings); numbers(s, ['strokeScale', 'fontScale', 'pointRadius', 'pointLabelScale', 'measurementScale', 'axisScale'], true);
-    if (typeof s.hideLabelBoxes !== 'boolean' || typeof s.hideFills !== 'boolean') fail('stil ayarları geçersiz');
+    if (typeof s.hideFills !== 'boolean' || (s.showLabelBoxes !== undefined && typeof s.showLabelBoxes !== 'boolean')) fail('stil ayarları geçersiz');
+    // Eski dosyalardaki hideLabelBoxes tanınmayan anahtar olarak düşer: kutular artık varsayılan olarak kapalı.
     for (const [k, allowed] of Object.entries(STYLE_SECENEKLERI)) if (s[k] !== undefined && !(allowed as readonly string[]).includes(s[k])) fail('stil ayarları geçersiz');
     // Bilinen alanlar tek tek doğrulanır: tanınmayan anahtarlar düşer, eksik olanlar varsayılandan tamamlanır
     // (1.0/2.0 dosyaları yeni ayarlar olmadan da açılır).

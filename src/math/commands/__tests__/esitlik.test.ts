@@ -6,7 +6,7 @@ import { rankHandlers } from '../engine';
 import { CommandScene } from '../scene';
 import { parseClause, splitClauses } from '../text';
 import type { CommandSuccess } from '../types';
-import { esitlikIsaretleri } from '../../esitlikIsaretleri';
+import { ESITLIK_CIZGI_SAYILARI, ESITLIK_EN_COK, esitlikIsaretleri } from '../../esitlikIsaretleri';
 import { expectFail, expectOk } from './helpers';
 
 /** Aile henüz kayıtlı değilse de sınanabilsin. */
@@ -115,11 +115,35 @@ describe('eşitlik komutları: elle işaret', () => {
   it.each([
     ['CD kenarına iki çizgi koy', 2], ["CD'ye tek çizgi koy", 1], ["CD'ye bir çizgi koy", 1], ["CD'ye çift çizgi koy", 2],
     ["CD'ye üç çizgi at", 3], ['CD parçasına dört çizgi koy', 4], ["CD'ye çentik at", 1],
+    ['CD kenarına beş çizgi koy', 5], ['CD kenarına altı çizgi koy', 6],
+    ['CD kenarına yedi çizgi koy', 7], ['CD kenarına sekiz çizgi koy', 8], ["CD'ye 8 çizgi koy", 8],
   ])('%s → %i', (text, beklenen) => {
     const sahne = kullanici();
     const r = ok(text as string, sahne);
     expect(mark(r.objects, 'seg-CD')).toBe(beklenen);
     expect(r.objects).toHaveLength(sahne.length);
+  });
+
+  it('seçili parçaya sekiz çizgi koyar ve adını doğru bildirir', () => {
+    const r = ok('seçili parçaya sekiz çizgi koy', kullanici(), ['seg-CD']);
+    expect(mark(r.objects, 'seg-CD')).toBe(8);
+    expect(r.message).toBe('[CD]: eşitlik işareti sekiz çizgi oldu.');
+  });
+
+  it('son boş işareti kullanır; sekiz işaret de doluysa sahneyi koruyarak açıklar', () => {
+    const isaretler = ESITLIK_CIZGI_SAYILARI.flatMap((k) => [
+      pt(`pt-L${k}`, 40 + k, 0), seg(`e${k}`, 'pt-K', `pt-L${k}`, { equalityMark: k }),
+    ]);
+    const sahne = [...kullanici(), pt('pt-K', 40, 0), ...isaretler];
+    const birBos = sahne.filter((o) => o.id !== `e${ESITLIK_EN_COK}`);
+    const r = ok("AC ile AD'yi eşit işaretle", birBos);
+    expect(mark(r.objects, 'seg-AC')).toBe(8);
+    expect(mark(r.objects, 'seg-AD')).toBe(8);
+    expect(r.message).toBe('[AC] ve [AD] sekiz çizgiyle eşit işaretlendi.');
+    const once = JSON.stringify(sahne);
+    expect(expectFail(ALL, "AC ile AD'yi eşit işaretle", sahne))
+      .toBe(`${ESITLIK_EN_COK} farklı eşitlik işaretinin hepsi kullanılıyor. Önce birinin işaretini kaldırın.`);
+    expect(JSON.stringify(sahne)).toBe(once);
   });
 
   it("CD'nin eşitlik işaretini kaldır / gizle: parça SİLİNMEZ, gizlenmez; işaret 0 olur", () => {
@@ -146,10 +170,15 @@ describe('eşitlik komutları: elle işaret', () => {
     expect((u.objects.find((o) => o.id === 'ABC') as { edgeEqualityMarks?: unknown }).edgeEqualityMarks).toEqual({ 0: 3 });
     const e = esitlikIsaretleri(u.objects);
     expect(e.isaretHaritasi.get('edge:ABC:0')?.sayi).toBe(3);
+    const sekiz = ok('AB yayına sekiz çizgi koy', dortYay());
+    expect(mark(sekiz.objects, 'yAB')).toBe(8);
+    const bes = ok('AB kenarına beş çizgi koy', ucgen());
+    expect((bes.objects.find((o) => o.id === 'ABC') as { edgeEqualityMarks?: unknown }).edgeEqualityMarks).toEqual({ 0: 5 });
   });
 
   it('hatalar: çizgi sayısı, bilinmeyen ad, karışık tür', () => {
-    expect(expectFail(ALL, "CD'ye beş çizgi koy", kullanici())).toContain('1 ile 4');
+    expect(expectFail(ALL, "CD'ye dokuz çizgi koy", kullanici())).toContain(`1 ile ${ESITLIK_EN_COK}`);
+    expect(expectFail(ALL, "CD'ye 10 çizgi koy", kullanici())).toContain(`1 ile ${ESITLIK_EN_COK}`);
     const sahne = kullanici();
     const r = expectFail(ALL, "XY'nin eşitlik işaretini kaldır", sahne);
     expect(r).toContain('bulunamadı');

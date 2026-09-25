@@ -209,7 +209,9 @@ export async function exportPdf(svg: SVGSVGElement, baslik = 'geoeba-cizim') {
 
   pdf.setFontSize(13);
   pdf.text(baslik, kenar, kenar + 6);
-  pdf.addImage(dataUrl, 'PNG', kenar + (kullanilabilirG - g) / 2, kenar + basligaAyrilan, g, y);
+  // Sıkıştırma AÇIK: sıkıştırmasız gömülen raster tek üçgenlik bir çizimi bile ~18 MB yapıyordu
+  // (aynı çizim PNG olarak 190 KB). EBA'ya yüklenebilen, e-postayla gönderilebilen bir dosya gerekir.
+  pdf.addImage(dataUrl, 'PNG', kenar + (kullanilabilirG - g) / 2, kenar + basligaAyrilan, g, y, undefined, 'FAST');
   pdf.save(`${guvenliAd(baslik)}.pdf`);
 }
 

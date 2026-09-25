@@ -5,6 +5,32 @@ import { executeTurkishCommand } from '../turkishCommands';
 const p = (id: string, x = 0, y = 0) => ({ id, type: 'point', x, y });
 const base = { id: 'triangle', type: 'polygon', pointIds: ['A', 'B', 'C'] };
 
+describe('kaydırıcının görsel ölçü hedefi', () => {
+  const slider = { id: 's', type: 'slider', variableName: 'a', min: 1, max: 10, step: 1, value: 5 };
+  const bindingTarget = { objectId: 'triangle', propertyKey: 'edge:0' };
+  const file = (target: unknown) => ({ objects: [p('A'), p('C', 0, 4),
+    { ...p('B', 5), construction: { kind: 'sliderPoint', sliderId: 's', mode: 'length', anchorId: 'A', direction: { x: 1, y: 0 } } },
+    { ...slider, bindingTarget: target }, base] });
+
+  it('şekil kaydırıcıya bağlı olsa da görsel geri başvuru döngü yaratmaz ve yeniden yüklenir', () => {
+    const input = file(bindingTarget), snapshot = JSON.stringify(input);
+    const loaded = parseProjectFile(input);
+    expect(loaded.objects.find(o => o.id === 's')).toMatchObject({ variableName: 'a', bindingTarget });
+    expect(parseProjectFile(JSON.parse(JSON.stringify(loaded)))).toEqual(loaded);
+    expect(JSON.stringify(input)).toBe(snapshot);
+  });
+
+  it.each([null, [], 'triangle', {}, { objectId: 1, propertyKey: 'radius' }, { objectId: '', propertyKey: 'radius' }, { objectId: 'triangle', propertyKey: '' }, { objectId: 'triangle', propertyKey: 0 }])(
+    'geçersiz ölçü hedefini reddeder: %j', target => expect(() => parseProjectFile(file(target))).toThrow());
+
+  it('eksik görsel hedefi temizler; başka nesne türünde bu alanı kabul etmez', () => {
+    const input = file({ ...bindingTarget, objectId: 'removed' }), snapshot = JSON.stringify(input);
+    expect(parseProjectFile(input).objects.find(o => o.id === 's')).not.toHaveProperty('bindingTarget');
+    expect(JSON.stringify(input)).toBe(snapshot);
+    expect(() => parseProjectFile({ objects: [{ ...p('A'), bindingTarget }] })).toThrow();
+  });
+});
+
 describe('slider point construction persistence', () => {
   const slider = { id: 's', type: 'slider', variableName: 'a', min: -10, max: 180, step: 1, value: 5 };
   const length = { kind: 'sliderPoint', sliderId: 's', mode: 'length', anchorId: 'A', direction: { x: 0.6, y: 0.8 } };
@@ -201,14 +227,15 @@ describe('project file validation', () => {
   it('preserves 3D scene, camera, styles and plane settings in a JSON round trip', () => {
     const file = { version: '2.0', objects: [], solids: [{ id: 'cube', type: 'cube', name: 'Küp', position: { x: 1, y: 2, z: 3 }, rotation: { x: 0, y: 30, z: 0 }, dimensions: { width: 3, height: 3, depth: 3 }, color: '#123456', opacity: 0.8, unfoldProgress: 0.5, showFaces: true, showWireframe: true, showVertices: false, selectedFaceIndex: null }],
       camera3D: { rotX: 25, rotY: -40, zoom: 55, panX: 0, panY: 30, perspective: 700, showAxes: true, showGrid: false, showCoordinates: false },
-      styleSettings: { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideLabelBoxes: true, hideFills: false, olcuYazimi: 'kisa', aciYazimi: 'isaret' },
+      styleSettings: { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, showLabelBoxes: true, hideFills: false, olcuYazimi: 'kisa', aciYazimi: 'isaret', tamSayiOlcu: false },
       layoutMode: '3d_only', viewport: { zoom: 88, panX: 42, panY: 0, showCoordinates: false } };
     expect(parseProjectFile(JSON.parse(JSON.stringify(file)))).toEqual(file);
   });
   it('opens a 1.0/2.0 file without the notation settings and fills them from the defaults', () => {
-    const eski = { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideLabelBoxes: true, hideFills: false };
-    expect(parseProjectFile({ objects: [], styleSettings: eski }).styleSettings)
-      .toEqual({ ...eski, olcuYazimi: 'tam', aciYazimi: 'sapka' });
+    const eski = { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideFills: false };
+    // Eski dosyanın hideLabelBoxes: false değeri yalnızca eski varsayılandı: dosya kutusuz açılır.
+    expect(parseProjectFile({ objects: [], styleSettings: { ...eski, hideLabelBoxes: false } }).styleSettings)
+      .toEqual({ ...eski, showLabelBoxes: false, olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayiOlcu: true });
   });
   it('drops unknown style keys instead of copying them into the document', () => {
     const s = { strokeScale: 1, fontScale: 1, pointRadius: 6, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideLabelBoxes: false, hideFills: false, birSey: 'x' };
@@ -218,8 +245,9 @@ describe('project file validation', () => {
     { olcuYazimi: 'uzun' },
     { aciYazimi: 'ok' },
     { hideFills: 'evet' },
+    { showLabelBoxes: 'evet' },
   ])('rejects invalid style settings: %j', patch => {
-    const s = { strokeScale: 1, fontScale: 1, pointRadius: 6, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideLabelBoxes: false, hideFills: false, ...patch };
+    const s = { strokeScale: 1, fontScale: 1, pointRadius: 6, pointLabelScale: 1, measurementScale: 1, axisScale: 1, showLabelBoxes: false, hideFills: false, ...patch };
     expect(() => parseProjectFile({ objects: [], styleSettings: s })).toThrow('stil ayarları geçersiz');
   });
   it('accepts saved live constructions produced by the command system', () => {
@@ -258,5 +286,23 @@ describe('arc measurement (two points on a circle, circle not split)', () => {
   });
   it('still opens documents without arc measurements', () => {
     expect(parseProjectFile({ objects: [...sahne(), { id: 's', type: 'measurement', kind: 'slope', pointIds: ['B', 'D'] }] }).objects).toHaveLength(6);
+  });
+});
+
+describe('trig measurement labels hidden one by one', () => {
+  const sahne = () => [p('A'), p('B', 3), p('C', 3, 4)];
+  const trig = (extra: Record<string, unknown> = {}) => ({ id: 't', type: 'measurement', kind: 'trig', pointIds: ['C', 'B', 'A'], ...extra });
+  it('round trips the hidden ratio labels', () => {
+    const loaded = parseProjectFile(JSON.parse(JSON.stringify({ objects: [...sahne(), trig({ hiddenRatios: ['sin', 'tan'] })] })));
+    expect(loaded.objects[3]).toMatchObject({ hiddenRatios: ['sin', 'tan'] });
+  });
+  it.each([
+    ['an unknown ratio', { hiddenRatios: ['cot'] }],
+    ['a non-array value', { hiddenRatios: 'sin' }],
+  ])('rejects %s', (_name, extra) => {
+    expect(() => parseProjectFile({ objects: [...sahne(), trig(extra)] })).toThrow();
+  });
+  it('rejects hidden ratios on a non-trig measurement', () => {
+    expect(() => parseProjectFile({ objects: [...sahne(), { id: 's', type: 'measurement', kind: 'slope', pointIds: ['A', 'B'], hiddenRatios: ['sin'] }] })).toThrow();
   });
 });

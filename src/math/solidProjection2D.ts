@@ -89,6 +89,8 @@ export interface ProjectedSolid2D {
     y: number;
     title: string;
     dimText: string;
+    /** Boyutlar ayrı ayrı ('r = 1', 'h = 3'): tuval her birini AYRI kutuda yazar */
+    dimParts: string[];
     volume: number;
     surfaceArea: number;
     subtitle?: string;
@@ -530,6 +532,8 @@ export function projectSolidFor2D(
       dimText = `r:${formatTurkishNumber(r)}`;
       break;
   }
+  // Her boyut ayrı etiket: 'r:1 h:3' → ['r = 1', 'h = 3']; '2×3×4' tek boyut üçlüsüdür, bölünmez.
+  const dimParts = dimText ? dimText.split(' ').map((p) => p.replace(':', ' = ')) : [];
 
   // Rozet pozisyonu (En yüksek noktanın hemen üstü)
   let minY = groundCenterScreen.y;
@@ -576,6 +580,7 @@ export function projectSolidFor2D(
       y: Math.min(minY - 20 * labelScale, groundCenterScreen.y - 32 * labelScale),
       title: displayTitle,
       dimText,
+      dimParts,
       volume: calculate3DVolume(solid),
       surfaceArea: calculate3DSurfaceArea(solid),
     },

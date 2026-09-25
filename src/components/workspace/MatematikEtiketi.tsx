@@ -49,6 +49,8 @@ export interface MatematikEtiketiProps {
   y: number;
   /** Yazı boyu (fs(..., 'measure')) */
   px: number;
+  /** Yerleşim merkezini değiştirmeden yazıyı, süsleri ve kutuyu birlikte ölçekler. */
+  olcek?: number;
   agirlik?: 600 | 700;
   renk: EtiketRengi;
   /** Satır başına renk (alan satırı / çevre satırı) */
@@ -56,7 +58,7 @@ export interface MatematikEtiketiProps {
   /** Soluk sözcüklerin rengi ('kiriş', '(büyük yay)') */
   solukRenk?: EtiketRengi;
   kutu?: KutuStili | null;
-  /** styleSettings.hideLabelBoxes: kutu gizlenir, yazı zemin rengi haleyle okunur kalır */
+  /** !styleSettings.showLabelBoxes (varsayılan): kutu gizlenir, yazı zemin rengi haleyle okunur kalır */
   kutuGizli?: boolean;
   /** Kutusuz etiket (doğru/ışın |AB|): hale her zaman */
   hale?: boolean;
@@ -75,7 +77,8 @@ export interface MatematikEtiketiProps {
 const renkOzellikleri = (r: EtiketRengi, tur: 'yazi' | 'cizgi') =>
   typeof r === 'object' ? (tur === 'yazi' ? { fill: r.hex } : { stroke: r.hex }) : { className: ETIKET_RENGI[r][tur] };
 
-const HALE = 'hsl(var(--background))';
+/** Kutusuz yazının halesi tuvalin gerçek zemin rengidir (Canvas svg'si --etiket-hale verir); özel zemin yoksa tema zemini. */
+const HALE = 'var(--etiket-hale, hsl(var(--background)))';
 const f = (n: number) => Number(n.toFixed(2));
 const cubukYolu = (c: Cubuk) => `M${f(c.x)},${f(c.y0)} L${f(c.x)},${f(c.y1)}`;
 
@@ -87,12 +90,14 @@ function Etiket(p: MatematikEtiketiProps) {
   const k = p.kutu;
   const solukRenk = p.solukRenk ?? 'soluk';
   const donme = p.donmeAcisi && Math.abs(p.donmeAcisi) > 0.01 ? ` rotate(${f(p.donmeAcisi)})` : '';
+  const olcek = p.olcek ?? 1;
+  const olcekleme = olcek === 1 ? '' : ` scale(${olcek})`;
   return (
     <g
       role="img"
       aria-label={p.sesli}
       data-yazim={p.satirlar.map(duzMetin).join('\n')}
-      transform={`translate(${f(p.x)} ${f(p.y)})${donme}`}
+      transform={`translate(${f(p.x)} ${f(p.y)})${donme}${olcekleme}`}
     >
       {/* Kutu gizliyken bile çizilir (display:none DEĞİL): ipucu ve fare alanı kalsın, dışa aktarımda görünmesin. */}
       <rect
@@ -176,6 +181,7 @@ const kutuEsit = (a: KutuStili | null | undefined, b: KutuStili | null | undefin
  */
 export function etiketEsit(a: MatematikEtiketiProps, b: MatematikEtiketiProps): boolean {
   if (a.x !== b.x || a.y !== b.y || a.px !== b.px || a.agirlik !== b.agirlik) return false;
+  if ((a.olcek ?? 1) !== (b.olcek ?? 1)) return false;
   if (a.donmeAcisi !== b.donmeAcisi || !!a.kutuGizli !== !!b.kutuGizli || !!a.hale !== !!b.hale) return false;
   if (a.minGenislik !== b.minGenislik || a.minYukseklik !== b.minYukseklik) return false;
   if (a.sesli !== b.sesli || a.ipucu !== b.ipucu) return false;

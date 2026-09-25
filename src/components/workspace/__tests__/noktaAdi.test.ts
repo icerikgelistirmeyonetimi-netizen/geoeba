@@ -15,16 +15,19 @@ describe('noktaAdiYeri — ad çizgilerin üstüne gelmez', () => {
     expect(yer).toMatchObject({ x: 110, y: 90, textAnchor: 'start', yon: 'sağ-üst' });
   });
 
-  it('sağ üste giden kenar (H→M gibi) adı sol üste kaydırır', () => {
+  it('tek kol sağ üste gidiyorsa ad kolun UZANTISINA (karşı yöne) geçer', () => {
+    // Eski kural sıradaki ilk boş yeri (sol üst) seçiyordu; ders kitabında uç noktanın adı
+    // parçanın uzantısında durur.
     const yer = noktaAdiYeri(P, [isin(1, -1, 140)], KUTU);
-    expect(yer.yon).toBe('sol-üst');
-    expect(yer).toMatchObject({ x: 90, y: 90, textAnchor: 'end' });
+    expect(yer.yon).toBe('sol-alt');
+    expect(yer.textAnchor).toBe('end');
+    expect(yer.y).toBeGreaterThan(P.y + 10);
   });
 
-  it('sağ üst ve sol üst kapalıysa sağ alta iner', () => {
+  it('iki kol yukarı açılıyorsa (Λ) ad tam aralarına, aşağıya konur', () => {
     const yer = noktaAdiYeri(P, [isin(1, -1), isin(-1, -1)], KUTU);
-    expect(yer.yon).toBe('sağ-alt');
-    expect(yer.textAnchor).toBe('start');
+    expect(yer.yon).toBe('alt');
+    expect(yer.textAnchor).toBe('middle');
     expect(yer.y).toBeGreaterThan(P.y + 10);
   });
 
@@ -33,8 +36,8 @@ describe('noktaAdiYeri — ad çizgilerin üstüne gelmez', () => {
     expect(noktaAdiYeri(P, [isin(0, 1), isin(0, -1)], KUTU).yon).toBe('sağ-üst');
   });
 
-  it('30° yukarı giden ışın sağ üst kutuyu keser; kısa parça (kutuya ulaşmayan) kesmez', () => {
-    expect(noktaAdiYeri(P, [isin(Math.cos(Math.PI / 6), -Math.sin(Math.PI / 6))], KUTU).yon).toBe('sol-üst');
+  it('30° yukarı giden ışın sağ üst kutuyu keser, ad karşı yana geçer; kısa parça (kutuya ulaşmayan) adı oynatmaz', () => {
+    expect(noktaAdiYeri(P, [isin(Math.cos(Math.PI / 6), -Math.sin(Math.PI / 6))], KUTU).yon).toBe('sol-alt');
     expect(noktaAdiYeri(P, [isin(Math.cos(Math.PI / 6), -Math.sin(Math.PI / 6), 6)], KUTU).yon).toBe('sağ-üst');
   });
 
@@ -45,6 +48,29 @@ describe('noktaAdiYeri — ad çizgilerin üstüne gelmez', () => {
     expect(noktaAdiYeri(nokta, [daire], KUTU).yon).toBe('sol-üst');
     // Çemberin tepesindeki noktada çember yatay geçer; sağ üst boştur
     expect(noktaAdiYeri({ x: 100, y: 100 }, [daire], KUTU).yon).toBe('sağ-üst');
+  });
+
+  it('üçgenin köşesinde ad şeklin DIŞINA konur (kolların arasındaki en geniş açıklık)', () => {
+    // Köşe P; kollar sağa ve sağ üste (üçgenin içi sağ üst çeyrekte) → ad sol alt tarafta
+    const yer = noktaAdiYeri(P, [isin(1, 0, 150), isin(1, -1.2, 150)], KUTU);
+    expect(['sol', 'sol-alt', 'alt']).toContain(yer.yon);
+  });
+
+  it('kıl payı kurtulan yer, bol boşluklu yeri yenemez', () => {
+    // Sağ üst kapalı; sol üstün hemen yanından bir kol geçiyor (dar), alt taraf ferah
+    const yer = noktaAdiYeri(P, [isin(1, -1, 150), isin(-0.35, -1, 150)], KUTU);
+    expect(['alt', 'sol-alt', 'sağ-alt']).toContain(yer.yon);
+  });
+
+  it('şekil sürüklenirken ad önceki yerinde kalır; sağ üst ancak ferahlayınca geri döner', () => {
+    // Sağ üst çok az boşlukla açık (kol kutunun 2-3 px yanından geçiyor)
+    const darKol = [isin(1, -0.18, 150)];
+    const ilk = noktaAdiYeri(P, darKol, KUTU);
+    expect(ilk.yon).toBe('sağ-üst'); // ilk açılışta: değmiyorsa yerinden oynamaz
+    // Ad daha önce sol altta idiyse ve sağ üst yalnız kıl payı açıksa orada KALIR (gidip gelmez)
+    expect(noktaAdiYeri(P, darKol, KUTU, 'sol-alt').yon).toBe('sol-alt');
+    // Sağ üst ferahladıysa (engel yok değil ama uzak) eve döner
+    expect(noktaAdiYeri(P, [isin(1, 1, 150)], KUTU, 'sol-alt').yon).toBe('sağ-üst');
   });
 
   it('bütün yönler kapalıysa en az çizginin kestiği yön seçilir', () => {

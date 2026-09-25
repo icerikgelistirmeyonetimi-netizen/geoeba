@@ -5,28 +5,23 @@ import { useWorkspace } from '@/state/WorkspaceContext';
 import {
   MathObject,
   PointObject,
-  SegmentObject,
   LineObject,
-  RayObject,
   CircleObject,
-  ArcObject,
-  SectorObject,
   AngleObject,
   PolygonObject,
   FunctionObject,
   SliderObject,
-  EllipseObject,
 } from '@/types/math';
 import { Solid3DObject } from '@/types/workspace3d';
-import {
-  calculateDistance,
-  calculateAngleDegrees,
-  calculatePolygonArea,
-  calculatePolygonPerimeter,
-  calculateLineEquation,
-} from '@/math/geometry';
+import { calculateLineEquation } from '@/math/geometry';
 import { formatTurkishNumber, formatCoordinate } from '@/math/coordinates';
 import { sliderIsBound } from '@/math/sliderBindings';
+import { sliderDisplay } from '@/math/sliderDisplay';
+import { yazimAyari, yaricap } from '@/math/matematikYazimi';
+import { cemberMerkezi, nesnedenNokta } from '@/math/olcuYazimlari';
+import { type PanelSatiri, metinSatiri, nesneSatirlari, olcuSatiri, panelYazimi } from '@/math/panelYazimlari';
+import { MatematikMetni } from '@/components/workspace/MatematikMetni';
+import { PanelOlcusu } from '@/components/workspace/PanelOlcusu';
 import { executeTurkishCommand, normalizeCommand } from '@/math/turkishCommands';
 import { searchCommands, CommandSuggestion } from '@/math/commandSearch';
 import { interpretSemanticMatch } from '@/math/semanticCommands';
@@ -49,6 +44,7 @@ import {
   CircleDot,
   Box,
   CornerDownLeft,
+  Ruler,
 } from 'lucide-react';
 
 interface AlgebraViewProps {
@@ -86,6 +82,7 @@ export function AlgebraView({
     setSliderValues,
     viewport,
     styleSettings,
+    commit,
   } = useWorkspace();
 
   const sliders = useMemo(() => objects.filter((o): o is SliderObject => o.type === 'slider'), [objects]);
@@ -111,7 +108,6 @@ export function AlgebraView({
   const [commandFeedback, setCommandFeedback] = useState<{ ok: boolean; message: string } | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const pointsById = useMemo(() => new Map(objects.filter((o) => o.type === 'point').map((p) => [p.id, p as PointObject])), [objects]);
 
   // Semantic and lexical autocomplete suggestions
   const meaning = useSemanticCommands(inputVal, isInputFocused);
@@ -159,6 +155,12 @@ export function AlgebraView({
       return;
     }
 
+    // Komut sahneyi değiştiriyorsa UYGULA. Eskiden yalnız "başarılı" yazılıyor, çizim değişmiyordu.
+    if (plan.sceneChanged) {
+      commit(plan.objects, `Komut: ${raw}`);
+      if (plan.selectedIds) setSelectedObjectIds(plan.selectedIds);
+    }
+
     if (plan.actions && plan.actions.length > 0) {
       for (const act of plan.actions) {
         if (act.kind === 'playback') {
@@ -195,107 +197,65 @@ export function AlgebraView({
     }
   };
 
+  // Nesne satırları MEB yazımıyla yazılır (|AB| = 5 br, m(ABC^) = 60°, A(ABC) = 6 br²):
+  // adlar yalnızca GÖRÜNEN nokta adlarından kurulur, kurallar tuvalle ortaktır (panelYazimlari.ts).
+  const nokta = useMemo(() => nesnedenNokta(objects), [objects]);
+  // Panel HER ZAMAN tam yazımdadır: "Yalnızca değer" ayarı yalnızca tuval etiketlerini seyreltir.
+  const yazim = useMemo(() => panelYazimi(styleSettings), [styleSettings]);
+
+  /** Nesne türüne göre listede görünen kısa ad (nesnenin kendi etiketi yoksa). */
+  const VARSAYILAN_BASLIK: Partial<Record<MathObject['type'], string>> = {
+    point: 'Nokta', segment: 's', line: 'd', ray: 'r', circle: 'c', ellipse: 'e',
+    angle: 'α', polygon: 'Çokgen', arc: 'Yay', sector: 'Dilim', measurement: 'Ölçüm',
+  };
+
   // Format single math object expression
-  const formatObjectExpression = (obj: MathObject): { header: string; formula: string; value?: string } => {
+  const formatObjectExpression = (obj: MathObject): { header: string; ana: PanelSatiri; ek?: PanelSatiri } => {
+    const header = obj.label || VARSAYILAN_BASLIK[obj.type] || obj.type;
     switch (obj.type) {
       case 'point': {
         const pt = obj as PointObject;
-        return {
-          header: pt.label || 'Nokta',
-          formula: formatCoordinate({ x: pt.x, y: pt.y }),
-        };
+        return { header, ana: metinSatiri(formatCoordinate({ x: pt.x, y: pt.y })) };
       }
       case 'slider': {
         const s = obj as SliderObject;
         return {
           header: s.variableName || s.label,
-          formula: `${formatTurkishNumber(s.value)}`,
-          value: `[${formatTurkishNumber(s.min)} .. ${formatTurkishNumber(s.max)}]`,
+          ana: metinSatiri(`${formatTurkishNumber(s.value)}`),
+          ek: metinSatiri(`[${formatTurkishNumber(s.min)} .. ${formatTurkishNumber(s.max)}]`),
         };
       }
       case 'function': {
         const fn = obj as FunctionObject;
-        return {
-          header: fn.label || 'f',
-          formula: `y = ${fn.expression}`,
-        };
-      }
-      case 'segment': {
-        const seg = obj as SegmentObject;
-        const p1 = pointsById.get(seg.startPointId);
-        const p2 = pointsById.get(seg.endPointId);
-        const dist = p1 && p2 ? calculateDistance(p1, p2) : 0;
-        return {
-          header: seg.label || 's',
-          formula: p1 && p2 ? `|${p1.label}${p2.label}| = ${formatTurkishNumber(dist)} br` : `${formatTurkishNumber(dist)} br`,
-        };
+        return { header, ana: metinSatiri(`y = ${(fn as FunctionObject).expression}`) };
       }
       case 'line': {
         const line = obj as LineObject;
-        const p1 = pointsById.get(line.point1Id);
-        const p2 = pointsById.get(line.point2Id);
-        const eq = p1 && p2 ? calculateLineEquation(p1, p2).equationText : 'Doğru';
-        return {
-          header: line.label || 'd',
-          formula: eq,
-        };
-      }
-      case 'ray': {
-        const ray = obj as RayObject;
-        const p1 = pointsById.get(ray.startPointId);
-        const p2 = pointsById.get(ray.throughPointId);
-        return {
-          header: ray.label || 'r',
-          formula: p1 && p2 ? `[${p1.label}${p2.label}) Işını` : 'Işın',
-        };
+        const p1 = nokta(line.point1Id);
+        const p2 = nokta(line.point2Id);
+        return { header, ana: metinSatiri(p1 && p2 ? calculateLineEquation(p1, p2).equationText : 'Doğru') };
       }
       case 'circle': {
+        // Merkez ve yarıçap cemberMerkezi'nden gelir: üç noktadan geçen çemberde de doğrudur (eskiden r = 0 yazıyordu).
         const circ = obj as CircleObject;
-        const c = pointsById.get(circ.centerPointId);
-        const rp = circ.radiusPointId ? pointsById.get(circ.radiusPointId) : undefined;
-        const r = c && rp ? calculateDistance(c, rp) : circ.fixedRadius ?? 0;
-        const cx = c ? formatTurkishNumber(c.x) : '0';
-        const cy = c ? formatTurkishNumber(c.y) : '0';
+        const g = cemberMerkezi(circ, objects, nokta);
+        const r = g?.radius ?? 0;
+        const cx = formatTurkishNumber(g?.merkez.x ?? 0);
+        const cy = formatTurkishNumber(g?.merkez.y ?? 0);
         return {
-          header: circ.label || 'c',
-          formula: `(x - ${cx})² + (y - ${cy})² = ${formatTurkishNumber(r * r)}`,
-          value: `r = ${formatTurkishNumber(r)}`,
+          header,
+          ana: metinSatiri(`(x - ${cx})² + (y - ${cy})² = ${formatTurkishNumber(r * r)}`),
+          ek: g ? olcuSatiri(yaricap(g.merkezNoktasi, g.yaricapNoktasi, r)) : undefined,
         };
       }
       case 'ellipse': {
-        const elp = obj as EllipseObject;
-        return {
-          header: elp.label || 'e',
-          formula: `rx = ${formatTurkishNumber(elp.radiusX)}, ry = ${formatTurkishNumber(elp.radiusY)}`,
-        };
+        const satirlar = nesneSatirlari(obj, objects, nokta);
+        return { header, ana: satirlar[2] ?? satirlar[0], ek: satirlar[0] };
       }
-      case 'angle': {
-        const ang = obj as AngleObject;
-        const p1 = pointsById.get(ang.point1Id);
-        const v = pointsById.get(ang.vertexPointId);
-        const p3 = pointsById.get(ang.point3Id);
-        const deg = p1 && v && p3 ? calculateAngleDegrees(p1, v, p3) : 0;
-        return {
-          header: ang.label || 'α',
-          formula: `${formatTurkishNumber(deg)}°`,
-        };
+      default: {
+        const satirlar = nesneSatirlari(obj, objects, nokta);
+        return { header, ana: satirlar[0] ?? metinSatiri(obj.type), ek: satirlar[1] };
       }
-      case 'polygon': {
-        const poly = obj as PolygonObject;
-        const pts = poly.pointIds.map((id) => pointsById.get(id)).filter(Boolean) as PointObject[];
-        const area = pts.length >= 3 ? calculatePolygonArea(pts) : 0;
-        const perim = pts.length >= 3 ? calculatePolygonPerimeter(pts) : 0;
-        return {
-          header: poly.label || 'Çokgen',
-          formula: `Alan = ${formatTurkishNumber(area)}`,
-          value: `Çevre = ${formatTurkishNumber(perim)}`,
-        };
-      }
-      default:
-        return {
-          header: obj.label || obj.type,
-          formula: obj.type,
-        };
     }
   };
 
@@ -351,6 +311,13 @@ export function AlgebraView({
         title: 'Açılar',
         icon: Sparkles,
         items: filtered.filter((o) => o.type === 'angle') as AngleObject[],
+      },
+      {
+        // Ölçümler (uzunluk, eğim, yay, trigonometrik oranlar) listede hiç görünmüyordu.
+        key: 'measurements',
+        title: 'Ölçümler',
+        icon: Ruler,
+        items: filtered.filter((o) => o.type === 'measurement'),
       },
       {
         key: 'solids',
@@ -473,6 +440,7 @@ export function AlgebraView({
                       const expr = formatObjectExpression(obj);
                       const isVisible = obj.visible !== false;
                       const sliderBound = obj.type === 'slider' && sliderIsBound(objects, obj.id);
+                      const sliderLabel = obj.type === 'slider' ? sliderDisplay(objects, obj, yazimAyari(styleSettings)) : null;
 
                       return (
                         <div
@@ -509,10 +477,16 @@ export function AlgebraView({
                               />
 
                               {/* Cebirsel İfade */}
-                              <div className="truncate flex-1 flex items-baseline gap-1.5">
-                                <span className="font-bold text-foreground text-[12px]">{expr.header}</span>
-                                <span className="font-mono text-[11px] text-foreground/85 font-medium truncate">{expr.formula}</span>
-                                {expr.value && <span className="text-[10px] text-muted-foreground font-mono truncate">({expr.value})</span>}
+                              <div className="truncate yazim-payi flex-1 flex items-baseline gap-1.5 leading-[1.45]">
+                                {sliderLabel ? (
+                                  <MatematikMetni dugumler={sliderLabel.nodes} title={sliderLabel.text} className="min-w-0 truncate yazim-payi py-0.5 font-semibold text-foreground text-[12px]" />
+                                ) : (
+                                  <>
+                                    <MatematikMetni metin={expr.header} ayar={yazim} className="font-bold text-foreground text-[12px]" />
+                                    <PanelOlcusu satir={expr.ana} ayar={yazim} metinSinifi="font-mono" className="text-[11px] text-foreground/85 font-medium truncate yazim-payi" />
+                                  </>
+                                )}
+                                {expr.ek && <span className="text-[10px] text-muted-foreground truncate yazim-payi">(<PanelOlcusu satir={expr.ek} ayar={yazim} metinSinifi="font-mono" />)</span>}
                               </div>
                             </div>
 
@@ -525,8 +499,8 @@ export function AlgebraView({
                                     e.stopPropagation();
                                     setSliderSettingsId(obj.id);
                                   }}
-                                  aria-label={`${expr.header} kaydırıcısı ayarları`}
-                                  title={`${expr.header} kaydırıcısı ayarları`}
+                                  aria-label={`${sliderLabel?.name ?? expr.header} kaydırıcısı ayarları`}
+                                  title={`${sliderLabel?.name ?? expr.header} kaydırıcısı ayarları`}
                                   className="p-1 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                                 >
                                   <Sliders className="w-3 h-3" aria-hidden="true" />
@@ -568,7 +542,8 @@ export function AlgebraView({
                                 max={(obj as SliderObject).max}
                                 step={(obj as SliderObject).step}
                                 value={(obj as SliderObject).value}
-                                aria-label={`${expr.header} değeri`}
+                                aria-label={`${sliderLabel?.name ?? expr.header} değeri`}
+                                aria-valuetext={sliderLabel?.text}
                                 onPointerDown={(e) => {
                                   if (sliderBound) return;
                                   e.preventDefault();
@@ -606,7 +581,7 @@ export function AlgebraView({
             commandFeedback.ok ? 'bg-primary/10 text-primary border-primary/20' : 'bg-destructive/10 text-destructive border-destructive/20'
           }`}
         >
-          <span className="truncate">{commandFeedback.message}</span>
+          <MatematikMetni metin={commandFeedback.message} ayar={yazim} className="truncate yazim-payi leading-[1.45]" />
         </div>
       )}
 

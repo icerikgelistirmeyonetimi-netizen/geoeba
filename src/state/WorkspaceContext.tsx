@@ -31,7 +31,7 @@ import {
   FractionObject,
   Point2D,
   MeasurementKind,
-  MeasurementLabelAnchor,
+  MeasurementLabelAnchor, type LabelOffset,
   CheckboxObject,
   ButtonObject,
   InputBoxObject,
@@ -81,13 +81,14 @@ import { createId } from './ids';
 import { pointAngleAction, providesAngleArm } from '@/math/pointAngles';
 import { withLengthMeasurement } from '@/math/partialLengths';
 import { aci, alan, cevre, olcuMetni, uzunluk } from '@/math/matematikYazimi';
+import { nesnedenNokta, trigSatirlari, yayOlcumuYazimi } from '@/math/olcuYazimlari';
 import { GERI_AL_IPUCU, NOKTALI_SEKILLER, gorunurNoktaAdlari, noktalariyla, olcumParcasiMi, silmeIpucu } from '@/math/nesneAdlari';
 import { birlestirmeIpucu, birlestirmeToleransi, noktalariBirlestir, ustUsteleriBirlestir } from '@/math/noktaBirlestir';
 import {
   addArcMeasurement, arcMeasurementDependencies, arcNearMissHint, arcValueText, circlesThroughPoint, commonCircles, dropDanglingArcMeasurements,
   arcTitle, findArcMeasurement, resolveArc, type ArcSpec,
 } from '@/math/arcMeasure';
-import { fitPolynomial, polynomialToExpression, coefficientOfDetermination } from '@/math/regression';
+import { fitPolynomial, polynomialToExpression, coefficientOfDetermination, noktalardanTamGeciyor } from '@/math/regression';
 import type { HostShape } from '@/math/geometry';
 import type { ValuePromptRequest } from '@/components/workspace/ValuePromptDialog';
 import confetti from 'canvas-confetti';
@@ -242,7 +243,7 @@ interface WorkspaceContextType {
   /** Çokgenin bütün kenar uzunluklarını gösterir veya gizler. */
   setAllPolygonEdgeLabels: (polygonId: string, show: boolean) => void;
   hideMeasurement: (objectId: string, kind: MeasurementKind | string) => void;
-  setLabelOffset: (objectId: string, kind: MeasurementKind | string, offset: Point2D, recordHistory?: boolean, anchor?: MeasurementLabelAnchor | null) => void;
+  setLabelOffset: (objectId: string, kind: MeasurementKind | string, offset: LabelOffset, recordHistory?: boolean, anchor?: MeasurementLabelAnchor | null) => void;
   measureArcLength: (arcId: string) => void;
   /**
    * Aynı çemberin üzerindeki iki nokta arasındaki yayı ölçer (çember BÖLÜNMEZ). Varsayılan küçük yay;
@@ -2344,9 +2345,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       // Alt menü maddeleri ve araç, 'olc-' sarmalayıcısının dışında: ölçümler Sade görünümde de görünür olsun
       setViewport((prev) => (prev.showMeasurements === false ? { ...prev, showMeasurements: true } : prev));
       if (typeof window !== 'undefined') window.dispatchEvent(new Event('geoeba:show-measurements'));
+      // İpucu, tuvaldeki rozetle AYNI yazımı kullanır: '|P͡Q| ≈ 6,28 br · m(P͡Q) = 90°'
+      // (eskiden 'PQ yayı: 6,28 br · 90°' yazıyordu; rozet ile ipucu iki ayrı dil konuşuyordu).
+      const yayYazimi = yayOlcumuYazimi(m, sonuc.objects, nesnedenNokta(sonuc.objects));
+      const yayDegeri = yayYazimi
+        ? `${olcuMetni(yayYazimi.uzunluk)} · ${olcuMetni(yayYazimi.olcu)}`
+        : yay ? arcValueText(yay) : '';
       let ipucu =
         sonuc.created || sonuc.revealed
-          ? `${baslik}: ${yay ? arcValueText(yay) : ''}. ${yay?.half ? 'Diğer yarım çember' : yay?.major ? 'Küçük yay' : 'Büyük yay'} için rozete sağ tıklayın.`
+          ? `${yayDegeri}. ${yay?.half ? 'Diğer yarım çember' : yay?.major ? 'Küçük yay' : 'Büyük yay'} için rozete sağ tıklayın.`
           : `${baslik} zaten ölçülmüş.`;
       if (!options.circleId && ortak.length > 1) {
         ipucu += ` (${a.label} ile ${b.label} birden çok çemberin üzerinde; ${cember.label || 'çember'} kullanıldı. Diğeri için noktaya sağ tıklayıp Yay ölç menüsünü kullanın.)`;
@@ -2589,18 +2596,22 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         label: functionLabel(nextFunctionName(objects), ifade),
         showLabel: true,
         expression: ifade,
-        color: '#db2777',
+        // Fonksiyon aracıyla aynı renk: pembe, seçim rengiyle karışıp eğriyi hep "seçili" gösteriyordu.
+        color: '#2563eb',
         thickness: 2.5,
         visible: true,
         createdAt: Date.now(),
       };
-      commit((prev) => [...prev, fn], `${degree}. derece polinom uyduruldu`);
+      commit((prev) => [...prev, fn], degree === 1 ? 'En uygun doğru uyduruldu' : `${degree}. derece polinom uyduruldu`);
+      // Seçim noktalardan yeni fonksiyona geçer: aksi hâlde Delete eğriyi değil noktaları siliyordu.
+      setSelectedObjectId(fn.id);
       setHintMessage(
-        `Uydurulan fonksiyon: ${fn.label}  ·  R² = ${formatTurkishNumber(Number(r2.toFixed(4)))}` +
-          (r2 > 0.999 ? ' (noktalardan tam geçiyor)' : '')
+        // R² 4 basamakla: varsayılan 2 basamak 0,9994'ü "1" gösterip tam uyum sanısı veriyordu
+        `${degree === 1 ? 'En uygun doğru' : 'Uydurulan fonksiyon'}: ${fn.label}  ·  R² = ${formatTurkishNumber(r2, 4)}` +
+          (noktalardanTamGeciyor(noktalar, katsayilar) ? ' (noktalardan tam geçiyor)' : '')
       );
     },
-    [objects, commit]
+    [objects, commit, setSelectedObjectId]
   );
 
   /**
@@ -3052,7 +3063,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
    * `recordHistory=false` sürükleme sırasında kullanılır; bırakılınca tek adım kaydedilir.
    */
   const setLabelOffset = useCallback(
-    (objectId: string, kind: MeasurementKind | string, offset: Point2D, recordHistory = true, anchor?: MeasurementLabelAnchor | null) => {
+    (objectId: string, kind: MeasurementKind | string, offset: LabelOffset, recordHistory = true, anchor?: MeasurementLabelAnchor | null) => {
       const guncelle = (prev: MathObject[]) =>
         prev.map((o) => {
           if (o.id !== objectId) return o;
@@ -3440,11 +3451,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       // ---------------------------------------------------------------------
 
       /** Yeni bir yardımcı nokta üretir; etiketi sıradaki boş harftir. */
+      /** Yardımcı nokta. Üretilen adlar listeye eklenir: art arda iki çağrı AYNI adı vermesin (orta dikme). */
+      const yardimciAdlar: string[] = [];
       const yardimciNokta = (x: number, y: number, renk = '#7c3aed'): PointObject => {
         const mevcut = [...objs, ...newlyCreated]
           .filter((o): o is PointObject => o.type === 'point')
-          .map((o) => o.label || '');
+          .map((o) => o.label || '')
+          .concat(yardimciAdlar);
         const [ad] = generateNextPointLabels(mevcut, 1);
+        yardimciAdlar.push(ad);
         return {
           id: createId('pt'),
           type: 'point',
@@ -3806,17 +3821,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             createdAt: Date.now(),
           };
           commitWith([etiket], etiket.label + ' ölçüldü');
-          const y = (v: number) => formatTurkishNumber(Number(v.toFixed(4)));
+          // İpucu, tuvaldeki etiketlerle AYNI yazım modelinden kurulur: 'm(AB̂C) ≈ 83,7°  ·  sin B̂ = …'
+          // (yuvarlanan değer '≈' alır). Elle kurulan '=' hem yanlış hem de tuvalden farklıydı.
           setHintMessage(
-            b.label +
-              ' açısı = ' +
-              y(o.derece) +
-              '°  ·  sin = ' +
-              y(o.sin) +
-              '  ·  cos = ' +
-              y(o.cos) +
-              '  ·  tan = ' +
-              (o.tan === null ? 'tanımsız' : y(o.tan)) +
+            trigSatirlari(a, b, c, o).map((satir) => olcuMetni(satir)).join('  ·  ') +
               (o.kenarlar ? '  ·  dik üçgen: kenar oranları da gösteriliyor' : '')
           );
           return;
@@ -4062,6 +4070,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             visible: true,
             showArea: isArea,
             showPerimeter: !isArea,
+            // Bu çokgen ÖLÇMEK için kuruldu: silinince kullanıcının noktalarını götürmez
+            olcumSekli: true,
             createdAt: Date.now(),
           };
           commitWith(

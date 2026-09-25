@@ -8,7 +8,7 @@
  */
 import type { ViewportTransform } from '@/types/math';
 import { worldToScreen } from '@/math/coordinates';
-import type { EsitlikIsareti } from '@/math/esitlikIsaretleri';
+import { ESITLIK_EN_COK, type EsitlikIsareti } from '@/math/esitlikIsaretleri';
 
 /** Çentik merkezleri arası uzaklık (px) */
 export const ARALIK = 4;
@@ -58,8 +58,10 @@ export interface CentikEngelleri {
  * ya da çentik bir eksen çizgisinin üstüne boylu boyunca düşüyorsa (y ekseninde ortalanmış yatay kenar) çentik
  * görünmez olur; öbek en yakın boş yere kaydırılır. Boşsa ya da yer yoksa 0.
  */
-export function centikKaydirmasi(m: CentikOgesi, viewport: ViewportTransform, cizgiOlcegi: number, engeller: CentikEngelleri): number {
-  const k = Math.max(1, Math.min(4, Math.round(m.sayi)));
+export function centikKaydirmasi(
+  m: CentikOgesi, viewport: ViewportTransform, cizgiOlcegi: number, engeller: CentikEngelleri, aciYaricapiPx?: number,
+): number {
+  const k = Math.max(1, Math.min(ESITLIK_EN_COK, Math.round(m.sayi)));
   const yari = centikYariBoyu(m.kalinlik, cizgiOlcegi);
   const gw = ((k - 1) / 2) * ARALIK + centikKalinligi(cizgiOlcegi) / 2;
   // Öğe boyunca o px ötedeki öbeğin merkezi (c), öğe yönü (d) ve çentik yönü (n)
@@ -75,9 +77,11 @@ export function centikKaydirmasi(m: CentikOgesi, viewport: ViewportTransform, ci
     yer = (o) => ({ cx: mx + dx * o, cy: my + dy * o, dx, dy, nx: -dy, ny: dx });
     enCok = L / 2 - gw - 6;
   } else {
-    if (!m.merkez || m.yaricap === undefined || m.baslangic === undefined || m.tarama === undefined) return 0;
+    // AÇI: yay yarıçapı yakınlaştırmayla büyümez (Canvas 22·etiketOlcegi px çizer), dışarıdan gelir.
+    if (!m.merkez || m.baslangic === undefined || m.tarama === undefined) return 0;
+    if (m.tur !== 'aci' && m.yaricap === undefined) return 0;
     const cS = worldToScreen(m.merkez, viewport);
-    const rPx = m.yaricap * viewport.zoom;
+    const rPx = m.tur === 'aci' ? (aciYaricapiPx ?? 0) : m.yaricap! * viewport.zoom;
     if (!(rPx > 0)) return 0;
     const orta = m.baslangic + m.tarama / 2;
     yer = (o) => {
@@ -85,7 +89,7 @@ export function centikKaydirmasi(m: CentikOgesi, viewport: ViewportTransform, ci
       const c = Math.cos(t), s = Math.sin(t);
       return { cx: cS.x + rPx * c, cy: cS.y - rPx * s, nx: c, ny: -s, dx: -s, dy: -c };
     };
-    enCok = (rPx * m.tarama) / 2 - gw - 6;
+    enCok = (rPx * Math.abs(m.tarama)) / 2 - gw - 6;
   }
   const carpar = (o: number) => {
     const { cx, cy, dx, dy, nx, ny } = yer!(o);
@@ -108,8 +112,10 @@ export function centikKaydirmasi(m: CentikOgesi, viewport: ViewportTransform, ci
 }
 
 /** Çentik öbeğinin SVG yolu; öğe ekranda çok kısaysa / yay çok küçükse null. `kaydirma`: öğe boyunca px (centikKaydirmasi). */
-export function centikYolu(m: CentikOgesi, viewport: ViewportTransform, cizgiOlcegi: number, kaydirma = 0): string | null {
-  const k = Math.max(1, Math.min(4, Math.round(m.sayi)));
+export function centikYolu(
+  m: CentikOgesi, viewport: ViewportTransform, cizgiOlcegi: number, kaydirma = 0, aciYaricapiPx?: number,
+): string | null {
+  const k = Math.max(1, Math.min(ESITLIK_EN_COK, Math.round(m.sayi)));
   const yari = centikYariBoyu(m.kalinlik, cizgiOlcegi);
   const gerekli = Math.max(EN_KISA, (k - 1) * ARALIK + 16);
   const parcalar: string[] = [];
@@ -128,10 +134,13 @@ export function centikYolu(m: CentikOgesi, viewport: ViewportTransform, cizgiOlc
     }
     return parcalar.join('');
   }
-  if (!m.merkez || m.yaricap === undefined || m.baslangic === undefined || m.tarama === undefined) return null;
+  if (!m.merkez || m.baslangic === undefined || m.tarama === undefined) return null;
+  if (m.tur !== 'aci' && m.yaricap === undefined) return null;
   const cS = worldToScreen(m.merkez, viewport);
-  const rPx = m.yaricap * viewport.zoom;
-  if (!(rPx >= EN_KUCUK_YARICAP) || !(rPx * m.tarama >= gerekli)) return null;
+  const rPx = m.tur === 'aci' ? (aciYaricapiPx ?? 0) : m.yaricap! * viewport.zoom;
+  // Açının yayı sabit yarıçapta ve kısadır; ölçüt yalnız çentiklerin sığacağı yay boyudur.
+  const enAz = m.tur === 'aci' ? (k - 1) * ARALIK + 10 : gerekli;
+  if (!(rPx >= EN_KUCUK_YARICAP) || !(rPx * Math.abs(m.tarama) >= enAz)) return null;
   const orta = m.baslangic + m.tarama / 2 + kaydirma / rPx;
   const ic = Math.max(0, rPx - yari), dis = rPx + yari;
   for (let j = 0; j < k; j++) {

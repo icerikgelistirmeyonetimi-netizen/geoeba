@@ -2,10 +2,14 @@
 
 /**
  * Veri ve Grafik — bileşenlerin paylaştığı küçük yardımcılar:
- * boyut gözlemi (ResizeObserver), azaltılmış hareket tercihi, SVG → PNG indirme, ortak sınıf adları.
+ * boyut gözlemi (ResizeObserver), azaltılmış hareket tercihi, radyo / açılır menü klavyesi, ortak sınıf adları.
+ * Grafik yardımcıları (SVG renkleri, geçiş eğrisi, PNG indirme, SVG koordinatı, renk noktası) `grafikOrtak.tsx`'te;
+ * eski içe aktarmalar bozulmasın diye buradan yeniden dışa aktarılır.
  */
 import React, { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { sekmeOkTusu } from '../sekmeler';
+
+export { GECIS, RENK, dosyaIndir, svgPngIndir, svgKonumu, RenkNoktasi } from './grafikOrtak';
 
 export interface Boyut {
   genislik: number;
@@ -19,10 +23,11 @@ export function useBoyut<T extends HTMLElement>(ref: RefObject<T>, varsayilan: B
     const el = ref.current;
     if (!el) return;
     const oku = () => {
-      const r = el.getBoundingClientRect();
+      // offsetWidth/Height yerleşim kutusudur: pencere açılış / büyütme animasyonundaki transform ölçeğinden
+      // etkilenmez (getBoundingClientRect ölçeklenmiş boyutu verir, animasyon bitince ResizeObserver tetiklenmez)
       setBoyut((onceki) => {
-        const g = Math.round(r.width);
-        const y = Math.round(r.height);
+        const g = Math.round(el.offsetWidth);
+        const y = Math.round(el.offsetHeight);
         return onceki.genislik === g && onceki.yukseklik === y ? onceki : { genislik: g, yukseklik: y };
       });
     };
@@ -63,6 +68,15 @@ export function radyoTusu(e: React.KeyboardEvent<HTMLElement>, indeks: number, a
 }
 
 /**
+ * Tuş "Veri topla" panelinin mi (olayın hedefi `[data-veri-topla-paneli]` içinde): panel kendi kısayollarını ve
+ * Escape'ini yönetir; uygulamanın genel (document düzeyindeki) tuş işleyicileri bu tuşları yakalamaz.
+ */
+export function paneldekiTus(hedef: EventTarget | null): boolean {
+  const e = hedef as { closest?: (secici: string) => unknown } | null;
+  return !!e && typeof e.closest === 'function' && !!e.closest('[data-veri-topla-paneli]');
+}
+
+/**
  * Açılır menü (menü düğmesi deseni): açılınca odak ilk menuitem'e geçer; Aşağı / Yukarı / Home / End
  * öğeler arasında dolaşır; Escape kapatıp odağı düğmeye döndürür; Tab ve dışarı tıklama kapatır.
  */
@@ -81,8 +95,19 @@ export function useAcilirMenu() {
     const tik = (e: MouseEvent) => {
       if (!kapRef.current?.contains(e.target as Node)) setAcik(false);
     };
+    // Odak menüde değilken de (ör. menüde odaklanacak öğe yok) Escape kapatır ve odağı düğmeye döndürür. Odak "Veri
+    // topla" panelindeyken tuş panelindir (kendi Escape'i öğretmen kartını kapatır): menü tuşu yakalamaz
+    const tus = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || paneldekiTus(e.target)) return;
+      setAcik(false);
+      dugmeRef.current?.focus();
+    };
     document.addEventListener('mousedown', tik);
-    return () => document.removeEventListener('mousedown', tik);
+    document.addEventListener('keydown', tus);
+    return () => {
+      document.removeEventListener('mousedown', tik);
+      document.removeEventListener('keydown', tus);
+    };
   }, [acik]);
   const menuTusu = (e: React.KeyboardEvent<HTMLDivElement>) => {
     const ogeler = Array.from(e.currentTarget.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([disabled])'));
@@ -114,108 +139,21 @@ export function useAcilirMenu() {
   return { acik, setAcik, kapat, kapRef, dugmeRef, menuRef, menuTusu, dugmeTusu };
 }
 
-export const GECIS = 'cubic-bezier(0.2, 0.8, 0.2, 1)';
-
-/** SVG içinde kullanılan tema renkleri (CSS değişkenleri; PNG'de hesaplanmış değerle çözülür) */
-export const RENK = {
-  metin: 'hsl(var(--foreground))',
-  solukMetin: 'hsl(var(--muted-foreground))',
-  kenar: 'hsl(var(--border))',
-  birincil: 'hsl(var(--primary))',
-  vurgu: 'hsl(var(--ring))',
-  kart: 'hsl(var(--card))',
-  zemin: 'hsl(var(--background))',
-  izgara: 'hsl(var(--grid-color))',
-  mercan: '#d9805f',
-  altin: '#b9884a',
-  lavanta: '#7f88c4',
-} as const;
-
 export const DUGME =
   'inline-flex items-center justify-center gap-1.5 h-11 min-w-[44px] px-3 rounded-[calc(var(--radius)-6px)] border border-border bg-card text-[13px] font-semibold text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap';
 
-export const DUGME_BIRINCIL =
-  'inline-flex items-center justify-center gap-1.5 h-11 min-w-[44px] px-3 rounded-[calc(var(--radius)-6px)] bg-primary text-primary-foreground text-[13px] font-semibold hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-opacity whitespace-nowrap';
+/**
+ * Dolu (basılı / etkin) zemin: birincil renk üstünde beyaz yazı. Koyu temada birincil renk açık kaldığı için
+ * zemin koyulaştırılır (hsl 175 58% 30%; beyaz yazıyla karşıtlık ≈ 5,2 : 1 ≥ 4,5 : 1).
+ */
+export const DOLU_ZEMIN = 'bg-primary text-primary-foreground dark:bg-[hsl(175_58%_30%)] dark:text-white';
+
+export const DUGME_BIRINCIL = `inline-flex items-center justify-center gap-1.5 h-11 min-w-[44px] px-3 rounded-[calc(var(--radius)-6px)] ${DOLU_ZEMIN} text-[13px] font-semibold hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-opacity whitespace-nowrap`;
 
 export const SECIM =
   'h-11 rounded-[calc(var(--radius)-6px)] border border-border bg-card px-2 text-[13px] font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 export const ONAY_KUTUSU = 'h-6 w-6 accent-[hsl(var(--primary))] cursor-pointer';
-
-export function dosyaIndir(blob: Blob, ad: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = ad;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-const RENK_NITELIKLERI = ['fill', 'stroke', 'color'] as const;
-
-/** Canlı ağaçtaki hesaplanmış renkleri klona yazar (CSS değişkenleri PNG'de çözümsüz kalmasın) */
-function renkleriCoz(canli: SVGSVGElement, klon: SVGSVGElement): void {
-  const canliDugumler = [canli, ...Array.from(canli.querySelectorAll<SVGElement>('*'))];
-  const klonDugumler = [klon, ...Array.from(klon.querySelectorAll<SVGElement>('*'))];
-  canliDugumler.forEach((el, i) => {
-    const k = klonDugumler[i];
-    if (!k) return;
-    const hesaplanmis = window.getComputedStyle(el);
-    for (const nitelik of RENK_NITELIKLERI) {
-      const nitelikDegeri = el.getAttribute(nitelik) ?? '';
-      const stilDegeri = el.style.getPropertyValue(nitelik);
-      if (nitelikDegeri.includes('var(') || stilDegeri.includes('var(')) {
-        const cozulmus = hesaplanmis.getPropertyValue(nitelik);
-        if (cozulmus) {
-          k.setAttribute(nitelik, cozulmus);
-          k.style.setProperty(nitelik, cozulmus);
-        }
-      }
-    }
-    const yaziTipi = hesaplanmis.fontFamily;
-    if (el.tagName.toLowerCase() === 'text' && yaziTipi) k.style.fontFamily = yaziTipi;
-    // Geçiş animasyonları PNG'ye taşınmaz
-    k.style.transition = 'none';
-  });
-}
-
-/** SVG → canvas → PNG dosyası (2× çözünürlük) */
-export async function svgPngIndir(svg: SVGSVGElement, dosyaAdi: string): Promise<void> {
-  const genislik = svg.clientWidth || Number(svg.getAttribute('width')) || 800;
-  const yukseklik = svg.clientHeight || Number(svg.getAttribute('height')) || 500;
-  const klon = svg.cloneNode(true) as SVGSVGElement;
-  klon.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  klon.setAttribute('width', String(genislik));
-  klon.setAttribute('height', String(yukseklik));
-  renkleriCoz(svg, klon);
-  const zemin = window.getComputedStyle(svg).backgroundColor;
-  const metin = new XMLSerializer().serializeToString(klon);
-  const svgUrl = URL.createObjectURL(new Blob([metin], { type: 'image/svg+xml;charset=utf-8' }));
-  try {
-    const resim = await new Promise<HTMLImageElement>((coz, reddet) => {
-      const img = new Image();
-      img.onload = () => coz(img);
-      img.onerror = () => reddet(new Error('SVG çizilemedi'));
-      img.src = svgUrl;
-    });
-    const olcek = 2;
-    const tuval = document.createElement('canvas');
-    tuval.width = genislik * olcek;
-    tuval.height = yukseklik * olcek;
-    const ctx = tuval.getContext('2d');
-    if (!ctx) throw new Error('Canvas yok');
-    ctx.fillStyle = zemin && zemin !== 'rgba(0, 0, 0, 0)' ? zemin : '#fbf7ee';
-    ctx.fillRect(0, 0, tuval.width, tuval.height);
-    ctx.drawImage(resim, 0, 0, tuval.width, tuval.height);
-    const blob = await new Promise<Blob | null>((coz) => tuval.toBlob(coz, 'image/png'));
-    if (!blob) throw new Error('PNG üretilemedi');
-    dosyaIndir(blob, dosyaAdi);
-  } finally {
-    URL.revokeObjectURL(svgUrl);
-  }
-}
 
 /** Dosya adı için güvenli kısaltma */
 export function dosyaAdiTemizle(metin: string): string {
@@ -229,31 +167,22 @@ export function dosyaAdiTemizle(metin: string): string {
   );
 }
 
-/** İşaretçi olayını SVG yerel koordinatına çevirir (SVG piksel ölçeğinde çizildiği için doğrudan) */
-export function svgKonumu(svg: SVGSVGElement, clientX: number, clientY: number): { x: number; y: number } {
-  const r = svg.getBoundingClientRect();
-  return { x: clientX - r.left, y: clientY - r.top };
-}
-
-/** Tablolarda kategori rengini gösteren küçük renk noktası (renk anahtarı, frekans ve iki yönlü tablolar) */
-export function RenkNoktasi({ renk }: { renk: string | undefined }) {
+/**
+ * Değişken türü çipi (değişken sekmeleri ve tablo başlıkları): sayısalda "123", kategorikte "Abc".
+ * Görseldir (aria-hidden); tür, çipi taşıyan öğenin adında ya da title'ında yazılır. `className` ek sınıflardır.
+ */
+export function TurIsareti({ tur, className = '' }: { tur: 'sayi' | 'etiket'; className?: string }) {
+  const renk =
+    tur === 'sayi'
+      ? 'bg-[#216a78]/[0.12] text-[#0f4c57] dark:bg-[#2a9d94]/[0.22] dark:text-[#9fe0d9]'
+      : 'bg-[#7f88c4]/[0.2] text-[#454d8c] dark:bg-[#7f88c4]/[0.3] dark:text-[#d3d7f5]';
   return (
-    <svg viewBox="0 0 12 12" className="h-3 w-3 shrink-0" aria-hidden="true">
-      <circle cx="6" cy="6" r="5.5" fill={renk} />
-    </svg>
-  );
-}
-
-/** Değişken türü simgesi: sayısal = cetvel, kategorik = etiket (değişken sekmeleri ve tablo başlıkları) */
-export function TurIsareti({ tur, className = 'h-3.5 w-3.5 opacity-80' }: { tur: 'sayi' | 'etiket'; className?: string }) {
-  return tur === 'sayi' ? (
-    <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
-      <path d="M2 11.5h12M4 11.5V9M7 11.5V8M10 11.5V9M13 11.5V7" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  ) : (
-    <svg viewBox="0 0 16 16" className={className} aria-hidden="true">
-      <path d="M2.5 3h5.2l5.8 5.8-4.7 4.7L3 7.7V3z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-      <circle cx="5.5" cy="5.8" r="1.1" fill="currentColor" />
-    </svg>
+    <span
+      aria-hidden="true"
+      data-tur-cipi={tur}
+      className={`inline-flex h-6 shrink-0 select-none items-center rounded-full px-1.5 text-[12px] font-bold leading-none tabular-nums ${renk} ${className}`}
+    >
+      {tur === 'sayi' ? '123' : 'Abc'}
+    </span>
   );
 }

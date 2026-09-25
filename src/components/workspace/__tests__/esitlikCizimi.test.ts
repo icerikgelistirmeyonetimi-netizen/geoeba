@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ViewportTransform } from '@/types/math';
+import type { CizgiSayisi } from '@/math/esitlikIsaretleri';
 import { ARALIK, centikKalinligi, centikKaydirmasi, centikYariBoyu, centikYolu, etiketPayi } from '../esitlikCizimi';
 
 const vp = { zoom: 40, panX: 0, panY: 0, width: 800, height: 600, showGrid: true, showAxes: true, showCoordinates: false, snapToGrid: false, gridStep: 1 } as ViewportTransform;
@@ -11,6 +12,25 @@ function alt(d: string | null): number[][] {
 }
 
 describe('eşitlik çentiği çizimi', () => {
+  it.each([5, 6, 7, 8] as CizgiSayisi[])('%i çentik düz kenarda ve yayda eksiksiz çizilir', sayi => {
+    const kenar = alt(centikYolu({ tur: 'duz', sayi, kalinlik: 2.5, a: { x: -2, y: 0 }, b: { x: 2, y: 0 } }, vp, 1));
+    const yay = alt(centikYolu({ tur: 'yay', sayi, kalinlik: 3, merkez: { x: 0, y: 0 }, yaricap: 2, baslangic: 0, tarama: Math.PI / 2 }, vp, 1));
+    expect(kenar).toHaveLength(sayi);
+    expect(yay).toHaveLength(sayi);
+    expect(kenar.every(([x1, , x2]) => x1 === x2)).toBe(true);
+    expect((kenar[0][0] + kenar[sayi - 1][0]) / 2).toBe(400);
+  });
+
+  it('sekiz çentiğin bütün genişliği nokta çakışmasında hesaba katılır', () => {
+    const kenar = { tur: 'duz' as const, sayi: 8 as const, kalinlik: 2.5, a: { x: -2, y: 0 }, b: { x: 2, y: 0 } };
+    const kaydirma = centikKaydirmasi(kenar, vp, 1, { noktalar: [{ x: 400, y: 300, r: 6.5 }] });
+    const cizgiler = alt(centikYolu(kenar, vp, 1, kaydirma));
+    expect(cizgiler).toHaveLength(8);
+    expect(cizgiler.every(([x]) => Math.abs(x - 400) > 7)).toBe(true);
+    const kisa = { ...kenar, a: { x: 0, y: 0 }, b: { x: 1, y: 0 } };
+    expect(centikYolu(kisa, vp, 1)).toBeNull(); // 40 px içine 44 px'lik öbek sığmaz.
+  });
+
   it('yatay parçada iki çentik: dikey, ortada ±2 px, çizgi kalınlığının iki yanından 5 px taşar', () => {
     const d = centikYolu({ tur: 'duz', sayi: 2, kalinlik: 2.5, a: { x: -1, y: 0 }, b: { x: 1, y: 0 } }, vp, 1);
     const cizgiler = alt(d);

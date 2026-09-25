@@ -449,8 +449,8 @@ describe('app: style settings', () => {
     ['dolguları kaldır', { hideFills: true }],
     ['tüm şekillerin dolgularını gizle', { hideFills: true }],
     ['dolguları geri getir', { hideFills: false }],
-    ['etiket kutularını gizle', { hideLabelBoxes: true }],
-    ['etiket kutularını göster', { hideLabelBoxes: false }],
+    ['etiket kutularını gizle', { showLabelBoxes: false }],
+    ['etiket kutularını göster', { showLabelBoxes: true }],
     ['stili sıfırla', { ...DEFAULT_STYLE_SETTINGS }],
   ])('%s', (text, patch) => {
     expect(stylePatch(text)).toEqual(patch);

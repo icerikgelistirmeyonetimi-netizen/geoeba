@@ -82,6 +82,8 @@ describe('solidProjection2D', () => {
     expect(projected.topView?.baseShapeName).toBe('Daire');
     expect(projected.topView?.kind).toBe('circle');
     expect(projected.topView?.radius).toBeCloseTo(2 * defaultViewport.zoom, 1);
+    // Rozetteki her boyut ayrı etikettir
+    expect(projected.badge.dimParts).toEqual(['r = 2', 'h = 5']);
   });
 
   it('projects a cube into 2D axonometric mode with faces and edges', () => {

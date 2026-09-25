@@ -434,7 +434,7 @@ export function Header() {
             className="w-full text-left px-3.5 py-2.5 rounded-xl bg-accent text-foreground hover:bg-muted flex items-center gap-2.5"
           >
             <Compass className="w-4 h-4 text-ada-deniz" />
-            <span>Ana Sayfa (Kademe Seçimi)</span>
+            <span>Ana Sayfa</span>
           </button>
           <button
             onClick={() => {

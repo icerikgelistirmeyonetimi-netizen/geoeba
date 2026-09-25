@@ -94,7 +94,12 @@ function reply(spec: ArcSpec, circles: MathObject[], scene: CommandScene): strin
   const r = resolveArc(spec, scene.objects) ?? fail('Noktalar çakışık; aralarında yay yok.');
   const where = circles.length > 1 ? ` (${circles[0].label || 'çember'} üzerinde)` : '';
   const uclar = yayOlcumUclari(spec, scene, r);
-  return `${arcTitle(spec, scene.objects, r)}${where}: ${yaz(yayUzunlugu(uclar, r.length))}, ${yaz(yayOlcusu(uclar, r.degrees))}.`;
+  const baslik = arcTitle(spec, scene.objects, r);
+  // Başlık yayı zaten 'yarım çemberi' / 'büyük yayı' diye adlandırıyorsa aynı niteleyici iki ölçüye
+  // birden eklenince tek cümlede üç kez okunuyordu; bu durumda yalnız SON ölçü taşır. Ara noktayla
+  // adlandırılan yaylarda (|B͡C͡D|) niteleyici zaten çıkmaz, bayraklar olduğu gibi kalır.
+  const sade = /yarım çemberi|büyük yayı/.test(baslik) ? { ...uclar, buyuk: false, yarim: false } : uclar;
+  return `${baslik}${where}: ${yaz(yayUzunlugu(sade, r.length))}, ${yaz(yayOlcusu(uclar, r.degrees))}.`;
 }
 
 /** Ölçümü gösterir (yoksa oluşturur). Hiçbir alan değişmediyse yalnızca ölçüm görünümünü açar (boş geçmiş adımı yok). */

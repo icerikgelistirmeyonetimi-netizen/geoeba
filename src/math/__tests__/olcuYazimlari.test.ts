@@ -5,7 +5,7 @@ import type {
 } from '@/types/math';
 import { VARSAYILAN_YAZIM, duzMetin, olcuMetni, type YazimAyari } from '@/math/matematikYazimi';
 import {
-  aciGrubu, aciOlcusu, cemberKartSatirlari, cokgenKartSatirlari, elipsKartSatirlari, kenarUzunlugu,
+  aciGrubu, aciOlcusu, cemberKartSatirlari, cemberYaricapiGorunur, cokgenKartSatirlari, elipsKartSatirlari, kenarUzunlugu,
   nesnedenNokta, noktaBulucu, olcumKartKutulari, segmentUzunlugu, trigSatirlari, yayGeometrisi,
   yayMerkezAcisi, yayOlcumuYazimi, yayOlculeri, yayUclari, yazimlar,
 } from '@/math/olcuYazimlari';
@@ -327,13 +327,21 @@ describe('ölçüm kartları', () => {
   const kartlar = (objects: MathObject[], yazim: YazimAyari = VARSAYILAN_YAZIM) =>
     olcumKartKutulari({ objects, viewport: GORUNUM, yazim, px });
 
-  it('çokgen kartı A(ABC) ve Ç(ABC) satırlarını taşır', () => {
+  /** Her etiketin tek satırlık düz metni */
+  const metinler = (ks: ReturnType<typeof kartlar>) => ks.map((k) => k.satirlar.map(duzMetin).join(' / '));
+
+  it('çokgenin alanı ve çevresi AYRI etiketlerdir, alt alta boşlukla dizilir', () => {
     const poly = govde<PolygonObject>({ id: 'poly1', type: 'polygon', pointIds: [A.id, B.id, C.id], showArea: true, showPerimeter: true });
-    const [k] = kartlar([A, B, C, poly]);
-    expect(k.satirlar.map(duzMetin)).toEqual(['A(ABC) = 6 br²', 'Ç(ABC) = 12 br']);
-    expect(k.satirTurleri).toEqual(['alan', 'cevre']);
-    expect(k.anahtar).toBe('area');
-    expect(k.sesli).toContain('üçgeninin alanı');
+    const ks = kartlar([A, B, C, poly]);
+    expect(metinler(ks)).toEqual(['A(ABC) = 6 br²', 'Ç(ABC) = 12 br']);
+    expect(ks.map((k) => k.satir)).toEqual(['alan', 'cevre']);
+    expect(ks.map((k) => k.anahtar)).toEqual(['area', 'perimeter']);
+    expect(ks[0].sesli).toContain('üçgeninin alanı');
+    expect(ks[0].sesli).not.toContain('çevre');
+    // Fare ipucu OKUNUR açıklamadır; ekran okuyucunun sözcük biçimi görsel arayüze sızmaz.
+    expect(ks.map((k) => k.ipucu)).toEqual(['ABC üçgeninin alanı: 6 br²', 'ABC üçgeninin çevresi: 12 br']);
+    expect(ks[1].merkez.x).toBeCloseTo(ks[0].merkez.x, 5);
+    expect(ks[1].kutu.y0 - ks[0].kutu.y1).toBeCloseTo(6 * scale, 5);
   });
 
   it('yalnızca çevre açıkken anahtar perimeter olur', () => {
@@ -347,8 +355,8 @@ describe('ölçüm kartları', () => {
     const poly = govde<PolygonObject>({ id: 'poly1', type: 'polygon', pointIds: [A.id, B.id, C.id], showArea: true, showPerimeter: true });
     const [k] = kartlar([A, B, C, poly]);
     const altY = GORUNUM.height / 2; // y = 0 dünya noktası
-    expect(k.merkez.y).toBeCloseTo(altY + (24 + k.olcu.yukseklik / 2) * scale, 5);
-    expect(k.kutu.y0).toBeCloseTo(k.merkez.y - k.olcu.yukseklik / 2, 5);
+    expect(k.merkez.y).toBeCloseTo(altY + (22 + k.olcu.yukseklik / 2) * scale, 5);
+    expect(k.kutu.y0).toBeCloseTo(k.merkez.y - k.olcu.yukseklik * scale / 2, 5);
     expect(k.merkez.x).toBeCloseTo(GORUNUM.width / 2 + ((-2 + 2 + 2) / 3) * GORUNUM.zoom, 5);
   });
 
@@ -366,8 +374,8 @@ describe('ölçüm kartları', () => {
       labelOffsets: { area: { x: 1, y: 2 } },
     });
     const [k] = kartlar([A, B, C, poly]);
-    expect(k.kutu.x0).toBeCloseTo(k.merkez.x - k.olcu.genislik / 2 + 40, 5);
-    expect(k.kutu.y0).toBeCloseTo(k.merkez.y - k.olcu.yukseklik / 2 - 80, 5);
+    expect(k.kutu.x0).toBeCloseTo(k.merkez.x - k.olcu.genislik * scale / 2 + 40, 5);
+    expect(k.kutu.y0).toBeCloseTo(k.merkez.y - k.olcu.yukseklik * scale / 2 - 80, 5);
   });
 
   it('köşe adı gizliyse sözcüğe düşer', () => {
@@ -393,16 +401,21 @@ describe('ölçüm kartları', () => {
     expect(before.kutu.x0).toBeCloseTo(GORUNUM.width / 2 + (2 / 3 + 5) * GORUNUM.zoom, 5);
   });
 
-  it('çember kartı başlık, yarıçap, alan ve çevre satırlarını verir', () => {
+  it('çemberin başlığı, yarıçapı, alanı ve çevresi AYRI etiketlerdir', () => {
     const M = nokta('M', 0, 0);
     const T = nokta('T', 2, 0);
     const circ = govde<CircleObject>({ id: 'c1', type: 'circle', centerPointId: M.id, radiusPointId: T.id, showArea: true, showPerimeter: true });
-    const [k] = kartlar([M, T, circ]);
-    expect(k.satirlar.map(duzMetin)).toEqual([
+    const ks = kartlar([M, T, circ]);
+    expect(metinler(ks)).toEqual([
       'Ç(M, r)', 'r = |MT| = 2 br', 'Alan = πr² ≈ 12,57 br²', 'Çevre = 2πr ≈ 12,57 br',
     ]);
-    expect(k.satirTurleri).toEqual(['baslik', 'yaricap', 'alan', 'cevre']);
-    expect(k.merkez.y).toBeCloseTo(GORUNUM.height / 2 + 2 * GORUNUM.zoom + (14 + k.olcu.yukseklik / 2) * scale, 5);
+    expect(ks.map((k) => k.satir)).toEqual(['baslik', 'yaricap', 'alan', 'cevre']);
+    expect(ks.map((k) => k.anahtar)).toEqual(['title', 'radius', 'area', 'perimeter']);
+    expect(ks.every((k) => k.satirlar.length === 1)).toBe(true);
+    expect(ks[0].merkez.y).toBeCloseTo(GORUNUM.height / 2 + 2 * GORUNUM.zoom + (14 + ks[0].olcu.yukseklik / 2) * scale, 5);
+    for (let i = 1; i < ks.length; i++) {
+      expect(ks[i].kutu.y0 - ks[i - 1].kutu.y1).toBeCloseTo(6 * scale, 5);
+    }
   });
 
   it('üç noktadan geçen çemberde başlık yazılmaz', () => {
@@ -410,31 +423,57 @@ describe('ölçüm kartları', () => {
     const Q = nokta('Q', 1, 0);
     const R = nokta('R', 0, 1);
     const circ = govde<CircleObject>({ id: 'c1', type: 'circle', centerPointId: '', throughPointIds: [P.id, Q.id, R.id], showArea: true });
-    const [k] = kartlar([P, Q, R, circ]);
-    expect(k.satirTurleri).toEqual(['yaricap', 'alan']);
-    expect(duzMetin(k.satirlar[0])).toBe('r = 1 br');
+    const ks = kartlar([P, Q, R, circ]);
+    expect(ks.map((k) => k.satir)).toEqual(['yaricap', 'alan']);
+    expect(duzMetin(ks[0].satirlar[0])).toBe('r = 1 br');
   });
 
   it('merkezi gizli çemberde de yarıçap sözcüğe düşer', () => {
     const M = nokta('M', 0, 0, { visible: false });
     const T = nokta('T', 2, 0);
     const circ = govde<CircleObject>({ id: 'c1', type: 'circle', centerPointId: M.id, radiusPointId: T.id, showArea: true });
-    const [k] = kartlar([M, T, circ]);
-    expect(k.satirTurleri).toEqual(['yaricap', 'alan']);
-    expect(duzMetin(k.satirlar[0])).toBe('r = 2 br');
+    const ks = kartlar([M, T, circ]);
+    expect(ks.map((k) => k.satir)).toEqual(['yaricap', 'alan']);
+    expect(duzMetin(ks[0].satirlar[0])).toBe('r = 2 br');
   });
 
-  it('elips kartı formülü yazar ve çevresi her zaman yaklaşıktır', () => {
+  it('çemberin yarıçap etiketi tek başına gizlenir ve tek başına açılır', () => {
+    const M = nokta('M', 0, 0);
+    const T = nokta('T', 2, 0);
+    const temel = { id: 'c1', type: 'circle' as const, centerPointId: M.id, radiusPointId: T.id };
+    const gizli = govde<CircleObject>({ ...temel, showArea: true, showRadius: false });
+    expect(kartlar([M, T, gizli]).map((k) => k.anahtar)).toEqual(['title', 'area']);
+    const yalniz = govde<CircleObject>({ ...temel, showRadius: true });
+    expect(kartlar([M, T, yalniz]).map((k) => k.anahtar)).toEqual(['title', 'radius']);
+    // Hiçbir ölçü yoksa başlık da yazılmaz
+    expect(kartlar([M, T, govde<CircleObject>({ ...temel, showRadius: false })])).toHaveLength(0);
+    expect(cemberYaricapiGorunur(govde<CircleObject>({ ...temel }))).toBe(false);
+    expect(cemberYaricapiGorunur(govde<CircleObject>({ ...temel, showPerimeter: true }))).toBe(true);
+    expect(cemberYaricapiGorunur(govde<CircleObject>({ ...temel, showPerimeter: true, showRadius: false }))).toBe(false);
+  });
+
+  it('her etiket kendi kayıklığıyla taşınır; öteki etiketler yerinde kalır', () => {
+    const M = nokta('M', 0, 0);
+    const T = nokta('T', 2, 0);
+    const temel = { id: 'c1', type: 'circle' as const, centerPointId: M.id, radiusPointId: T.id, showArea: true, showPerimeter: true };
+    const once = kartlar([M, T, govde<CircleObject>(temel)]);
+    const sonra = kartlar([M, T, govde<CircleObject>({ ...temel, labelOffsets: { perimeter: { x: 1, y: 0 } } })]);
+    const etiket = (ks: typeof once, a: string) => ks.find((k) => k.anahtar === a)!;
+    expect(etiket(sonra, 'perimeter').kutu.x0 - etiket(once, 'perimeter').kutu.x0).toBeCloseTo(GORUNUM.zoom, 5);
+    for (const a of ['title', 'radius', 'area']) expect(etiket(sonra, a).kutu).toEqual(etiket(once, a).kutu);
+  });
+
+  it('elipsin alanı ve çevresi ayrı etiketlerdir; çevresi her zaman yaklaşıktır', () => {
     const U = nokta('U', 0, 0);
     const elp = govde<EllipseObject>({ id: 'e1', type: 'ellipse', centerPointId: U.id, radiusX: 3, radiusY: 2, showArea: true, showPerimeter: true });
-    const [k] = kartlar([U, elp]);
-    expect(k.satirlar.map(duzMetin)).toEqual(['Alan = πab ≈ 18,85 br²', 'Çevre ≈ 15,87 br']);
+    const ks = kartlar([U, elp]);
+    expect(metinler(ks)).toEqual(['Alan = πab ≈ 18,85 br²', 'Çevre ≈ 15,87 br']);
+    expect(ks.map((k) => k.anahtar)).toEqual(['area', 'perimeter']);
   });
 
-  it('kısa ayarda kartlar da kısalır', () => {
+  it('kısa ayarda etiketler de kısalır', () => {
     const poly = govde<PolygonObject>({ id: 'poly1', type: 'polygon', pointIds: [A.id, B.id, C.id], showArea: true, showPerimeter: true });
-    const [k] = kartlar([A, B, C, poly], KISA);
-    expect(k.satirlar.map(duzMetin)).toEqual(['Alan = 6 br²', 'Çevre = 12 br']);
+    expect(metinler(kartlar([A, B, C, poly], KISA))).toEqual(['Alan = 6 br²', 'Çevre = 12 br']);
   });
 
   it('ölçüsü kapalı ve görünmez şekiller kart üretmez', () => {
@@ -446,27 +485,31 @@ describe('ölçüm kartları', () => {
   it('kart satırları doğrudan da kurulabilir', () => {
     expect(cokgenKartSatirlari([A, B, C], true, false).turler).toEqual(['alan']);
     expect(cemberKartSatirlari(null, null, 2, false, true).turler).toEqual(['yaricap', 'cevre']);
+    expect(cemberKartSatirlari(nokta('O', 0, 0), null, 2, true, false, false).turler).toEqual(['baslik', 'alan']);
+    expect(cemberKartSatirlari(nokta('O', 0, 0), null, 2, false, false, false).turler).toEqual([]);
     expect(elipsKartSatirlari(3, 2, true, true).turler).toEqual(['alan', 'cevre']);
   });
 
-  const viewports: ViewportTransform[] = [
-    { ...GORUNUM, zoom: 44, width: 0, height: 0 },
-    { ...GORUNUM, zoom: 5, panX: 21, panY: -35 },
-    { ...GORUNUM, zoom: 120, panX: -210, panY: 62, width: 1280, height: 720 },
-    { ...GORUNUM, zoom: 300, panX: 315, panY: -143, width: 620, height: 900 },
+  const viewports: { viewport: ViewportTransform; fontScale: number }[] = [
+    { viewport: { ...GORUNUM, zoom: 44, width: 0, height: 0 }, fontScale: 1 },
+    { viewport: { ...GORUNUM, zoom: 22, panX: -70, panY: 110 }, fontScale: 0.5 },
+    { viewport: { ...GORUNUM, zoom: 5, panX: 21, panY: -35 }, fontScale: 5 / 44 },
+    { viewport: { ...GORUNUM, zoom: 46.2, panX: -35, panY: 28 }, fontScale: 1.05 },
+    { viewport: { ...GORUNUM, zoom: 120, panX: -210, panY: 62, width: 1280, height: 720 }, fontScale: 1.05 },
+    { viewport: { ...GORUNUM, zoom: 300, panX: 315, panY: -143, width: 620, height: 900 }, fontScale: 1.05 },
   ];
   const worldCenter = (k: ReturnType<typeof kartlar>[number], viewport: ViewportTransform) =>
     screenToWorld({ x: (k.kutu.x0 + k.kutu.x1) / 2, y: (k.kutu.y0 + k.kutu.y1) / 2 }, viewport);
-  const expectFixedSize = (k: ReturnType<typeof kartlar>[number]) => {
-    expect(k.kutu.x1 - k.kutu.x0).toBeCloseTo(k.olcu.genislik, 8);
-    expect(k.kutu.y1 - k.kutu.y0).toBeCloseTo(k.olcu.yukseklik, 8);
+  const expectScreenSize = (k: ReturnType<typeof kartlar>[number], fontScale: number) => {
+    expect(k.kutu.x1 - k.kutu.x0).toBeCloseTo(k.olcu.genislik * fontScale, 8);
+    expect(k.kutu.y1 - k.kutu.y0).toBeCloseTo(k.olcu.yukseklik * fontScale, 8);
   };
   const expectPoint = (actual: { x: number; y: number }, expected: { x: number; y: number }) => {
     expect(actual.x).toBeCloseTo(expected.x, 8);
     expect(actual.y).toBeCloseTo(expected.y, 8);
   };
 
-  it.each(['polygon', 'circle', 'ellipse'] as const)('%s kartının dünya merkezi ve piksel boyutu zoom, kaydırma ve pencere boyutunda değişmez', type => {
+  it.each(['polygon', 'circle', 'ellipse'] as const)('%s kartının dünya merkezi ve referans ölçüsü korunur; ekran kutusu yazıyla birlikte ölçeklenir', type => {
     const common = { id: 'zoomShape', showArea: true, showPerimeter: true };
     const shape = type === 'polygon'
       ? govde<PolygonObject>({ ...common, type, pointIds: [A.id, B.id, C.id], edgeLabels: [0, 1, 2] })
@@ -475,17 +518,21 @@ describe('ölçüm kartları', () => {
         : govde<EllipseObject>({ ...common, type, centerPointId: A.id, radiusX: 3, radiusY: 2 });
     const objects = [A, B, C, shape];
     const snapshot = JSON.stringify(objects);
-    const [initial] = kartlar(objects);
-    const center = screenToWorld(initial.merkez, GORUNUM);
-    expectFixedSize(initial);
-    for (const viewport of viewports) {
-      const [card] = olcumKartKutulari({ objects, viewport, yazim: VARSAYILAN_YAZIM, px });
-      expectPoint(screenToWorld(card.merkez, viewport), center);
-      expectPoint(worldCenter(card, viewport), center);
-      expect(card.olcu).toEqual(initial.olcu);
-      expectFixedSize(card);
-    }
-    expect(kartlar(objects)[0]).toEqual(initial);
+    const initials = kartlar(objects);
+    expect(initials.length).toBeGreaterThan(1);
+    initials.forEach((initial, i) => {
+      const center = screenToWorld(initial.merkez, GORUNUM);
+      expectScreenSize(initial, scale);
+      for (const { viewport, fontScale } of viewports) {
+        const card = olcumKartKutulari({ objects, viewport, yazim: VARSAYILAN_YAZIM, px })[i];
+        expect(card.anahtar).toBe(initial.anahtar);
+        expectPoint(screenToWorld(card.merkez, viewport), center);
+        expectPoint(worldCenter(card, viewport), center);
+        expect(card.olcu).toEqual(initial.olcu);
+        expectScreenSize(card, fontScale);
+      }
+    });
+    expect(kartlar(objects)).toEqual(initials);
     expect(JSON.stringify(objects)).toBe(snapshot);
   });
 
@@ -495,13 +542,13 @@ describe('ölçüm kartları', () => {
     const objects = [A, B, C, poly];
     const [initial] = kartlar(objects);
     const initialCenter = worldCenter(initial, GORUNUM);
-    for (const viewport of viewports) {
+    for (const { viewport, fontScale } of viewports) {
       const [card] = olcumKartKutulari({ objects, viewport, yazim: VARSAYILAN_YAZIM, px });
       const naturalWorld = screenToWorld(card.merkez, viewport);
       const renderedWorld = worldCenter(card, viewport);
       expectPoint(renderedWorld, { x: naturalWorld.x + offset.x, y: naturalWorld.y + offset.y });
       expectPoint(renderedWorld, initialCenter);
-      expectFixedSize(card);
+      expectScreenSize(card, fontScale);
     }
     expect(poly.labelAnchors).toBeUndefined();
   });
@@ -514,14 +561,30 @@ describe('ölçüm kartları', () => {
     });
     const objects = [A, B, C, poly];
     const [initial] = kartlar(objects);
-    expectFixedSize(initial);
-    for (const viewport of viewports) {
+    expectScreenSize(initial, scale);
+    for (const { viewport, fontScale } of viewports) {
       const [card] = olcumKartKutulari({ objects, viewport, yazim: VARSAYILAN_YAZIM, px });
       const alignmentX = alignment === 'left' ? card.kutu.x0 : alignment === 'right' ? card.kutu.x1 : (card.kutu.x0 + card.kutu.x1) / 2;
       expectPoint(screenToWorld({ x: alignmentX, y: (card.kutu.y0 + card.kutu.y1) / 2 }, viewport), { x: 2 / 3 + 5, y: 1 + 2 });
-      expectFixedSize(card);
+      expectScreenSize(card, fontScale);
       expect(card.olcu).toEqual(initial.olcu);
     }
+  });
+
+  it('uzaklaştırmada kutu doğrusal küçülür; yakınlaştırmada normalin yüzde beş fazlasında durur', () => {
+    const poly = govde<PolygonObject>({ id: 'scaledCard', type: 'polygon', pointIds: [A.id, B.id, C.id], showArea: true, showPerimeter: true });
+    const objects = [A, B, C, poly];
+    const at = (zoom: number) => olcumKartKutulari({ objects, viewport: { ...GORUNUM, zoom }, yazim: VARSAYILAN_YAZIM, px })[0];
+    const normal = at(44);
+    const width = (card: typeof normal) => card.kutu.x1 - card.kutu.x0;
+    const height = (card: typeof normal) => card.kutu.y1 - card.kutu.y0;
+    const half = at(22), quarter = at(11), capped = at(46.2), close = at(300);
+    expect(width(half)).toBeCloseTo(width(normal) / 2, 8);
+    expect(height(quarter)).toBeCloseTo(height(normal) / 4, 8);
+    expect(width(capped)).toBeCloseTo(width(normal) * 1.05, 8);
+    expect(height(close)).toBeCloseTo(height(normal) * 1.05, 8);
+    expect(width(close)).toBeCloseTo(width(capped), 8);
+    for (const card of [half, quarter, capped, close]) expect(card.olcu).toEqual(normal.olcu);
   });
 });
 

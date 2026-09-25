@@ -55,7 +55,7 @@ export interface EksenSayilariGirdisi {
   yCentikleri: readonly EksenCentigi[];
   /** Izgara adımı (dünya birimi); seyreltme için. Verilmezse çentiklerden çıkarılır. */
   adim?: number;
-  /** Eksen sayılarının yazı boyu: fs(10, 'axis') (axisScale ve fontScale dahil) */
+  /** Eksen sayılarının yazı boyu: fs(11, 'axis') (axisScale ve fontScale dahil) */
   yaziBoyu: number;
   /** Tuvalin üstündeki HTML katmanları (tuval px). Bkz. tuvalEngelleri */
   engeller?: readonly Dikdortgen[];
@@ -230,7 +230,7 @@ export function tuvalEngelleri(genislik: number, yukseklik: number, secenek: { c
 
 /**
  * Canvas'ın "(0; 0)" rozeti: orijin tuvalin 30 px yakınındaysa çizilir; kutu origin + (8, 8), 48 x 20, 1,5 px
- * çerçeve. Metni (Roboto Mono, fs(10, 'axis'), ortası origin + 32, tabanı origin + 22) büyük eksen yazısında
+ * çerçeve. Metni (Roboto Mono, fs(11, 'axis'), ortası origin + 32, tabanı origin + 22) büyük eksen yazısında
  * kutudan taşar (axisScale 2'de 72 px): engel kutusu ikisinin birleşimidir.
  */
 export function orijinRozetiKutusu(

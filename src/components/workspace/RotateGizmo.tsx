@@ -8,7 +8,7 @@ interface RotateGizmoProps {
   center: { x: number; y: number };
   /** Serbest sürükleme sırasında gösterilecek derece; sürükleme yoksa null. */
   feedbackDeg: number | null;
-  /** 🔄 ikonuna basıldığında serbest döndürmeyi başlatır. */
+  /** Serbest döndürme koluna (iki oklu daire) basıldığında serbest döndürmeyi başlatır. */
   onFreeRotateStart: (e: React.MouseEvent) => void;
   /** Hazır derece düğmelerine tıklandığında çağrılır (saat yönü tersi pozitif). */
   onRotate: (deg: number) => void;
@@ -94,7 +94,7 @@ export function RotateGizmo({ center, feedbackDeg, onFreeRotateStart, onRotate }
             className="fill-ada-murekkep stroke-ada-mercan shadow-2xl"
           />
           <text x="0" y="5" textAnchor="middle" className="fill-ada-fildisi font-black text-xs font-mono">
-            🔄 {formatTurkishNumber(feedbackDeg)}°
+            {formatTurkishNumber(feedbackDeg)}°
           </text>
         </g>
       )}

@@ -2,12 +2,26 @@ import { describe, it, expect } from 'vitest';
 import {
   fitPolynomial,
   coefficientOfDetermination,
+  noktalardanTamGeciyor,
   polinomDegeri,
   polynomialToExpression,
 } from '@/math/regression';
 import { intersectLineEllipse, calculateDistance } from '@/math/geometry';
 
 const yakin = (a: number, b: number, hane = 6) => expect(a).toBeCloseTo(b, hane);
+
+describe('noktalardanTamGeciyor', () => {
+  it('tam uyan eğride evet; R² 1’e çok yakın olsa da artık kalan regresyon doğrusunda hayır', () => {
+    const parabol = [{ x: -3, y: 5 }, { x: -1, y: 1 }, { x: 1, y: 1 }, { x: 3, y: 5 }];
+    expect(noktalardanTamGeciyor(parabol, fitPolynomial(parabol, 2)!)).toBe(true);
+    const neredeyseDogru = [{ x: 0, y: 1 }, { x: 1, y: 3 }, { x: 2, y: 5 }, { x: 3, y: 7.2 }];
+    const dogru = fitPolynomial(neredeyseDogru, 1)!;
+    expect(coefficientOfDetermination(neredeyseDogru, dogru)).toBeGreaterThan(0.999);
+    expect(noktalardanTamGeciyor(neredeyseDogru, dogru)).toBe(false);
+    const ikiNokta = [{ x: 1, y: 2 }, { x: 4, y: 11 }];
+    expect(noktalardanTamGeciyor(ikiNokta, fitPolynomial(ikiNokta, 1)!)).toBe(true);
+  });
+});
 
 describe('Polinom uydurma (uydurpolinom)', () => {
   it('doğru üzerindeki noktalara tam olarak o doğruyu uydurur', () => {

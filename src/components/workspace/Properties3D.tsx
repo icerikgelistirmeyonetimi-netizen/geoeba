@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { Solid3DObject } from '@/types/workspace3d';
 import { calculate3DVolume, calculate3DSurfaceArea, getSolidPropertyCounts, generateSolidMesh, computeFaceArea } from '@/math/geometry3d';
 import { formatTurkishNumber } from '@/math/coordinates';
-import { Box, Sparkles, Trash2, CheckCircle2, RotateCw, ScanSearch, LayoutGrid, Columns2, Maximize2, ChevronRight } from 'lucide-react';
+import { Box, Sparkles, Trash2, CheckCircle2, RotateCw, ScanSearch, LayoutGrid, Columns2, Maximize2, ChevronRight, BookOpen, Lock, MapPin, Ruler } from 'lucide-react';
 import { LayoutMode } from './PropertiesPanel';
 
 interface Properties3DProps {
@@ -457,7 +457,7 @@ export function Properties3D({
         <div className="p-3.5 rounded-2xl bg-ada-altin/10 border border-ada-altin/25 space-y-2.5">
           <div className="flex items-center justify-between text-xs font-bold text-foreground">
             <span className="flex items-center gap-1.5">
-              <span>📖</span>
+              <BookOpen className="w-3.5 h-3.5 text-ada-altin" />
               <span>Açınım / Yüzeyleri Ayır</span>
             </span>
             <span className="font-mono font-black text-sm text-ada-altin">%{Math.round(unfold * 100)}</span>
@@ -473,18 +473,19 @@ export function Properties3D({
           />
           <div className="flex items-center justify-between gap-1 pt-1">
             {[
-              { v: 0, label: '🔒 %0 Kapalı' },
-              { v: 0.5, label: '%50 Yarı Açık' },
-              { v: 1, label: '📖 %100 Tam Açık' },
+              { v: 0, label: '%0 Kapalı', Simge: Lock },
+              { v: 0.5, label: '%50 Yarı Açık', Simge: null },
+              { v: 1, label: '%100 Tam Açık', Simge: BookOpen },
             ].map((b) => (
               <button
                 key={b.v}
                 onClick={() => onUpdateSolid({ unfoldProgress: b.v })}
-                className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                className={`inline-flex items-center justify-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
                   Math.abs(unfold - b.v) < 0.03 ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border hover:bg-muted'
                 }`}
               >
-                {b.label}
+                {b.Simge && <b.Simge className="w-3 h-3 shrink-0" aria-hidden="true" />}
+                <span>{b.label}</span>
               </button>
             ))}
           </div>
@@ -494,7 +495,10 @@ export function Properties3D({
       {/* 4. BOYUTLAR */}
       <div className="space-y-3 p-3 rounded-2xl bg-card border border-border/80">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-black text-foreground">📐 Boyutlar</span>
+          <span className="text-xs font-black text-foreground flex items-center gap-1.5">
+            <Ruler className="w-3.5 h-3.5 text-primary" />
+            Boyutlar
+          </span>
           <span className="text-[10px] text-muted-foreground font-mono">
             {formatTurkishNumber(dims.width)} × {formatTurkishNumber(dims.height)} × {formatTurkishNumber(dims.depth)} br
           </span>
@@ -542,7 +546,10 @@ export function Properties3D({
       {/* 5. KONUM */}
       <div className="space-y-2.5 p-3 rounded-2xl bg-card border border-border/80">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-black text-foreground">📍 3D Konum</span>
+          <span className="text-xs font-black text-foreground flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-primary" />
+            3D Konum
+          </span>
           <span className="text-[10px] text-muted-foreground font-mono">
             ({formatTurkishNumber(selectedSolid.position.x)}; {formatTurkishNumber(selectedSolid.position.y)}; {formatTurkishNumber(selectedSolid.position.z)})
           </span>

@@ -53,7 +53,7 @@ describe('MatematikEtiketi (tuval SVG etiketi)', () => {
     expect(html.replace(`translate(${merkez.x} ${merkez.y})`, 'translate(100 50)')).toBe(temel);
   });
 
-  it('yazı boyutu yalnız verilen piksel ayarıyla değişir', () => {
+  it('zoom ölçeği verilmezse yazı boyutu piksel ayarıyla değişir', () => {
     const normal = ciz();
     const buyuk = ciz({ px: 18 });
     expect(normal).toContain('font-size="11"');
@@ -61,6 +61,15 @@ describe('MatematikEtiketi (tuval SVG etiketi)', () => {
     expect(buyuk).not.toContain('scale(');
     const kutuGenisligi = (html: string) => Number(html.match(/data-yazim-kutu=""[^>]*?\swidth="([\d.]+)"/)?.[1]);
     expect(kutuGenisligi(buyuk)).toBeGreaterThan(kutuGenisligi(normal));
+  });
+
+  it.each([0.25, 0.5, 1.05])('zoom ölçeği %s iken bütün etiket aynı merkez etrafında ölçeklenir', olcek => {
+    const props = { donmeAcisi: -30.5, satirlar: [d(aci(A, B, C, 60))] };
+    const normal = ciz(props);
+    const scaled = ciz({ ...props, olcek });
+    expect(scaled).toContain(`transform="translate(100 50) rotate(-30.5) scale(${olcek})"`);
+    // Kutu, metin, hale ve açı süsü tek dönüşüm altındadır; canonical düzen değişmez.
+    expect(scaled.replace(` scale(${olcek})`, '')).toBe(normal);
   });
 
   it('kutu gizliyken bile çizilir: ipucu ve fare alanı kalır, dışa aktarımda görünmez', () => {
@@ -135,6 +144,8 @@ describe('MatematikEtiketi karşılaştırıcısı', () => {
     expect(etiketEsit(a, { ...a, kutu: { sinif: 'x' } })).toBe(false);
     expect(etiketEsit(a, { ...a, kutuGizli: true })).toBe(false);
     expect(etiketEsit(a, { ...a, donmeAcisi: 12 })).toBe(false);
+    expect(etiketEsit(a, { ...a, olcek: 0.5 })).toBe(false);
+    expect(etiketEsit(a, { ...a, olcek: 1 })).toBe(true);
     expect(etiketEsit(a, { ...a, sesli: 'başka' })).toBe(false);
     expect(etiketEsit(a, { ...a, satirRengi: ['alan'] })).toBe(false);
   });

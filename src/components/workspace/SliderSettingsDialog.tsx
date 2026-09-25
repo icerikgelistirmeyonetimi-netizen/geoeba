@@ -5,6 +5,9 @@ import { AlertCircle, Check, Sliders, Trash2, X } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { createId, useWorkspace } from '@/state/WorkspaceContext';
 import { resolveCommandBindings } from '@/math/commandBindings';
+import { sliderDisplay } from '@/math/sliderDisplay';
+import { yazimAyari } from '@/math/matematikYazimi';
+import { MatematikMetni } from '@/components/workspace/MatematikMetni';
 import {
   rebindSliderProperty, sliderBindingTargets, sliderIsBound, snapSliderValue, validateSliderSettings,
 } from '@/math/sliderBindings';
@@ -16,6 +19,11 @@ interface SliderSettingsDialogProps {
 }
 
 type NumberField = 'min' | 'max' | 'step' | 'value';
+type SettingsTab = 'general' | 'position';
+const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'general', label: 'Genel' },
+  { id: 'position', label: 'Konum' },
+];
 const NUMBER_FIELDS: { key: NumberField; label: string }[] = [
   { key: 'min', label: 'Başlangıç' },
   { key: 'max', label: 'Bitiş' },
@@ -33,9 +41,10 @@ function parseNumber(raw: string): number | null {
 }
 
 export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialogProps) {
-  const { objects, commit, deleteObject } = useWorkspace();
+  const { objects, commit, deleteObject, styleSettings } = useWorkspace();
   const [numbers, setNumbers] = useState<Record<NumberField, string>>({ min: '', max: '', step: '', value: '' });
   const [position, setPosition] = useState({ x: '', y: '' });
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [targetId, setTargetId] = useState('');
   const [propertyKey, setPropertyKey] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +53,7 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
   onCloseRef.current = onClose;
   const objectsRef = useRef(objects);
   objectsRef.current = objects;
-  const minInputRef = useRef<HTMLInputElement>(null);
+  const generalTabRef = useRef<HTMLButtonElement>(null);
 
   const slider = objects.find(object => object.id === sliderId && object.type === 'slider');
   const targets = useMemo(() => sliderBindingTargets(objects, sliderId ?? undefined), [objects, sliderId]);
@@ -54,6 +63,7 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
   useEffect(() => {
     if (!sliderId) {
       loadedIdRef.current = null;
+      setActiveTab('general');
       return;
     }
     if (!slider || slider.type !== 'slider') {
@@ -76,10 +86,12 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
     });
     setTargetId('');
     setPropertyKey('');
+    setActiveTab('general');
     setError(null);
   }, [sliderId, slider]);
 
   if (!sliderId || !slider || slider.type !== 'slider') return null;
+  const label = sliderDisplay(objects, slider, yazimAyari(styleSettings));
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -87,6 +99,7 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
     for (const { key, label } of NUMBER_FIELDS) {
       const value = parseNumber(numbers[key]);
       if (value === null) {
+        setActiveTab('general');
         setError(numbers[key].trim()
           ? `${label} için geçerli bir sayı girin. Ondalık ayırıcı olarak virgül veya nokta kullanabilirsiniz.`
           : `${label} alanını doldurun.`);
@@ -96,12 +109,14 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
     }
     const validation = validateSliderSettings(parsed.min, parsed.max, parsed.step, parsed.value);
     if (validation) {
+      setActiveTab('general');
       setError(validation);
       return;
     }
     const hasX = position.x.trim() !== '';
     const hasY = position.y.trim() !== '';
     if (hasX !== hasY) {
+      setActiveTab('position');
       setError('Konum için X ve Y alanlarını birlikte doldurun.');
       return;
     }
@@ -110,12 +125,14 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
       const x = parseNumber(position.x);
       const y = parseNumber(position.y);
       if (x === null || y === null) {
+        setActiveTab('position');
         setError('X ve Y konumları için geçerli sayılar girin. Ondalık ayırıcı olarak virgül veya nokta kullanabilirsiniz.');
         return;
       }
       coordinates = { x, y };
     }
     if (targetId && (!target || !target.properties.some(property => property.key === propertyKey && !property.disabled))) {
+      setActiveTab('general');
       setError(target ? 'Kaydırıcıyla değiştirilecek özelliği seçin.' : 'Seçilen şekil artık bağlanabilir değil. Başka bir şekil seçin.');
       return;
     }
@@ -145,6 +162,7 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
       setError(null);
       onClose();
     } catch (failure) {
+      setActiveTab('general');
       setError(failure instanceof Error ? failure.message : 'Kaydırıcı ayarları uygulanamadı. Değerleri kontrol edin.');
     }
   };
@@ -154,7 +172,7 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
       isOpen
       onClose={onClose}
       labelledBy="slider-settings-title"
-      initialFocusRef={minInputRef}
+      initialFocusRef={generalTabRef}
       overlayClassName="bg-ada-murekkep/60 backdrop-blur-sm"
       className="bg-card border border-border w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-2xl p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150"
     >
@@ -169,29 +187,120 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4 text-xs" noValidate>
-        <p className="font-semibold text-foreground">{slider.variableName}</p>
-        <div className="grid grid-cols-2 gap-3">
-          {NUMBER_FIELDS.map(({ key, label }) => (
-            <div key={key} className="space-y-1">
-              <label htmlFor={`slider-settings-${key}`} className="font-semibold text-muted-foreground">{label}</label>
-              <input
-                id={`slider-settings-${key}`}
-                ref={key === 'min' ? minInputRef : undefined}
-                type="text"
-                inputMode="decimal"
-                value={numbers[key]}
-                onChange={event => {
-                  setNumbers(previous => ({ ...previous, [key]: event.target.value }));
-                  setError(null);
-                }}
-                className={`${INPUT_CLASS} font-mono`}
-              />
-            </div>
+        <MatematikMetni dugumler={label.nameNodes} as="div" className="font-semibold text-foreground" />
+        <div
+          role="tablist"
+          aria-label="Kaydırıcı ayar sekmeleri"
+          className="flex gap-1 rounded-xl bg-muted/60 p-1"
+          onKeyDown={event => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const index = SETTINGS_TABS.findIndex(tab => tab.id === activeTab);
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? SETTINGS_TABS.length - 1
+              : (index + (event.key === 'ArrowRight' ? 1 : SETTINGS_TABS.length - 1)) % SETTINGS_TABS.length;
+            setActiveTab(SETTINGS_TABS[next].id);
+            event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+          }}
+        >
+          {SETTINGS_TABS.map(tab => (
+            <button
+              key={tab.id}
+              ref={tab.id === 'general' ? generalTabRef : undefined}
+              id={`slider-settings-tab-${tab.id}`}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              aria-controls={`slider-settings-panel-${tab.id}`}
+              tabIndex={activeTab === tab.id ? 0 : -1}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 rounded-lg px-3 py-2 font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${activeTab === tab.id
+                ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-muted'}`}
+            >
+              {tab.label}
+            </button>
           ))}
         </div>
 
-        <div className="space-y-2 border-t border-border pt-3">
-          <h3 className="font-semibold text-foreground">Konum</h3>
+        <div
+          id="slider-settings-panel-general"
+          role="tabpanel"
+          aria-labelledby="slider-settings-tab-general"
+          hidden={activeTab !== 'general'}
+          className={activeTab === 'general' ? 'space-y-4' : 'hidden'}
+        >
+          <div className="grid grid-cols-2 gap-3">
+            {NUMBER_FIELDS.map(({ key, label }) => (
+              <div key={key} className="space-y-1">
+                <label htmlFor={`slider-settings-${key}`} className="font-semibold text-muted-foreground">{label}</label>
+                <input
+                  id={`slider-settings-${key}`}
+                  type="text"
+                  inputMode="decimal"
+                  value={numbers[key]}
+                  onChange={event => {
+                    setNumbers(previous => ({ ...previous, [key]: event.target.value }));
+                    setError(null);
+                  }}
+                  className={`${INPUT_CLASS} font-mono`}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-3 border-t border-border pt-3">
+            <p id="slider-settings-hint" className="text-muted-foreground leading-relaxed">{bound ? 'Şekil bağlantısını değiştirmek için şekli ve özelliği seçin.' : 'Önce şekli, sonra değiştirmek istediğiniz kenar, açı veya diğer özelliği seçin.'}</p>
+            <div className="space-y-1">
+              <label htmlFor="slider-settings-target" className="font-semibold text-foreground">Şekil</label>
+              <select
+                id="slider-settings-target"
+                value={targetId}
+                aria-describedby="slider-settings-hint"
+                onChange={event => {
+                  setTargetId(event.target.value);
+                  setPropertyKey('');
+                  setError(null);
+                }}
+                className={INPUT_CLASS}
+              >
+                <option value="">{bound ? 'Mevcut bağlantıyı koru' : 'Şekil seçin'}</option>
+                {targets.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+              </select>
+            </div>
+            {target && (
+              <div className="space-y-1">
+                <label htmlFor="slider-settings-property" className="font-semibold text-foreground">Özellik</label>
+                <select
+                  id="slider-settings-property"
+                  value={propertyKey}
+                  onChange={event => { setPropertyKey(event.target.value); setError(null); }}
+                  className={INPUT_CLASS}
+                >
+                  <option value="">Özellik seçin</option>
+                  {[
+                    { label: 'Kenarlar', properties: target.properties.filter(property => property.key.startsWith('edge:')) },
+                    { label: 'Açılar', properties: target.properties.filter(property => property.key.startsWith('angle:') || property.key === 'centralAngle' || property.key === 'rotation') },
+                    { label: 'Diğer özellikler', properties: target.properties.filter(property => !property.key.startsWith('edge:') && !property.key.startsWith('angle:') && property.key !== 'centralAngle' && property.key !== 'rotation') },
+                  ].filter(group => group.properties.length > 0).map(group => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.properties.map(property => <option key={property.key} value={property.key} disabled={property.disabled}>{property.label}{property.disabled ? ' — düzenlenemiyor' : ''}</option>)}
+                    </optgroup>
+                  ))}
+                </select>
+                {target.properties.some(property => property.disabled) && <p className="text-muted-foreground leading-relaxed">Kilitli veya başka ilişkilerle kısıtlanan özellikler değiştirilemez.</p>}
+              </div>
+            )}
+            {targets.length === 0 && <p className="text-muted-foreground leading-relaxed">Şu anda bağlanabilecek bir şekil yok. Kaydırıcının aralığını ve adımını yine de düzenleyebilirsiniz.</p>}
+          </div>
+        </div>
+
+        <div
+          id="slider-settings-panel-position"
+          role="tabpanel"
+          aria-labelledby="slider-settings-tab-position"
+          hidden={activeTab !== 'position'}
+          className={activeTab === 'position' ? 'space-y-3' : 'hidden'}
+        >
           <div className="grid grid-cols-2 gap-3">
             {(['x', 'y'] as const).map(axis => (
               <div key={axis} className="space-y-1">
@@ -212,51 +321,6 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
             ))}
           </div>
           <p className="text-muted-foreground leading-relaxed">X ve Y girerek kaydırıcıyı tuvalde konumlandırabilirsiniz.</p>
-        </div>
-
-        <div className="space-y-3 border-t border-border pt-3">
-          <p id="slider-settings-hint" className="text-muted-foreground leading-relaxed">{bound ? 'Şekil bağlantısını değiştirmek için şekli ve özelliği seçin.' : 'Önce şekli, sonra değiştirmek istediğiniz kenar, açı veya diğer özelliği seçin.'}</p>
-          <div className="space-y-1">
-            <label htmlFor="slider-settings-target" className="font-semibold text-foreground">Şekil</label>
-            <select
-              id="slider-settings-target"
-              value={targetId}
-              aria-describedby="slider-settings-hint"
-              onChange={event => {
-                setTargetId(event.target.value);
-                setPropertyKey('');
-                setError(null);
-              }}
-              className={INPUT_CLASS}
-            >
-              <option value="">{bound ? 'Mevcut bağlantıyı koru' : 'Şekil seçin'}</option>
-              {targets.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
-            </select>
-          </div>
-          {target && (
-            <div className="space-y-1">
-              <label htmlFor="slider-settings-property" className="font-semibold text-foreground">Özellik</label>
-              <select
-                id="slider-settings-property"
-                value={propertyKey}
-                onChange={event => { setPropertyKey(event.target.value); setError(null); }}
-                className={INPUT_CLASS}
-              >
-                <option value="">Özellik seçin</option>
-                {[
-                  { label: 'Kenarlar', properties: target.properties.filter(property => property.key.startsWith('edge:')) },
-                  { label: 'Açılar', properties: target.properties.filter(property => property.key.startsWith('angle:') || property.key === 'centralAngle' || property.key === 'rotation') },
-                  { label: 'Diğer özellikler', properties: target.properties.filter(property => !property.key.startsWith('edge:') && !property.key.startsWith('angle:') && property.key !== 'centralAngle' && property.key !== 'rotation') },
-                ].filter(group => group.properties.length > 0).map(group => (
-                  <optgroup key={group.label} label={group.label}>
-                    {group.properties.map(property => <option key={property.key} value={property.key} disabled={property.disabled}>{property.label}{property.disabled ? ' — düzenlenemiyor' : ''}</option>)}
-                  </optgroup>
-                ))}
-              </select>
-              {target.properties.some(property => property.disabled) && <p className="text-muted-foreground leading-relaxed">Kilitli veya başka ilişkilerle kısıtlanan özellikler değiştirilemez.</p>}
-            </div>
-          )}
-          {targets.length === 0 && <p className="text-muted-foreground leading-relaxed">Şu anda bağlanabilecek bir şekil yok. Kaydırıcının aralığını ve adımını yine de düzenleyebilirsiniz.</p>}
         </div>
 
         {error && <p role="alert" className="flex items-start gap-1.5 text-destructive leading-relaxed"><AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" /><span>{error}</span></p>}

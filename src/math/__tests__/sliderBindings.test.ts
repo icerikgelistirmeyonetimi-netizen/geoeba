@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AngleObject, CircleObject, EllipseObject, MathObject, PointObject, PolygonObject, SliderObject } from '@/types/math';
 import { constructionDependencies, resolveCommandBindings } from '../commandBindings';
 import { calculateAngleDegrees, getArcGeometry } from '../geometry';
-import { bindSliderProperty, rebindSliderProperty, sliderBindingTargets, sliderIsBound, snapSliderValue, validateSliderSettings } from '../sliderBindings';
+import { bindSliderProperty, detachSliderBindings, rebindSliderProperty, sliderBindingTargets, sliderIsBound, snapSliderValue, validateSliderSettings } from '../sliderBindings';
 
 const base = (id: string) => ({ id, label: id, showLabel: true, color: '#123456', visible: true, createdAt: 0 });
 const point = (id: string, x: number, y: number, extra: Partial<PointObject> = {}): PointObject => ({ ...base(id), type: 'point', x, y, isIndependent: true, ...extra });
@@ -12,6 +12,43 @@ const segment: MathObject = { ...base('seg'), type: 'segment', startPointId: 'A'
 const getPoint = (objects: MathObject[], id: string) => objects.find(o => o.id === id) as PointObject;
 const bind = (objects: MathObject[], target: string, key: string) => bindSliderProperty(objects, 's', target, key, () => 'new-radius');
 const value = (objects: MathObject[], next: number) => resolveCommandBindings(objects.map(o => o.id === 's' ? { ...o, value: next } as SliderObject : o));
+
+describe('kaydırıcının seçilmiş ölçü adı', () => {
+  const triangle: PolygonObject = { ...base('tri'), type: 'polygon', pointIds: ['A', 'B', 'C'] };
+  const settings = { min: 0, max: 180, step: 1, value: 60 };
+
+  it('ilk bağlantı ve farklı ölçüye geçiş hedefi saklar; iç değişken ve kaynak sahne korunur', () => {
+    const objects: MathObject[] = [A, B, C, slider(), triangle];
+    const snapshot = JSON.stringify(objects);
+    const first = bind(objects, 'tri', 'edge:0');
+    expect(first.find(o => o.id === 's')).toMatchObject({ variableName: 'a', bindingTarget: { objectId: 'tri', propertyKey: 'edge:0' } });
+    const next = rebindSliderProperty(first, 's', 'tri', 'angle:0', settings, () => 'unused');
+    expect(next.find(o => o.id === 's')).toMatchObject({ variableName: 'a', bindingTarget: { objectId: 'tri', propertyKey: 'angle:0' } });
+    expect(first.find(o => o.id === 's')).toMatchObject({ bindingTarget: { objectId: 'tri', propertyKey: 'edge:0' } });
+    expect(JSON.stringify(objects)).toBe(snapshot);
+  });
+
+  it('eski bağlantı yeniden kaydedilince ölçü adı eklenir; yalnız ayar güncellemesinde korunur', () => {
+    const bound = bind([A, B, C, slider(60), triangle], 'tri', 'angle:0');
+    const legacy = bound.map(o => {
+      if (o.type !== 'slider') return o;
+      const { bindingTarget: _bindingTarget, ...rest } = o;
+      return rest;
+    });
+    const saved = rebindSliderProperty(legacy, 's', 'tri', 'angle:0', settings, () => 'unused');
+    const updated = rebindSliderProperty(saved, 's', '', '', { ...settings, value: 90 }, () => 'unused');
+    expect(updated.find(o => o.id === 's')).toMatchObject({ variableName: 'a', bindingTarget: { objectId: 'tri', propertyKey: 'angle:0' } });
+    expect(detachSliderBindings(updated, ['s']).find(o => o.id === 's')).not.toHaveProperty('bindingTarget');
+    expect(updated.find(o => o.id === 's')).toHaveProperty('bindingTarget');
+  });
+
+  it('başarısız yeniden bağlama önceki seçilmiş ölçüyü ve ilişkiyi değiştirmez', () => {
+    const bound = bind([A, B, C, slider(), triangle], 'tri', 'edge:0');
+    const snapshot = JSON.stringify(bound);
+    expect(() => rebindSliderProperty(bound, 's', 'tri', 'angle:0', { ...settings, max: 360, value: 270 }, () => 'unused')).toThrow('180');
+    expect(JSON.stringify(bound)).toBe(snapshot);
+  });
+});
 
 describe('kaydırıcı ayarları', () => {
   it('sonlu, sıralı sınırları, pozitif adımı ve mevcut değeri doğrular', () => {
@@ -199,7 +236,7 @@ describe('canlı kaydırıcı bağları', () => {
     const bound = bind(objects, 'A', mode);
     const other = mode === 'x' ? 'y' : 'x';
     expect(getPoint(bound, 'A')[mode]).toBe(7);
-    expect(bound.find(o => o.id === 's')).toBe(s);
+    expect(bound.find(o => o.id === 's')).toEqual({ ...s, bindingTarget: { objectId: 'A', propertyKey: mode } });
     expect(sliderIsBound(bound, 's')).toBe(true);
     const dragged = bound.map(o => o.id === 'A' ? { ...o, [other]: 12 } as PointObject : o);
     const changed = getPoint(value(dragged, 9), 'A');
@@ -522,6 +559,7 @@ describe('şekil özellikleri', () => {
     const objects = [A, slider(6), ellipse];
     const snapshot = JSON.stringify(objects);
     const bound = bind(objects, 'ellipse', property);
+    expect(bound.find(o => o.id === 's')).toMatchObject({ variableName: 'a', bindingTarget: { objectId: 'ellipse', propertyKey: property } });
     expect(bound).toHaveLength(objects.length);
     const changed = value(bound, 9).find(o => o.id === 'ellipse') as EllipseObject;
     expect(changed[property]).toBe(9);
@@ -540,6 +578,7 @@ describe('şekil özellikleri', () => {
     const snapshot = JSON.stringify(objects);
     expect(sliderBindingTargets(objects)[0].properties.find(p => p.key === 'centralAngle')?.disabled).not.toBe(true);
     const bound = bindSliderProperty(objects, 's', 'round', 'centralAngle', () => { throw new Error('Yeni nokta gerekmemeli.'); });
+    expect(bound.find(o => o.id === 's')).toMatchObject({ variableName: 'a', bindingTarget: { objectId: 'round', propertyKey: 'centralAngle' } });
     expect(bound).toHaveLength(objects.length);
     expect(getPoint(bound, 'D').construction).toEqual({ ...D.construction, sliderId: 's', sliderVariableName: 'a' });
     expect(sliderIsBound(bound, 's')).toBe(true);

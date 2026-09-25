@@ -10,7 +10,7 @@
  * (sol üstteki başlık yazıları ve alttaki düğmeler bu sürede çekilir).
  *
  * Sahne motoru (adaSahnesi.ts) yalnız tarayıcıda, effect içinde dinamik olarak yüklenir.
- * WebGL2 yoksa ya da sahne yüklenemezse `onHata` çağrılır; sayfa 2B ekranlara döner.
+ * Sahne açılamazsa aynı ekranın kademe, sınıf ve konu gezinmesi kullanılabilir kalır.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { GradeId, LevelId, Topic } from '@/types/curriculum';
@@ -41,8 +41,8 @@ interface AdaEkraniProps {
   onKademeSec: (kademe: LevelId) => void;
   onAtolye: () => void;
   onAnaSayfa: () => void;
-  /** WebGL2 yok ya da sahne yüklenemedi: 2B ekranlara dönülmeli. */
-  onHata: () => void;
+  initialGrade?: GradeId | null;
+  initialTopic?: Topic | null;
 }
 
 const ikon = {
@@ -147,7 +147,7 @@ const bekle = (ms: number) => new Promise<void>((coz) => setTimeout(coz, ms));
 /** En fazla `ms` kadar bekler; kamera odaklanması bitmese de gezinti ilerler. */
 const enFazla = (soz: Promise<unknown>, ms: number) => Promise.race([soz, bekle(ms)]);
 
-export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: AdaEkraniProps) {
+export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGrade, initialTopic }: AdaEkraniProps) {
   const ANA = sayfa === 'ana-sayfa';
   const kademe = ANA ? null : kademeAdasi(sayfa);
 
@@ -160,13 +160,14 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
   const gidiliyor = useRef(false);
 
   // Geri çağırmalar effect'i yeniden başlatmasın diye en güncel hâlleri ref'te tutulur
-  const geriCagirmalar = useRef({ onKademeSec, onAtolye, onAnaSayfa, onHata });
-  geriCagirmalar.current = { onKademeSec, onAtolye, onAnaSayfa, onHata };
+  const geriCagirmalar = useRef({ onKademeSec, onAtolye, onAnaSayfa });
+  geriCagirmalar.current = { onKademeSec, onAtolye, onAnaSayfa };
 
   const [hazir, setHazir] = useState(false);
   const [ilerleme, setIlerleme] = useState(0.04);
   const [yukleyiciVar, setYukleyiciVar] = useState(true);
   const [hataMesaji, setHataMesaji] = useState<string | null>(null);
+  const [yalin, setYalin] = useState(false);
   const [kurulum, setKurulum] = useState(0);
   const [etkilesildi, setEtkilesildi] = useState(false);
   const [uzerinde, setUzerinde] = useState<string | null>(null);
@@ -175,6 +176,8 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
   const [canli, setCanli] = useState('');
   const [panelSinif, setPanelSinif] = useState<GradeId | null>(null);
   const [panelAcik, setPanelAcik] = useState(false);
+  const panelDurumu = useRef({ sinif: panelSinif, acik: panelAcik });
+  panelDurumu.current = { sinif: panelSinif, acik: panelAcik };
   const [acikUnite, setAcikUnite] = useState<string | null>(null);
   // Paneldeki açık konu: panel sola genişler, konunun içeriği panelin içinde gösterilir
   const [icerik, setIcerik] = useState<{ uniteId: string; konu: Topic } | null>(null);
@@ -228,9 +231,9 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
   // Sahne hazır olana kadar görünmeyen arayüz klavyeyle de erişilemesin (React 18'de inert özelliği yok)
   useEffect(() => {
     for (const oge of [ustRef.current, rihtimRef.current, kontrollerRef.current]) {
-      if (oge) oge.inert = !hazir || hataMesaji != null;
+      if (oge) oge.inert = !hazir;
     }
-  }, [hazir, hataMesaji]);
+  }, [hazir]);
 
   useEffect(() => {
     if (panelAcik) return;
@@ -329,91 +332,127 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
   useEffect(() => {
     const kap = sahneKapRef.current;
     if (!kap) return;
-    if (!webgl2Var()) {
-      geriCagirmalar.current.onHata();
-      return;
-    }
     let etkin = true;
     const iptal = new AbortController();
     let sahne: AdaSahnesi | null = null;
+    let yuklemeSuresi: ReturnType<typeof setTimeout> | undefined;
+    let yukleyiciSuresi: ReturnType<typeof setTimeout> | undefined;
     const cozucular: Array<() => void> = [];
+    const sahneyiKapat = () => {
+      cozucular.splice(0).forEach((coz) => coz());
+      sahne?.dispose();
+      if (sahneRef.current === sahne) sahneRef.current = null;
+      sahne = null;
+    };
+    const yalinaGec = (mesaj: string) => {
+      if (!etkin) return;
+      setYalin(true);
+      setHataMesaji(mesaj);
+      setHazir(true);
+      setYukleyiciVar(false);
+    };
 
     setHazir(false);
+    setYalin(false);
     setYukleyiciVar(true);
     setHataMesaji(null);
     setIlerleme(0.04);
 
-    (async () => {
-      let Sahne: typeof import('./adaSahnesi').AdaSahnesi;
+    if (!webgl2Var()) {
+      yalinaGec('Ada görünümü bu cihazda açılamıyor.');
+      return;
+    }
+
+    // Yanıt vermeyen bir indirme gezinmeyi süresiz kapatmasın.
+    yuklemeSuresi = setTimeout(() => {
+      iptal.abort();
+      sahneyiKapat();
+      yalinaGec('Ada görünümünün hazırlanması uzun sürdü.');
+    }, 25000);
+
+    void (async () => {
       try {
-        ({ AdaSahnesi: Sahne } = await import('./adaSahnesi'));
+        const { AdaSahnesi: Sahne } = await import('./adaSahnesi');
+        if (!etkin || iptal.signal.aborted) return;
+        sahne = new Sahne(kap, {
+          sayfa,
+          varliklar: VARLIK_ONEKI + '/adalar/',
+          dracoYolu: VARLIK_ONEKI + '/adalar/draco/',
+          renkler: kademe ? { ...RENKLER, [sayfa]: kademe.renk } : RENKLER,
+          bosluklar,
+          etiketAktifSinifi: s['etiket--aktif'],
+        });
+        sahneRef.current = sahne;
+        cozucular.push(
+          sahne.dinle('uzerinde', ({ giris }) => setUzerinde(giris ? String(giris.id) : null)),
+          sahne.dinle('etkilesim', () => setEtkilesildi(true)),
+          sahne.dinle('bosluk', () => bosTiklamaRef.current()),
+          sahne.dinle('sec', ({ giris }) => {
+            if (giris.tur === 'landmark') void atolyeyeGit();
+            else if (giris.tur === 'stage') {
+              const hedef = kademeAdasi(String(giris.id));
+              if (hedef) void kademeyeGit(hedef.id);
+            } else {
+              const sinif = sinifNumarasi(giris.id);
+              if (sinif != null) sinifaGitRef.current(sinif);
+            }
+          }),
+          sahne.dinle('hata', ({ yenile }) => {
+            if (!etkin) return;
+            if (yenile) setKurulum((n) => n + 1);
+            else {
+              // Restored olayını dinlemeye devam et; bu sırada HTML gezinmesi açık kalır.
+              clearTimeout(yuklemeSuresi);
+              clearTimeout(yukleyiciSuresi);
+              yalinaGec('Ada görünümü geçici olarak durakladı.');
+            }
+          })
+        );
+
+        await sahne.yukle((oran) => {
+          if (etkin && !iptal.signal.aborted) setIlerleme(Math.max(0.04, oran));
+        }, iptal.signal);
+        if (!etkin || iptal.signal.aborted) return;
+        clearTimeout(yuklemeSuresi);
+        for (const [kimlik, oge] of etiketler.current) sahne.etiketBagla(kimlik, oge);
+        setIlerleme(1);
+        setHazir(true);
+        yukleyiciSuresi = setTimeout(() => etkin && setYukleyiciVar(false), 900);
+        await sahne.giris();
+        if (!etkin || iptal.signal.aborted) return;
+        const panel = panelDurumu.current;
+        if (panel.acik && panel.sinif != null) {
+          const kimlik = sahneSinifKimligi(panel.sinif);
+          sahne.kilitle(kimlik);
+          void sahne.odaklan(kimlik, { kaymaPx: panelKaymasi() });
+        } else sahne.tanit();
       } catch (hata) {
-        // Parça yüklenemedi (ağ kopması, yeni dağıtımda silinen eski dosya): 2B ekranlara dön
-        if (etkin) {
-          console.error('Ada sahnesi modülü yüklenemedi', hata);
-          geriCagirmalar.current.onHata();
-        }
-        return;
+        if (!etkin || iptal.signal.aborted) return;
+        clearTimeout(yuklemeSuresi);
+        clearTimeout(yukleyiciSuresi);
+        iptal.abort();
+        sahneyiKapat();
+        console.error('Ada görünümü açılamadı', hata);
+        yalinaGec('Ada görünümü şu anda açılamıyor.');
       }
-      if (!etkin) return;
-      sahne = new Sahne(kap, {
-        sayfa,
-        varliklar: `${VARLIK_ONEKI}/adalar/`,
-        dracoYolu: `${VARLIK_ONEKI}/adalar/draco/`,
-        renkler: kademe ? { ...RENKLER, [sayfa]: kademe.renk } : RENKLER,
-        bosluklar,
-        etiketAktifSinifi: s['etiket--aktif'],
-      });
-      sahneRef.current = sahne;
-
-      cozucular.push(
-        sahne.dinle('uzerinde', ({ giris }) => setUzerinde(giris ? String(giris.id) : null)),
-        sahne.dinle('etkilesim', () => setEtkilesildi(true)),
-        sahne.dinle('bosluk', () => bosTiklamaRef.current()),
-        sahne.dinle('sec', ({ giris }) => {
-          if (giris.tur === 'landmark') void atolyeyeGit();
-          else if (giris.tur === 'stage') {
-            const hedef = kademeAdasi(String(giris.id));
-            if (hedef) void kademeyeGit(hedef.id);
-          } else {
-            const sinif = sinifNumarasi(giris.id);
-            if (sinif != null) sinifaGitRef.current(sinif);
-          }
-        }),
-        sahne.dinle('hata', ({ mesaj, yenile }) => {
-          if (yenile) setKurulum((n) => n + 1);
-          else setHataMesaji(mesaj);
-        })
-      );
-
-      try {
-        await sahne.yukle((oran) => setIlerleme(Math.max(0.04, oran)), iptal.signal);
-      } catch (hata) {
-        if (!etkin || (hata instanceof DOMException && hata.name === 'AbortError')) return;
-        console.error('Ada sahnesi yüklenemedi', hata);
-        geriCagirmalar.current.onHata();
-        return;
-      }
-      if (!etkin) return;
-
-      for (const [kimlik, oge] of etiketler.current) sahne.etiketBagla(kimlik, oge);
-      setIlerleme(1);
-      setHazir(true);
-      setTimeout(() => etkin && setYukleyiciVar(false), 900);
-      await sahne.giris();
-      if (etkin) sahne.tanit();
     })();
 
     return () => {
       etkin = false;
+      clearTimeout(yuklemeSuresi);
+      clearTimeout(yukleyiciSuresi);
       iptal.abort();
-      cozucular.forEach((coz) => coz());
-      sahne?.dispose();
-      sahneRef.current = null;
+      sahneyiKapat();
     };
-    // atolyeyeGit/kademeyeGit/sinifaGit yalnız ref'lerdeki güncel geri çağırmaları kullanır
+    // Sahne olayları güncel gezinme geri çağırmalarını ref'lerden okur.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sayfa, kurulum, bosluklar]);
+
+  function yenidenDene() {
+    // İlk sonda geçici bir grafik hatasına denk geldiyse tekrar kontrol edilebilir.
+    if (webgl2Sonucu === false) webgl2Sonucu = null;
+    setKurulum((n) => n + 1);
+  }
 
   // ---------------------------------------------------------------------------
   // Gezinti
@@ -431,7 +470,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
     const ada = kademeAdasi(hedef);
     setCanli(`${ada?.baslik ?? hedef} açılıyor.`);
     const sahne = sahneRef.current;
-    if (sahne && ANA) {
+    if (sahne && ANA && !yalin) {
       sahne.kilitle(hedef);
       await enFazla(sahne.odaklan(hedef, { sure: 950 }), 1000);
     }
@@ -456,7 +495,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
     const uniteSayisi = sinifUniteleri(sinif).length;
     setCanli(`${sinifAdi(sinif)}: ${uniteSayisi} ünite listelendi.`);
     const sahne = sahneRef.current;
-    if (sahne) {
+    if (sahne && !yalin) {
       sahne.kilitle(kimlik);
       // Panel bir sonraki karede yerleşir; boyutu ölçülünce bina panelin açıkta bıraktığı alana alınır
       requestAnimationFrame(() => void sahne.odaklan(kimlik, { kaymaPx: panelKaymasi() }));
@@ -477,7 +516,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
       icerikAcan.current = null;
     }
     const sahne = sahneRef.current;
-    if (sahne) {
+    if (sahne && !yalin) {
       sahne.kilitle(null);
       void sahne.sifirla();
     }
@@ -511,9 +550,10 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
   }
 
   /** Konu seçildi: panel sola doğru genişler, konunun içeriği panelin içinde açılır. */
-  function konuyuAc(uniteId: string, konu: Topic, acan: HTMLElement) {
+  function konuyuAc(uniteId: string, konu: Topic, acan: HTMLElement | null) {
     icerikAcan.current = acan;
-    if (icerik?.konu.id === konu.id) {
+    // Adresten açılışta sinifaGit aynı turda önceki içeriği temizlemiş olabilir.
+    if (acan && icerik?.konu.id === konu.id) {
       icerikBaslikRef.current?.focus({ preventScroll: true });
       return;
     }
@@ -543,7 +583,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
     gidiliyor.current = true;
     setCanli(`${ATOLYE.ad}: Serbest Çizim Stüdyosu açılıyor.`);
     const sahne = sahneRef.current;
-    if (sahne) {
+    if (sahne && !yalin) {
       sahne.kilitle(ATOLYE.id);
       await enFazla(sahne.odaklan(ATOLYE.id, { sure: 1100 }), 1150);
     }
@@ -562,13 +602,41 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
       return;
     }
     const sahne = sahneRef.current;
-    if (!sahne) return;
+    if (!sahne || yalin) return;
     setSecili(null);
     sahne.kilitle(null);
     void sahne.sifirla();
   }
 
   sinifaGitRef.current = sinifaGit;
+
+  // Adresle gelen seçim yalnız adres girdileri değiştiğinde uygulanır. Paneli elle
+  // kapatmak, sahnenin yüklenmesi veya yeniden denenmesi aynı konuyu tekrar açmaz.
+  const ilkSecimAnahtari = useRef<string | null>(null);
+  useEffect(() => {
+    const anahtar = `${sayfa}:${initialGrade ?? ''}:${initialTopic?.id ?? ''}`;
+    if (ilkSecimAnahtari.current === anahtar) return;
+    ilkSecimAnahtari.current = anahtar;
+    if (!kademe) return;
+    if (initialGrade == null) {
+      paneliKapat(false);
+      return;
+    }
+    if (!ADA_SINIFLARI[kademe.id].includes(initialGrade)) return;
+    sinifaGit(initialGrade);
+    if (!initialTopic) return;
+    const unite = sinifUniteleri(initialGrade).find((u) => u.topics.some((konu) => konu.id === initialTopic.id));
+    const sinif = curriculumData.levels[kademe.id].grades.find((g) => g.gradeNumber === initialGrade);
+    const konu = unite?.topics.find((k) => k.id === initialTopic.id)
+      ?? sinif?.topics.find((k) => k.id === initialTopic.id);
+    if (konu) {
+      setAcikUnite(unite?.id ?? null);
+      konuyuAc(unite?.id ?? '', konu, null);
+    }
+    // Gezinme işlevleri panel durumunu okur; o durum bu adres etkisini tekrarlatmamalı.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sayfa, initialGrade, initialTopic?.id]);
+
   bosTiklamaRef.current = () => {
     if (panelAcik) paneliKapat(false);
   };
@@ -578,7 +646,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
   };
 
   const vurgula = (kimlik: string | number | null) => {
-    if (hazir) sahneRef.current?.vurgula(kimlik);
+    if (hazir && !yalin) sahneRef.current?.vurgula(kimlik);
   };
 
   const etiketRef = (kimlik: string) => (oge: HTMLDivElement | null) => {
@@ -592,6 +660,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
   const kokSiniflari = [
     s.kok,
     hazir && s.hazir,
+    yalin && s.yalin,
     etkilesildi && s.etkilesildi,
     ANA && s['ana-sayfa'],
     panelAcik && s['panel-acik'],
@@ -608,8 +677,10 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
   const siniflar = kademe ? ADA_SINIFLARI[kademe.id] : [];
 
   return (
-    <div className={kokSiniflari} style={kokStili}>
+    <div className={kokSiniflari} style={kokStili} data-ada-gorunumu={yalin ? 'yalin' : 'sahne'}>
       <div ref={sahneKapRef} className={s.sahne} aria-hidden="true" />
+
+      {yalin && <div className={s['yalin-fon']} aria-hidden="true"><span /><span /><span /></div>}
 
       <div className={s.etiketler} aria-hidden="true">
         {siniflar.map((sinif) => {
@@ -649,7 +720,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
           )}
           <h1 className={s.baslik}>{ANA ? 'Matematik Takımadaları' : kademe?.baslik}</h1>
           <p className={s.aciklama}>
-            {ANA ? 'Matematiğin yeni rotası' : `${kademe?.aralik} · Ünitelerini görmek için bir sınıf binası seç.`}
+            {ANA ? 'Matematiğin yeni rotası' : `${kademe?.aralik} · Ünitelerini görmek için bir sınıf seç.`}
           </p>
         </div>
         {!ANA && (
@@ -760,7 +831,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
           </nav>
         )}
 
-        <div ref={kontrollerRef} className={s.kontroller}>
+        <div ref={kontrollerRef} className={s.kontroller} hidden={yalin}>
           <button type="button" className={s['yuvarlak-dugme']} aria-label="Görünümü sıfırla" title="Görünümü sıfırla" onClick={gorunumuSifirla}>
             {ikon.sifirla}
           </button>
@@ -952,7 +1023,14 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
         </p>
       </section>
 
-      {(yukleyiciVar || hataMesaji) && (
+      {yalin && (
+        <div className={s['yalin-durum']}>
+          <p role="status">{hataMesaji} Öğrenmeye buradan devam edebilirsin.</p>
+          <button type="button" onClick={yenidenDene}>Ada görünümünü yeniden dene <span aria-hidden="true">{ikon.sifirla}</span></button>
+        </div>
+      )}
+
+      {!yalin && yukleyiciVar && (
         <div
           className={[s.yukleyici, hazir && !hataMesaji && s['yukleyici--kapan'], hataMesaji && s['yukleyici--hata']]
             .filter(Boolean)
@@ -964,7 +1042,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, onHata }: 
             <p className={s['yukleyici-baslik']}>{ANA ? 'Matematik Takımadaları' : kademe?.baslik}</p>
             <p className={s['yukleyici-durum']}>{hataMesaji ?? 'Adalar hazırlanıyor…'}</p>
             {hataMesaji ? (
-              <button type="button" className={`${s.dugme} ${s['dugme--birincil']}`} onClick={() => setKurulum((n) => n + 1)}>
+              <button type="button" className={`${s.dugme} ${s['dugme--birincil']}`} onClick={yenidenDene}>
                 Yeniden dene
               </button>
             ) : (

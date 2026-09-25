@@ -22,7 +22,8 @@ describe('stil ayarları varsayılanları', () => {
     expect(STYLE_SECENEKLERI.aciYazimi).toBe(ACI_YAZIMLARI);
   });
   it('varsayılan ayarlar yazimAyari ile uyumlu', () => {
-    expect(yazimAyari(DEFAULT_STYLE_SETTINGS)).toEqual({ olcuYazimi: 'tam', aciYazimi: 'sapka' });
+    // Uygulamanın varsayılanı: tam sayı AÇIK (kullanıcı isteği, 2026-09-25)
+    expect(yazimAyari(DEFAULT_STYLE_SETTINGS)).toEqual({ olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: true });
   });
 });
 
@@ -49,13 +50,21 @@ describe('loadStyleSettings', () => {
   });
 
   it('sayı ve mantıksal alanlar eskisi gibi davranır', () => {
-    depoKur(JSON.stringify({ strokeScale: 2, hideLabelBoxes: true, fontScale: 'büyük', hideFills: 'evet', olcuYazimi: 'kisa' }));
+    depoKur(JSON.stringify({ strokeScale: 2, showLabelBoxes: true, fontScale: 'büyük', hideFills: 'evet', olcuYazimi: 'kisa' }));
     const s = loadStyleSettings();
     expect(s.strokeScale).toBe(2);
-    expect(s.hideLabelBoxes).toBe(true);
+    expect(s.showLabelBoxes).toBe(true);
     expect(s.fontScale).toBe(DEFAULT_STYLE_SETTINGS.fontScale);
     expect(s.hideFills).toBe(false);
     expect(s.olcuYazimi).toBe('kisa');
+  });
+
+  it('etiket kutuları varsayılan olarak kapalı; eski kayıttaki hideLabelBoxes: false kutuları geri getirmez', () => {
+    expect(DEFAULT_STYLE_SETTINGS.showLabelBoxes).toBe(false);
+    depoKur(JSON.stringify({ strokeScale: 2, hideLabelBoxes: false }));
+    const s = loadStyleSettings();
+    expect(s.showLabelBoxes).toBe(false);
+    expect(s).not.toHaveProperty('hideLabelBoxes');
   });
 
   it('bozuk kayıt varsayılanı bozmaz', () => {

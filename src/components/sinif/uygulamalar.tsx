@@ -15,6 +15,7 @@ import React, { type ComponentType } from 'react';
 import dynamic from 'next/dynamic';
 import { manifest as veriGrafikManifesti } from '@/components/uygulamalar/veri-grafik/manifest';
 import { manifest as olasilikManifesti } from '@/components/uygulamalar/olasilik/manifest';
+import { manifest as algoritmaManifesti } from '@/components/uygulamalar/algoritma/manifest';
 import s from './sinif.module.css';
 
 const VARLIK_ONEKI = process.env.NEXT_PUBLIC_ASSET_PREFIX ?? '';
@@ -92,6 +93,7 @@ const CizimMenuCubugu: ComponentType = dynamic(
 );
 const VeriGrafik = tembel<UygulamaProps>(() => import('@/components/uygulamalar/veri-grafik'), veriGrafikManifesti.kisaAd);
 const Olasilik = tembel<UygulamaProps>(() => import('@/components/uygulamalar/olasilik'), olasilikManifesti.kisaAd);
+const Algoritma = tembel<UygulamaProps>(() => import('@/components/uygulamalar/algoritma'), algoritmaManifesti.kisaAd);
 
 /** Kayıt defteri: görev çubuğu, kısayollar ve Başlat menüsü bu sırayı kullanır. */
 export const UYGULAMALAR: readonly UygulamaTanimi[] = [
@@ -107,6 +109,7 @@ export const UYGULAMALAR: readonly UygulamaTanimi[] = [
   },
   { ...veriGrafikManifesti, Bilesen: VeriGrafik },
   { ...olasilikManifesti, Bilesen: Olasilik },
+  { ...algoritmaManifesti, Bilesen: Algoritma },
 ];
 
 export function uygulamaBul(id: string): UygulamaTanimi | undefined {

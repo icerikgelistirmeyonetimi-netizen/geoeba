@@ -672,7 +672,8 @@ export class CommandScene {
   addMeasurement(kind: 'slope' | 'trig', pointIds: string[]): MeasurementObject {
     const names = pointIds.map(id => this.point(id).label).join('');
     const existing = this.objects.find((m): m is MeasurementObject => m.type === 'measurement' && m.kind === kind && m.pointIds.join() === pointIds.join());
-    if (existing) return this.update(existing.id, { showValue: true, visible: true }) as MeasurementObject;
+    // Yeniden ölçmek, tek tek gizlenmiş trig etiketlerini de geri getirir
+    if (existing) return this.update(existing.id, { showValue: true, visible: true, hiddenRatios: undefined }) as MeasurementObject;
     return this.add({ id: createId('olc'), type: 'measurement', kind, label: kind === 'slope' ? `${names} eğimi` : `${names} açısının oranları`, showLabel: true,
       pointIds: [...pointIds], showValue: true, color: kind === 'slope' ? COLORS.slope : COLORS.trig, visible: true, createdAt: Date.now() } as MeasurementObject);
   }

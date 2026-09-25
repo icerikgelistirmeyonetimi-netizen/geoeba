@@ -1,3 +1,4 @@
+// Sahip: A (vg/veri.ts: sayı okuma / yazma, tablo işlemleri, yapıştırma, CSV, örnek veriler)
 import { describe, expect, it } from 'vitest';
 import {
   ORNEK_VERILER,
@@ -29,6 +30,10 @@ import {
   tumunuTemizle,
   yapistir,
   yapistirmayiAyristir,
+  ornekBul,
+  TUM_OZELLIKLER,
+  type OrnekVeri,
+  type RehberEylemi,
 } from '../veri';
 import { ozetHesapla } from '../istatistik';
 import { caprazSayim, frekanslar, kategorikMi, renkEslemesi, sutunMetinleri } from '../kategorik';
@@ -60,6 +65,36 @@ describe('veri: sayı okuma / yazma', () => {
     expect(sayiYaz(-0)).toBe('0');
     expect(sayiYaz(0.1 + 0.2)).toBe('0,3');
     expect(sayiYaz(2.345, 1)).toBe('2,3');
+  });
+
+  it('sayiYaz yarımları sıfırdan uzağa yuvarlar (kayan nokta artığına rağmen)', () => {
+    expect(sayiYaz(2.275)).toBe('2,28');
+    expect(sayiYaz(1.005)).toBe('1,01');
+    expect(sayiYaz(14.35, 1)).toBe('14,4');
+    expect(sayiYaz(-2.275)).toBe('-2,28');
+    expect(sayiYaz(0.1 + 0.2)).toBe('0,3');
+    expect(sayiYaz(2.5, 0)).toBe('3');
+    expect(sayiYaz(-2.5, 0)).toBe('-3');
+    expect(sayiYaz(-0.001)).toBe('0');
+    expect(sayiYaz(1234.5678, 3)).toBe('1234,568');
+    expect(sayiYaz(25000, 6)).toBe('25000');
+    expect(sayiYaz(-9.1, 6)).toBe('-9,1');
+    expect(sayiYaz(0.000001, 6)).toBe('0,000001');
+    expect(sayiYaz(Number.NaN)).toBe('');
+    // Ortalama gibi hesaplanan değerler: 16,35 bilgisayarda 16,349999… çıkar
+    expect(sayiYaz((16.3 + 16.4) / 2, 1)).toBe('16,4');
+  });
+
+  it('sayiOku baştaki yüzde işaretini ve Unicode eksiyi (−) okur', () => {
+    expect(sayiOku('−3,5')).toBe(-3.5);
+    expect(sayiOku('%50')).toBe(50);
+    expect(sayiOku('% 12,5')).toBe(12.5);
+    expect(sayiOku('%−5')).toBe(-5);
+    expect(sayiOku('−1.234,5')).toBe(-1234.5);
+    expect(sayiOku('%')).toBeNull();
+    expect(sayiOku('%5%')).toBeNull();
+    // Sayı → metin → sayı gidiş-dönüşü
+    for (const x of [0, 2.28, -9.1, 1234.5, 0.000001]) expect(sayiOku(sayiYaz(x, 6))).toBe(x);
   });
 });
 
@@ -151,6 +186,28 @@ describe('veri: yapıştırma', () => {
     expect(yapistirmayiAyristir('')).toEqual([]);
   });
 
+  it('CSV tırnakları çözülür: tırnak içindeki ayırıcı ve satır sonu bölmez, "" tek tırnak olur', () => {
+    expect(yapistirmayiAyristir('"Kaya, Ali";155')).toEqual([['Kaya, Ali', '155']]);
+    expect(yapistirmayiAyristir('Ad,Boy\n"Kaya, Ali",155\nEce,150')).toEqual([
+      ['Ad', 'Boy'],
+      ['Kaya, Ali', '155'],
+      ['Ece', '150'],
+    ]);
+    // Excel'den çok satırlı hücre (sekmeli): satır sonu hücrede boşluk olur
+    expect(yapistirmayiAyristir('Ad\tNot\r\n"çok\r\nsatırlı"\t5\r\n')).toEqual([
+      ['Ad', 'Not'],
+      ['çok satırlı', '5'],
+    ]);
+    expect(yapistirmayiAyristir('"Ali ""Kara""";3')).toEqual([['Ali "Kara"', '3']]);
+    // Tırnaklı ondalık sayı tek sütunda bölünmez
+    expect(yapistirmayiAyristir('"3,5"\n"4,2"')).toEqual([['3,5'], ['4,2']]);
+    // Alan ortasındaki tırnak ve kapanmayan tırnak düz metindir
+    expect(yapistirmayiAyristir('5" boy;3')).toEqual([['5" boy', '3']]);
+    expect(yapistirmayiAyristir('"açık;5')).toEqual([['"açık', '5']]);
+    // Aradaki boş satır kalır, sondaki boş satırlar atılır
+    expect(yapistirmayiAyristir('a\n\nb\n  \n')).toEqual([['a'], [''], ['b']]);
+  });
+
   it('yapistir gerekirse satır/sütun ekleyerek konumdan itibaren yazar', () => {
     const t = tabloOlustur(['Ad', 'Değer'], [['a', 1]]);
     const y = yapistir(t, 0, 1, [
@@ -222,6 +279,30 @@ describe('veri: CSV, gezinti, örnekler, doğrulama', () => {
     expect(t!.satirlar[0].hucreler).toEqual(['x', '']);
     expect(t!.satirlar[1].hucreler).toEqual(['y', '3,5']);
   });
+
+  it('tabloDogrula: ilk sütun bir araştırma sütunuysa kayıttaki türü korunur (ölçüm değeri, sayı küpü)', () => {
+    const tablo = (ilk: { id: string; tur: string }) =>
+      tabloDogrula({
+        sutunlar: [
+          { id: ilk.id, ad: 'İlk', tur: ilk.tur },
+          { id: 's2', ad: 'B', tur: 'sayi' },
+        ],
+        satirlar: [{ id: 'r1', hucreler: ['84', '1'] }],
+      })!;
+    // Araştırma sütunu (`ar<n>-<kimlik>-<rol>`): sayı kalır, etiket kalır
+    expect(tablo({ id: 'ar3-x7k2-deger', tur: 'sayi' }).sutunlar[0].tur).toBe('sayi');
+    expect(tablo({ id: 'ar3-x7k2-s0', tur: 'sayi' }).sutunlar[0].tur).toBe('sayi');
+    expect(tablo({ id: 'ar3-x7k2-cevap', tur: 'etiket' }).sutunlar[0].tur).toBe('etiket');
+    // Bilinmeyen tür sayı sayılır (öteki sütunlardaki kuralla aynı)
+    expect(tablo({ id: 'ar3-x7k2-deger', tur: 'bozuk' }).sutunlar[0].tur).toBe('sayi');
+    // Rolsüz ilk sütun (elle ya da örnekten) her zaman etiket; rol sözlükte yoksa da
+    expect(tablo({ id: 's1-ab12', tur: 'sayi' }).sutunlar[0].tur).toBe('etiket');
+    expect(tablo({ id: 'ar3-x7k2-bilinmeyen', tur: 'sayi' }).sutunlar[0].tur).toBe('etiket');
+    // Sayısal ilk sütunun değerleri ve öteki sütunlar olduğu gibi
+    const t = tablo({ id: 'ar3-x7k2-deger', tur: 'sayi' });
+    expect(t.satirlar[0].hucreler).toEqual(['84', '1']);
+    expect(t.sutunlar[1].tur).toBe('sayi');
+  });
 });
 
 describe('veri: sütun türleri (kategorik sütunlar ilk sütun dışında da)', () => {
@@ -289,17 +370,19 @@ describe('örnek veriler: konulara göre, açıklamalı ve öğretici sayılarla
     expect(oz.enBuyuk).toBe(6);
   });
 
-  it('boy: 24 öğrenci, çan biçimli; ortalama = medyan = tepe değer = 152, OMS 2,5, açıklık 14', () => {
+  it('boy: 24 öğrenci; ortalama 153, ortanca 152, tepe değer 152 (3 kez), OMS 5, açıklık 30', () => {
     const v = degerler('boy', 1);
     const oz = ozetHesapla(v);
     expect(v).toHaveLength(24);
-    expect(oz.ortalama).toBe(152);
+    expect(oz.ortalama).toBe(153);
     expect(oz.medyan).toBe(152);
     expect(tepe(v)).toEqual([152]);
-    expect(oz.oms).toBeCloseTo(2.5, 10);
-    expect(oz.aciklik).toBe(14);
-    // Simetri: 152'nin k altındaki ve k üstündeki öğrenci sayıları eşit
-    for (const k of [1, 2, 3, 4, 6, 7]) expect(v.filter((x) => x === 152 - k).length, String(k)).toBe(v.filter((x) => x === 152 + k).length);
+    expect(v.filter((x) => x === 152)).toHaveLength(3);
+    expect(oz.oms).toBeCloseTo(5, 10);
+    expect(oz.aciklik).toBe(30);
+    expect([oz.enKucuk, oz.enBuyuk]).toEqual([140, 170]);
+    // Rehberin 3. adımı: 24 öğrenciden 16'sı 148 ile 158 cm arasındaki bantta (ortalama ± ortalama mutlak sapma)
+    expect(v.filter((x) => x >= 148 && x <= 158)).toHaveLength(16);
   });
 
   it('ulasim: sağa çarpık, uç değer 60; ortalama 16 > medyan 12 > tepe değer 10; uç değer çıkınca ortalama 12,86', () => {
@@ -325,32 +408,38 @@ describe('örnek veriler: konulara göre, açıklamalı ve öğretici sayılarla
     expect(ORNEK_VERILER.find((o) => o.id === 'mac')!.karsilastir).toBe('Yasemin');
   });
 
-  it('gun / meyve / ders: bütün 24 parça, her dilim 15° katı; ders iki yönlü tabloda 12 + 12', () => {
+  it('gun / baskan / atik: gün 24 saat; 20 oyda açılar tam derece; atik iki yönlü tabloda 12 + 12', () => {
     expect(degerler('gun', 1).reduce((t, x) => t + x, 0)).toBe(24);
-    const meyve = frekanslar(sutunMetinleri(ornekVeriOlustur('meyve'), 0).map((m) => m.deger));
-    expect(meyve.reduce((t, x) => t + x.sayi, 0)).toBe(24);
-    for (const x of meyve) expect(((x.sayi / 24) * 360) % 15, x.kategori).toBe(0);
-    const ders = ornekVeriOlustur('ders');
-    expect(ders.sutunlar.map((s) => [s.ad, s.tur])).toEqual([['Öğrenci', 'etiket'], ['Sınıf', 'etiket'], ['En sevdiği ders', 'etiket']]);
-    const sinif = renkEslemesi(ders, 1)!;
+    const baskan = frekanslar(sutunMetinleri(ornekVeriOlustur('baskan'), 1).map((m) => m.deger));
+    expect(baskan.reduce((t, x) => t + x.sayi, 0)).toBe(20);
+    for (const x of baskan) expect(((x.sayi / 20) * 360) % 1, x.kategori).toBe(0);
+    const atik = ornekVeriOlustur('atik');
+    expect(atik.sutunlar.map((s) => [s.ad, s.tur])).toEqual([['Öğrenci', 'etiket'], ['Sınıf', 'etiket'], ['En çok çıkan atık', 'etiket']]);
+    const sinif = renkEslemesi(atik, 1)!;
     expect(sinif.kategoriler).toEqual(['5-A', '5-B']);
-    const capraz = caprazSayim(ders, 2, sinif);
-    expect(capraz.map((c) => c.kategori)).toEqual(['Beden Eğitimi', 'Fen Bilimleri', 'Matematik', 'Sosyal Bilgiler', 'Türkçe']);
-    expect(capraz.map((c) => c.sayilar)).toEqual([[3, 4], [3, 2], [4, 2], [1, 1], [1, 3]]);
+    // Sırasız çağrı: kategoriler alfabetik
+    const capraz = caprazSayim(atik, 2, sinif);
+    expect(capraz.map((c) => c.kategori)).toEqual(['Cam', 'Kâğıt ve karton', 'Metal', 'Plastik', 'Yemek artığı']);
+    expect(capraz.map((c) => c.sayilar)).toEqual([[1, 2], [1, 4], [1, 0], [6, 1], [3, 5]]);
+    // kategoriSirasi ile: tasarım sırası
+    const sira = ORNEK_VERILER.find((o) => o.id === 'atik')!.kategoriSirasi!['En çok çıkan atık'];
+    expect(sira).toEqual(['Yemek artığı', 'Plastik', 'Kâğıt ve karton', 'Cam', 'Metal']);
+    const sirali = caprazSayim(atik, 2, sinif, sira);
+    expect(sirali.map((c) => c.sayilar)).toEqual([[3, 5], [6, 1], [1, 4], [1, 2], [1, 0]]);
     expect(capraz.reduce((t, c) => t + c.toplam, 0)).toBe(24);
     for (const c of capraz) expect(((c.toplam / 24) * 360) % 15, c.kategori).toBe(0);
     expect(capraz.every((c) => c.bos === 0)).toBe(true);
   });
 
-  it('fide: haftalık artışlar 3, 4, 5, 4, 3, 2, 1; sicaklik tepe Temmuz', () => {
+  it('fide: haftalık artışlar 3, 4, 5, 4, 3, 2, 1; sicaklik en sıcak ay Ağustos', () => {
     const boy = degerler('fide', 1);
     expect(boy.slice(1).map((x, i) => x - boy[i])).toEqual([3, 4, 5, 4, 3, 2, 1]);
     const s = ornekVeriOlustur('sicaklik');
     const enSicak = gecerliDegerler(s, 1).reduce((a, b) => (b.deger > a.deger ? b : a));
-    expect(satirEtiketi(s, enSicak.satir)).toBe('Temmuz');
+    expect(satirEtiketi(s, enSicak.satir)).toBe('Ağustos');
   });
 
-  it('calisma: Sınıf ikinci sütunda kategorik, pozitif ilişki; cikolata: negatif ilişki; sinif: pozitif', () => {
+  it('calisma: Sınıf ikinci sütunda kategorik, orta güçte pozitif ilişki; cikolata: güçlü negatif ilişki', () => {
     const r = (a: number[], b: number[]) => {
       const ort = (x: number[]) => x.reduce((s, v) => s + v, 0) / x.length;
       const [ma, mb] = [ort(a), ort(b)];
@@ -361,8 +450,191 @@ describe('örnek veriler: konulara göre, açıklamalı ve öğretici sayılarla
     expect(c.sutunlar.map((s) => s.tur)).toEqual(['etiket', 'etiket', 'sayi', 'sayi']);
     expect(kategorikMi(c, 0)).toBe(false);
     expect(new Set(c.satirlar.map((x) => x.hucreler[0])).size).toBe(20);
-    expect(r(degerler('calisma', 2), degerler('calisma', 3))).toBeGreaterThan(0.9);
-    expect(r(degerler('cikolata', 1), degerler('cikolata', 2))).toBeLessThan(-0.9);
-    expect(r(degerler('sinif', 1), degerler('sinif', 2))).toBeGreaterThan(0.9);
+    // Kusursuz doğru değil: r ≈ 0,70 (istisna nokta 8B-03) ve r ≈ −0,90
+    const rc = r(degerler('calisma', 2), degerler('calisma', 3));
+    expect(rc).toBeGreaterThan(0.6);
+    expect(rc).toBeLessThan(0.8);
+    expect(r(degerler('cikolata', 1), degerler('cikolata', 2))).toBeLessThan(-0.85);
+  });
+});
+
+describe('örnek veriler: 16 örnek, sınıf düzeyi, hikâye, kaynak ve rehber', () => {
+  const degerler = (id: string, sutun: number, grup?: string) => {
+    const t = ornekVeriOlustur(id);
+    return gecerliDegerler(t, sutun)
+      .filter((d) => grup === undefined || t.satirlar[d.satir].hucreler[1] === grup)
+      .map((d) => d.deger);
+  };
+  const sutunAdi = (o: OrnekVeri, ad: string) => o.olustur().sutunlar.find((s) => s.ad === ad);
+  const eylemler = (o: OrnekVeri): RehberEylemi[] =>
+    o.rehber.flatMap((a) => [a.eylem, a.yedekEylem].filter((e): e is RehberEylemi => !!e));
+
+  it('16 örnek, 5 konu (5-8. sınıf ve zenginleştirme), her konuda en az bir örnek; eski kimlikler yok', () => {
+    expect(ORNEK_VERILER).toHaveLength(16);
+    expect(ORNEK_KONULARI.map((k) => k.id)).toEqual(['sinif5', 'sinif6', 'sinif7', 'sinif8', 'zenginlestirme']);
+    expect(ORNEK_KONULARI.map((k) => k.kisaAd)).toEqual(['5. sınıf', '6. sınıf', '7. sınıf', '8. sınıf', 'Zenginleştirme']);
+    expect(ornekKonulari().map((k) => k.ornekler.length)).toEqual([4, 4, 4, 2, 2]);
+    expect(ORNEK_VERILER.map((o) => o.id)).toEqual([
+      'baskan', 'atik', 'gun', 'harcama', 'kitap', 'kardes', 'ulasim', 'mac',
+      'sinav', 'boy', 'fide', 'sicaklik', 'iklim', 'ekran', 'calisma', 'cikolata',
+    ]);
+    for (const eski of ['meyve', 'ders', 'sinif']) {
+      expect(ornekBul(eski), eski).toBeUndefined();
+      // Bilinmeyen kimlik ilk örneğe düşer (bugünkü davranış)
+      expect(ornekVeriOlustur(eski).sutunlar.map((s) => s.ad), eski).toEqual(['Oy pusulası', 'Aday']);
+    }
+    expect(ornekBul(null)).toBeUndefined();
+    expect(ornekBul('boy')!.ad).toBe('7-C öğrencilerinin boy uzunlukları');
+    // İlk açılış verisi boy
+    expect(ORNEK_VERILER.filter((o) => o.varsayilanAcilis).map((o) => o.id)).toEqual(['boy']);
+  });
+
+  it('her örnekte hikâye, kaynak, kazanım ve 4 adımlı rehber tutarlı', () => {
+    const SIRA = ['tahmin', 'bak', 'olc', 'yorumla'];
+    for (const o of ORNEK_VERILER) {
+      const t = o.olustur();
+      expect(o.aciklama.length, o.id).toBeLessThanOrEqual(120);
+      if (o.aciklamaOzellikli) expect(o.aciklamaOzellikli.metin.length, o.id).toBeLessThanOrEqual(120);
+      expect(o.hikaye.n, o.id).toBe(t.satirlar.length);
+      for (const alan of [o.hikaye.arastirmaSorusu, o.hikaye.kim, o.hikaye.neZaman, o.hikaye.nasil, o.hikaye.cumle]) {
+        expect(alan.length, o.id).toBeGreaterThan(5);
+      }
+      expect(o.hikaye.arastirmaSorusu.endsWith('?'), o.id).toBe(true);
+      if (o.kaynak.tur === 'gercek') expect(o.kaynak.url, o.id).toMatch(/^https:\/\//);
+      // Kazanım: MAT.<sınıf>.… ; zenginleştirmede boş
+      if (o.konu === 'zenginlestirme') expect(o.kazanim, o.id).toEqual([]);
+      else {
+        expect(o.kazanim.length, o.id).toBeGreaterThan(0);
+        for (const k of o.kazanim) expect(k, o.id).toMatch(new RegExp(`^MAT\\.${o.sinif}\\.\\d+\\.\\d+$`));
+        expect(o.konu, o.id).toBe(`sinif${o.sinif}`);
+      }
+      expect(o.rehber.map((a) => a.tur), o.id).toEqual(SIRA);
+      for (const a of o.rehber) {
+        expect(a.baslik.length * a.soru.length * a.cevap.length, o.id).toBeGreaterThan(0);
+        if (a.eylem?.gerektirir) expect(TUM_OZELLIKLER, o.id).toContain(a.eylem.gerektirir);
+        if (a.yedekEylem) expect(a.yedekEylem.gerektirir, o.id).toBeUndefined();
+      }
+      // Tahmin adımında düğme yok: öğrenci ölçüye bakmadan tahmin eder
+      expect(o.rehber[0].eylem, o.id).toBeNull();
+      // Açılışta ölçüler kapalı
+      for (const v of Object.values(o.acilis?.secenekler ?? {})) expect(v, o.id).toBe(false);
+      // Önerilen sekme için sekme ipucu yazılmaz (şerit orada aciklama'yı gösterir)
+      const onerilen = o.acilis?.sekme ?? o.onerilenGrafik;
+      expect(onerilen, o.id).toBeDefined();
+      expect(o.sekmeIpucu?.[onerilen!], o.id).toBeUndefined();
+      for (const m of Object.values(o.sekmeIpucuOzellikli ?? {})) expect(TUM_OZELLIKLER, o.id).toContain(m!.gerektirir);
+    }
+  });
+
+  it('örneklerin sütun adlarına bağlı alanları tabloda karşılık bulur', () => {
+    for (const o of ORNEK_VERILER) {
+      const t = o.olustur();
+      const etiketler = t.satirlar.map((r) => r.hucreler[0]);
+      if (o.grupla) expect(sutunAdi(o, o.grupla)?.tur, o.id).toBe('etiket');
+      for (const [ad, sira] of Object.entries(o.kategoriSirasi ?? {})) {
+        const i = t.sutunlar.findIndex((s) => s.ad === ad);
+        expect(t.sutunlar[i]?.tur, `${o.id} ${ad}`).toBe('etiket');
+        expect([...sira].sort(), `${o.id} ${ad}`).toEqual([...new Set(t.satirlar.map((r) => r.hucreler[i]))].sort());
+      }
+      for (const ad of Object.keys(o.yuzdeDegisim ?? {})) expect(sutunAdi(o, ad)?.tur, `${o.id} ${ad}`).toBe('sayi');
+      for (const e of eylemler(o)) {
+        if (e.tur === 'hucre') {
+          expect(etiketler, o.id).toContain(e.satir);
+          expect(sutunAdi(o, e.sutun)?.tur, o.id).toBe('sayi');
+        }
+        if (e.tur === 'satirVurgula') expect(etiketler, o.id).toContain(e.satir);
+        if (e.tur === 'satirEkle') expect(e.hucreler, o.id).toHaveLength(t.sutunlar.length);
+      }
+      // Hassas ölçümlerde adlar yerine kod
+      if (o.hassas) for (const e of etiketler) expect(e, o.id).toMatch(/^[0-9A-Z]+-?\d+$/);
+    }
+  });
+
+  it('istatistik iddiaları: sinav, mac, gun, iklim (öteki örnekler yukarıda)', () => {
+    // sinav: 7-A ve 7-B'nin ortalaması 70, ortalama mutlak sapma 16 ve 6, açıklık 60 ve 25
+    const a = ozetHesapla(degerler('sinav', 2, '7-A'));
+    const b = ozetHesapla(degerler('sinav', 2, '7-B'));
+    expect([a.n, b.n]).toEqual([15, 15]);
+    expect([a.ortalama, b.ortalama]).toEqual([70, 70]);
+    expect(a.oms).toBeCloseTo(16, 10);
+    expect(b.oms).toBeCloseTo(6, 10);
+    expect([a.aciklik, b.aciklik]).toEqual([60, 25]);
+    // mac: aynı ortalama 17, açıklık 27 ve 4
+    expect([ozetHesapla(degerler('mac', 1)).aciklik, ozetHesapla(degerler('mac', 2)).aciklik]).toEqual([27, 4]);
+    // gun: toplam 24 saat, her dilim 15°'nin katı (tam saat)
+    const gun = degerler('gun', 1);
+    expect(gun.reduce((t, x) => t + x, 0)).toBe(24);
+    for (const x of gun) expect(Number.isInteger(((x / 24) * 360) / 15), String(x)).toBe(true);
+    // iklim: Erzurum'da 4 ay sıfırın altında
+    expect(degerler('iklim', 1).filter((x) => x < 0)).toHaveLength(4);
+    // kitap: ortalama 2,7 verilerden biri değil
+    expect(degerler('kitap', 1)).not.toContain(2.7);
+  });
+
+  it('öğrenciye dönük metinlerde program dışı terim, simge ve emoji yok', () => {
+    const YASAK = [
+      /medyan/i, /frekans/i, /\bmod\b/i, /kuramsal/i, /\bzar\b/i, /x̄/, /Σ/, /Δ/, /\bOMS\b/, /uç değer/i, /iki yönlü/i,
+      /\p{Extended_Pictographic}/u,
+    ];
+    for (const o of ORNEK_VERILER) {
+      const metinler = [
+        o.ad,
+        o.aciklama,
+        o.aciklamaOzellikli?.metin,
+        ...Object.values(o.hikaye).filter((x): x is string => typeof x === 'string'),
+        ...o.rehber.flatMap((a) => [a.baslik, a.soru, a.cevap, a.eylem?.etiket, a.yedekEylem?.etiket]),
+        ...Object.values(o.sekmeIpucu ?? {}),
+        ...Object.values(o.sekmeIpucuOzellikli ?? {}).map((m) => m?.metin),
+      ].filter((x): x is string => typeof x === 'string');
+      for (const m of metinler) for (const y of YASAK) expect(m, `${o.id}: ${y}`).not.toMatch(y);
+      // Öğretmen notunda da doğrulanmamış "ders kitabındaki örnek" iddiası yok
+      expect(`${o.ogretmenNotu ?? ''} ${o.kaynak.not ?? ''}`, o.id).not.toMatch(/ders kitabındaki örnek/i);
+      // Akıllı tahta dokunmatik: fare dili yok ("üzerine gel", "fareyle")
+      for (const m of metinler) expect(m, o.id).not.toMatch(/üzerine gel|fareyle|imleç/i);
+    }
+  });
+
+  it('öğretmen notları ve kaynaklar yalnız sınıfta işe yarayan bilgi: geliştirme durumu ve kod alan adları yok', () => {
+    const GELISTIRME = [
+      /gelene kadar/i, /henüz yok/i, /uygulanana kadar/i, /düzeltilmesi gerekir/i, /adımı gerekir/i, /[Uu]ygulama bugün/,
+      /yazılmalı/i, /\bkipi\b/i, /\bHTML\b/, /acilis\./, /"grupla"/,
+      /\b(yuzdeDegisim|daireSiklik|daireYuvarlama|acilisAralik|kategoriSirasi|sekmeIpucu|varsayilanAcilis)\b/,
+    ];
+    const AYLAR = 'Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık';
+    for (const o of ORNEK_VERILER) {
+      const metinler = [o.ogretmenNotu, o.kaynak.ad, o.kaynak.not, o.kaynak.erisim, o.kaynak.urlAd, o.kaynak.url2Ad].filter(
+        (x): x is string => typeof x === 'string',
+      );
+      for (const m of metinler) for (const y of GELISTIRME) expect(m, `${o.id}: ${y}`).not.toMatch(y);
+      // Erişim tarihi okunur biçimde: "24 Eylül 2026"
+      if (o.kaynak.erisim) expect(o.kaynak.erisim, o.id).toMatch(new RegExp(`^\\d{1,2} (${AYLAR}) \\d{4}$`));
+      // İki bağlantılı kaynakta ikisinin de kısa adı var (kartta "MGM: Erzurum · İzmir" gibi)
+      if (o.kaynak.url2) expect([o.kaynak.urlAd, o.kaynak.url2Ad].every((a) => !!a && a.length > 1), o.id).toBe(true);
+    }
+  });
+
+  it('rehber metinleri öğretici: tahmin adımının cevabı gerçek bir cevap; açıklama (şerit) sonucu baştan söylemez', () => {
+    for (const o of ORNEK_VERILER) {
+      expect(o.rehber[0].cevap, o.id).not.toMatch(/Tahmin serbest|Tahminini not et|cevap verecek|karşılaştıracağız/);
+      expect(o.rehber[0].cevap.length, o.id).toBeGreaterThan(30);
+    }
+    // Açılış şeridi yönlendirir ya da sorar; "Grafikte bul" ve "Aç ve ölç" adımlarının cevabı orada yazmaz
+    const SONUC: [string, RegExp][] = [
+      ['harcama', /çeyrek|orantılı küçülür/],
+      ['kitap', /2,7/],
+      ['kardes', /iki tepe değer var/],
+      ['ulasim', /Feyza|60|çeker|etkilemez/],
+      ['mac', /17|aynı/],
+      ['sinav', /70/],
+      ['boy', /140|170/],
+      ['fide', /hızlanıyor|yavaşlıyor/],
+      ['iklim', /dört ay|4 ay/],
+      ['calisma', /genellikle artıyor/],
+      ['cikolata', /azalıyor|negatif/],
+    ];
+    for (const [id, desen] of SONUC) {
+      const o = ornekBul(id)!;
+      for (const m of [o.aciklama, o.aciklamaOzellikli?.metin].filter((x): x is string => !!x)) expect(m, id).not.toMatch(desen);
+    }
   });
 });

@@ -1,21 +1,22 @@
 /**
  * Veri ve Grafik — kategorik (etiket türündeki) değişkenler için saf yardımcılar:
- * değişken olarak kullanılabilecek sütunlar, kategori sırası, frekans / göreli sıklık, mod,
- * kategori renkleri ve nokta grafiğinde ayrık kutucuk yerleşimi.
+ * değişken olarak kullanılabilecek sütunlar, kategori sırası, sıklık / göreli sıklık, tepe değer (`mod`),
+ * kategori renkleri, nokta grafiğinde ayrık kutucuk yerleşimi ve başlıklar için yönelme eki.
  */
 import type { Sutun, VeriTablosu } from './veri';
 
 /**
- * Kategori paleti: ada tonlarından türetilmiş 12 ayrı renk (deniz, mercan, lavanta, altın, turkuaz, gül,
+ * Kategori paleti: ada tonlarından türetilmiş 12 ayrı renk (deniz, mercan, lavanta, altın, zümrüt, gül,
  * zeytin, mor, gök, kiremit, arduvaz, kahve). Hepsinin bağıl parlaklığı 0,18–0,27 bandında: açık (fildişi)
  * ve koyu (mürekkep) kart zemininde en az 3:1 karşıtlık verir; 12 kategoriye kadar renk yinelenmez.
+ * Beşinci renk (zümrüt) eskiden turkuazdı; birinci renge (deniz) çok yakın düşüyordu (ΔE 20 → 42).
  */
 export const KATEGORI_PALETI = [
   '#2f8394',
   '#c8684a',
   '#7f88c4',
   '#a8782f',
-  '#2a9d94',
+  '#22a06f',
   '#bd5c8f',
   '#6b8e3a',
   '#9168bd',
@@ -47,6 +48,27 @@ export function kategoriRengi(etiket: string, indeks: number): string {
   return KATEGORI_PALETI[((indeks % n) + n) % n];
 }
 
+/** Onaltılık rengin bağıl parlaklığı (WCAG); onaltılık değilse (CSS değişkeni) null */
+export function bagilParlaklik(renk: string): number | null {
+  const hex = renk.trim().replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return null;
+  const kanal = (i: number) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * kanal(0) + 0.7152 * kanal(2) + 0.0722 * kanal(4);
+}
+
+/**
+ * Kart zemininde seçilmeyecek kadar açık ya da koyu renk mi ("Beyaz" #efe5d0 fildişi kartta 1,2:1, "Siyah" #15302d
+ * mürekkep kartta 1:1)? Böyle dolgulu nokta, sütun, dilim ve lejant noktasına metin renginde (temaya göre koyu ya
+ * da açık) kenar çizilir. Paletin 12 rengi (bağıl parlaklık 0,16–0,28) kenar almaz.
+ */
+export function kenarGerekir(renk: string): boolean {
+  const l = bagilParlaklik(renk);
+  return l !== null && (l > 0.5 || l < 0.06);
+}
+
 /** Açık renkli zeminde okunur metin rengi */
 export function rengeGoreMetin(renk: string): string {
   const hex = renk.replace('#', '');
@@ -69,16 +91,43 @@ export function sutunMetinleri(tablo: VeriTablosu, sutun: number): { satir: numb
   return sonuc;
 }
 
-/**
- * Kategorik değişken sayılan sütun mu? Etiket türündeki sütunlar kategoriktir; yalnız ilk sütun
- * (satır adı: "Ayşe", "Çekiliş 1" …) her değeri farklıysa değişken sayılmaz — tekrar eden değer varsa sayılır.
- */
 /** Örnekleyicinin sıra numarası sütunları ("Çekiliş", "Tekrar"): hiçbir zaman değişken sayılmaz */
 export const SIRA_SUTUNLARI: ReadonlySet<string> = new Set(['vg-cekilis', 'vg-tekrar']);
 
+// ── Veri toplama (araştırma) sütun rolleri ────────────────────────────────────
+
+/**
+ * Veri toplama panelinin tabloya yazdığı sütunların rolleri. Sütun kimliği `${arastirma.kimlik}-${rol}`
+ * biçimindedir (ör. `ar7-x3k2-cevap`): cevap (anket seçeneği), grup (Sınıf …), ad (ölçülen kişi),
+ * deger (ölçüm), s0 / s1 (deney sonucu; iki sayı küpünde 1. ve 2. küp), toplam (iki küpün toplamı), deney.
+ */
+export const ARASTIRMA_ROLLERI = ['cevap', 'grup', 'ad', 'deger', 's0', 's1', 'toplam', 'deney'] as const;
+export type ArastirmaSutunRolu = (typeof ARASTIRMA_ROLLERI)[number];
+
+const ARASTIRMA_KIMLIGI = /^ar\d+-[a-z0-9]+-([a-z0-9]+)$/;
+
+/** Sütun kimliğinden araştırma rolü; veri toplama sütunu değilse (elle eklenen, örnek veri …) null */
+export function arastirmaSutunRolu(id: string): ArastirmaSutunRolu | null {
+  const m = ARASTIRMA_KIMLIGI.exec(id);
+  return m && (ARASTIRMA_ROLLERI as readonly string[]).includes(m[1]) ? (m[1] as ArastirmaSutunRolu) : null;
+}
+
+/** Etiket türündeyken her zaman kategorik değişken sayılan roller (boş tabloda da eksen atanabilsin) */
+const KATEGORIK_ROLLER: ReadonlySet<ArastirmaSutunRolu> = new Set<ArastirmaSutunRolu>(['cevap', 'grup', 's0', 's1', 'deney']);
+
+/**
+ * Kategorik değişken sayılan sütun mu? Etiket türündeki sütunlar kategoriktir. İstisnalar:
+ * - sıra numarası sütunları (`SIRA_SUTUNLARI`) hiçbir zaman sayılmaz;
+ * - veri toplama sütunlarında rol belirler: 'ad' (kişi adı) sayılmaz; cevap / grup / s0 / s1 / deney
+ *   veri olmasa da sayılır (anket ya da deney tablosu boşken eksen bu sütuna atanır);
+ * - rolsüz ilk sütun (satır adı: "Ayşe", "1. maç" …) her değeri farklıysa sayılmaz — tekrar eden değer varsa sayılır.
+ */
 export function kategorikMi(tablo: VeriTablosu, sutun: number): boolean {
   const s = tablo.sutunlar[sutun];
   if (!s || s.tur !== 'etiket' || SIRA_SUTUNLARI.has(s.id)) return false;
+  const rol = arastirmaSutunRolu(s.id);
+  if (rol === 'ad') return false;
+  if (rol !== null && KATEGORIK_ROLLER.has(rol)) return true;
   if (sutun > 0) return true;
   const metinler = sutunMetinleri(tablo, 0).map((m) => m.deger);
   return metinler.length >= 2 && new Set(metinler).size < metinler.length;
@@ -131,12 +180,86 @@ export function frekanslar(degerler: string[], sira?: string[]): Frekans[] {
   });
 }
 
-/** En sık görülen kategori(ler); veri yoksa boş dizi */
+/**
+ * Tepe değer: en sık görülen kategori(ler). Veri yoksa boş dizi. En az iki kategori varken bütün kategoriler
+ * eşit sayıdaysa da boş dizi döner ("bütün değerler eşit sayıda: tepe değer yok"); verilen sıradaki hiç
+ * görülmemiş (sıklığı 0) kategoriler de sayılır: 3 · 3 · 0 sıklıklarında tepe değer ilk ikisidir.
+ */
 export function mod(degerler: string[], sira?: string[]): string[] {
   const f = frekanslar(degerler, sira);
   const enCok = f.reduce((m, x) => Math.max(m, x.sayi), 0);
   if (enCok === 0) return [];
+  if (f.length >= 2 && f.every((x) => x.sayi === enCok)) return [];
   return f.filter((x) => x.sayi === enCok).map((x) => x.kategori);
+}
+
+/** Bütün kategoriler eşit sayıdayken tepe değer kartında yazan açıklama */
+export const TEPE_DEGER_YOK = 'bütün değerler eşit sayıda: tepe değer yok';
+
+const SESLILER = 'aıoueiöü';
+const INCE_SESLILER = 'eiöü';
+/** Rakamların okunuşundaki son sesli ve okunuşun sesliyle bitip bitmediği (0 sıfır, 1 bir, 2 iki …) */
+const RAKAM_OKUNUSU: Record<string, [string, boolean]> = {
+  '0': ['ı', false],
+  '1': ['i', false],
+  '2': ['i', true],
+  '3': ['ü', false],
+  '4': ['ö', false],
+  '5': ['e', false],
+  '6': ['ı', true],
+  '7': ['i', true],
+  '8': ['i', false],
+  '9': ['u', false],
+};
+/** Onlar basamağı (sonu 0 olan sayılar): 10 on, 20 yirmi, 30 otuz … */
+const ONLAR_OKUNUSU: Record<string, [string, boolean]> = {
+  '1': ['o', false],
+  '2': ['i', true],
+  '3': ['u', false],
+  '4': ['ı', false],
+  '5': ['i', true],
+  '6': ['ı', false],
+  '7': ['i', false],
+  '8': ['e', false],
+  '9': ['a', false],
+};
+
+/**
+ * Sütun adına kesme işaretiyle yönelme eki: "Sınıf" → "Sınıf'a", "Meyve" → "Meyve'ye", "Renk" → "Renk'e",
+ * "Oy pusulası" → "Oy pusulası'na" (tamlamada n kaynaştırması), "2. küp" → "2. küp'e". Sondaki birim ayracı
+ * ("Boy (cm)") ek için yok sayılır. "Sınıf'a göre sıklık tablosu" gibi başlıklarda kullanılır.
+ */
+export function yonelmeEkli(ad: string): string {
+  const govde = ad.replace(/\s*\([^()]*\)\s*$/, '').trim() || ad.trim();
+  if (govde === '') return ad;
+  const kucuk = govde.toLocaleLowerCase('tr');
+  const sonHarf = kucuk[kucuk.length - 1];
+  let sonSesli: string | null = null;
+  let sesliyleBiter = SESLILER.includes(sonHarf);
+  if (/\d/.test(sonHarf)) {
+    const onlar = kucuk.length >= 2 ? kucuk[kucuk.length - 2] : '';
+    const okunus =
+      sonHarf !== '0'
+        ? RAKAM_OKUNUSU[sonHarf]
+        : /\d/.test(onlar) && onlar !== '0'
+          ? ONLAR_OKUNUSU[onlar]
+          : /00$/.test(kucuk)
+            ? (['ü', false] as [string, boolean]) // yüz, bin
+            : RAKAM_OKUNUSU['0'];
+    [sonSesli, sesliyleBiter] = okunus;
+  } else {
+    for (let i = kucuk.length - 1; i >= 0; i--) {
+      if (SESLILER.includes(kucuk[i])) {
+        sonSesli = kucuk[i];
+        break;
+      }
+    }
+  }
+  const unlu = sonSesli !== null && INCE_SESLILER.includes(sonSesli) ? 'e' : 'a';
+  if (!sesliyleBiter) return `${govde}'${unlu}`;
+  // Birden çok sözcüklü ad ı / i / u / ü ile bitiyorsa tamlamadır (Oy pusulası, Göz rengi): n kaynaştırması
+  const tamlama = /\s/.test(govde) && 'ıiuü'.includes(sonHarf);
+  return `${govde}'${tamlama ? 'n' : 'y'}${unlu}`;
 }
 
 /**

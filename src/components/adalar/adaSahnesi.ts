@@ -18,6 +18,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FIRLATMA, kapakAcisi, roketDurumu, RoketEfekti } from './roketFirlatma';
 
 // ---------------------------------------------------------------------------
 // Tipler
@@ -63,10 +64,24 @@ export interface SahneGrubu {
   /** Dönen alet: görsel olarak ait olduğu seçilebilir grubun anahtarı */
   owner?: string;
   /** Dönen aletin hareket tipi */
-  motion?: 'tur' | 'salinim';
-  /** Dönen aletin modeldeki duruş açısı (radyan) */
+  motion?: AletHareketi;
+  /** Dönen aletin modeldeki duruş açısı (radyan); saat ibresinde 12'den saat yönünde */
   restAngle?: number;
+  /** Saat ibresi (motion 'saat') */
+  hand?: SaatEli;
+  /** Dönen parça pişmiş gölge haritasına gölge verir (kubbe gibi dönüşle biçimi değişmeyenler) */
+  shadow?: boolean;
+  /** Roket: kapak açılınca lülesi zeminde durana dek yükselişi (m) */
+  rise?: number;
 }
+
+/**
+ * Ayrı köke çıkan hareketli parçalar: atölye aletleri, park saati, gözlemevi kubbesi, ortaokul
+ * piramidinin kapağı ve roketi (roketFirlatma.ts).
+ */
+export type AletHareketi = 'tur' | 'salinim' | 'saat' | 'kubbe' | 'piramit' | 'roket';
+
+export type SaatEli = 'akrep' | 'yelkovan' | 'saniye';
 
 export interface SahneIsigi {
   name: string;
@@ -217,11 +232,25 @@ interface Rota {
   q: number;
 }
 
-/** Kendi pivotunda dönen atölye aleti (exporter'ın "arac:*" grupları). */
+/** Kendi pivotunda dönen parça (exporter'ın "arac:*" grupları): atölye aleti, saat ibresi, kubbe. */
 interface DonenAlet {
   nesne: THREE.Object3D;
   eksen: THREE.Vector3;
-  hareket: 'tur' | 'salinim';
+  hareket: AletHareketi;
+  /** Saat ibresi; yalnız 'saat' hareketinde */
+  el: SaatEli | null;
+  /** Modeldeki duruş açısı (radyan); saat ibresi kadranda bu açıdan döndürülür */
+  durus: number;
+  /** Saat ibresinin şu an gösterdiği açı (12'den saat yönünde, radyan) */
+  gorunen: number;
+  /** Saat üzerindeyken canlı saati, değilken modeldeki duruşu gösterir */
+  canli: boolean;
+  /** Duruş ↔ canlı saat geçişi: başlangıç açısı, en kısa yoldan fark, ilerleme 0–1 */
+  gecis: { bas: number; fark: number; ilerleme: number } | null;
+  /** Düğümün duruş konumu (roket buradan eksen boyunca ötelenir) */
+  taban: THREE.Vector3;
+  /** Roket: lülesi zeminde durana dek yükseliş (m) */
+  yukselis: number;
   sahip: string;
   /** Salınım genliği (radyan); duruş açısına göre kısılmış olabilir */
   genlik: number;
@@ -392,6 +421,70 @@ export const PERGEL_SURE = 3;
 /** Pergel: ilerleme 0→1 boyunca tam tur; iki uçta hız sıfır. */
 export function pergelTurAcisi(p: number): number {
   return Math.PI * 2 * yumusak.gecis(Math.min(1, Math.max(0, p)));
+}
+
+/** Motorun tanıdığı dönen parça hareketleri; JSON'daki bilinmeyen hareket parçayı sabit bırakır. */
+export const ALET_HAREKETLERI: ReadonlySet<string> = new Set<AletHareketi>(['tur', 'salinim', 'saat', 'kubbe', 'piramit', 'roket']);
+
+/** Saniye ibresinin bir sonraki saniyeye geçişi (saniye): kısa, yumuşak bir "tik". */
+export const SANIYE_TIK_SURESI = 0.16;
+
+/**
+ * Park saatinin ibresi, cihazın yerel saatine göre 12'den saat yönünde açı (radyan).
+ * Akrep ve yelkovan kesintisiz ilerler; saniye ibresi her saniyenin başında SANIYE_TIK_SURESI
+ * içinde bir sonraki çizgiye geçer ve orada durur (tik=false: geçişsiz atlar).
+ */
+export function saatAcisi(el: SaatEli, tarih: Date, tik = true): number {
+  const saniye = tarih.getSeconds();
+  const dakika = tarih.getMinutes() + (saniye + tarih.getMilliseconds() / 1000) / 60;
+  if (el === 'akrep') return (Math.PI * 2 * ((tarih.getHours() % 12) + dakika / 60)) / 12;
+  if (el === 'yelkovan') return (Math.PI * 2 * dakika) / 60;
+  const gecis = tik ? yumusak.gecis(Math.min(1, tarih.getMilliseconds() / 1000 / SANIYE_TIK_SURESI)) : 1;
+  return (Math.PI * 2 * (saniye - 1 + gecis)) / 60;
+}
+
+/**
+ * Ana sayfa kadrajının ek payı: içerik güvenli alana 1.06 × bu kadar payla sığar. Adalar kenarlara
+ * dayanıyordu (kullanıcı, 2026-09-24: "fazla yakın, az uzaklaştır"); açılış ve sıfırlama aynı uzaklıktadır.
+ */
+export const ANA_SAYFA_UZAKLIK = 1.15;
+
+/** Park saati üzerine gelince canlı saate, ayrılınca modeldeki duruşa bu sürede (saniye) geçer. */
+export const SAAT_GECIS_SURESI = 0.9;
+
+/** a açısından b'ye en kısa yoldan işaretli fark (radyan), (−π, π]. */
+export function acisalFark(a: number, b: number): number {
+  const tam = Math.PI * 2;
+  const f = (((b - a) % tam) + tam) % tam;
+  return f > Math.PI ? f - tam : f;
+}
+
+/**
+ * Gözlemevi kubbesinin üzerine gelince yaptığı tek tarama: [hedef açı (radyan; yukarıdan bakınca
+ * saat yönü tersi +), dönüş süresi (s), hedefte bekleme (s)]. Kubbe gökyüzünü tarar gibi önce bir
+ * yana, sonra öbür yana döner ve yarık yeniden izleyiciye bakarak (0) durur; teleskop kubbeyle döner.
+ * Sürekli döngü yok (kullanıcı isteği): her yeni üzerine gelişte bir kez.
+ */
+export const KUBBE_ADIMLARI: readonly (readonly [number, number, number])[] = [
+  [0.85, 2.0, 0.4],
+  [-0.55, 3.0, 0.4],
+  [0, 1.7, 0],
+];
+export const KUBBE_SURE = KUBBE_ADIMLARI.reduce((toplam, [, donus, bekleme]) => toplam + donus + bekleme, 0);
+
+/** Tarama başladıktan `s` saniye sonra kubbenin duruştan dönüş açısı (radyan); tarama bitince 0. */
+export function kubbeAcisi(s: number): number {
+  if (!(s > 0)) return 0;
+  let p = s;
+  let onceki = 0;
+  for (const [hedef, donus, bekleme] of KUBBE_ADIMLARI) {
+    if (p < donus) return onceki + (hedef - onceki) * yumusak.gecis(p / donus);
+    p -= donus;
+    if (p < bekleme) return hedef;
+    p -= bekleme;
+    onceki = hedef;
+  }
+  return 0;
 }
 
 /** Cam ve vurgu halkaları ortam kapatmasına (AO) katılmaz. */
@@ -584,6 +677,8 @@ export class AdaSahnesi extends EventTarget {
   private readonly secilebilirler: Secilebilir[] = [];
   private readonly yuzenler: Yuzen[] = [];
   private readonly aletler: DonenAlet[] = [];
+  /** Ortaokul roketinin alevi ve dumanı; sahnede roket varsa kurulur */
+  private roketEfekti: RoketEfekti | null = null;
   private readonly etiketler = new Map<Secilebilir, HTMLElement>();
   private fareUzerinde: Secilebilir | null = null;
   private disVurgu: Secilebilir | null = null;
@@ -812,6 +907,8 @@ export class AdaSahnesi extends EventTarget {
     const kokler = [...gltf.scene.children];
     const icerikKutusu = new THREE.Box3();
     const hareketli = (grup: string) => grup.startsWith('float:') || grup.startsWith('iz:');
+    // Dönen parçalardan yalnız biçimi dönüşle değişmeyenler (kubbe kabuğu) pişmiş gölgeye katılır
+    const golgeVerenAletler = new Set(veri.groups.filter((g) => g.kind === 'arac' && g.shadow).map((g) => g.key));
     for (const kok of kokler) {
       const grup = grupAdi(kok);
       kok.traverse((o) => {
@@ -823,7 +920,7 @@ export class AdaSahnesi extends EventTarget {
         // Gölge haritası bir kez pişirilir; dönen alet gölgesi duruş pozunda donup nesneden
         // kopardı. hareketli()'ye eklenmez: o yüklem kadraj kutusu, nokta bulutu ve kıyı
         // alanı için de kullanılıyor, pergel ise sahnenin en yüksek noktası.
-        mesh.castShadow = !cam && !hareketli(grup) && !grup.startsWith('arac:');
+        mesh.castShadow = !cam && !hareketli(grup) && (!grup.startsWith('arac:') || golgeVerenAletler.has(grup));
         mesh.receiveShadow = true;
         if (cam) {
           mesh.renderOrder = 2;
@@ -900,12 +997,20 @@ export class AdaSahnesi extends EventTarget {
       } else if (tur === 'arac') {
         if (!giris.pivot || !giris.axis) continue; // exporter eksik yazdıysa alet sabit kalır
         // Bilinmeyen bir hareket türü sessizce salınıma düşmesin: alet sabit kalsın
-        if (giris.motion !== 'tur' && giris.motion !== 'salinim') continue;
+        if (!giris.motion || !ALET_HAREKETLERI.has(giris.motion)) continue;
+        if (giris.motion === 'saat' && !giris.hand) continue; // hangi ibre olduğu bilinmeden döndürülmez
         const hareket = giris.motion;
         this.aletler.push({
           nesne: kok,
           eksen: new THREE.Vector3(...giris.axis).normalize(),
           hareket,
+          el: giris.hand ?? null,
+          durus: giris.restAngle ?? 0,
+          gorunen: giris.restAngle ?? 0,
+          canli: false,
+          gecis: null,
+          taban: kok.position.clone(),
+          yukselis: giris.rise ?? 0,
           genlik: ibreGenligi(giris.restAngle),
           sahip: giris.owner ?? '',
           // Faz yalnız salınanlar arasında sayılır: tek ibre gecikmesiz başlasın
@@ -914,6 +1019,10 @@ export class AdaSahnesi extends EventTarget {
           ilerleme: 0,
           donuyor: false,
         });
+        if (hareket === 'roket' && !this.roketEfekti) {
+          this.roketEfekti = new RoketEfekti();
+          sahne.add(this.roketEfekti.grup);
+        }
       } else if (tur === 'stage' || tur === 'grade' || tur === 'landmark') {
         this.secilebilirEkle(kok, giris, tur, aracKokleri.get(giris.key));
       }
@@ -1088,6 +1197,22 @@ export class AdaSahnesi extends EventTarget {
     }
   }
 
+  /**
+   * Park saati ibresini canlı saate (ada üzerindeyken) ya da modeldeki duruşa yönlendirir; yön
+   * değişince ibre en kısa yoldan SAAT_GECIS_SURESI içinde yerine varır (azaltılmış harekette atlar).
+   */
+  private saatModu(a: DonenAlet, canli: boolean): void {
+    if (a.canli === canli || !a.el) return;
+    a.canli = canli;
+    if (this.azHareket) {
+      a.gecis = null;
+      return;
+    }
+    const hedef = canli ? saatAcisi(a.el, new Date(Date.now() + SAAT_GECIS_SURESI * 1000), false) : a.durus;
+    const fark = acisalFark(a.gorunen, hedef);
+    a.gecis = Math.abs(fark) > 1e-3 ? { bas: a.gorunen, fark, ilerleme: 0 } : null;
+  }
+
   private secilebilirEkle(
     kok: THREE.Object3D,
     giris: SahneGrubu,
@@ -1199,6 +1324,12 @@ export class AdaSahnesi extends EventTarget {
     const kamera = (this.kamera = new THREE.OrthographicCamera(-10, 10, 10, -10, 1, 400));
     const ofset = konum.clone().sub(hedef);
     this.tabanKure = new THREE.Spherical().setFromVector3(ofset);
+    if (this.sayfa === 'ana-sayfa') {
+      // Alçak, hafif yandan açılış açısı adaları geniş ekrana yayar;
+      // cercevele() bu yönden sığdırarak açılış ve sıfırlamada aynı yakınlığı korur.
+      this.tabanKure.theta = -0.2;
+      this.tabanKure.phi = 1.08;
+    }
     this.tabanKure.radius = Math.max(60, this.icerikKutusu.getBoundingSphere(new THREE.Sphere()).radius * 3);
     kamera.position.copy(this.icerikMerkezi).add(new THREE.Vector3().setFromSpherical(this.tabanKure));
     kamera.lookAt(this.icerikMerkezi);
@@ -1414,7 +1545,8 @@ export class AdaSahnesi extends EventTarget {
       if (y < minY) minY = y;
       if (y > maxY) maxY = y;
     }
-    const pay = w < 700 ? 1.03 : 1.06;
+    // Ana sayfada adalar kenarlara dayanmasın: kadraj biraz uzaktan açılır (kullanıcı: "fazla yakın")
+    const pay = (w < 700 ? 1.03 : 1.06) * (this.sayfa === 'ana-sayfa' ? ANA_SAYFA_UZAKLIK : 1);
     const birimPiksel = Math.max(((maxX - minX) * pay) / guvenliW, ((maxY - minY) * pay) / guvenliH);
     const yarimW = (w * birimPiksel) / 2;
     const yarimH = (h * birimPiksel) / 2;
@@ -1614,13 +1746,17 @@ export class AdaSahnesi extends EventTarget {
         const uzerinde = s === this.fareUzerinde || s === this.disVurgu;
         if (uzerinde && !s.aletTetik && !this.azHareket) {
           for (const a of s.aletler) {
-            if (a.hareket === 'tur' && !a.donuyor) {
+            // Pergel tam tur, gözlemevi kubbesi tek tarama, ortaokul piramidi ve roketi birlikte bir
+            // fırlatma yapar; hiçbiri bitmeden yeniden başlamaz (sürekli döngü yok)
+            if (a.hareket !== 'salinim' && a.hareket !== 'saat' && !a.donuyor) {
               a.donuyor = true;
               a.ilerleme = 0;
             }
           }
         }
         s.aletTetik = uzerinde;
+        // Park saati yalnız üzerindeyken çalışır; ayrılınca modeldeki duruşuna döner
+        for (const a of s.aletler) if (a.hareket === 'saat') this.saatModu(a, uzerinde);
       }
       s.h += ((aktif ? 1 : 0) - s.h) * k;
       if (s.nabiz > 0) s.nabiz = Math.max(0, s.nabiz - dt * 0.9);
@@ -1669,11 +1805,64 @@ export class AdaSahnesi extends EventTarget {
       }
     }
 
-    // Atölye aletleri: iletki ibresi arada bir tarar, pergel üzerine gelince tam tur atar.
+    // Dönen parçalar: iletki ibresi arada bir tarar; pergel tam tur atar, gözlemevi kubbesi bir kez
+    // tarar ve park saati çalışır, üçü de yalnız sahibi (atölye, lise, ilkokul) üzerindeyken.
     // Düğümün taban dönüşü birim (exporter mesh'i pivota göre merkezliyor), doğrudan yazılır.
+    let tarih: Date | null = null;
     for (const a of this.aletler) {
       if (a.hareket === 'salinim') {
         a.nesne.quaternion.setFromAxisAngle(a.eksen, ibreTaramaAcisi(t + a.faz, a.genlik));
+      } else if (a.hareket === 'saat' && a.el) {
+        if (a.gecis) {
+          a.gecis.ilerleme = Math.min(1, a.gecis.ilerleme + dt / SAAT_GECIS_SURESI);
+          a.gorunen = a.gecis.bas + a.gecis.fark * yumusak.gecis(a.gecis.ilerleme);
+          if (a.gecis.ilerleme >= 1) a.gecis = null;
+        } else if (a.canli) {
+          tarih ??= new Date();
+          a.gorunen = saatAcisi(a.el, tarih, !this.azHareket);
+        } else {
+          a.gorunen = a.durus;
+        }
+        // Eksen kadrandan izleyiciye bakar: saat yönünde ilerlemek eksen etrafında eksi dönüştür
+        a.nesne.quaternion.setFromAxisAngle(a.eksen, a.durus - a.gorunen);
+      } else if (a.hareket === 'kubbe') {
+        if (!a.donuyor) continue;
+        a.ilerleme += dt; // kubbede ilerleme saniye cinsinden
+        if (a.ilerleme >= KUBBE_SURE) {
+          a.donuyor = false;
+          a.ilerleme = 0;
+          a.nesne.quaternion.identity();
+        } else {
+          a.nesne.quaternion.setFromAxisAngle(a.eksen, kubbeAcisi(a.ilerleme));
+        }
+      } else if (a.hareket === 'piramit') {
+        if (!a.donuyor) continue;
+        a.ilerleme += dt; // saniye; roketle aynı karede başlar
+        if (a.ilerleme >= FIRLATMA.sure) {
+          a.donuyor = false;
+          a.ilerleme = 0;
+          a.nesne.quaternion.identity();
+        } else {
+          a.nesne.quaternion.setFromAxisAngle(a.eksen, kapakAcisi(a.ilerleme));
+        }
+      } else if (a.hareket === 'roket') {
+        if (!a.donuyor) continue;
+        a.ilerleme += dt;
+        const bitti = a.ilerleme >= FIRLATMA.sure;
+        const d = roketDurumu(bitti ? 0 : a.ilerleme, a.yukselis);
+        a.nesne.position.copy(a.taban).addScaledVector(a.eksen, d.yukseklik);
+        if (d.titreme > 0) {
+          a.nesne.position.x += (Math.random() - 0.5) * 0.012 * d.titreme;
+          a.nesne.position.z += (Math.random() - 0.5) * 0.012 * d.titreme;
+        }
+        a.nesne.scale.setScalar(Math.max(1e-4, d.olcek));
+        // Alev ve duman lüleden (düğümün orijini) çıkar
+        this.roketEfekti?.besle(bitti ? null : a.nesne.position, d.alev, d.duman, d.yayilma);
+        if (bitti) {
+          a.donuyor = false;
+          a.ilerleme = 0;
+          a.nesne.scale.setScalar(1);
+        }
       } else if (a.donuyor) {
         a.ilerleme = Math.min(1, a.ilerleme + dt / PERGEL_SURE);
         if (a.ilerleme >= 1) {
@@ -1685,6 +1874,9 @@ export class AdaSahnesi extends EventTarget {
         }
       }
     }
+
+    // Roketin alevi ve dumanı: fırlatma bittikten sonra da kalan bulutlar solana dek güncellenir
+    this.roketEfekti?.guncelle(dt, t);
 
     // Etiketler
     if (this.etiketler.size) {
@@ -1762,6 +1954,8 @@ export class AdaSahnesi extends EventTarget {
     for (const a of bekleyen) a.bitti?.(true);
 
     kontrol?.dispose();
+    this.roketEfekti?.dispose();
+    this.roketEfekti = null;
 
     if (bilesim) {
       for (const gecis of bilesim.passes) gecis.dispose();

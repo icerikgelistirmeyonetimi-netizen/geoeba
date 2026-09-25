@@ -9,9 +9,14 @@ export function labelLayoutViewport(vp: ViewportTransform): ViewportTransform {
   return { ...vp, width: 0, height: 0, panX: 0, panY: 0, zoom: LABEL_LAYOUT_ZOOM };
 }
 
-/** Yalnız yerleşim aralıklarını gerçek ekran ölçeğine taşır; yazı ve kutu boyutları sabittir. */
+/** Yerleşim aralıklarını gerçek ekran ölçeğine taşır; yazı boyutundan bağımsızdır. */
 export function labelZoomScale(vp: ViewportTransform): number {
   return vp.zoom / LABEL_LAYOUT_ZOOM;
+}
+
+/** Yazılar uzaklaşırken şekille küçülür; normal boyun en fazla %5 üzerine çıkar. */
+export function labelFontScale(vp: ViewportTransform): number {
+  return Math.min(1.05, labelZoomScale(vp));
 }
 
 /** Sabit yerleşim pikseli (x = dünya x · 44, y = −dünya y · 44) → gerçek ekran pikseli. */

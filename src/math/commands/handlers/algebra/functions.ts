@@ -1,6 +1,6 @@
 import type { PointObject } from '@/types/math';
 import { extractVariableNames } from '@/math/parser';
-import { coefficientOfDetermination, fitPolynomial, polynomialToExpression } from '@/math/regression';
+import { coefficientOfDetermination, fitPolynomial, noktalardanTamGeciyor, polynomialToExpression } from '@/math/regression';
 import type { CommandHandler } from '../../types';
 import { type Clause, type VerbKind, fold, parseClause } from '../../text';
 import { type CommandScene, colorIn, fail, skip, trNum } from '../../scene';
@@ -236,10 +236,14 @@ export const polyfitHandler: CommandHandler = {
     'tüm noktalara 3. derece polinom uydur',
     'ABCD noktalarından geçen kübik polinomu bul',
     'A, B, C, D noktalarına en uygun parabolü uydur',
+    'seçili noktaları doğrusal fonksiyona dönüştür',
   ],
   match(c) {
     if (c.definition || c.assignment || WIDGET_NOUN.test(c.text)) return 0;
-    if (!/\bpolinom|\bregresyon|\buydur|\ben uygun (?:dogru|egri|parabol)|\bgecen (?:parabol|polinom|kubik|egri)/.test(c.text)) return 0;
+    // "noktaları doğrusal fonksiyona dönüştür", "A, B, C noktalarından doğrusal fonksiyon oluştur" da uydurmadır; noktalar
+    // anılmadan "doğrusal fonksiyon çiz" ise f(x) = x demektir (sözcüklü fonksiyon ailesi).
+    const noktalardanFonksiyon = /\bfonksiyon\w* donustur|\bdogrusal fonksiyon/.test(c.text) && (/\bnokta/.test(c.text) || c.labels.length >= 2);
+    if (!noktalardanFonksiyon && !/\bpolinom|\bregresyon|\buydur|\ben uygun (?:dogru|egri|parabol)|\bgecen (?:parabol|polinom|kubik|egri)/.test(c.text)) return 0;
     if (hasForeignEditVerb(c)) return 0;
     // Uydurma bir hesaplamadır; "2. derece polinom" içindeki "derece" açı ölçümü (measure.angle 56) sanılmasın.
     return 58;
@@ -275,14 +279,18 @@ export const polyfitHandler: CommandHandler = {
     const expression = polynomialToExpression(coefficients);
     const r2 = coefficientOfDetermination(coords, coefficients);
     const name = nextFunctionName(scene);
-    const { fn } = scene.addFunction(expression, { label: `${name}(x) = ${expression}`, color: colorIn(c) ?? '#db2777' });
+    // Fonksiyon rengi (pembe seçim rengiyle karışıyordu); sonuç seçilir ki Delete noktaları değil eğriyi silsin.
+    const { fn } = scene.addFunction(expression, { label: `${name}(x) = ${expression}`, color: colorIn(c) });
+    scene.setFocus([fn.id]);
 
     if (pending) {
       const index = scene.messages.lastIndexOf(pending.message);
       if (index >= 0) scene.messages.splice(index, 1);
     }
     const names = points.map(p => p.label).join(', ');
-    scene.say(`${names} noktalarına ${degree}. derece polinom uyduruldu: ${functionName(fn)} = ${expression} (R² = ${trNum(r2, 4)}${r2 > 0.999 ? ', noktalardan tam geçiyor' : ''}).`
+    const ne = degree === 1 ? 'en uygun doğru (doğrusal regresyon)' : `${degree}. derece polinom`;
+    // "Tam geçiyor" R²'ye göre değil artıklara göre: R² = 0,9994 olan doğru noktaların hepsinden geçmez.
+    scene.say(`${names} noktalarına ${ne} uyduruldu: ${functionName(fn)} = ${expression} (R² = ${trNum(r2, 4)}${noktalardanTamGeciyor(coords, coefficients) ? ', noktalardan tam geçiyor' : ''}).`
       + (written === undefined ? ` Derece yazılmadığı için ${degree} alındı.` : ''));
   },
 };

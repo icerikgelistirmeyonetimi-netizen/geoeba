@@ -13,6 +13,9 @@ import { TOOL_GROUPS } from './toolDefinitions';
 import { isAnyModalOpen, registerModalOpen, registerModalClose } from '@/components/ui/modalState';
 import { StylePanel } from './StylePanel';
 import { EsitUzunluklarSimgesi } from './EsitlikSimgeleri';
+import { SinifDuzeyiMenusu } from './SinifDuzeyiMenusu';
+import { aracGorunurMu, sinifEtiketi } from './sinifDuzeyleri';
+import { useSinifDuzeyi } from '@/hooks/useSinifDuzeyi';
 import {
   FileText,
   FolderOpen,
@@ -78,7 +81,12 @@ export interface WorkspaceMenuBarProps {
   onResetView?: () => void;
 }
 
-type MenuKey = 'dosya' | 'duzenle' | 'gorunum' | 'araclar' | 'ekle' | 'ayarlar' | 'yardim' | null;
+type MenuKey = 'dosya' | 'duzenle' | 'gorunum' | 'araclar' | 'ekle' | 'ayarlar' | 'yardim' | 'sinif' | null;
+
+/** Menüdeki araç kısayolu ipucu: harf elle yazılmaz, klavyenin gerçek bağından (TOOL_SHORTCUTS) okunur. */
+function AracKisayolu({ arac }: { arac: ToolMode }) {
+  return <span className="text-[10px] text-muted-foreground whitespace-nowrap">{TOOL_SHORTCUTS[arac]}</span>;
+}
 
 export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const [activeMenu, setActiveMenu] = useState<MenuKey>(null);
@@ -163,6 +171,9 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const hasSelection = studioDimension === '3D' ? !!sceneBridge?.selectedIds.length : selectedObjectIds.length > 0;
   // Silme her iki görünümde de seçili 2B nesneleri ve 3B cisimleri birlikte kapsar (deleteSelection)
   const hasDeletable = !!sceneBridge?.selectedIds.length || selectedObjectIds.length > 0;
+  // Araçlar menüsü de araç paneli gibi seçili sınıfın araçlarını gösterir (Sınıf menüsü)
+  const [sinifDuzeyi] = useSinifDuzeyi();
+  const aracMenudeGorunur = (arac: ToolMode) => aracGorunurMu(sinifDuzeyi, arac);
 
   // Menü dışına tıklanınca kapat
   useEffect(() => {
@@ -725,7 +736,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
               Araçlar
             </button>
             {activeMenu === 'araclar' && (
-              <div className="absolute top-full left-0 mt-1 w-52 bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
+              <div className="absolute top-full left-0 mt-1 w-56 bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
                 <button
                   onClick={() => {
                     closeMenu();
@@ -737,106 +748,131 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     <MousePointer className="w-3.5 h-3.5 text-ada-deniz" />
                     <span>Seçim</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">V</span>
+                  <AracKisayolu arac="select" />
                 </button>
 
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    onSelectTool('point');
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Dot className="w-3.5 h-3.5 text-ada-deniz" />
-                    <span>Nokta</span>
+                {/* Seçili sınıfın panelinde olmayan araçlar burada da gösterilmez (Seçim her sınıfta var) */}
+                {aracMenudeGorunur('point') && (
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      onSelectTool('point');
+                    }}
+                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Dot className="w-3.5 h-3.5 text-ada-deniz" />
+                      <span>Nokta</span>
+                    </div>
+                    <AracKisayolu arac="point" />
+                  </button>
+                )}
+
+                {aracMenudeGorunur('segment') && (
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      onSelectTool('segment');
+                    }}
+                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Minus className="w-3.5 h-3.5 text-ada-deniz" />
+                      <span>Doğru / Parça</span>
+                    </div>
+                    <AracKisayolu arac="segment" />
+                  </button>
+                )}
+
+                {aracMenudeGorunur('circle') && (
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      onSelectTool('circle');
+                    }}
+                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Circle className="w-3.5 h-3.5 text-ada-lavanta" />
+                      <span>Çember</span>
+                    </div>
+                    <AracKisayolu arac="circle" />
+                  </button>
+                )}
+
+                {aracMenudeGorunur('polygon') && (
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      onSelectTool('polygon');
+                    }}
+                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Shapes className="w-3.5 h-3.5 text-ada-vurgu" />
+                      <span>Çokgen</span>
+                    </div>
+                    <AracKisayolu arac="polygon" />
+                  </button>
+                )}
+
+                {(['measure_distance', 'reflect', 'perpendicular'] as const).some(aracMenudeGorunur) && (
+                  <div className="my-1 border-t border-border/60" />
+                )}
+
+                {aracMenudeGorunur('measure_distance') && (
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      onSelectTool('measure_distance');
+                    }}
+                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Ruler className="w-3.5 h-3.5 text-ada-altin" />
+                      <span>Ölçüm (Uzunluk / Açı)</span>
+                    </div>
+                    <AracKisayolu arac="measure_distance" />
+                  </button>
+                )}
+
+                {aracMenudeGorunur('reflect') && (
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      onSelectTool('reflect');
+                    }}
+                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <FlipHorizontal className="w-3.5 h-3.5 text-ada-mercan" />
+                      <span>Dönüşüm (Simetri / Öteleme)</span>
+                    </div>
+                    <AracKisayolu arac="reflect" />
+                  </button>
+                )}
+
+                {aracMenudeGorunur('perpendicular') && (
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      onSelectTool('perpendicular');
+                    }}
+                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Wrench className="w-3.5 h-3.5 text-ada-deniz" />
+                      <span>Geometri Araçları (Dikme/Teğet)</span>
+                    </div>
+                    <AracKisayolu arac="perpendicular" />
+                  </button>
+                )}
+
+                {sinifDuzeyi !== 'tum' && (
+                  <div className="mx-3 mt-1 pt-1.5 border-t border-border/60 text-[11px] leading-snug text-muted-foreground">
+                    {sinifEtiketi(sinifDuzeyi)} araçları gösteriliyor. Değiştirmek için Sınıf menüsü.
                   </div>
-                  <span className="text-[10px] text-muted-foreground">P</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    onSelectTool('segment');
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Minus className="w-3.5 h-3.5 text-ada-deniz" />
-                    <span>Doğru / Parça</span>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">S</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    onSelectTool('circle');
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Circle className="w-3.5 h-3.5 text-ada-lavanta" />
-                    <span>Çember</span>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">C</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    onSelectTool('polygon');
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Shapes className="w-3.5 h-3.5 text-ada-vurgu" />
-                    <span>Çokgen</span>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">G</span>
-                </button>
-
-                <div className="my-1 border-t border-border/60" />
-
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    onSelectTool('measure_distance');
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Ruler className="w-3.5 h-3.5 text-ada-altin" />
-                    <span>Ölçüm (Uzunluk / Açı)</span>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground">M</span>
-                </button>
-
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    onSelectTool('reflect');
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <FlipHorizontal className="w-3.5 h-3.5 text-ada-mercan" />
-                    <span>Dönüşüm (Simetri / Öteleme)</span>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    onSelectTool('perpendicular');
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Wrench className="w-3.5 h-3.5 text-ada-deniz" />
-                    <span>Geometri Araçları (Dikme/Teğet)</span>
-                  </div>
-                </button>
+                )}
               </div>
             )}
           </div>
@@ -867,7 +903,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     <Type className="w-3.5 h-3.5 text-ada-murekkep-2 dark:text-ada-kum" />
                     <span>Metin</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">T</span>
+                  <AracKisayolu arac="text" />
                 </button>
 
                 <button
@@ -894,7 +930,8 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     <FunctionSquare className="w-3.5 h-3.5 text-ada-deniz-koyu dark:text-ada-vurgu" />
                     <span>Denklem / Fonksiyon</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">F</span>
+                  {/* Fonksiyon aracının kısayolu da bu pencereyi açar (activateTool('function')) */}
+                  <AracKisayolu arac="function" />
                 </button>
 
                 <button
@@ -1175,6 +1212,15 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
               </div>
             )}
           </div>
+
+          {/* 8. SINIF DÜZEYİ MENÜSÜ: araç panelini seçilen sınıfın kazanımlarına göre daraltır. En sonda durur:
+              kısa etiketi ve rozeti dar pencerede diğer menüleri itmez. */}
+          <SinifDuzeyiMenusu
+            acik={activeMenu === 'sinif'}
+            onBaslikTikla={() => handleMenuHeaderClick('sinif')}
+            onBaslikUzerine={() => handleMenuHeaderHover('sinif')}
+            onKapat={closeMenu}
+          />
           {/* Sağ üstteki hızlı işlem ve tema kapsülleri kullanıcı isteğiyle kaldırıldı: geri al / yinele tuvalin
               sol üstünde, sığdırma Görünüm menüsünde ve tuvalin sağ tık menüsünde, temizleme Dosya > Yeni'de;
               açık/koyu tema düğmesi masaüstü görev çubuğunun sağ köşesinde (Masaustu.tsx). */}
@@ -1242,7 +1288,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   <strong className="text-foreground">GeoEBA</strong>, Millî Eğitim Bakanlığı müfredatına tam uyumlu; ilkokul, ortaokul ve lise kademelerinde geometri, matematik ve 3D uzamsal düşünme becerilerini geliştirmek amacıyla tasarlanmış yeni nesil etkileşimli çalışma ortamıdır.
                 </p>
                 <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 text-foreground font-medium">
-                  🚀 Sürüm: 1.0.0 (Etkileşimli 2D + 3D Hibrit Çizim Stüdyosu)
+                  Sürüm: 1.0.0 (Etkileşimli 2D + 3D Hibrit Çizim Stüdyosu)
                 </div>
                 <p>
                   Tüm çizim araçları, dinamik fonksiyon grafikleyicisi, çokgen ağırlık merkezleri, 3D katı cisim açınımları ve EBA ders içerikleriyle entegre çalışır.

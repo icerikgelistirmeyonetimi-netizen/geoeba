@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Point2D, ViewportTransform } from '@/types/math';
 import { worldToScreen } from '../coordinates';
-import { LABEL_LAYOUT_ZOOM, labelLayoutViewport, labelZoomScale, projectLabelPoint, unprojectLabelPoint } from '../labelViewport';
+import { LABEL_LAYOUT_ZOOM, labelFontScale, labelLayoutViewport, labelZoomScale, projectLabelPoint, unprojectLabelPoint } from '../labelViewport';
 
 const viewport: ViewportTransform = {
   zoom: 44, width: 1000, height: 800, panX: 17, panY: -23,
@@ -26,7 +26,7 @@ describe('ölçüm etiketleri için sabit yerleşim görünümü', () => {
 
   it.each([
     [11, 0.25], [22, 0.5], [44, 1], [66, 1.5], [132, 3],
-  ])('zoom %i için yazı ve kutu ölçeği %s olur', (zoom, expected) => {
+  ])('zoom %i için yerleşim aralığı ölçeği %s olur', (zoom, expected) => {
     expect(labelZoomScale({ ...viewport, zoom })).toBe(expected);
   });
 
@@ -67,7 +67,7 @@ describe('ölçüm etiketleri için sabit yerleşim görünümü', () => {
     close(projectLabelPoint(canonical, viewport), startScreen);
   });
 
-  it('etiket aralıkları yazı ölçeğiyle birlikte büyür; pan ve tuval boyutu aralığı değiştirmez', () => {
+  it('etiket aralıkları geometriyle birlikte büyür; pan ve tuval boyutu aralığı değiştirmez', () => {
     const a = { x: -110, y: 77 };
     const b = { x: -88, y: 95 };
     for (const zoom of [11, 22, 44, 132]) {
@@ -76,5 +76,30 @@ describe('ölçüm etiketleri için sabit yerleşim görünümü', () => {
       const pb = projectLabelPoint(b, vp);
       close({ x: pb.x - pa.x, y: pb.y - pa.y }, { x: 22 * labelZoomScale(vp), y: 18 * labelZoomScale(vp) });
     }
+  });
+});
+
+describe('etiket yazılarının dar büyüme aralığı', () => {
+  it.each([[5, 5 / 44], [11, 0.25], [22, 0.5], [44, 1], [45.1, 1.025], [46.2, 1.05], [88, 1.05], [300, 1.05]])(
+    'zoom %s için yazı ölçeği %s olur', (zoom, expected) => {
+      expect(labelFontScale({ ...viewport, zoom })).toBeCloseTo(expected, 12);
+    },
+  );
+
+  it('uzaklaştırınca yazı yüksekliği ve yan yana dizilen etiket aralığı aynı oranda küçülür', () => {
+    const a = { x: 100, y: 100 };
+    const b = { x: 100, y: 124 };
+    for (const zoom of [5, 11, 22, 44]) {
+      const vp = { ...viewport, zoom };
+      const gap = projectLabelPoint(b, vp).y - projectLabelPoint(a, vp).y;
+      const height = 20 * labelFontScale(vp);
+      expect(gap / height).toBeCloseTo(1.2, 10);
+    }
+  });
+
+  it('yazı büyümesi sınırda süreklidir', () => {
+    const zoom = LABEL_LAYOUT_ZOOM * 1.05;
+    expect(labelFontScale({ ...viewport, zoom: zoom - 1e-8 })).toBeCloseTo(1.05, 8);
+    expect(labelFontScale({ ...viewport, zoom: zoom + 1e-8 })).toBe(1.05);
   });
 });

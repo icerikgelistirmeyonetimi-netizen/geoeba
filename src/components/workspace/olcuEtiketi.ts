@@ -117,3 +117,33 @@ export function yayEtiketiYerlesimi(
 export function etiketUzaklasmisMi(kaymaX: number, kaymaY: number, esik: number = ETIKET_UZAK_ESIK): boolean {
   return Math.hypot(kaymaX, kaymaY) > esik;
 }
+
+/** Doğrusal ölçü etiketinin EKRAN çerçevesi: a→b birim yönü, sol normali, boyu ve orta noktası (px). */
+export interface CizgiCercevesi { ex: number; ey: number; nx: number; ny: number; boy: number; ox: number; oy: number }
+
+export function cizgiCercevesi(a: EtiketNoktasi, b: EtiketNoktasi): CizgiCercevesi | null {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const boy = Math.hypot(dx, dy);
+  if (!(boy > 1e-6)) return null;
+  const ex = dx / boy, ey = dy / boy;
+  return { ex, ey, nx: -ey, ny: ex, boy, ox: (a.x + b.x) / 2, oy: (a.y + b.y) / 2 };
+}
+
+/**
+ * Etiket MERKEZİNİN kenar eksenindeki yeri (ekran px → eksen): `boyunca` orta noktadan kenar boyunun
+ * kesri, `dik` ÇİZGİNİN KENDİSİNDEN işaretli uzaklık (dünya birimi, a→b'nin sol normali yönünde).
+ * Doğal konuma değil çizgiye göre ölçülür: parça dikeyden geçerken etiketin doğal tarafı değişse de
+ * elle konmuş etiket çizgiye göre aynı yerde kalır (2026-09-25: "dik açıya kaydırdığımda uzunluk
+ * ölçümünü uzağa fırlatıyor").
+ */
+export function kenarEksenine(p: EtiketNoktasi, c: CizgiCercevesi, zoom: number): { boyunca: number; dik: number } {
+  const rx = p.x - c.ox, ry = p.y - c.oy;
+  return { boyunca: (rx * c.ex + ry * c.ey) / c.boy, dik: (rx * c.nx + ry * c.ny) / (zoom || 1) };
+}
+
+/** Kenar ekseni → etiket merkezinin ekran yeri: kenar kısalıp uzadıkça aynı ORANDA kayar, çizgiye uzaklığı korur. */
+export function kenarEkseninden(o: { boyunca: number; dik: number }, c: CizgiCercevesi, zoom: number): EtiketNoktasi {
+  const t = o.boyunca * c.boy;
+  const n = o.dik * (zoom || 1);
+  return { x: c.ox + c.ex * t + c.nx * n, y: c.oy + c.ey * t + c.ny * n };
+}

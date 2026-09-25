@@ -1,6 +1,6 @@
 /**
  * EŞİTLİK İŞARETLERİ (ÇENTİKLER) — ders kitabı eşlik gösterimi: eşit uzunluktaki doğru parçaları / kenarlar ve
- * eş yaylar ortalarından geçen aynı sayıda kısa çizgiyle (|, ||, |||, ||||) işaretlenir.
+ * eş yaylar ortalarından geçen aynı sayıda kısa çizgiyle (birden sekize kadar) işaretlenir.
  *
  * Saf modül: çizim (Canvas) yalnızca buradan dönen listeyi çizer; komutlar ve sağ tık menüsü de aynı sonucu okur.
  *
@@ -12,11 +12,11 @@
  *   yuvarlamasını (bkz. YUVARLAMA_PAYI) karşılar; işaret "eştir" iddiasıdır, ekranda ikisi de "10,39" yazan
  *   10,39 ile 10,388 işaretlenmez.
  * - Aynı çizgi tek öğedir: parçanın üzerine düşen çokgen kenarı, iki çokgenin ortak kenarı (köşegen) "kendine eşit" sayılmaz.
- * - Bir birleşik gruptaki farklı eşitlik grupları 1, 2, 3, 4 çizgi alır; sıra nesnelerin sahnedeki ilk görünüşüne göredir
+ * - Bir birleşik gruptaki farklı eşitlik grupları 1–8 çizgi alır; sıra nesnelerin sahnedeki ilk görünüşüne göredir
  *   (sürükleme sırayı değiştirmez, çizgi sayıları kararlı kalır). Numaralama alanı: sınır kutuları çakışan/değen şekiller
  *   (dokunuyor gibi görünen ayrı şekillerde aynı sayı eşitsiz kenarlara verilmesin).
  * - Açı kolları (armOfAngleId) otomatik gruplamaya girmez (kolların eşit boyu yalnız çizim varsayılanıdır); elle işaretlenebilir.
- * - ELLE işaret (parça/yay: equalityMark, çokgen kenarı: edgeEqualityMarks) otomatiği ezer: 0 = işaretsiz, 1–4 = çizgi sayısı.
+ * - ELLE işaret (parça/yay: equalityMark, çokgen kenarı: edgeEqualityMarks) otomatiği ezer: 0 = işaretsiz, 1–8 = çizgi sayısı.
  *   Elle konan sayılar, aynı numaralama alanındaki otomatik gruplara verilmez.
  */
 import type { MathObject, Point2D, PointObject, PolygonObject } from '@/types/math';
@@ -48,18 +48,20 @@ export const ACI_PAYI = 2e-4;
  * eşlik iddiası değildir ve arayüzün 4 basamaklı yuvarladığı noktalar (öteleme kopyaları) da değmiş sayılmalı.
  */
 export const TEMAS_MUTLAK = 1e-4;
+/** Menü, komutlar ve otomatik numaralama aynı çizgi sayılarını kullanır. */
+export const ESITLIK_CIZGI_SAYILARI = [1, 2, 3, 4, 5, 6, 7, 8] as const;
 /** En çok çizgi sayısı. */
-export const ESITLIK_EN_COK = 4;
+export const ESITLIK_EN_COK = ESITLIK_CIZGI_SAYILARI.length;
 /** Bundan kalabalık otomatik grup işaretlenmez (döşemeler, çok kenarlı düzgün çokgenler); elle işaret yine konabilir. */
 export const OTOMATIK_GRUP_EN_COK = 12;
-export const CIZGI_ADLARI = ['işaretsiz', 'tek çizgi', 'iki çizgi', 'üç çizgi', 'dört çizgi'] as const;
+export const CIZGI_ADLARI = ['işaretsiz', 'tek çizgi', 'iki çizgi', 'üç çizgi', 'dört çizgi', 'beş çizgi', 'altı çizgi', 'yedi çizgi', 'sekiz çizgi'] as const;
 
 // ------------------------------------------------------------------ türler
-export type EsitlikTuru = 'duz' | 'yay';
-export type CizgiSayisi = 1 | 2 | 3 | 4;
+export type EsitlikTuru = 'duz' | 'yay' | 'aci';
+export type CizgiSayisi = (typeof ESITLIK_CIZGI_SAYILARI)[number];
 
 interface OgeGeometrisi {
-  /** Temsilci öğenin anahtarı: 'seg:<id>', 'edge:<çokgenId>:<i>', 'arc:<id>' */
+  /** Temsilci öğenin anahtarı: 'seg:<id>', 'edge:<çokgenId>:<i>', 'arc:<id>', 'ang:<açıId>' */
   anahtar: string;
   tur: EsitlikTuru;
   /** Çizgi rengini ve seçim rengini veren nesne */
@@ -98,7 +100,7 @@ export interface EsitlikOgesi extends OgeGeometrisi {
   bilesen: string;
   /** Numaralama alanı kimliği */
   alan: string;
-  /** Etkin elle değer (0–4); yoksa otomatik */
+  /** Etkin elle değer (0–8); yoksa otomatik */
   elle?: number;
   /** Tüm üyeleri açı kolu: otomatik gruplamaya girmez */
   aciKolu: boolean;
@@ -129,8 +131,8 @@ export interface EsitlikSonucu {
   isaretliAnahtarlar: Set<string>;
   /** Temsilci anahtar → çizilen işaret */
   isaretHaritasi: Map<string, EsitlikIsareti>;
-  /** Sahnede elle kullanılan çizgi sayıları (1–4), türe göre */
-  elleSayilar: { duz: Set<number>; yay: Set<number> };
+  /** Sahnede elle kullanılan çizgi sayıları (1–8), türe göre */
+  elleSayilar: { duz: Set<number>; yay: Set<number>; aci: Set<number> };
   otomatik: boolean;
   /**
    * İşaretlenmeden bırakılan otomatik grup sayısı: üyesi OTOMATIK_GRUP_EN_COK'ten çok olanlar (döşeme, çok
@@ -143,11 +145,13 @@ export interface EsitlikSonucu {
 export const parcaAnahtari = (id: string) => `seg:${id}`;
 export const kenarAnahtari = (cokgenId: string, i: number) => `edge:${cokgenId}:${i}`;
 export const yayAnahtari = (id: string) => `arc:${id}`;
+export const aciAnahtari = (id: string) => `ang:${id}`;
 
-/** 'seg:id' | 'edge:id:i' | 'arc:id' anahtarını çözer. */
-export function anahtarCoz(anahtar: string): { tur: 'seg' | 'edge' | 'arc'; id: string; kenar?: number } | null {
+/** 'seg:id' | 'edge:id:i' | 'arc:id' | 'ang:id' anahtarını çözer. */
+export function anahtarCoz(anahtar: string): { tur: 'seg' | 'edge' | 'arc' | 'ang'; id: string; kenar?: number } | null {
   if (anahtar.startsWith('seg:')) return anahtar.length > 4 ? { tur: 'seg', id: anahtar.slice(4) } : null;
   if (anahtar.startsWith('arc:')) return anahtar.length > 4 ? { tur: 'arc', id: anahtar.slice(4) } : null;
+  if (anahtar.startsWith('ang:')) return anahtar.length > 4 ? { tur: 'ang', id: anahtar.slice(4) } : null;
   if (anahtar.startsWith('edge:')) {
     const son = anahtar.lastIndexOf(':');
     const id = anahtar.slice(5, son);
@@ -233,8 +237,25 @@ interface HamOge extends OgeGeometrisi {
  * Sahnedeki eşitlik işaretlerini hesaplar. `otomatik: false` iken yalnız elle konan işaretler döner.
  * Bozuk başvurularda hata atmaz (eksik noktalı öğe atlanır).
  */
-export function esitlikIsaretleri(objects: readonly MathObject[], secenek: { otomatik?: boolean } = {}): EsitlikSonucu {
+export function esitlikIsaretleri(
+  objects: readonly MathObject[],
+  secenek: {
+    otomatik?: boolean;
+    /**
+     * TAM SAYI yazımı açık: eşitlik GÖRÜNEN tam sayılara göre kurulur (kullanıcı, 2026-09-25: "eşit uzun
+     * görünse de eşit saymıyor virgüllü olanı"). 6,08 ile 5,83 ekranda ikisi de "6 br" yazıldığı için eş
+     * sayılır; açılar tam dereceye, yaylar tam yarıçap ve tam dereceye göre karşılaştırılır.
+     */
+    tamSayi?: boolean;
+  } = {},
+): EsitlikSonucu {
   const otomatik = secenek.otomatik !== false;
+  const tamSayi = secenek.tamSayi === true;
+  const DERECE = 180 / Math.PI;
+  /** Tam sayı yazımında görünen değer: uzunluk tam birim, açı tam derece */
+  const tamUzunluk = (x: number) => Math.round(x);
+  const tamDerece = (radyan: number) => Math.round(Math.abs(radyan) * DERECE);
+  const tamEsit = (a: number, b: number) => a === b;
   // 0) dizin
   const byId = new Map<string, MathObject>();
   const sira = new Map<string, number>();
@@ -517,8 +538,41 @@ export function esitlikIsaretleri(objects: readonly MathObject[], secenek: { oto
     }
   }
 
+  // 6.5) AÇI öğeleri: aynı ölçüdeki açılar eş işaret alır (kullanıcı isteği, 2026-09-25).
+  // Açının çizilen yay yarıçapı EKRAN sabitidir (Canvas: 22·etiketOlcegi px), dünya birimi değil; bu yüzden
+  // `yaricap` verilmez ve çizim katmanı yarıçapı kendisi geçirir (esitlikCizimi.centikYolu, aciYaricapiPx).
+  // Açı bir BAĞLAYICI değildir: ayrı şekilleri birleştirmez, köşesinin bileşenine aittir.
+  const aciListesi: HamOge[] = [];
+  for (const o of objects) {
+    if (!o || o.type !== 'angle' || !gorunur(o)) continue;
+    const p1 = pts.get(o.point1Id), kose = pts.get(o.vertexPointId), p3 = pts.get(o.point3Id);
+    if (!p1 || !kose || !p3) continue;
+    const a1 = Math.atan2(p1.y - kose.y, p1.x - kose.x);
+    const a2 = Math.atan2(p3.y - kose.y, p3.x - kose.x);
+    if (!sonlu(a1) || !sonlu(a2)) continue;
+    if (Math.hypot(p1.x - kose.x, p1.y - kose.y) < 1e-9 || Math.hypot(p3.x - kose.x, p3.y - kose.y) < 1e-9) continue;
+    let d = a2 - a1;
+    while (d <= -Math.PI) d += IKI_PI;
+    while (d > Math.PI) d -= IKI_PI;
+    const tarama = o.reflex ? d - Math.sign(d || 1) * IKI_PI : d;
+    if (!(Math.abs(tarama) > 1e-9)) continue;
+    const anahtar = aciAnahtari(o.id);
+    const s2 = (sira.get(o.id) ?? 0) * 4096;
+    const uye = { anahtar, sira: s2, id: o.id, kol: false, segment: false };
+    const tol = temasToleransi(kose);
+    // Aynı köşede aynı kolları tarayan ikinci bir açı nesnesi TEK öğedir (iki kez işaretlenmesin)
+    const ayni = aciListesi.find((y) => Math.abs(y.merkez!.x - kose.x) <= tol && Math.abs(y.merkez!.y - kose.y) <= tol
+      && aciFarki(y.baslangic!, a1) <= ACI_PAYI && Math.abs(Math.abs(y.tarama!) - Math.abs(tarama)) <= ACI_PAYI);
+    if (ayni) { ayni.uyeler.push(uye); ayni.sira = Math.min(ayni.sira, s2); continue; }
+    aciListesi.push({
+      anahtar, tur: 'aci', sahipId: o.id, renk: o.color || '#f59e0b', kalinlik: 2, sira: s2,
+      merkez: { x: kose.x, y: kose.y }, baslangic: a1, tarama,
+      uyeler: [uye], uzunluk: Math.abs(tarama), bilesenDugumu: C(o.vertexPointId),
+    });
+  }
+
   // 7) bileşenler, numaralama alanları
-  const hamOgeler: HamOge[] = [...duzAileleri.values(), ...yayListesi];
+  const hamOgeler: HamOge[] = [...duzAileleri.values(), ...yayListesi, ...aciListesi];
   const kutular = new Map<string, { x0: number; x1: number; y0: number; y1: number }>();
   const kutuyaEkle = (kok: string, x: number, y: number, r = 0) => {
     if (!sonlu(x) || !sonlu(y)) return;
@@ -590,13 +644,13 @@ export function esitlikIsaretleri(objects: readonly MathObject[], secenek: { oto
       a: o.a, b: o.b, merkez: o.merkez, yaricap: o.yaricap, baslangic: o.baslangic, tarama: o.tarama, sayi, kaynak,
     });
   };
-  const elleSayilar = { duz: new Set<number>(), yay: new Set<number>() };
-  const alanElle = new Map<string, { duz: Set<number>; yay: Set<number> }>();
+  const elleSayilar = { duz: new Set<number>(), yay: new Set<number>(), aci: new Set<number>() };
+  const alanElle = new Map<string, { duz: Set<number>; yay: Set<number>; aci: Set<number> }>();
   for (const o of ogeler.values()) {
     if (o.elle === undefined || o.elle === 0) continue;
     isaretle(o, o.elle as CizgiSayisi, 'elle');
     elleSayilar[o.tur].add(o.elle);
-    const k = alanElle.get(o.alan) ?? { duz: new Set<number>(), yay: new Set<number>() };
+    const k = alanElle.get(o.alan) ?? { duz: new Set<number>(), yay: new Set<number>(), aci: new Set<number>() };
     k[o.tur].add(o.elle);
     alanElle.set(o.alan, k);
   }
@@ -626,9 +680,18 @@ export function esitlikIsaretleri(objects: readonly MathObject[], secenek: { oto
     for (const liste of bilesenler.values()) {
       if (liste.length < 2) continue;
       const tur = liste[0].tur;
-      const kumeler = tur === 'duz'
-        ? kumele(liste, (o) => o.uzunluk, uzunlukEsit)
-        : kumele(liste, (o) => o.yaricap!, uzunlukEsit).flatMap((k) => kumele(k, (o) => o.tarama!, aciEsit));
+      const kumeler = tamSayi
+        // Tam sayı yazımı: ekranda aynı sayıyı gösterenler eştir
+        ? (tur === 'duz'
+          ? kumele(liste, (o) => tamUzunluk(o.uzunluk), tamEsit)
+          : tur === 'aci'
+            ? kumele(liste, (o) => tamDerece(o.tarama!), tamEsit)
+            : kumele(liste, (o) => tamUzunluk(o.yaricap!), tamEsit).flatMap((k) => kumele(k, (o) => tamDerece(o.tarama!), tamEsit)))
+        : tur === 'duz'
+          ? kumele(liste, (o) => o.uzunluk, uzunlukEsit)
+          : tur === 'aci'
+            ? kumele(liste, (o) => Math.abs(o.tarama!), aciEsit)
+            : kumele(liste, (o) => o.yaricap!, uzunlukEsit).flatMap((k) => kumele(k, (o) => o.tarama!, aciEsit));
       for (const k of kumeler) {
         if (k.length < 2) continue;
         if (k.length > OTOMATIK_GRUP_EN_COK) { atlanan++; continue; }
@@ -643,9 +706,17 @@ export function esitlikIsaretleri(objects: readonly MathObject[], secenek: { oto
      * üst üste binen iki eş kare "4 ≠ 4" dememeli. Ölçüsü farklı gruplar yine ayrı sayı alır.
      */
     const alanVerilen = new Map<string, { oge: EsitlikOgesi; sayi: number }[]>();
-    const ayniOlcu = (a: EsitlikOgesi, b: EsitlikOgesi) => (a.tur === 'duz'
-      ? uzunlukEsit(a.uzunluk, b.uzunluk)
-      : uzunlukEsit(a.yaricap ?? 0, b.yaricap ?? 0) && aciEsit(a.tarama ?? 0, b.tarama ?? 0));
+    const ayniOlcu = (a: EsitlikOgesi, b: EsitlikOgesi) => (tamSayi
+      ? (a.tur === 'duz'
+        ? tamUzunluk(a.uzunluk) === tamUzunluk(b.uzunluk)
+        : a.tur === 'aci'
+          ? tamDerece(a.tarama ?? 0) === tamDerece(b.tarama ?? 0)
+          : tamUzunluk(a.yaricap ?? 0) === tamUzunluk(b.yaricap ?? 0) && tamDerece(a.tarama ?? 0) === tamDerece(b.tarama ?? 0))
+      : a.tur === 'duz'
+        ? uzunlukEsit(a.uzunluk, b.uzunluk)
+        : a.tur === 'aci'
+          ? aciEsit(Math.abs(a.tarama ?? 0), Math.abs(b.tarama ?? 0))
+          : uzunlukEsit(a.yaricap ?? 0, b.yaricap ?? 0) && aciEsit(a.tarama ?? 0, b.tarama ?? 0));
     for (const g of adaylar) {
       const anahtar = `${g.tur}|${g.alan}`;
       const verilen = alanVerilen.get(anahtar) ?? [];
@@ -654,7 +725,7 @@ export function esitlikIsaretleri(objects: readonly MathObject[], secenek: { oto
         let bos = alanSayac.get(anahtar);
         if (!bos) {
           const ayrilmis = alanElle.get(g.alan)?.[g.tur];
-          bos = [1, 2, 3, 4].filter((n) => !ayrilmis?.has(n));
+          bos = ESITLIK_CIZGI_SAYILARI.filter((n) => !ayrilmis?.has(n));
           alanSayac.set(anahtar, bos);
         }
         sayi = bos.shift();
@@ -701,7 +772,7 @@ export function esitlikHedefleri(objects: readonly MathObject[], aId: string, bI
   return { duz, yay };
 }
 
-/** Anahtarın etkin elle değeri (0–4 ya da otomatik için undefined) ve şu an çizilen çizgi sayısı. */
+/** Anahtarın etkin elle değeri (0–8 ya da otomatik için undefined) ve şu an çizilen çizgi sayısı. */
 export function etkinEsitlik(sonuc: EsitlikSonucu, anahtar: string): { elle?: number; sayi?: CizgiSayisi; kaynak?: 'otomatik' | 'elle'; temsilci: string } {
   const t = sonuc.temsilci.get(anahtar) ?? anahtar;
   const m = sonuc.isaretHaritasi.get(t);
@@ -709,7 +780,7 @@ export function etkinEsitlik(sonuc: EsitlikSonucu, anahtar: string): { elle?: nu
 }
 
 /**
- * Elle bir çizgi sayısı (1–4) verilirken birlikte işaretlenecek anahtarlar: hedef şu an bir OTOMATİK grubun
+ * Elle bir çizgi sayısı (1–8) verilirken birlikte işaretlenecek anahtarlar: hedef şu an bir OTOMATİK grubun
  * üyesiyse grubun TAMAMI, değilse yalnız hedef. Tek bir kenara elle işaret koymak, eşit olan eşini çıplak
  * bırakmasın (ikizkenar üçgende bir kola "iki çizgi" demek öbür kolun çentiğini silmesin).
  * "İşaretsiz" (0) ve "Otomatik" için kullanılmaz: orada yalnız hedef değişir, kalan üyeler gruplanmayı sürdürür.
@@ -735,8 +806,8 @@ export function sonrakiEsitlikSayisi(sonuc: EsitlikSonucu, tur: EsitlikTuru, ana
     if (g.tur !== tur || !alanlar.has(g.alan) || g.anahtarlar.some((a) => hedefler.has(a))) continue;
     kullanilan.add(g.sayi);
   }
-  for (let k = 1; k <= ESITLIK_EN_COK; k++) if (!kullanilan.has(k)) return k as CizgiSayisi;
-  for (let k = 1; k <= ESITLIK_EN_COK; k++) if (!elle.has(k)) return k as CizgiSayisi;
+  for (const k of ESITLIK_CIZGI_SAYILARI) if (!kullanilan.has(k)) return k;
+  for (const k of ESITLIK_CIZGI_SAYILARI) if (!elle.has(k)) return k;
   return null;
 }
 
@@ -829,6 +900,7 @@ export function esitlikOgesiAdi(objects: readonly MathObject[], anahtar: string)
     const n = o.pointIds.length;
     return `[${ad(o.pointIds[c.kenar!])}${ad(o.pointIds[(c.kenar! + 1) % n])}]`;
   }
+  if (c.tur === 'ang' && o.type === 'angle') return `${ad(o.point1Id)}${ad(o.vertexPointId)}${ad(o.point3Id)} Açısı`;
   if (o.type === 'measurement') return `${ad(o.pointIds?.[0])}${ad(o.pointIds?.[1])} Yayı`;
   return o.label || anahtar;
 }

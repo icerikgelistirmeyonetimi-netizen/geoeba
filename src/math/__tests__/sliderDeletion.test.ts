@@ -21,6 +21,18 @@ const expectPosition = (actual: PointObject, expected: PointObject) => {
 };
 
 describe('kaydırıcıyı silerken çizimi koruma', () => {
+  it('görsel ölçü hedefi şekli silerken kaydırıcıyı silmez; bağı çözünce yalnız eski adı temizler', () => {
+    const s = { ...slider('s', 'a', 5), bindingTarget: { objectId: 'seg', propertyKey: 'length' } };
+    const A = point('A', 0, 0);
+    const B = point('B', 5, 0, { isIndependent: false, construction: { kind: 'sliderPoint', sliderId: 's', mode: 'length', anchorId: 'A', direction: { x: 1, y: 0 } } });
+    const objects: MathObject[] = [A, B, s, { ...base('seg'), type: 'segment', startPointId: 'A', endPointId: 'B' }];
+    expect(planDeletion(objects, ['seg']).removal.has('s')).toBe(false);
+    const prepared = detachSliderBindings(objects, ['s']);
+    expect(prepared.find(o => o.id === 's')).toMatchObject({ variableName: 'a', value: 5 });
+    expect(prepared.find(o => o.id === 's')).not.toHaveProperty('bindingTarget');
+    expect(s.bindingTarget).toEqual({ objectId: 'seg', propertyKey: 'length' });
+  });
+
   it('canlı koordinat, uzunluk ve açı noktalarını son değerlere çözüp dondurur; şekiller kalırken denetim bileşeni silinir', () => {
     const s = slider('s', 'a', 60);
     const A = point('A', 1, 2), C = point('C', 5, 2);

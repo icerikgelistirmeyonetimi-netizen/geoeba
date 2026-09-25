@@ -7,6 +7,38 @@ import { parseProjectFile } from '../projectFile';
 import { resolveCommandBindings } from '../commandBindings';
 
 describe('object clipboard', () => {
+  const namedSliderScene = () => parseProjectFile({ objects: [
+    { id: 'A', type: 'point', x: 0, y: 0 },
+    { id: 'B', type: 'point', x: 5, y: 0, construction: { kind: 'sliderPoint', sliderId: 's', mode: 'length', anchorId: 'A', direction: { x: 1, y: 0 } } },
+    { id: 'C', type: 'point', x: 0, y: 4 },
+    { id: 's', type: 'slider', variableName: 'a', min: 1, max: 10, step: 1, value: 5, bindingTarget: { objectId: 'tri', propertyKey: 'edge:0' } },
+    { id: 'tri', type: 'polygon', pointIds: ['A', 'B', 'C'] },
+    { id: 'f', type: 'function', expression: 'a*x' },
+  ] }).objects;
+
+  it('şekille kopyalanan ölçü adını yeni şekle yönlendirir; bağımlılık oluşturmaz', () => {
+    const original = namedSliderScene(), snapshot = JSON.stringify(original);
+    const clipboard = copyObjects(original, ['tri']);
+    expect(clipboard.objects).toHaveLength(5);
+    const pasted = pasteObjects(clipboard, original, { x: 10, y: 10 });
+    const shape = pasted.objects.find(o => o.type === 'polygon')!;
+    const slider = pasted.objects.find(o => o.type === 'slider')!;
+    expect(slider).toMatchObject({ variableName: 'a2', bindingTarget: { objectId: shape.id, propertyKey: 'edge:0' } });
+    expect(objectDependencies(slider)).toEqual([]);
+    expect(() => parseProjectFile({ objects: pasted.objects })).not.toThrow();
+    expect(JSON.stringify(original)).toBe(snapshot);
+  });
+
+  it.each(['s', 'f'])('%s kopyalamak ölçünün şeklini panoya çekmez; eski hedef yapıştırmada temizlenir', selectedId => {
+    const original = namedSliderScene(), snapshot = JSON.stringify(original);
+    const clipboard = copyObjects(original, [selectedId]);
+    expect(clipboard.objects.map(o => o.id)).toEqual(selectedId === 's' ? ['s'] : ['s', 'f']);
+    const pasted = pasteObjects(clipboard, original, { x: 10, y: 10 });
+    expect(pasted.objects.find(o => o.type === 'slider')).not.toHaveProperty('bindingTarget');
+    expect(() => parseProjectFile({ objects: pasted.objects })).not.toThrow();
+    expect(JSON.stringify(original)).toBe(snapshot);
+  });
+
   it('copies ellipse property sliders and remaps the values inside the property map', () => {
     const original = parseProjectFile({ objects: [
       { id: 'O', type: 'point', x: 2, y: 1 },

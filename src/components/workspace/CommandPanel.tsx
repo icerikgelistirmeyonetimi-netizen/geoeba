@@ -13,6 +13,9 @@ import { TOOL_GROUPS } from './toolDefinitions';
 import { CommandSuggestion, searchCommands } from '@/math/commandSearch';
 import { interpretSemanticMatch } from '@/math/semanticCommands';
 import { useSemanticCommands } from '@/hooks/useSemanticCommands';
+import { panelYazimi } from '@/math/panelYazimlari';
+import { MatematikMetni } from './MatematikMetni';
+import { YazimKopyala } from './YazimKopyala';
 
 const toolExamples = TOOL_GROUPS.flatMap(group => group.tools.map(tool => `${tool.name} aracını seç`));
 const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
@@ -54,6 +57,9 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
   const listId = useId();
   const helpId = useId();
   const drawer = variant === 'drawer';
+  // Yanıtlar MEB yazımıyla gösterilir (şapkalı açı, mutlak değer çizgisi, yay imi).
+  // Komut yanıtı HER ZAMAN tam yazımdadır; "Yalnızca değer" yalnızca tuval etiketlerini seyreltir.
+  const yazim = useMemo(() => panelYazimi(styleSettings), [styleSettings]);
   const meaning = useSemanticCommands(text, visible && focused);
   const lexicalSuggestions = useMemo(() => searchCommands(text, {
     examples: toolExamples, history: lastCommands, labels: objects.map(o => o.label),
@@ -275,9 +281,10 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
       <button type="submit" disabled={!text.trim()} aria-label="Komutu uygula" className="h-9 rounded-xl bg-primary text-primary-foreground px-3 disabled:opacity-40"><ArrowUp className="w-4 h-4" /></button>
     </form>
     {focused && interpretations[0]?.clarification && <p className="mt-1.5 text-xs text-primary">{interpretations[0].clarification}</p>}
-    {(result || constraintError) && <p role="status" className={`mt-1.5 text-xs ${constraintError || !result?.ok ? 'text-destructive' : 'text-muted-foreground'}`}>
-      {constraintError ? `${constraintError} Son geçerli çizim korundu.` : result?.message}
+    {(result || constraintError) && <p role="status" className={`mt-1.5 text-xs leading-[1.45] ${constraintError || !result?.ok ? 'text-destructive' : 'text-muted-foreground'}`}>
+      {constraintError ? `${constraintError} Son geçerli çizim korundu.` : <MatematikMetni metin={result?.message ?? ''} ayar={yazim} />}
     </p>}
+    {!constraintError && result?.ok && result.message && <div className="mt-1 flex items-center"><YazimKopyala metin={result.message} ayar={yazim} /></div>}
     {result && !result.ok && result.suggestions && result.suggestions.length > 0 && <div className="flex gap-2 overflow-x-auto mt-1">{result.suggestions.slice(0, 3).map(s => <button type="button" key={s} onClick={() => chooseSuggestion(s)} className="text-[11px] shrink-0 text-primary underline">{s}</button>)}</div>}
   </section>;
 }

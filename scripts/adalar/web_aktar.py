@@ -29,6 +29,9 @@ import time
 import unicodedata
 from mathutils import Vector
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import roket as roket_modeli  # noqa: E402  (Blender betiği: klasör sys.path'e elle eklenir)
+
 T0 = time.time()
 ARGV = sys.argv[sys.argv.index("--") + 1:]
 OUT_DIR = os.path.abspath(ARGV[0])
@@ -116,6 +119,40 @@ if IS_HOME:
             "eksen": (atolye_kok.matrix_world.to_3x3() @ Vector(tanim["yerel_eksen"])).normalized(),
         }
 
+# ---------------------------------------------------------------------------
+# Hareketli ada parçaları (her sayfada): ilkokul parkının saati gerçek saati gösterir, lise
+# gözlemevinin kubbesi yarığı ve teleskobuyla birlikte döner. Her biri ayrı "arac:*" grubuna
+# çıkar; sahibi nesnenin normalde gireceği gruptur (ana sayfada stage:*, kademe sayfasında
+# grade:*). Kaynakta bulunmayan parçanın grubu yazılmaz, nesneleri sahibinde sabit kalır.
+# Zamanlama ve genlikler JSON'da değil, src/components/adalar/adaSahnesi.ts sabitlerindedir.
+# ---------------------------------------------------------------------------
+SAAT_GOBEGI = "G04 • saat göbeği"
+SAAT_YUZU = "G04 • saat yüzü"
+SAAT_YELKOVANI = "G04 • yelkovan"
+SAAT_SANIYESI = "G04 • saniye"   # kaynakta yok: dışa aktarımda yelkovandan türetilir
+PARCA_TANIMLARI = {
+    # one: ibrenin kadrandan öne alınma payı (m); aynı düzlemdeki ibreler dönerken iç içe geçerdi
+    "arac:saat-akrep": {"onekler": ("G04 • akrep",), "motion": "saat", "hand": "akrep", "one": 0.0},
+    "arac:saat-yelkovan": {"onekler": (SAAT_YELKOVANI,), "motion": "saat", "hand": "yelkovan", "one": 0.035},
+    "arac:saat-saniye": {"onekler": (SAAT_SANIYESI,), "motion": "saat", "hand": "saniye", "one": 0.062},
+    # Kubbe kabuğu ve teleskop gölge verir: yuvarlak kubbenin pişmiş gölgesi dönüşte değişmez.
+    # İnce kaburgalar ile yarık kenarları vermez; izleri pişmiş gölge haritasında kubbede kalırdı.
+    "arac:kubbe": {"onekler": ("G11_observatory_dome", "G11_telescope_tube", "G11_telescope_lens"),
+                   "motion": "kubbe", "shadow": True},
+    "arac:kubbe-kaburga": {"onekler": ("G11_meridian_rib", "G11_viewing_slit_edge"), "motion": "kubbe"},
+    # Ortaokul cam piramidi (cam yüzler, kaburgalar, çıtalar, tepe) arka taban kenarındaki menteşeden
+    # geriye yatar; içinden roket (roket.py, dışa aktarımda kurulur) fırlar. İkisi aynı anda tetiklenir.
+    "arac:piramit": {"onekler": ("G06_pyramid_",), "motion": "piramit"},
+    "arac:roket": {"onekler": ("Roket • ",), "motion": "roket"},
+}
+# Roket, piramidin içinde girişin solunda durur (Blender dünya x, y; m). Burası kapak 45° açıkken
+# ön kenarının (y≈8.47) önünde, oktahedronun (y≥8.49) ve kapı çerçevesinin (x≥2.54) dışında kalan
+# tek serbest şerittir; kapak kapalıyken roket zeminin altında gizlidir.
+ROKET_YERI = (2.25, 8.12)
+ROKET_ZEMIN_PAYI = 0.035   # kalkışa hazır roketin lülesi zeminin bu kadar üstünde durur
+PARCA_GEOMETRI = {}   # anahtar → {"pivot": Vector, "eksen": Vector, "restAngle"?, "one"?}, DÜNYA uzayı
+PARCA_SAHIBI = {}     # anahtar → sahibin grup anahtarı (stage:* / grade:*)
+
 
 def collection_renderable(col):
     while col is not None:
@@ -139,6 +176,70 @@ def ancestors(ob):
     while p is not None:
         yield p
         p = p.parent
+
+
+def saniye_ibresi_ekle():
+    """Yelkovanın kopyasından ince, kuyruklu saniye ibresi: aynı eksende, 12'yi gösterir.
+
+    Yelkovan göbekten uca giden 24 dilimli bir çubuktur (park_olustur.py `rod`: yerel +Z uca
+    bakar, orijin çubuğun ortası). Kopyada yarıçap 0.026 → 0.016, göbekten uç 0.54 → 0.62 ve
+    göbeğin arkasında 0.12'lik kuyruk; renk göbek ve rakamlarla aynı koyu petrol.
+    """
+    yelkovan = bpy.data.objects.get(SAAT_YELKOVANI)
+    gobek = bpy.data.objects.get(SAAT_GOBEGI)
+    if yelkovan is None or gobek is None or yelkovan.type != "MESH" or SAAT_SANIYESI in bpy.data.objects:
+        return None
+    zs = [v.co.z for v in yelkovan.data.vertices]
+    alt, boy = min(zs), max(zs) - min(zs)
+    if boy < 1e-4:
+        return None
+    ibre = yelkovan.copy()
+    ibre.data = yelkovan.data.copy()
+    ibre.name = ibre.data.name = SAAT_SANIYESI
+    for col in yelkovan.users_collection:
+        col.objects.link(ibre)
+    oran, kuyruk, uc = 0.016 / 0.026, -0.12, 0.62   # yarıçap oranı; göbekten uzaklıklar (m)
+    for v in ibre.data.vertices:
+        u = (v.co.z - alt) / boy                        # 0: göbek, 1: yelkovanın ucu
+        v.co.x *= oran
+        v.co.y *= oran
+        v.co.z = alt + kuyruk + u * (uc - kuyruk)
+    ibre.data.update()
+    if gobek.active_material is not None:
+        for i in range(len(ibre.data.materials)):
+            ibre.data.materials[i] = gobek.active_material
+    for md in ibre.modifiers:
+        if md.type == "BEVEL":   # yelkovanın 0.03'lük pahı ince çubuğun yarıçapından büyük
+            md.width = min(md.width, 0.006)
+            md.segments = min(md.segments, 2)
+    return ibre
+
+
+if saniye_ibresi_ekle() is not None:
+    log("saniye ibresi eklendi:", SAAT_SANIYESI)
+
+
+def roket_ekle():
+    """Ortaokul piramidinin içine, zeminin altına gizli roketi kurar (roket.py); yükselişi döndürür.
+
+    Kapak açılınca roket bu kadar yükselip zeminde durur, sonra fırlar (adaSahnesi.ts). Roket
+    ERISIM_06'ya bağlanır ki sahibi ana sayfada stage:ortaokul, kademe sayfasında grade:6 olsun.
+    """
+    ebeveyn = bpy.data.objects.get("ERISIM_06")
+    taban = bpy.data.objects.get("G06_greenhouse_base_003")
+    if ebeveyn is None or taban is None or not renderable(taban) or not ebeveyn.users_collection:
+        return None
+    if any(o.name.startswith("Roket • ") for o in bpy.data.objects):
+        return None
+    zemin = max((taban.matrix_world @ Vector(c)).z for c in taban.bound_box)
+    alt = zemin - roket_modeli.BOY - 0.01          # burun ucu zeminin 1 cm altında: kapalıyken görünmez
+    roket_modeli.roket_olustur(ebeveyn.users_collection[0], ebeveyn, Vector((ROKET_YERI[0], ROKET_YERI[1], alt)))
+    return zemin + ROKET_ZEMIN_PAYI - alt
+
+
+ROKET_YUKSELIS = roket_ekle()
+if ROKET_YUKSELIS is not None:
+    log("roket kuruldu, yükseliş:", round(ROKET_YUKSELIS, 3))
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +304,79 @@ if IS_HOME:
 
 bpy.context.view_layer.update()
 dg = bpy.context.evaluated_depsgraph_get()
+
+
+def dunya_kutusu(ob):
+    kose = [ob.matrix_world @ Vector(c) for c in ob.bound_box]
+    return (Vector((min(k.x for k in kose), min(k.y for k in kose), min(k.z for k in kose))),
+            Vector((max(k.x for k in kose), max(k.y for k in kose), max(k.z for k in kose))))
+
+
+def kutu_merkezi(ob):
+    mn, mx = dunya_kutusu(ob)
+    return (mn + mx) / 2
+
+
+def ilk_nesne(onek):
+    return next((o for o in scene.objects if o.name.startswith(onek) and renderable(o)), None)
+
+
+def parca_geometrisi_topla():
+    """Hareketli parçaların pivotu, ekseni ve (ibrelerde) duruş açısı; join'den önce, DÜNYA uzayında."""
+    # Saat: pivot göbeğin merkezi, eksen kadranın izleyiciye bakan normali. Duruş açısı ibrenin
+    # 12'den saat yönünde açısıdır (0–2π); 3 rakamının sağda kalması eksenin yönünü doğrular.
+    gobek, yuz = ilk_nesne(SAAT_GOBEGI), ilk_nesne(SAAT_YUZU)
+    on_iki, uc = ilk_nesne("G04 • saat 12"), ilk_nesne("G04 • saat 3")
+    if all((gobek, yuz, on_iki, uc)):
+        pivot = kutu_merkezi(gobek)
+        n = (yuz.matrix_world.to_3x3() @ Vector((0.0, 0.0, 1.0))).normalized()
+        if n.dot(pivot - kutu_merkezi(yuz)) < 0:
+            n = -n
+
+        def duz(v):
+            return v - n * v.dot(n)
+
+        yukari = duz(kutu_merkezi(on_iki) - pivot).normalized()
+        sag = yukari.cross(n)
+        if sag.dot(duz(kutu_merkezi(uc) - pivot)) <= 0:
+            raise RuntimeError("saat: 3 rakamı kadranın sağında değil; eksen yönü yanlış")
+        for anahtar, tanim in PARCA_TANIMLARI.items():
+            ibre = ilk_nesne(tanim["onekler"][0]) if tanim["motion"] == "saat" else None
+            if ibre is None:
+                continue
+            # Yön: köşelerin ağırlık merkezi. Çubuk ekseni etrafında simetrik olduğundan merkez eksen
+            # üzerindedir; en uzak köşe ise uç kapağın kenarında kalıp açıyı birkaç derece kaydırıyordu.
+            ev = ibre.evaluated_get(dg)
+            me = ev.to_mesh()
+            merkez = sum((ibre.matrix_world @ v.co for v in me.vertices), Vector()) / max(1, len(me.vertices))
+            ev.to_mesh_clear()
+            d = duz(merkez - pivot)
+            PARCA_GEOMETRI[anahtar] = {
+                "pivot": pivot.copy(), "eksen": n.copy(), "one": tanim["one"],
+                "restAngle": round(math.atan2(d.dot(sag), d.dot(yukari)) % (2 * math.pi), 5),
+            }
+    # Gözlemevi: kubbe kabuğunun taban merkezinden geçen düşey eksen
+    kubbe = ilk_nesne("G11_observatory_dome")
+    if kubbe is not None:
+        mn, mx = dunya_kutusu(kubbe)
+        pivot = Vector(((mn.x + mx.x) / 2, (mn.y + mx.y) / 2, mn.z))
+        for anahtar in ("arac:kubbe", "arac:kubbe-kaburga"):
+            PARCA_GEOMETRI[anahtar] = {"pivot": pivot.copy(), "eksen": Vector((0.0, 0.0, 1.0))}
+    # Ortaokul piramidi ve roketi birlikte: menteşe cam yüzlerin arka taban kenarında; −X ekseni
+    # etrafında artı açı kapağı geriye (kameradan uzağa) yatırır. Roket düşey yükselir.
+    camlar = [o for o in scene.objects if o.name.startswith("G06_pyramid_glass") and renderable(o)]
+    lule = ilk_nesne("Roket • lüle")
+    if camlar and lule is not None and ROKET_YUKSELIS is not None:
+        kutular = [dunya_kutusu(o) for o in camlar]
+        mentese = Vector(((min(k[0].x for k in kutular) + max(k[1].x for k in kutular)) / 2,
+                          max(k[1].y for k in kutular), min(k[0].z for k in kutular)))
+        PARCA_GEOMETRI["arac:piramit"] = {"pivot": mentese, "eksen": Vector((-1.0, 0.0, 0.0))}
+        PARCA_GEOMETRI["arac:roket"] = {"pivot": lule.matrix_world.translation.copy(),
+                                        "eksen": Vector((0.0, 0.0, 1.0)), "rise": round(ROKET_YUKSELIS, 4)}
+
+
+parca_geometrisi_topla()
+log("hareketli parçalar:", {k: g.get("restAngle") for k, g in sorted(PARCA_GEOMETRI.items())})
 
 # ---------------------------------------------------------------------------
 # Malzemeler: prosedürel Cycles ağlarından web malzemesine yaklaşık değerler
@@ -360,6 +534,15 @@ def group_for(ob):
             elif ob.name.startswith(deger):
                 return anahtar
         return "landmark:atolye"
+    parca = parca_anahtari(ob)
+    if parca is not None:
+        PARCA_SAHIBI.setdefault(parca, temel_grup(chain))
+        return parca
+    return temel_grup(chain)
+
+
+def temel_grup(chain):
+    """Ana sayfada nesnenin adası (stage:*), kademe sayfasında sınıf binası (grade:*)."""
     if IS_HOME:
         for a in chain:
             if a.type == "EMPTY" and a.name.startswith("ADA_"):
@@ -369,6 +552,14 @@ def group_for(ob):
         if a.type == "EMPTY" and a.name.startswith("ERISIM_"):
             return f"grade:{grade_id(a)}"
     return "static"
+
+
+def parca_anahtari(ob):
+    """Hareketli parça grubu; geometrisi toplanamayan parçanın nesneleri sahibinde sabit kalır."""
+    for anahtar, tanim in PARCA_TANIMLARI.items():
+        if anahtar in PARCA_GEOMETRI and ob.name.startswith(tanim["onekler"]):
+            return anahtar
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -466,18 +657,26 @@ for key, obj in sorted(joined.items(), key=lambda kv: (kv[0].startswith("iz:"), 
         entry["halfLength"] = round(max(mx.x - mn.x, mx.y - mn.y) / 2, 4)
     elif kind == "arac":
         # Yüzenlerden farkı: pivot su yüzeyine indirilmez, gerçek 3B dünya noktasıdır
-        g = ARAC_GEOMETRI.get(key)
+        g = ARAC_GEOMETRI.get(key) or PARCA_GEOMETRI.get(key)
         if g is None:
             raise RuntimeError(f"{key}: pivot/eksen toplanmamış")
+        tanim = ARAC_TANIMLARI.get(key) or PARCA_TANIMLARI[key]
         pivot = g["pivot"]
         obj.data.transform(Matrix.Translation(-pivot))
+        if g.get("one"):   # eksen boyunca öteleme dönüşle değişmez; ibre kadrandan öne alınır
+            obj.data.transform(Matrix.Translation(g["eksen"] * g["one"]))
         obj.location = pivot
         entry["pivot"] = to_three(pivot)
         entry["axis"] = [c + 0.0 for c in to_three(g["eksen"])]   # −0.0 → 0.0
-        entry["owner"] = "landmark:atolye"
-        entry["motion"] = ARAC_TANIMLARI[key]["motion"]
-        if "restAngle" in ARAC_TANIMLARI[key]:
-            entry["restAngle"] = ARAC_TANIMLARI[key]["restAngle"]
+        entry["owner"] = PARCA_SAHIBI.get(key, "landmark:atolye")
+        entry["motion"] = tanim["motion"]
+        if "restAngle" in tanim or "restAngle" in g:
+            entry["restAngle"] = tanim.get("restAngle", g.get("restAngle"))
+        for alan in ("hand", "shadow"):
+            if alan in tanim:
+                entry[alan] = tanim[alan]
+        if "rise" in g:   # roket: kapak açılınca zeminde durana dek yükseliş (m)
+            entry["rise"] = g["rise"]
     elif kind == "iz":
         tekne = next((e for e in group_meta if e["key"] == f"float:{gid}"), None)
         if tekne is not None:

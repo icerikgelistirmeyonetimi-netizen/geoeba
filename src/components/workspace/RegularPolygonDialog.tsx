@@ -5,6 +5,7 @@ import { useWorkspace } from '@/state/WorkspaceContext';
 import { Point2D, PointObject, PolygonObject } from '@/types/math';
 import { formatTurkishNumber } from '@/math/coordinates';
 import { generateNextPointLabels } from '@/math/geometry';
+import { regularPolygonVertices } from '@/math/regularPolygon';
 import { createId } from '@/state/ids';
 import { Modal } from '@/components/ui/Modal';
 import { Hexagon, X, Check, Sparkles } from 'lucide-react';
@@ -21,14 +22,50 @@ const MIN_RADIUS = 0.5;
 const MAX_RADIUS = 10;
 
 const PRESET_EDGES = [
-  { count: 3, name: 'Eşkenar Üçgen', emoji: '▲' },
-  { count: 4, name: 'Kare', emoji: '■' },
-  { count: 5, name: 'Düzgün Beşgen', emoji: '⬟' },
-  { count: 6, name: 'Düzgün Altıgen (Petek)', emoji: '⬡' },
-  { count: 8, name: 'Düzgün Sekizgen', emoji: '🛑' },
-  { count: 10, name: 'Düzgün Ongen', emoji: '🔟' },
-  { count: 12, name: 'Düzgün Onikigen', emoji: '💠' },
+  { count: 3, name: 'Eşkenar Üçgen' },
+  { count: 4, name: 'Kare' },
+  { count: 5, name: 'Düzgün Beşgen' },
+  { count: 6, name: 'Düzgün Altıgen (Petek)' },
+  { count: 8, name: 'Düzgün Sekizgen' },
+  { count: 10, name: 'Düzgün Ongen' },
+  { count: 12, name: 'Düzgün Onikigen' },
 ];
+
+/**
+ * Şablon çipi simgesinin köşeleri (24'lük görünüm kutusu, ekran koordinatı): tabanı yatay duran
+ * düzgün n-gen. Her şablon aynı büyüklükte görünsün diye çokgen en çok 20 × 18 birimlik alana
+ * sığdırılıp ortalanır; kare bu alanı tümüyle doldurup iri durduğu için biraz küçültülür.
+ */
+function cokgenSimgesiNoktalari(kenar: number): string {
+  const koseler = Array.from({ length: kenar }, (_, i) => {
+    const aci = Math.PI / 2 + Math.PI / kenar + (i * 2 * Math.PI) / kenar;
+    return { x: Math.cos(aci), y: Math.sin(aci) };
+  });
+  const xs = koseler.map((k) => k.x);
+  const ys = koseler.map((k) => k.y);
+  const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  const olcek = Math.min(20 / (x1 - x0), 18 / (y1 - y0)) * (kenar === 4 ? 0.92 : 1);
+  return koseler
+    .map((k) => `${(12 + (k.x - (x0 + x1) / 2) * olcek).toFixed(2)},${(12 + (k.y - (y0 + y1) / 2) * olcek).toFixed(2)}`)
+    .join(' ');
+}
+
+/** Çizgi simgesi olarak düzgün çokgen (lucide simgeleriyle aynı çizgi kalınlığı, currentColor) */
+function CokgenSimgesi({ kenar }: { kenar: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="w-4 h-4 shrink-0"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polygon points={cokgenSimgesiNoktalari(kenar)} />
+    </svg>
+  );
+}
 
 function getPolygonName(n: number): string {
   if (n === 3) return 'Eşkenar Üçgen';
@@ -87,11 +124,12 @@ export function RegularPolygonDialog({
       sides
     );
 
+    // Ders kitabı düzeni: yatay tabana oturur, A sol alt köşede, köşeler saat yönünün tersine
+    const corners = regularPolygonVertices(sides, radius, targetPos);
     const pts: PointObject[] = [];
     for (let i = 0; i < sides; i++) {
-      const ang = (i * 2 * Math.PI) / sides - Math.PI / 2;
-      const px = Number((targetPos.x + radius * Math.cos(ang)).toFixed(2));
-      const py = Number((targetPos.y + radius * Math.sin(ang)).toFixed(2));
+      const px = Number(corners[i].x.toFixed(2));
+      const py = Number(corners[i].y.toFixed(2));
       pts.push({
         id: createId('pt'),
         type: 'point',
@@ -220,7 +258,7 @@ export function RegularPolygonDialog({
                 }`}
                 title={p.name}
               >
-                <span>{p.emoji}</span>
+                <CokgenSimgesi kenar={p.count} />
                 <span>{p.count} Gen</span>
               </button>
             ))}
@@ -294,7 +332,7 @@ export function RegularPolygonDialog({
             className="px-5 py-2 rounded-xl text-xs font-bold bg-primary hover:bg-ada-deniz-koyu dark:hover:bg-ada-deniz text-primary-foreground transition-all shadow-md flex items-center gap-1.5 cursor-pointer active:scale-95"
           >
             <Check className="w-4 h-4" />
-            <span>⬡ Çokgeni Çiz</span>
+            <span>Çokgeni Çiz</span>
           </button>
         </div>
       </form>

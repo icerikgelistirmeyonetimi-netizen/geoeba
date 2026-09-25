@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MathObject } from '@/types/math';
 import {
   esitlikHedefleri, esitlikIsaretleri, esitlikOgesiAdi, esitlikYamalari, esitlikYamalariniUygula, etkinEsitlik,
-  sonrakiEsitlikSayisi, tumElleIsaretleriniTemizle, type EsitlikSonucu,
+  sonrakiEsitlikSayisi, tumElleIsaretleriniTemizle, ESITLIK_CIZGI_SAYILARI, type EsitlikSonucu,
 } from '../esitlikIsaretleri';
 
 // ------------------------------------------------------------------ sahne kurucuları
@@ -49,6 +49,17 @@ const kare = (on: string, x: number, y: number, a: number, extra: Extra = {}) =>
   pt(`pt-${on}1`, x, y), pt(`pt-${on}2`, x + a, y), pt(`pt-${on}3`, x + a, y + a), pt(`pt-${on}4`, x, y + a),
   poly(on, [`pt-${on}1`, `pt-${on}2`, `pt-${on}3`, `pt-${on}4`], extra),
 ];
+
+/** Her uzunluğu iki kez içeren, uç uca bağlı doğru parçaları. */
+function esCiftZinciri(grupSayisi: number): MathObject[] {
+  const objects: MathObject[] = [pt('pt-0', 0, 0)];
+  let x = 0;
+  for (let i = 0; i < grupSayisi * 2; i++) {
+    x += Math.floor(i / 2) + 1;
+    objects.push(pt(`pt-${i + 1}`, x, 0), seg(`s${i}`, `pt-${i}`, `pt-${i + 1}`));
+  }
+  return objects;
+}
 
 describe('eşitlik işaretleri: otomatik', () => {
   it('kullanıcının sahnesi: AC = AD tek çizgi, CD işaretsiz', () => {
@@ -216,17 +227,40 @@ describe('eşitlik işaretleri: otomatik', () => {
     expect(isaretOzeti(esitlikIsaretleri(elle))).toEqual(['seg:k1=2e', 'seg:k2=2e']);
   });
 
-  it('beşinci grup işaretsiz kalır (yanıltıcı yinelenen sayı yok)', () => {
-    const uzunluklar = [1, 1, 2, 2, 3, 3, 4, 4, 5, 5];
-    const tamZincir: MathObject[] = [pt('pt-0', 0, 0)];
-    uzunluklar.reduce((acc, l, i) => {
-      const nx = acc + l;
-      tamZincir.push(pt(`pt-${i + 1}`, nx, 0), seg(`s${i}`, `pt-${i}`, `pt-${i + 1}`));
-      return nx;
-    }, 0);
-    const t = esitlikIsaretleri(tamZincir);
-    expect(t.gruplar.map((g) => g.sayi)).toEqual([1, 2, 3, 4]);
-    expect(t.isaretler.some((m) => m.anahtar === 'seg:s8' || m.anahtar === 'seg:s9')).toBe(false);
+  it('kullanıcının beş uzunluk grubunda CE ve IH de aynı beşinci işareti alır', () => {
+    const objects = [
+      pt('pt-A', 1, 2), pt('pt-B', 4, 2), pt('pt-J', 1, 6), pt('pt-D', 4, 6),
+      pt('pt-E', 0, 0), pt('pt-H', 3, 0), pt('pt-C', 0, 5), pt('pt-I', 3, 5),
+      ...['AB', 'JD', 'CI', 'EH', 'AJ', 'BD', 'AE', 'BH', 'CJ', 'ID', 'CE', 'IH']
+        .map((ad) => seg(ad, `pt-${ad[0]}`, `pt-${ad[1]}`)),
+    ];
+    const sonuc = esitlikIsaretleri(objects);
+    expect(sonuc.gruplar.map((g) => g.uzunluk)).toEqual([3, 4, Math.sqrt(5), Math.sqrt(2), 5]);
+    expect(sonuc.gruplar.map((g) => g.sayi)).toEqual([1, 2, 3, 4, 5]);
+    expect(sayiOf(sonuc, 'seg:CE')).toBe(5);
+    expect(sayiOf(sonuc, 'seg:IH')).toBe(5);
+    expect(sonuc.isaretler).toHaveLength(12);
+    expect(sonuc.atlananGruplar).toBe(0);
+  });
+
+  it('sekiz farklı eşitlik grubu ayrı çizgi sayıları alır', () => {
+    const sonuc = esitlikIsaretleri(esCiftZinciri(8));
+    expect(sonuc.gruplar.map((g) => g.sayi)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(sonuc.isaretler).toHaveLength(16);
+    expect(sonuc.atlananGruplar).toBe(0);
+    for (let i = 0; i < 8; i++) {
+      expect(sayiOf(sonuc, `seg:s${i * 2}`)).toBe(i + 1);
+      expect(sayiOf(sonuc, `seg:s${i * 2 + 1}`)).toBe(i + 1);
+    }
+  });
+
+  it('dokuzuncu grup işaretsiz kalır; farklı uzunluklara yanıltıcı aynı sayı verilmez', () => {
+    const sonuc = esitlikIsaretleri(esCiftZinciri(9));
+    expect(sonuc.gruplar.map((g) => g.sayi)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(sonuc.isaretler).toHaveLength(16);
+    expect(sayiOf(sonuc, 'seg:s16')).toBeUndefined();
+    expect(sayiOf(sonuc, 'seg:s17')).toBeUndefined();
+    expect(sonuc.atlananGruplar).toBe(1);
   });
 
   it('çok kalabalık otomatik grup (13 eşit kenar) işaretlenmez, 12 kenar işaretlenir', () => {
@@ -267,6 +301,33 @@ describe('eşitlik işaretleri: otomatik', () => {
 });
 
 describe('eşitlik işaretleri: elle ve numaralama', () => {
+  it('elle ayrılan 5–8 sayıları aynı alanda otomatik gruplarca tekrar kullanılmaz', () => {
+    const objects = [
+      ...esCiftZinciri(5),
+      ...[5, 6, 7, 8].flatMap((k) => [pt(`pt-elle${k}`, -k, 0), seg(`elle${k}`, 'pt-0', `pt-elle${k}`, { equalityMark: k })]),
+    ];
+    const sonuc = esitlikIsaretleri(objects);
+    expect(sonuc.gruplar.map((g) => g.sayi)).toEqual([1, 2, 3, 4]);
+    expect(sonuc.atlananGruplar).toBe(1);
+    expect(sayiOf(sonuc, 'seg:s8')).toBeUndefined();
+    expect(sayiOf(sonuc, 'seg:s9')).toBeUndefined();
+    for (const k of [5, 6, 7, 8]) {
+      expect(etkinEsitlik(sonuc, `seg:elle${k}`)).toMatchObject({ elle: k, sayi: k, kaynak: 'elle' });
+    }
+  });
+
+  it('1–7 elle ayrılmışsa otomatik eşit çift kalan sekizinci sayıyı alır', () => {
+    const objects = [
+      ...esCiftZinciri(1),
+      ...[1, 2, 3, 4, 5, 6, 7].flatMap((k) => [pt(`pt-elle${k}`, -k, 0), seg(`elle${k}`, 'pt-0', `pt-elle${k}`, { equalityMark: k })]),
+    ];
+    const sonuc = esitlikIsaretleri(objects);
+    expect(sonuc.gruplar.map((g) => g.sayi)).toEqual([8]);
+    expect(sayiOf(sonuc, 'seg:s0')).toBe(8);
+    expect(sayiOf(sonuc, 'seg:s1')).toBe(8);
+    expect(sonuc.atlananGruplar).toBe(0);
+  });
+
   it('elle değer otomatiği ezer ve aynı alanda çizgi sayısını ayırır', () => {
     const s = esitlikIsaretleri(ikizkenar({ edgeEqualityMarks: { 0: 2 } }));
     expect(isaretOzeti(s)).toEqual(['edge:ABC:0=2e', 'edge:ABC:1=1', 'edge:ABC:2=1']);
@@ -306,8 +367,10 @@ describe('eşitlik işaretleri: yardımcılar', () => {
     const se = esitlikIsaretleri(evPlus);
     expect(sonrakiEsitlikSayisi(se, 'duz', ['edge:DCE:1', 'seg:sBX'])).toBe(2);
     expect(sonrakiEsitlikSayisi(se, 'duz', ['seg:sBX', 'edge:ABCD:0'])).toBe(1);
-    const dolu = [...sahne, pt('pt-K', 40, 0),
-      ...[1, 2, 3, 4].flatMap((k) => [pt(`pt-L${k}`, 40 + k, 0), seg(`e${k}`, 'pt-K', `pt-L${k}`, { equalityMark: k })])];
+    const yediDolu = [...sahne, pt('pt-K', 40, 0),
+      ...ESITLIK_CIZGI_SAYILARI.filter((k) => k < 8).flatMap((k) => [pt(`pt-L${k}`, 40 + k, 0), seg(`e${k}`, 'pt-K', `pt-L${k}`, { equalityMark: k })])];
+    expect(sonrakiEsitlikSayisi(esitlikIsaretleri(yediDolu), 'duz', ['seg:seg-AC', 'seg:seg-CD'])).toBe(8);
+    const dolu = [...yediDolu, pt('pt-L8', 48, 0), seg('e8', 'pt-K', 'pt-L8', { equalityMark: 8 })];
     expect(sonrakiEsitlikSayisi(esitlikIsaretleri(dolu), 'duz', ['seg:seg-AC', 'seg:seg-CD'])).toBeNull();
   });
 

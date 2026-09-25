@@ -253,6 +253,10 @@ export function sliderIsBound(objects: readonly MathObject[], sliderId: string):
 function detachSliderGeometry(objects: readonly MathObject[], removed: ReadonlySet<string>): MathObject[] {
   const values = new Map(objects.flatMap(o => o.type === 'slider' ? [[o.id, o.value] as const] : []));
   return objects.map(o => {
+    if (o.type === 'slider' && removed.has(o.id) && o.bindingTarget) {
+      const { bindingTarget: _bindingTarget, ...rest } = o;
+      return rest;
+    }
     if (o.type === 'point') {
       let next = o;
       if (o.dependsOn?.some(id => removed.has(id))) {
@@ -284,6 +288,11 @@ function detachSliderGeometry(objects: readonly MathObject[], removed: ReadonlyS
     }
     return o;
   });
+}
+
+function rememberBinding(objects: MathObject[], sliderId: string, objectId: string, propertyKey: string): MathObject[] {
+  return objects.map(o => o.id === sliderId && o.type === 'slider'
+    ? { ...o, bindingTarget: { objectId, propertyKey } } : o);
 }
 
 /** Silme planından önce canlı değerleri sabitler; kaydırıcıların kendilerini plandan önce kaldırmaz. */
@@ -327,7 +336,9 @@ export function rebindSliderProperty(
   if (!targetId) return resolveCommandBindings(applySettings(resolved));
   const target = resolved.find(o => o.id === targetId);
   if (!target) throw new Error('Bağlanacak nesne bulunamadı.');
-  if (ownsBinding(resolved, sliderId, target, propertyKey)) return resolveCommandBindings(applySettings(resolved));
+  if (ownsBinding(resolved, sliderId, target, propertyKey)) {
+    return rememberBinding(resolveCommandBindings(applySettings(resolved)), sliderId, targetId, propertyKey);
+  }
   if (hasSharedTriangleBinding(resolved, sliderId)) throw new Error('Bu kaydırıcı üçgenin diğer kaydırıcılarıyla ortak bağlı; farklı bir özelliğe bağlanamaz.');
   const prepared = detachSliderGeometry(resolved, new Set([sliderId]));
   return bindSliderProperty(applySettings(prepared), sliderId, targetId, propertyKey, createPointId);
@@ -344,14 +355,14 @@ export function bindSliderProperty(objects: readonly MathObject[], sliderId: str
   if (target.type === 'ellipse') {
     if (!isEllipseProperty(propertyKey) || !availableEllipseProperty(target, propertyKey)) throw new Error('Elipsin bu özelliği kilitli, başka bir kaydırıcıya bağlı veya geçersiz.');
     if (propertyKey !== 'rotation' && !(slider.value > 0)) throw new Error('Yarıçap için kaydırıcının mevcut değeri sıfırdan büyük olmalı.');
-    return resolveCommandBindings(objects.map(o => o.id === target.id ? { ...target, sliderBindings: { ...target.sliderBindings, [propertyKey]: sliderId } } : o));
+    return rememberBinding(resolveCommandBindings(objects.map(o => o.id === target.id ? { ...target, sliderBindings: { ...target.sliderBindings, [propertyKey]: sliderId } } : o)), sliderId, targetId, propertyKey);
   }
   const rotation = propertyKey === 'centralAngle' ? fixedArcRotation(objects, target) : null;
   if (rotation) {
     if (slider.value < 0 || slider.value > 360) throw new Error('Açı için kaydırıcının mevcut değeri 0 ile 360 derece arasında olmalı.');
     const bound: PointObject = { ...rotation.point, isIndependent: false,
       construction: { ...rotation.rule, sliderId, sliderVariableName: slider.variableName } };
-    return resolveCommandBindings(objects.map(o => o.id === bound.id ? bound : o));
+    return rememberBinding(resolveCommandBindings(objects.map(o => o.id === bound.id ? bound : o)), sliderId, targetId, propertyKey);
   }
   const plan = planFor(objects, target, propertyKey, sliderId);
   if (!plan) throw new Error('Bu özellik bağlanamıyor: gerekli nokta kilitli, başka bir nesneye bağlı, geometri geçersiz veya bağımlılık döngüsel.');
@@ -373,7 +384,7 @@ export function bindSliderProperty(objects: readonly MathObject[], sliderId: str
     });
     next.push(bound);
   }
-  return resolveCommandBindings(next);
+  return rememberBinding(resolveCommandBindings(next), sliderId, targetId, propertyKey);
 }
 
 export function validateSliderSettings(min: number, max: number, step: number, value: number): string | null {

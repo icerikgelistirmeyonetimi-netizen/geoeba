@@ -80,12 +80,63 @@ export function shapeAnchorCenter(objects: readonly MathObject[], pointIds: read
   return count ? { x: x / count, y: y / count } : null;
 }
 
+/** Sürükleme anındaki nokta konumları (çapa grubundaki her nokta için). */
+export function etiketReferansi(
+  objects: readonly MathObject[],
+  pointIds: readonly string[],
+): { id: string; x: number; y: number }[] {
+  const ids = new Set(pointIds);
+  return objects
+    .filter((o): o is MathObject & { type: 'point'; x: number; y: number } =>
+      o.type === 'point' && ids.has(o.id) && Number.isFinite(o.x) && Number.isFinite(o.y))
+    .map((o) => ({ id: o.id, x: o.x, y: o.y }));
+}
+
+/**
+ * Noktaların ORTAK ötelemesi: çoğunluğun aynı vektörle kaydığı miktar.
+ * Tek bir köşe oynadıysa çoğunluk yerinde kalır ve sonuç (0, 0) olur; nesnenin tamamı taşınırsa
+ * hepsi aynı vektörle kayar ve yazı da o kadar gider.
+ */
+export function ortakOteleme(
+  objects: readonly MathObject[],
+  ref: readonly { id: string; x: number; y: number }[],
+): Point2D {
+  const simdiki = new Map(
+    objects.filter((o) => o.type === 'point').map((o) => [o.id, { x: (o as { x: number }).x, y: (o as { y: number }).y }]),
+  );
+  const gruplar = new Map<string, { vektor: Point2D; sayi: number }>();
+  for (const r of ref) {
+    const p = simdiki.get(r.id);
+    if (!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)) continue;
+    const v = { x: p.x - r.x, y: p.y - r.y };
+    const anahtar = `${v.x.toFixed(6)}|${v.y.toFixed(6)}`;
+    const grup = gruplar.get(anahtar);
+    if (grup) grup.sayi += 1;
+    else gruplar.set(anahtar, { vektor: v, sayi: 1 });
+  }
+  let en: { vektor: Point2D; sayi: number } | null = null;
+  let toplam = 0;
+  for (const grup of gruplar.values()) {
+    toplam += grup.sayi;
+    if (!en || grup.sayi > en.sayi) en = grup;
+  }
+  // Yalnızca ÇOĞUNLUK aynı vektörle kaydıysa yazı taşınır (nesnenin tamamı taşınmış demektir).
+  // Noktalar farklı yönlere gitmişse şekil BOZULMUŞTUR; yazı bırakıldığı yerde kalır.
+  return en && en.sayi * 2 > toplam ? en.vektor : { x: 0, y: 0 };
+}
+
 /** Etiketin seçilen yatay kenarı sabit kalırken güncel metin merkezini bulur. */
 export function anchoredLabelPosition(
   anchor: MeasurementLabelAnchor,
   objects: readonly MathObject[],
   widthWorld: number,
 ): Point2D | null {
+  // Kullanıcı yazıyı nereye bıraktıysa orada kalır: köşe/kenar oynayınca kıpırdamaz,
+  // nesnenin tamamı taşınırsa aynı vektörle birlikte gider.
+  if (anchor.base && anchor.ref?.length) {
+    const t = ortakOteleme(objects, anchor.ref);
+    return { x: anchor.base.x + t.x, y: anchor.base.y + t.y };
+  }
   const center = shapeAnchorCenter(objects, anchor.pointIds);
   if (!center) return null;
   const halfWidth = Math.max(0, Number.isFinite(widthWorld) ? widthWorld : 0) / 2;

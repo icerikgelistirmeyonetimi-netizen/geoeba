@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useWorkspace } from '@/state/WorkspaceContext';
 import { ToolMode } from '@/types/workspace';
@@ -24,7 +24,13 @@ import {
   rightTriangleRatios,
 } from '@/math/geometry';
 import { formatTurkishNumber } from '@/math/coordinates';
-import { arcDetachedText, arcValueText, resolveArc } from '@/math/arcMeasure';
+import { arcDetachedText, resolveArc } from '@/math/arcMeasure';
+import { metniCozumle, olcuDugumleri, yazimAyari } from '@/math/matematikYazimi';
+import { nesnedenNokta } from '@/math/olcuYazimlari';
+import { type PanelSatiri, metinSatiri, nesneSatirlari, panelYazimi, satirMetni } from '@/math/panelYazimlari';
+import { PanelOlcusu } from './PanelOlcusu';
+import { MatematikMetni } from './MatematikMetni';
+import { YazimKopyala } from './YazimKopyala';
 import { validateMathExpression, extractVariableNames, compileMathExpression, evaluateNumericInput } from '@/math/parser';
 import { functionDefinitionCycle, functionNameOwner, relabelFunction, undefinedFunctionCalls } from '@/math/functionNames';
 import {
@@ -66,6 +72,9 @@ import {
 import { TOOL_SHORTCUTS } from './toolShortcuts';
 import { TOOL_GROUPS } from './toolDefinitions';
 import { TREE_TOOL_GROUPS, TreeToolItem } from './treeToolDefinitions';
+import { gruplariSuz, grupAcikliklari } from './sinifDuzeyleri';
+import { SinifAramaBosNotu, SinifSuzgeciSeridi } from './SinifSuzgeci';
+import { useSinifDuzeyi } from '@/hooks/useSinifDuzeyi';
 import { MathKeypad } from '@/components/workspace/MathKeypad';
 import { LayoutMode } from './PropertiesPanel';
 
@@ -145,9 +154,14 @@ export function Toolbar({
     recordHistory,
     selectedObjectId,
     setSelectedObjectId,
+    styleSettings,
   } = useWorkspace();
 
   const [toolSearch, setToolSearch] = useState('');
+  // Sınıf düzeyi (menü çubuğundaki "Sınıf" menüsü): panel yalnız o sınıfın kazanımlarındaki araçları gösterir.
+  // Yalnız görünürlük süzülür; yazılı / sesli komutlar ve klavye kısayolları bütün araçlarla çalışır.
+  const [sinifDuzeyi, setSinifDuzeyi] = useSinifDuzeyi();
+  const aracGruplari = useMemo(() => gruplariSuz(TREE_TOOL_GROUPS, sinifDuzeyi), [sinifDuzeyi]);
   const [objectSearch, setObjectSearch] = useState('');
   const [sidebarTab, setSidebarTab] = useState<'araclar' | 'nesneler' | 'baglamlar' | 'gorunumler' | 'ara'>('araclar');
   const [layoutTooltip, setLayoutTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
@@ -396,6 +410,11 @@ export function Toolbar({
     Object.fromEntries(TREE_TOOL_GROUPS.map((g) => [g.id, g.defaultExpanded ?? true]))
   );
 
+  // Sınıf değişince (ve açılışta) gruplar yeniden açılır/kapanır: az araçlı sınıflarda hepsi açık gelir
+  useEffect(() => {
+    setExpandedTreeGroups(grupAcikliklari(TREE_TOOL_GROUPS, sinifDuzeyi));
+  }, [sinifDuzeyi]);
+
   const toggleTreeGroup = (groupId: string) => {
     setExpandedTreeGroups((prev) => ({
       ...prev,
@@ -404,7 +423,8 @@ export function Toolbar({
   };
 
   const toggleAllTreeGroups = () => {
-    const allExpanded = TREE_TOOL_GROUPS.every((g) => expandedTreeGroups[g.id] !== false);
+    // Yalnız panelde görünen gruplara bakılır (sınıf süzgecinin boşalttığı gruplar sayılmaz)
+    const allExpanded = aracGruplari.every((g) => expandedTreeGroups[g.id] !== false);
     const nextState = !allExpanded;
     setExpandedTreeGroups(
       Object.fromEntries(TREE_TOOL_GROUPS.map((g) => [g.id, nextState]))
@@ -667,95 +687,42 @@ export function Toolbar({
     }
   };
 
-  const getObjectDetails = (obj: MathObject): string => {
-    switch (obj.type) {
-      case 'point':
-        return `(${formatTurkishNumber(obj.x, 2)}; ${formatTurkishNumber(obj.y, 2)})`;
-      case 'circle': {
-        let radius = obj.fixedRadius ?? 0;
-        if (obj.radiusPointId && !radius) {
-          const center = objects.find((o) => o.id === obj.centerPointId);
-          const rPoint = objects.find((o) => o.id === obj.radiusPointId);
-          if (center?.type === 'point' && rPoint?.type === 'point') {
-            radius = calculateDistance(center, rPoint);
-          }
-        }
-        return `Yarıçap: ${formatTurkishNumber(radius, 2)} br`;
+  // Nesne listesindeki ölçüler tuvalle AYNI MEB yazımını kullanır (|AB| = 5 br, m(ABC^) = 60°,
+  // A(ABC) = 6 br²); adlar yalnızca görünen nokta adlarından kurulur (panelYazimlari.ts).
+  const nokta = useMemo(() => nesnedenNokta(objects), [objects]);
+  const yazim = useMemo(() => panelYazimi(styleSettings), [styleSettings]);
+
+  /** Tek satıra sığan özet: nesnenin en ayırt edici bir ya da iki ölçüsü. */
+  const nesneOzeti = (obj: MathObject): PanelSatiri[] => {
+    if (obj.type === 'measurement') {
+      const m = obj as MeasurementObject;
+      if (m.kind === 'arc') {
+        const y = m.circleId
+          ? resolveArc({ circleId: m.circleId, pointIds: m.pointIds, startPointId: m.startPointId, throughPointId: m.throughPointId, major: m.major }, objects)
+          : null;
+        const uyari = y ? arcDetachedText(y, objects) : null;
+        if (uyari) return [metinSatiri(uyari)];
       }
-      case 'ellipse':
-        return `a = ${formatTurkishNumber(obj.radiusX, 2)} br, b = ${formatTurkishNumber(obj.radiusY, 2)} br`;
-      case 'arc':
-      case 'sector': {
-        const merkez = objects.find((o) => o.id === obj.centerPointId);
-        const bas = objects.find((o) => o.id === obj.startPointId);
-        const r =
-          merkez?.type === 'point' && bas?.type === 'point' ? calculateDistance(merkez, bas) : 0;
-        return `Yarıçap: ${formatTurkishNumber(r, 2)} br`;
-      }
-      case 'line':
-        return 'Doğru';
-      case 'ray':
-        return 'Işın';
-      case 'segment': {
-        const p1 = objects.find((o) => o.id === obj.startPointId);
-        const p2 = objects.find((o) => o.id === obj.endPointId);
-        const uz = p1?.type === 'point' && p2?.type === 'point' ? calculateDistance(p1, p2) : 0;
-        return `Uzunluk: ${formatTurkishNumber(uz, 2)} br`;
-      }
-      case 'polygon':
-        return `Çokgen (${obj.pointIds?.length || 0} Köşe)`;
-      case 'pen':
-        return 'Serbest Çizim';
-      case 'fraction':
-        return `Kesir (${obj.numerator}/${obj.denominator})`;
-      case 'function':
-        return obj.expression;
-      case 'slider':
-        return `${obj.variableName} = ${formatTurkishNumber(obj.value, 2)}`;
-      case 'measurement': {
-        const m = obj as MeasurementObject;
-        const nk = (id: string) => objects.find((o) => o.id === id && o.type === 'point') as PointObject | undefined;
-        if (m.kind === 'arc') {
-          const y = m.circleId ? resolveArc({ circleId: m.circleId, pointIds: m.pointIds, startPointId: m.startPointId, throughPointId: m.throughPointId, major: m.major }, objects) : null;
-          return y ? arcDetachedText(y, objects) ?? arcValueText(y) : 'Yay ölçümü';
-        }
-        if (m.kind === 'distance') {
-          const a = nk(m.pointIds[0]);
-          const b = nk(m.pointIds[1]);
-          return a && b ? `|${a.label}${b.label}| = ${formatTurkishNumber(calculateDistance(a, b), 2)} br` : 'Uzunluk';
-        }
-        if (m.kind === 'slope') {
-          const a = nk(m.pointIds[0]);
-          const b = nk(m.pointIds[1]);
-          if (!a || !b) return 'Eğim';
-          const e = calculateSlope(a, b);
-          return e === null ? 'eğim tanımsız' : `eğim = ${formatTurkishNumber(Number(e.toFixed(4)))}`;
-        }
-        const [k, d, u] = m.pointIds.map(nk);
-        if (!k || !d || !u) return 'Trigonometrik oranlar';
-        const o = rightTriangleRatios(k, d, u);
-        return o
-          ? `sin=${formatTurkishNumber(Number(o.sin.toFixed(3)))} cos=${formatTurkishNumber(Number(o.cos.toFixed(3)))} tan=${formatTurkishNumber(Number(o.tan.toFixed(3)))}`
-          : 'Dik üçgen değil';
-      }
-      case 'angle': {
-        const p1 = objects.find((o) => o.id === obj.point1Id);
-        const v = objects.find((o) => o.id === obj.vertexPointId);
-        const p3 = objects.find((o) => o.id === obj.point3Id);
-        const d =
-          p1?.type === 'point' && v?.type === 'point' && p3?.type === 'point'
-            ? calculateAngleDegrees(p1, v, p3)
-            : 0;
-        return `${formatTurkishNumber(Math.round(d), 0)}°`;
-      }
-      case 'text':
-        return 'Metin Notu';
-      case 'image':
-        return 'Görsel';
-      default:
-        return 'Nesne';
+      return nesneSatirlari(obj, objects, nokta).slice(0, 2);
     }
+    const satirlar = nesneSatirlari(obj, objects, nokta);
+    // Elipste a ve b (üçüncü satır) listede yarıçaplardan daha bilgilendirici.
+    if (obj.type === 'ellipse') return satirlar.slice(2, 3);
+    if (obj.type === 'arc' || obj.type === 'sector') return satirlar.slice(0, 2);
+    return satirlar.slice(0, 1);
   };
+
+  /** Arama süzgeci ve başlık (title) için özetin düz metni. */
+  const getObjectDetails = (obj: MathObject): string => nesneOzeti(obj).map(satirMetni).join(' · ');
+
+  /** Özetin MEB yazımıyla çizilmiş hali (şapka, yay imi, mutlak değer çizgisi). */
+  const nesneOzetiYazimi = (obj: MathObject) =>
+    nesneOzeti(obj).map((s, i) => (
+      <React.Fragment key={i}>
+        {i > 0 && <span aria-hidden="true"> · </span>}
+        <PanelOlcusu satir={s} ayar={yazim} metinSinifi="font-mono" />
+      </React.Fragment>
+    ));
 
   const PRESET_COLORS = [
     { name: 'Mavi', hex: '#3b82f6' },
@@ -957,6 +924,16 @@ export function Toolbar({
   };
 
   const normalizedSearch = toolSearch.trim().toLocaleLowerCase('tr');
+  /** Araç adı ya da açıklaması aramayla eşleşiyor mu? (Boş arama her aracı kapsar.) */
+  const aramayaUyar = (tool: TreeToolItem) =>
+    normalizedSearch === '' ||
+    tool.name.toLocaleLowerCase('tr').includes(normalizedSearch) ||
+    tool.description.toLocaleLowerCase('tr').includes(normalizedSearch);
+  /** Sınıf süzgecinden geçen ve aramayla eşleşen araç sayısı */
+  const gorunenSonucSayisi = aracGruplari.reduce((toplam, g) => toplam + g.tools.filter(aramayaUyar).length, 0);
+  /** Arama yalnız sınıf süzgeci yüzünden mi boş kaldı? (Araç bütün araçlar arasında var.) */
+  const suzgecAramayiGizledi = gorunenSonucSayisi === 0 && TREE_TOOL_GROUPS.some((g) => g.tools.some(aramayaUyar));
+  const tumAraclaraDon = () => setSinifDuzeyi('tum');
 
   return (
     <div className="flex h-full min-h-0 bg-card/95 backdrop-blur-md border-r border-border select-none z-30 shadow-sm shrink-0 relative">
@@ -1180,9 +1157,9 @@ export function Toolbar({
                               style={{ backgroundColor: obj.color || '#3b82f6' }}
                             />
 
-                            {/* Nesne Adı */}
-                            <span className="font-bold text-[13px] text-foreground shrink-0">
-                              {obj.label || obj.type}:
+                            {/* Nesne Adı — alt indis ve üssü yazımla çizilir ("A_1" değil "A₁") */}
+                            <span className="font-bold text-[13px] text-foreground shrink-0 yazim-payi">
+                              <MatematikMetni metin={obj.label || obj.type} ayar={yazim} />:
                             </span>
 
                             {/* Konum / Boyut / İfade Bilgisi */}
@@ -1216,9 +1193,9 @@ export function Toolbar({
                                   startRowEdit(obj);
                                 }}
                                 title="Değeri düzenlemek için çift tıklayın"
-                                className="text-[11px] font-mono text-muted-foreground truncate hover:text-foreground"
+                                className="text-[11px] text-muted-foreground truncate yazim-payi hover:text-foreground leading-[1.45]"
                               >
-                                {getObjectDetails(obj)}
+                                {nesneOzetiYazimi(obj)}
                               </span>
                             )}
                           </div>
@@ -1357,9 +1334,17 @@ export function Toolbar({
                         </div>
                       </div>
 
-                      {/* Ölçü & Konum Detayı */}
-                      <div className="text-[13px] font-mono text-muted-foreground bg-background/80 p-2 rounded-xl border border-border/50">
-                        {getObjectDetails(selectedObject)}
+                      {/* Ölçü & Konum Detayı: seçili nesnenin BÜTÜN ölçüleri, MEB yazımıyla, her biri kendi satırında */}
+                      <div className="text-[13px] text-muted-foreground bg-background/80 p-2 rounded-xl border border-border/50 leading-[1.45] space-y-0.5">
+                        {nesneSatirlari(selectedObject, objects, nokta).map((s, i) => (
+                          <PanelOlcusu key={i} satir={s} ayar={yazim} as="div" metinSinifi="font-mono" className="text-foreground font-semibold" />
+                        ))}
+                        <YazimKopyala
+                          className="pt-1"
+                          satirlar={nesneSatirlari(selectedObject, objects, nokta).map((s) =>
+                            s.tur === 'olcu' ? olcuDugumleri(s.olcu, yazim) : metniCozumle(s.metin, yazim)
+                          )}
+                        />
                       </div>
                     </div>
 
@@ -1695,15 +1680,21 @@ export function Toolbar({
                 </div>
               </div>
 
-              {/* Ağaç Menü Araç Listesi (Alt Alta Tek Tek) */}
+              {/* Sınıf süzgeci açıkken: "5. sınıf araçları · Tüm araçlar" */}
+              <SinifSuzgeciSeridi duzey={sinifDuzeyi} onTumAraclar={tumAraclaraDon} />
+
+              {/* Ağaç Menü Araç Listesi (Alt Alta Tek Tek) — sınıf süzgecinden geçmiş gruplar; sayaçlar süzülmüş sayıdır */}
               <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-3.5 scrollbar-thin">
-                {TREE_TOOL_GROUPS.map((group) => {
-                  const matchingTools = group.tools.filter(
-                    (t) =>
-                      normalizedSearch === '' ||
-                      t.name.toLocaleLowerCase('tr').includes(normalizedSearch) ||
-                      t.description.toLocaleLowerCase('tr').includes(normalizedSearch)
-                  );
+                {normalizedSearch !== '' && gorunenSonucSayisi === 0 && (
+                  <SinifAramaBosNotu
+                    arama={toolSearch.trim()}
+                    duzey={sinifDuzeyi}
+                    suzgecGizledi={suzgecAramayiGizledi}
+                    onTumAraclar={tumAraclaraDon}
+                  />
+                )}
+                {aracGruplari.map((group) => {
+                  const matchingTools = group.tools.filter(aramayaUyar);
 
                   if (matchingTools.length === 0) return null;
 
@@ -1823,15 +1814,21 @@ export function Toolbar({
                 </div>
               </div>
 
+              {/* Sınıf süzgeci açıkken arama da yalnız o sınıfın araçlarında yapılır */}
+              <SinifSuzgeciSeridi duzey={sinifDuzeyi} onTumAraclar={tumAraclaraDon} />
+
               {/* Arama Sonuçları */}
               <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-1 scrollbar-thin">
-                {TREE_TOOL_GROUPS.flatMap((g) => g.tools)
-                  .filter(
-                    (tool) =>
-                      normalizedSearch === '' ||
-                      tool.name.toLocaleLowerCase('tr').includes(normalizedSearch) ||
-                      tool.description.toLocaleLowerCase('tr').includes(normalizedSearch)
-                  )
+                {normalizedSearch !== '' && gorunenSonucSayisi === 0 && (
+                  <SinifAramaBosNotu
+                    arama={toolSearch.trim()}
+                    duzey={sinifDuzeyi}
+                    suzgecGizledi={suzgecAramayiGizledi}
+                    onTumAraclar={tumAraclaraDon}
+                  />
+                )}
+                {aracGruplari.flatMap((g) => g.tools)
+                  .filter(aramayaUyar)
                   .map((tool) => {
                     const isActive = activeTool === tool.id;
                     const shortcut = TOOL_SHORTCUTS[tool.id as ToolMode];
@@ -1848,6 +1845,8 @@ export function Toolbar({
                           handleToolClick(tool.id as ToolMode);
                         }}
                         title={`${tool.name}${shortcut ? ` (${shortcut})` : ''} — ${tool.description}`}
+                        aria-label={tool.name}
+                        aria-pressed={isActive}
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-left transition-all cursor-pointer select-none text-[13px] ${
                           isActive
                             ? 'bg-primary/10 text-primary font-bold shadow-xs ring-1 ring-primary/30'

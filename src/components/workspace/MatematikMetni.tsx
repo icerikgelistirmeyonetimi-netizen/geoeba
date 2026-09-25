@@ -33,7 +33,16 @@ const SUS_YOLU: Record<'sapka' | 'yay' | 'ucgen', string> = {
   ucgen: 'M4,9.5 L50,1 L96,9.5 Z',
 };
 
-function Sus({ tur, children, kopyaOn }: { tur: 'sapka' | 'yay' | 'ucgen'; children: React.ReactNode; kopyaOn?: string }) {
+/**
+ * Aksanlı büyük harfler (İ'nin noktası, Ğ'nin çentiği, Ö/Ü'nün iki noktası) düz büyük harften
+ * 0,14 em daha yükseğe çıkar. SVG çizici bunu AKSANLI = 0,87 em ile hesaba katıyor (yazimDuzeni.ts);
+ * burada da süs aynı kadar yukarı alınır, yoksa şapka İÇĞ'nin işaretlerinin tam üstüne oturuyordu.
+ */
+const AKSAN = /[İÖÜĞŞÂÎÛ]/;
+const SUS_UST = -0.28;
+const SUS_AKSAN_PAYI = 0.14;
+
+function Sus({ tur, children, kopyaOn, aksanli }: { tur: 'sapka' | 'yay' | 'ucgen'; children: React.ReactNode; kopyaOn?: string; aksanli?: boolean }) {
   return (
     <span style={{ position: 'relative', display: 'inline-block', lineHeight: 1 }}>
       {kopyaOn && <Kopya s={kopyaOn} />}
@@ -41,7 +50,7 @@ function Sus({ tur, children, kopyaOn }: { tur: 'sapka' | 'yay' | 'ucgen'; child
         aria-hidden="true"
         viewBox="0 0 100 10"
         preserveAspectRatio="none"
-        style={{ position: 'absolute', left: '0.04em', top: '-0.28em', width: 'calc(100% - 0.08em)', height: '0.3em', overflow: 'visible' }}
+        style={{ position: 'absolute', left: '0.04em', top: `${(aksanli ? SUS_UST - SUS_AKSAN_PAYI : SUS_UST).toFixed(2)}em`, width: 'calc(100% - 0.08em)', height: '0.3em', overflow: 'visible' }}
       >
         <path d={SUS_YOLU[tur]} fill="none" stroke="currentColor" strokeWidth={1.4} vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
@@ -59,7 +68,20 @@ function Dugumler({ d }: { d: Dugum[] }) {
     <>
       {d.map((x, i) => {
         switch (x.t) {
-          case 'sembol': case 'ad': return <React.Fragment key={i}>{x.s}</React.Fragment>;
+          case 'sembol': return <React.Fragment key={i}>{x.s}</React.Fragment>;
+          case 'ad': {
+            // A_1 → A + gerçek alt indis, B' → B′ (tuval çizicisiyle AYNI kural: yazimDuzeni.yerlestir).
+            // Alt indisin önündeki gizli '_' kopyada 'A_1' gelmesini sağlar.
+            const m = x.s.match(/^(\p{L})(?:_(\d+))?('*)$/u);
+            if (!m) return <React.Fragment key={i}>{x.s.replace(/'/g, '′')}</React.Fragment>;
+            return (
+              <React.Fragment key={i}>
+                {m[1]}
+                {m[2] && <><Kopya s="_" /><span style={{ fontSize: '0.68em', verticalAlign: 'sub', lineHeight: 1 }}>{m[2]}</span></>}
+                {m[3] && '′'.repeat(m[3].length)}
+              </React.Fragment>
+            );
+          }
           case 'kelime': return <span key={i} style={x.soluk ? { opacity: 0.7 } : undefined}>{x.s}</span>;
           case 'sayi': return <React.Fragment key={i}>{x.s.replace('-', '−')}</React.Fragment>;
           case 'birim': return <React.Fragment key={i}>{x.s === '°' ? '°' : ` ${x.s}`}</React.Fragment>;
@@ -86,17 +108,18 @@ function Dugumler({ d }: { d: Dugum[] }) {
               </span>
             );
           case 'sus': {
+            const aksanli = AKSAN.test(duzMetin(x.ic));
             if (x.tur === 'yay') {
               // Kopyada A͡B: harflerin arasına U+0361
               const harfler = x.ic.map((y) => duzMetin([y]));
               return (
-                <Sus key={i} tur="yay">
+                <Sus key={i} tur="yay" aksanli={aksanli}>
                   {harfler.map((h, j) => <React.Fragment key={j}>{j > 0 && <Kopya s={'͡'} />}{h}</React.Fragment>)}
                 </Sus>
               );
             }
             return (
-              <Sus key={i} tur={x.tur} kopyaOn={x.tur === 'ucgen' ? '△' : x.ic.length > 1 ? '∠' : undefined}>
+              <Sus key={i} tur={x.tur} aksanli={aksanli} kopyaOn={x.tur === 'ucgen' ? '△' : x.ic.length > 1 ? '∠' : undefined}>
                 <Dugumler d={x.ic} />
                 {x.tur === 'sapka' && x.ic.length === 1 && <Kopya s={'̂'} />}
               </Sus>

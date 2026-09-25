@@ -11,7 +11,8 @@ import type { ContextMenuItem } from './ContextMenu';
 import { EsitlikSimgesi, EsitUzunluklarSimgesi } from './EsitlikSimgeleri';
 import { centikKalinligi, centikKaydirmasi, centikYolu, type CentikEngelleri } from './esitlikCizimi';
 import {
-  esitlikGrupAnahtarlari, esitlikYamalari, etkinEsitlik, kenarAnahtari, parcaAnahtari, sonrakiEsitlikSayisi, yayAnahtari,
+  CIZGI_ADLARI, ESITLIK_CIZGI_SAYILARI,
+  aciAnahtari, esitlikGrupAnahtarlari, esitlikYamalari, etkinEsitlik, kenarAnahtari, parcaAnahtari, sonrakiEsitlikSayisi, yayAnahtari,
   type EsitlikIsareti, type EsitlikSonucu, type EsitlikTuru, type EsitlikYamasi,
 } from '@/math/esitlikIsaretleri';
 
@@ -23,11 +24,17 @@ const EMPTY: readonly PointObject[] = [];
  * Çentik katmanı. Geçiş (transition) ve sınıf YOK: kaydırırken yol `d` her karede yeniden hesaplanır, geride kalmaz.
  * Tıklamayı engellemez (pointerEvents none). Sade görünümde de çizilir (ölçü rozeti değil, geometrik gösterim).
  */
-export function EsitlikIsaretleriKatmani({ isaretler, viewport, seciliIdler, cizgiOlcegi, noktalar, noktaYaricapi = 5 }: {
+export function EsitlikIsaretleriKatmani({ isaretler, viewport, seciliIdler, cizgiOlcegi, noktalar, noktaYaricapi = 5, aciYaricapiPx }: {
   isaretler: EsitlikIsareti[];
   viewport: ViewportTransform;
   seciliIdler: string[];
   cizgiOlcegi: number;
+  /**
+   * Açı yayının EKRAN yarıçapı (px). Açının yayı yakınlaştırmayla büyümediği için dünya birimiyle
+   * ifade edilemez; Canvas kendi çizdiği yarıçapı (22·etiketOlcegi) buraya verir. Dik açıda kare
+   * işaretinin köşegen ortasına düşsün diye yarısı geçilir.
+   */
+  aciYaricapiPx?: number;
   /**
    * Görünür noktalar: öğenin ortasında duran nokta çentiği örtmesin diye çentik yana kaydırılır.
    * DİZİ olmalı, yineleyici (Map.values()) DEĞİL: React StrictMode aynı props ile render'ı iki kez çağırır;
@@ -52,8 +59,11 @@ export function EsitlikIsaretleriKatmani({ isaretler, viewport, seciliIdler, ciz
   return (
     <g data-esitlik-isaretleri={isaretler.length} pointerEvents="none" aria-hidden="true">
       {isaretler.map((m) => {
-        const kaydirma = centikKaydirmasi(m, viewport, cizgiOlcegi, engeller);
-        const d = centikYolu(m, viewport, cizgiOlcegi, kaydirma);
+        // Dik açıda Canvas yay yerine KARE çizer; çentik karenin köşegen ortasına oturur (yarıçapın yarısı).
+        const dikAci = m.tur === 'aci' && Math.abs(Math.abs(m.tarama ?? 0) - Math.PI / 2) < 1e-3;
+        const rPx = m.tur === 'aci' ? (aciYaricapiPx ?? 0) * (dikAci ? 0.5 : 1) : undefined;
+        const kaydirma = centikKaydirmasi(m, viewport, cizgiOlcegi, engeller, rPx);
+        const d = centikYolu(m, viewport, cizgiOlcegi, kaydirma, rPx);
         if (!d) return null;
         return (
           <path
@@ -76,9 +86,9 @@ export function EsitlikIsaretleriKatmani({ isaretler, viewport, seciliIdler, ciz
   );
 }
 
-/** Boş alan menüsü: "Eşit Uzunlukları İşaretle" aç/kapa maddesi. */
+/** Boş alan menüsü: otomatik eşlik çentiklerini (uzunluk, yay ve AÇI) aç/kapa maddesi. */
 export function esitUzunluklarMaddesi(acik: boolean, degistir: () => void): ContextMenuItem {
-  return { id: 'esit-uzunluklar', label: 'Eşit Uzunlukları İşaretle', icon: <EsitUzunluklarSimgesi />, checked: acik, onSelect: degistir };
+  return { id: 'esit-uzunluklar', label: 'Eş Uzunluk ve Açıları İşaretle', icon: <EsitUzunluklarSimgesi />, checked: acik, onSelect: degistir };
 }
 
 const yayOlcumuMu = (o: MathObject) => o.type === 'measurement' && (o as { kind?: string }).kind === 'arc';
@@ -90,11 +100,12 @@ export function esitlikHedefAnahtari(hedef: MathObject, kenarNo: number | null):
     return kenarNo !== null && Number.isInteger(kenarNo) && kenarNo >= 0 && kenarNo < hedef.pointIds.length ? kenarAnahtari(hedef.id, kenarNo) : null;
   }
   if (hedef.type === 'arc' || hedef.type === 'sector' || yayOlcumuMu(hedef)) return yayAnahtari(hedef.id);
+  if (hedef.type === 'angle') return aciAnahtari(hedef.id);
   return null;
 }
 
 /**
- * Parça / tıklanan çokgen kenarı / yay / dilim menüsü: "Eşitlik işareti" alt menüsü (Otomatik, Tek/İki/Üç çizgi, İşaretsiz)
+ * Parça / tıklanan çokgen kenarı / yay / dilim menüsü: "Eşitlik işareti" alt menüsü (Otomatik, 1–8 çizgi, İşaretsiz)
  * ve aynı türden iki ya da daha çok öğe seçiliyken "Eşit olarak işaretle" (hepsine aynı, boştaki sayı).
  */
 export function esitlikMenuMaddeleri({ hedef, kenarNo, objects, seciliIdler, sonuc, uygula }: {
@@ -109,7 +120,7 @@ export function esitlikMenuMaddeleri({ hedef, kenarNo, objects, seciliIdler, son
   if (!anahtar || !sonuc.temsilci.has(anahtar)) return [];
   const tur: EsitlikTuru = anahtar.startsWith('arc:') ? 'yay' : 'duz';
   const e = etkinEsitlik(sonuc, anahtar);
-  // 1–4 seçilince hedefin OTOMATİK grubu birlikte işaretlenir (eşi çıplak kalmasın); 0 ve Otomatik yalnız hedefi değiştirir.
+  // Çizgi sayısı seçilince hedefin OTOMATİK grubu birlikte işaretlenir; 0 ve Otomatik yalnız hedefi değiştirir.
   const sec = (deger: number | undefined) => {
     const hedefler = deger ? esitlikGrupAnahtarlari(sonuc, anahtar) : [anahtar];
     uygula(esitlikYamalari(objects, sonuc, hedefler.map((a) => ({ anahtar: a, deger }))), 'Eşitlik işareti değiştirildi');
@@ -124,9 +135,11 @@ export function esitlikMenuMaddeleri({ hedef, kenarNo, objects, seciliIdler, son
       separatorBefore: true,
       submenu: [
         secenek('esitlik-otomatik', 'Otomatik', undefined, <EsitUzunluklarSimgesi />),
-        secenek('esitlik-tek', 'Tek çizgi', 1, <EsitlikSimgesi sayi={1} />),
-        secenek('esitlik-iki', 'İki çizgi', 2, <EsitlikSimgesi sayi={2} />),
-        secenek('esitlik-uc', 'Üç çizgi', 3, <EsitlikSimgesi sayi={3} />),
+        ...ESITLIK_CIZGI_SAYILARI.map((sayi) => {
+          const ad = CIZGI_ADLARI[sayi];
+          const id = ['tek', 'iki', 'uc'][sayi - 1] ?? String(sayi);
+          return secenek(`esitlik-${id}`, ad[0].toLocaleUpperCase('tr-TR') + ad.slice(1), sayi, <EsitlikSimgesi sayi={sayi} />);
+        }),
         secenek('esitlik-yok', 'İşaretsiz', 0, <EsitlikSimgesi sayi={0} />),
       ],
     },

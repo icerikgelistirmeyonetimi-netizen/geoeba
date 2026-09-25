@@ -5,6 +5,7 @@ import { exportPng, exportSvg, exportPdf, exportWord } from '@/utils/exportCanva
 import { StylePanel } from '@/components/workspace/StylePanel';
 import { useWorkspace } from '@/state/WorkspaceContext';
 import {
+  MathObject,
   PointObject,
   SegmentObject,
   LineObject,
@@ -16,16 +17,18 @@ import {
 } from '@/types/math';
 import {
   calculateDistance,
-  calculateAngleDegrees,
-  calculatePolygonArea,
-  calculatePolygonPerimeter,
-  calculateCircleArea,
-  calculateCircleCircumference,
   calculateLineEquation,
 } from '@/math/geometry';
 import { formatTurkishNumber, formatCoordinate } from '@/math/coordinates';
 import { noktaZ } from '@/math/zEkseni';
 import { sliderIsBound } from '@/math/sliderBindings';
+import { sliderDisplay } from '@/math/sliderDisplay';
+import { metniCozumle, olcuDugumleri, yazimAyari } from '@/math/matematikYazimi';
+import { nesnedenNokta } from '@/math/olcuYazimlari';
+import { nesneSatirlari, panelYazimi } from '@/math/panelYazimlari';
+import { MatematikMetni } from '@/components/workspace/MatematikMetni';
+import { PanelOlcusu } from '@/components/workspace/PanelOlcusu';
+import { YazimKopyala } from '@/components/workspace/YazimKopyala';
 import {
   Settings,
   Trash2,
@@ -44,6 +47,8 @@ import {
   ChevronUp,
   X,
   Contrast,
+  Magnet,
+  Ruler,
 } from 'lucide-react';
 
 export type LayoutMode = 'default' | 'algebra_2d' | '2d_3d' | 'three_col' | 'algebra_3d' | '2d_only' | '3d_only';
@@ -100,10 +105,38 @@ export function PropertiesPanel({
     handleSliderChange,
     setSliderSettingsId,
     recordHistory,
+    styleSettings,
   } = useWorkspace();
 
   const selectedObject = objects.find((o) => o.id === selectedObjectId);
   const sliders = objects.filter((o) => o.type === 'slider') as SliderObject[];
+
+  // Ölçüler tuvalle AYNI MEB yazımıyla yazılır; adlar yalnızca görünen nokta adlarından kurulur.
+  const nokta = React.useMemo(() => nesnedenNokta(objects), [objects]);
+  const yazim = React.useMemo(() => panelYazimi(styleSettings), [styleSettings]);
+
+  /** Seçili nesnenin bütün ölçüleri, her biri kendi satırında (|AB| = 5 br, A(ABC) = 6 br², m(ABC^) = 60°). */
+  const olcuKutusu = (obj: MathObject) => {
+    const satirlar = nesneSatirlari(obj, objects, nokta);
+    return (
+      <div className="p-3 bg-muted/40 rounded-xl space-y-1.5 border border-border/40">
+        {satirlar.map((s, i) => (
+          <PanelOlcusu
+            key={i}
+            satir={s}
+            ayar={yazim}
+            as="div"
+            metinSinifi="font-mono"
+            className="text-[13px] font-bold text-foreground leading-[1.45]"
+          />
+        ))}
+        <YazimKopyala
+          className="pt-1"
+          satirlar={satirlar.map((s) => (s.tur === 'olcu' ? olcuDugumleri(s.olcu, yazim) : metniCozumle(s.metin, yazim)))}
+        />
+      </div>
+    );
+  };
 
   /**
    * Süren düzenlemelerin (sürgü sürükleme, etiket yazma) başlangıç durumunu tutar.
@@ -601,7 +634,7 @@ export function PropertiesPanel({
                 {/* 5. Izgaraya Yapış (Snap) */}
                 <label className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                   <div className="flex items-center gap-2.5">
-                    <span className="text-sm">🧲</span>
+                    <Magnet className="w-4 h-4 text-ada-deniz dark:text-ada-vurgu" />
                     <span className="text-foreground font-bold">Izgaraya Yapış (Snap)</span>
                   </div>
                   <input
@@ -930,18 +963,10 @@ export function PropertiesPanel({
               {/* DOĞRU PARÇASI ÖZELLİKLERİ */}
               {selectedObject.type === 'segment' && (() => {
                 const seg = selectedObject as SegmentObject;
-                const p1 = objects.find((o) => o.id === seg.startPointId) as PointObject;
-                const p2 = objects.find((o) => o.id === seg.endPointId) as PointObject;
-                const length = p1 && p2 ? calculateDistance(p1, p2) : 0;
 
                 return (
                   <div className="space-y-3 text-xs">
-                    <div className="p-3 bg-muted/40 rounded-xl space-y-2 border border-border/40">
-                      <div className="text-muted-foreground font-medium">Uzunluk:</div>
-                      <div className="font-mono text-sm font-bold text-foreground">
-                        |{p1?.label || 'A'}{p2?.label || 'B'}| = {formatTurkishNumber(length)} birim
-                      </div>
-                    </div>
+                    {olcuKutusu(seg)}
 
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground font-medium">Uzunluğu Göster</span>
@@ -992,11 +1017,10 @@ export function PropertiesPanel({
 
                 return (
                   <div className="space-y-3 text-xs">
-                    <div className="p-3 bg-muted/40 rounded-xl space-y-2 border border-border/40">
-                      <div className="flex justify-between items-center">
-                        <span className="text-muted-foreground font-medium">Yarıçap (r):</span>
-                        <span className="font-bold text-foreground">{formatTurkishNumber(radius)} br</span>
-                      </div>
+                    {olcuKutusu(circ)}
+
+                    <div className="p-3 bg-muted/30 rounded-xl space-y-2 border border-border/50">
+                      <span className="text-[11px] font-bold text-muted-foreground">Yarıçapı Ayarla</span>
 
                       {/* Canlı Yarıçap Ayarı */}
                       <div className="space-y-1 pt-1">
@@ -1033,14 +1057,6 @@ export function PropertiesPanel({
                         />
                       </div>
 
-                      <div className="flex justify-between pt-1 border-t border-border/40">
-                        <span className="text-muted-foreground">Çevre (2πr):</span>
-                        <span className="font-bold text-foreground">{formatTurkishNumber(calculateCircleCircumference(radius))} br</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Alan (πr²):</span>
-                        <span className="font-bold text-foreground">{formatTurkishNumber(calculateCircleArea(radius))} br²</span>
-                      </div>
                     </div>
                   </div>
                 );
@@ -1052,8 +1068,6 @@ export function PropertiesPanel({
                 const polyPoints = poly.pointIds
                   .map((id) => objects.find((o) => o.id === id) as PointObject)
                   .filter(Boolean);
-                const area = calculatePolygonArea(polyPoints);
-                const perimeter = calculatePolygonPerimeter(polyPoints);
 
                 const xs = polyPoints.map((p) => p.x);
                 const ys = polyPoints.map((p) => p.y);
@@ -1087,25 +1101,23 @@ export function PropertiesPanel({
 
                 return (
                   <div className="space-y-3 text-xs">
-                    <div className="p-3 bg-muted/40 rounded-xl space-y-2 border border-border/40">
+                    <div className="p-3 bg-muted/40 rounded-xl space-y-1.5 border border-border/40">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Köşe Sayısı:</span>
                         <span className="font-bold text-foreground">{polyPoints.length}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Alan:</span>
-                        <span className="font-bold text-foreground">{formatTurkishNumber(area)} br²</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Çevre:</span>
-                        <span className="font-bold text-foreground">{formatTurkishNumber(perimeter)} br</span>
-                      </div>
+                      {nesneSatirlari(poly, objects, nokta).map((s, i) => (
+                        <PanelOlcusu key={i} satir={s} ayar={yazim} as="div" metinSinifi="font-mono" className="text-[13px] font-bold text-foreground leading-[1.45]" />
+                      ))}
                     </div>
 
                     {/* En / Boy / Kenar Boyutlandırma Kontrolleri */}
                     <div className="p-3 bg-muted/30 rounded-xl space-y-3 border border-border/50">
                       <div className="font-black text-foreground text-xs flex items-center justify-between">
-                        <span>📐 Boyutları Ayarla</span>
+                        <span className="flex items-center gap-1.5">
+                          <Ruler className="w-3.5 h-3.5 text-primary" />
+                          Boyutları Ayarla
+                        </span>
                         <span className="text-[10px] text-muted-foreground font-mono">{formatTurkishNumber(curW)} x {formatTurkishNumber(curH)} br</span>
                       </div>
 
@@ -1188,22 +1200,18 @@ export function PropertiesPanel({
               {/* AÇI ÖZELLİKLERİ */}
               {selectedObject.type === 'angle' && (() => {
                 const ang = selectedObject as AngleObject;
-                const p1 = objects.find((o) => o.id === ang.point1Id) as PointObject;
-                const vertex = objects.find((o) => o.id === ang.vertexPointId) as PointObject;
-                const p3 = objects.find((o) => o.id === ang.point3Id) as PointObject;
-                const deg = p1 && vertex && p3 ? calculateAngleDegrees(p1, vertex, p3) : 0;
-
-                return (
-                  <div className="space-y-3 text-xs">
-                    <div className="p-3 bg-muted/40 rounded-xl space-y-2 border border-border/40">
-                      <div className="text-muted-foreground font-medium">Açı Ölçüsü:</div>
-                      <div className="font-mono text-sm font-bold text-foreground">
-                        {formatTurkishNumber(deg)}° ({Math.round(deg)} derece)
-                      </div>
-                    </div>
-                  </div>
-                );
+                return <div className="space-y-3 text-xs">{olcuKutusu(ang)}</div>;
               })()}
+
+              {/* YAY / DAİRE DİLİMİ / ELİPS ÖLÇÜLERİ */}
+              {(selectedObject.type === 'arc' || selectedObject.type === 'sector' || selectedObject.type === 'ellipse') && (
+                <div className="space-y-3 text-xs">{olcuKutusu(selectedObject)}</div>
+              )}
+
+              {/* ÖLÇÜM NESNESİ (uzunluk, eğim, yay, trigonometrik oranlar) */}
+              {selectedObject.type === 'measurement' && (
+                <div className="space-y-3 text-xs">{olcuKutusu(selectedObject)}</div>
+              )}
 
               {/* KESİR MODELİ ÖZELLİKLERİ */}
               {selectedObject.type === 'fraction' && (() => {
@@ -1405,13 +1413,14 @@ export function PropertiesPanel({
               </div>
 
               <div className="space-y-3">
-                {sliders.map((s) => (
+                {sliders.map((s) => {
+                  const label = sliderDisplay(objects, s, yazimAyari(styleSettings));
+                  return (
                   <div key={s.id} className="p-3 bg-muted/40 rounded-xl border border-border/40 space-y-2">
                     <div className="flex items-center justify-between text-xs font-semibold">
-                      <button type="button" onClick={() => setSliderSettingsId(s.id)} className="flex items-center gap-1 text-foreground hover:text-primary" aria-label={`${s.variableName} kaydırıcısı ayarları`}>
-                        {s.variableName} = <Settings className="w-3.5 h-3.5" />
+                      <button type="button" onClick={() => setSliderSettingsId(s.id)} className="flex items-center gap-1 text-foreground hover:text-primary" aria-label={`${label.name} kaydırıcısı ayarları`} title={`${label.name} kaydırıcısı ayarları`}>
+                        <MatematikMetni dugumler={label.nodes} /> <Settings className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                       </button>
-                      <span className="font-mono text-primary font-bold">{formatTurkishNumber(s.value)}</span>
                     </div>
                     <input
                       type="range"
@@ -1419,6 +1428,8 @@ export function PropertiesPanel({
                       max={s.max}
                       step={s.step}
                       value={s.value}
+                      aria-label={`${label.name} değeri`}
+                      aria-valuetext={label.text}
                       onPointerDown={(e) => {
                         if (!sliderIsBound(objects, s.id)) { e.preventDefault(); setSliderSettingsId(s.id); }
                       }}
@@ -1444,7 +1455,8 @@ export function PropertiesPanel({
                       <span>{s.max}</span>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

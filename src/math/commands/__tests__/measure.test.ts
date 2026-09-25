@@ -695,6 +695,18 @@ describe('arc between two points (circle is not split)', () => {
     expect(expectOk(handlers, 'B D yayını ölç', circlePoints()).message).toBe('BD yayı: |B͡D| ≈ 4,71 br, m(B͡D) = 90°.');
   });
 
+  it('yarım çemberde niteleyici yinelenmez: başlık zaten "yarım çemberi" diyor', () => {
+    // Çember üzerinde başka adlandırılmış nokta yok: ad üç harfe çıkamaz, niteleyici gerekir.
+    const sahne = build(s => {
+      const M = s.addPoint({ x: 0, y: 0 }, { label: 'M' });
+      const B = s.addPoint({ x: 3, y: 0 }, { label: 'B' });
+      s.addCircle({ centerId: M.id, radiusPointId: B.id });
+      s.addPoint({ x: -3, y: 0 }, { label: 'D' });
+    });
+    expect(expectOk(handlers, 'BD yayını ölç', sahne).message)
+      .toBe('BD yarım çemberi: |B͡D| ≈ 9,42 br, m(B͡D) = 180° (yarım çember).');
+  });
+
   it('"ölçüsü", "uzunluğu", "uzunluğunu bul" oluşturur; soru yalnızca yanıtlar; ikinci kez ölçmek kopya üretmez', () => {
     for (const text of ['BD yayının ölçüsü', 'BD yayının uzunluğu', 'BD yayının uzunluğunu bul']) {
       expect(arcMeasures(expectOk(handlers, text, circlePoints()).objects)).toHaveLength(1);

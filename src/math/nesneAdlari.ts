@@ -21,6 +21,8 @@ export const NOKTALI_SEKILLER: ReadonlySet<ObjectType> = new Set<ObjectType>(['p
  * etiketi taşımadığı için bu süzgece takılmaz.
  */
 export function olcumParcasiMi(o: MathObject): boolean {
+  // Ölçmek için kurulmuş şekil (Alanı Bul / Çevre Hesapla çokgeni) kendi noktalarını götürmez
+  if (o.olcumSekli) return true;
   return o.type === 'segment' && !!o.unit && o.showLength !== false && /^\|[^|]+\|$/.test((o.label ?? '').trim());
 }
 

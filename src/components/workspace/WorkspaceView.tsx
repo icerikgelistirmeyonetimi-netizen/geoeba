@@ -35,6 +35,7 @@ import {
   Rows2,
   Maximize2,
   Box,
+  Shapes,
   Sliders,
   RotateCcw,
   Eye,
@@ -792,7 +793,8 @@ export function WorkspaceView() {
                 }`}
                 title="2D Geometri Araçlarını Göster"
               >
-                <span>📐</span>
+                {/* Simgeler iki araç panelinin kendi "Araçlar" sekmesindekilerle aynı (emoji yok) */}
+                <Shapes className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                 <span className="hidden sm:inline">2D Araçları</span>
               </button>
               <button
@@ -804,7 +806,7 @@ export function WorkspaceView() {
                 }`}
                 title="3D Katı Cisim Araçlarını Göster"
               >
-                <span>🧊</span>
+                <Box className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                 <span className="hidden sm:inline">3D Araçları</span>
               </button>
             </div>

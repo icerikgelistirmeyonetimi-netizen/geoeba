@@ -163,3 +163,83 @@ describe('pergelTurAcisi', () => {
     expect(modul.pergelTurAcisi(2)).toBeCloseTo(Math.PI * 2, 9);
   });
 });
+
+describe('saatAcisi', () => {
+  const DERECE = Math.PI / 180;
+  const an = (s: number, dk: number, sn: number, ms = 0) => new Date(2026, 8, 24, s, dk, sn, ms);
+
+  it("akrep ve yelkovan yerel saati gösterir (12'den saat yönünde, 12'lik kadran)", () => {
+    expect(modul.saatAcisi('akrep', an(3, 0, 0))).toBeCloseTo(90 * DERECE, 9);
+    expect(modul.saatAcisi('yelkovan', an(3, 0, 0))).toBeCloseTo(0, 9);
+    expect(modul.saatAcisi('akrep', an(15, 30, 0))).toBeCloseTo(105 * DERECE, 9);
+    expect(modul.saatAcisi('yelkovan', an(15, 30, 0))).toBeCloseTo(180 * DERECE, 9);
+    expect(modul.saatAcisi('akrep', an(0, 0, 0))).toBeCloseTo(0, 9);
+  });
+
+  it('yelkovan saniyelerle kesintisiz ilerler', () => {
+    expect(modul.saatAcisi('yelkovan', an(10, 10, 30))).toBeCloseTo(63 * DERECE, 9);
+  });
+
+  it('saniye ibresi tikle ilerler: saniyenin başında önceki çizgide, tikten sonra yeni çizgide durur', () => {
+    const tik = modul.SANIYE_TIK_SURESI * 1000;
+    expect(modul.saatAcisi('saniye', an(8, 0, 15, 0))).toBeCloseTo(84 * DERECE, 9);
+    const ara = modul.saatAcisi('saniye', an(8, 0, 15, tik / 2));
+    expect(ara).toBeGreaterThan(84 * DERECE);
+    expect(ara).toBeLessThan(90 * DERECE);
+    expect(modul.saatAcisi('saniye', an(8, 0, 15, tik))).toBeCloseTo(90 * DERECE, 9);
+    expect(modul.saatAcisi('saniye', an(8, 0, 15, 999))).toBeCloseTo(90 * DERECE, 9);
+  });
+
+  it('tik kapalıyken (azaltılmış hareket) saniye ibresi doğrudan çizgisine atlar', () => {
+    expect(modul.saatAcisi('saniye', an(8, 0, 15, 0), false)).toBeCloseTo(90 * DERECE, 9);
+  });
+});
+
+describe('acisalFark', () => {
+  it('en kısa yoldan işaretli farkı verir, 12 çizgisinden geçişi de', () => {
+    const DERECE = Math.PI / 180;
+    expect(modul.acisalFark(10 * DERECE, 40 * DERECE)).toBeCloseTo(30 * DERECE, 9);
+    expect(modul.acisalFark(40 * DERECE, 10 * DERECE)).toBeCloseTo(-30 * DERECE, 9);
+    expect(modul.acisalFark(350 * DERECE, 10 * DERECE)).toBeCloseTo(20 * DERECE, 9);
+    expect(modul.acisalFark(10 * DERECE, 350 * DERECE)).toBeCloseTo(-20 * DERECE, 9);
+    expect(modul.acisalFark(-6 * DERECE, 354 * DERECE)).toBeCloseTo(0, 9);
+    expect(Math.abs(modul.acisalFark(0, 180 * DERECE))).toBeCloseTo(Math.PI, 9);
+  });
+});
+
+describe('kubbeAcisi', () => {
+  it('tarama başlamadan ve bittikten sonra kubbe duruşta (yarık izleyiciye bakar)', () => {
+    expect(modul.kubbeAcisi(0)).toBe(0);
+    expect(modul.kubbeAcisi(-1)).toBe(0);
+    expect(modul.kubbeAcisi(modul.KUBBE_SURE)).toBe(0);
+    expect(modul.kubbeAcisi(modul.KUBBE_SURE + 30)).toBe(0); // sürekli döngü yok
+  });
+
+  it('adım hedeflerine varır ve hedefte bekler; son adım duruşa döner', () => {
+    let s = 0;
+    for (const [hedef, donus, bekleme] of modul.KUBBE_ADIMLARI) {
+      s += donus;
+      expect(modul.kubbeAcisi(s + 1e-6)).toBeCloseTo(hedef, 6);
+      if (bekleme > 0) expect(modul.kubbeAcisi(s + bekleme / 2)).toBeCloseTo(hedef, 9);
+      s += bekleme;
+    }
+    expect(s).toBeCloseTo(modul.KUBBE_SURE, 9);
+    expect(modul.KUBBE_ADIMLARI[modul.KUBBE_ADIMLARI.length - 1][0]).toBe(0);
+  });
+
+  it('iki yana da döner, sürekli ve sakin: 1/60 s adımda sıçrama yok (tepe hız < 86°/s), açı ±60° içinde', () => {
+    let onceki = 0;
+    let enKucuk = 0;
+    let enBuyuk = 0;
+    for (let s = 0; s <= modul.KUBBE_SURE + 0.5; s += 1 / 60) {
+      const a = modul.kubbeAcisi(s);
+      expect(Math.abs(a - onceki)).toBeLessThan(0.025);
+      expect(Math.abs(a)).toBeLessThanOrEqual((60 * Math.PI) / 180);
+      enKucuk = Math.min(enKucuk, a);
+      enBuyuk = Math.max(enBuyuk, a);
+      onceki = a;
+    }
+    expect(enBuyuk).toBeGreaterThan(0.5);
+    expect(enKucuk).toBeLessThan(-0.5);
+  });
+});

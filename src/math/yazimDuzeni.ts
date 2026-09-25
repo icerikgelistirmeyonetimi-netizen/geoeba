@@ -260,6 +260,83 @@ export function kutuParcayiKesiyorMu(k: Kutu, p: Nokta, q: Nokta, pay = 2): bool
 const kutuKoseleri = (k: Kutu): Nokta[] =>
   [{ x: k.x0, y: k.y0 }, { x: k.x1, y: k.y0 }, { x: k.x1, y: k.y1 }, { x: k.x0, y: k.y1 }];
 
+// ------------------------------------------------------------------------------------------------ ışın üzerinde dizme
+
+/**
+ * Ekrana hizalı bir kutunun, (cos a, -sin a) ışını boyunca komşusundan ayrılması için gereken
+ * EN KÜÇÜK yarı uzanım. İki kutu, eksenlerden YALNIZ BİRİNDE ayrışması yeterli olduğu için
+ * (ayırıcı eksen), eğik bir ışında yatay kutular birbirini y'de aşınca ayrışmış olur.
+ *
+ * Yay/daire dilimi ölçü listesi eskiden her etikete tam radyal uzanımı (|cos|·w + |sin|·h)/2
+ * kadar pay veriyordu: 45°'de dört etiketlik liste yaydan ~250 px uzağa taşıyor ve komşu şeklin
+ * ölçüm kartına giriyordu.
+ */
+export function ayirmaYarisi(genislik: number, yukseklik: number, aci: number): number {
+  const c = Math.abs(Math.cos(aci));
+  const s = Math.abs(Math.sin(aci));
+  return Math.min(
+    c > 1e-6 ? genislik / 2 / c : Number.POSITIVE_INFINITY,
+    s > 1e-6 ? yukseklik / 2 / s : Number.POSITIVE_INFINITY,
+  );
+}
+
+/** Işına DİK (teğete paralel) döndürülmüş kutunun ekrana hizalı kaplaması. */
+export function donmusKaplama(k: KutuOlcusu, aci: number): { genislik: number; yukseklik: number } {
+  const c = Math.abs(Math.cos(aci));
+  const s = Math.abs(Math.sin(aci));
+  return { genislik: k.genislik * s + k.yukseklik * c, yukseklik: k.genislik * c + k.yukseklik * s };
+}
+
+/** Işın boyunca tam radyal uzanım: etiketin şekilden (yaydan) ilk açıklığı bu kadardır. */
+export const radyalUzanim = (k: KutuOlcusu, aci: number): number =>
+  (Math.abs(Math.cos(aci)) * k.genislik + Math.abs(Math.sin(aci)) * k.yukseklik) / 2;
+
+/**
+ * İki ekrana hizalı kutunun ışın üzerinde ayrışması için gereken EN KÜÇÜK adım.
+ * Ayırıcı eksen kuralı ÇİFT üzerinden kurulur: kutu başına yarı uzanımları toplamak yetmez,
+ * çünkü biri x'te, öteki y'de ayrışıyor olabilir ve iki eksende de bindirme kalır.
+ */
+export function ayirmaAdimi(
+  a: { genislik: number; yukseklik: number }, b: { genislik: number; yukseklik: number }, aci: number,
+): number {
+  return ayirmaYarisi(a.genislik + b.genislik, a.yukseklik + b.yukseklik, aci);
+}
+
+/** Işın üzerine dizilecek bir etiket: kutusu ve teğete dönük olup olmadığı. */
+export interface YiginOgesi { kutu: KutuOlcusu; dondu?: boolean }
+
+/**
+ * Etiketleri (cos a, -sin a) ışını boyunca üst üste binmeyecek biçimde dizer.
+ * İlk etiket şekilden tam radyal uzanımı kadar açıkta durur (dönük etiket teğete yattığı için
+ * yalnızca kutu yüksekliğinin yarısı); sonrakiler komşularından ayrılmaya YETEN en küçük adımla gelir.
+ *
+ * @returns her etiketin MERKEZ yarıçapı ve listeye bir etiket daha eklendiğinde
+ *          onun düşeceği yarıçapı veren `sonraki` (merkez açı rozeti bunu kullanır).
+ */
+export function isinaDiz(
+  ogeler: readonly YiginOgesi[], aci: number, pay = 6,
+): { yaricaplar: number[]; sonraki: (kutu: KutuOlcusu, dondu?: boolean) => number } {
+  const kaplamalar = ogeler.map((o) => (o.dondu ? donmusKaplama(o.kutu, aci) : o.kutu));
+  const yaricaplar: number[] = [];
+  let yigin = 0;
+  ogeler.forEach((o, i) => {
+    yigin = i === 0
+      ? (o.dondu ? o.kutu.yukseklik / 2 : radyalUzanim(o.kutu, aci))
+      : yigin + ayirmaAdimi(kaplamalar[i - 1], kaplamalar[i], aci) + pay;
+    yaricaplar.push(yigin);
+  });
+  const sonKaplama = kaplamalar[kaplamalar.length - 1];
+  return {
+    yaricaplar,
+    sonraki: (kutu, dondu) => {
+      const kaplama = dondu ? donmusKaplama(kutu, aci) : kutu;
+      return sonKaplama
+        ? yigin + ayirmaAdimi(sonKaplama, kaplama, aci) + pay
+        : (dondu ? kutu.yukseklik / 2 : radyalUzanim(kutu, aci));
+    },
+  };
+}
+
 // ------------------------------------------------------------------------------------------------ açı rozeti
 
 /** Açı rozeti yerleşiminin girdisi — hepsi EKRAN birimiyle (y aşağı, açılar radyan). */
@@ -311,6 +388,43 @@ export function rozetUzakligi(g: RozetGirdisi, kutu: KutuOlcusu, pay = 3): numbe
     return Number(d.toFixed(1));
   }
   return null;
+}
+
+/**
+ * Otomatik kısa açı etiketi: gerçek yazı boyutuyla yayın yanındaki en yakın yeri bulur.
+ * `yaziOlcegi`, yazı ölçeğinin geometri ölçeğine oranıdır; girdi ve sonuç aynı yerleşim
+ * koordinatlarını kullanır. Kaynak kutu değişmez; dönen kutu yalnız yerleşim/çakışma içindir.
+ * Eski elle kaydırılmış etiketlerin doğal merkezini korumak için eski motor ayrı kalır.
+ */
+export function yakinAciRozetiYerlesimi(
+  g: RozetGirdisi, kutu: KutuOlcusu, yaziOlcegi: number,
+): { d: number; kutu: Kutu } {
+  const genislik = kutu.genislik * yaziOlcegi;
+  const yukseklik = kutu.yukseklik * yaziOlcegi;
+  const ux = Math.cos(g.orta), uy = Math.sin(g.orta);
+  const radyalUzanim = (genislik * Math.abs(ux) + yukseklik * Math.abs(uy)) / 2;
+  const yakin = g.yayR + 4 * yaziOlcegi + radyalUzanim;
+  const enUzak = Math.max(yakin, Math.min(180, 0.95 * Math.min(g.boy1, g.boy2)));
+  let d = yakin;
+
+  if (g.tarama < Math.PI - 1e-9) {
+    for (const kol of [g.kol1, g.kol2]) {
+      const nx = -Math.sin(kol), ny = Math.cos(kol);
+      const iceri = Math.abs(nx * ux + ny * uy);
+      const uzanim = (Math.abs(nx) * genislik + Math.abs(ny) * yukseklik) / 2;
+      // Kapalı biçim, 2 px'lik aramanın yakınlaştırırken oluşturduğu sıçramaları önler.
+      const gereken = iceri > 1e-9 ? (uzanim + 3 * yaziOlcegi) / iceri : Infinity;
+      d = Math.max(d, gereken);
+    }
+  }
+
+  // Çok dar/kısa açıda kollar arasına sığmak etiketi uzaklara götürmesin.
+  // Eski motor gibi son çare olarak yayın dışındaki kompakt yer kullanılır.
+  if (d > enUzak) d = yakin;
+  return {
+    d,
+    kutu: kutuMerkezli(g.kose.x + d * ux, g.kose.y + d * uy, { ...kutu, genislik, yukseklik }),
+  };
 }
 
 export interface RozetAdayi {

@@ -7,7 +7,7 @@
  * ile aynı ölçü ve konumda, geçişte zıplamaz — dekoratif, aria-hidden; halkalar yüklenmezse yalnız onlar
  * kaybolur, gradyan ve logo yine görünür; logo kaynak zinciri ve açılışta önceden yükleme: duvarVarliklari.ts),
  * sol üstte dikey sırayla uygulama kısayolları (kayıt defteri: uygulamalar.tsx), altta görev çubuğu (Başlat,
- * sabitlenmiş uygulamalar, Etkinlikler, sistem tepsisi: ağ, ses, canlı saat ve tarih) ve Başlat
+ * sabitlenmiş uygulamalar, sistem tepsisi: ağ, ses, canlı saat ve tarih) ve Başlat
  * menüsü (EBA logosu, Öğretmen satırı, uygulama listesi, "Adalara dön"). Pencereler `children`
  * olarak görev çubuğunun üstündeki alana yerleşir; çalışan uygulamanın görev çubuğu düğmesinde
  * gösterge, öndeki (odaklı) pencerede uzun gösterge vardır. Klavye: pencere küçültülünce odak görev
@@ -72,15 +72,6 @@ const ikon = {
   geri: (
     <svg viewBox="0 0 20 20" aria-hidden="true">
       <path d="M16 10H5m4.5-4.5L5 10l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  ),
-  /** Etkinlikler: dört kutucuk (ana girişteki adalar / etkinlik kartları) */
-  etkinlikler: (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="3.5" y="3.5" width="7" height="7" rx="2" fill="none" stroke="currentColor" strokeWidth="1.9" />
-      <rect x="13.5" y="3.5" width="7" height="7" rx="2" fill="none" stroke="currentColor" strokeWidth="1.9" />
-      <rect x="3.5" y="13.5" width="7" height="7" rx="2" fill="none" stroke="currentColor" strokeWidth="1.9" />
-      <path d="M17 13.6v6.8M13.6 17h6.8" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" />
     </svg>
   ),
 };
@@ -371,20 +362,6 @@ export function Masaustu({
             </button>
           );
         })}
-        {/* Etkinlikler: kullanıcının isteğiyle görev çubuğunda (kalıcı); ana girişe (Matematik Takımadaları) döner */}
-        <button
-          type="button"
-          className={s['gorev-uygulama']}
-          onClick={onAdalaraDon}
-          aria-label="Etkinlikler: ana girişe dön"
-          title="Etkinlikler (ana giriş)"
-          data-gorev="etkinlikler"
-        >
-          <span className={`${s['uygulama-simge']} ${s['uygulama-simge--kucuk']} ${s['uygulama-simge--altin']}`} aria-hidden="true">
-            {ikon.etkinlikler}
-          </span>
-          <span>Etkinlikler</span>
-        </button>
 
         <div className={s.tepsi}>
           <span className={s['tepsi-simge']} title="Ağ: bağlı" aria-label="Ağ: bağlı" role="img">

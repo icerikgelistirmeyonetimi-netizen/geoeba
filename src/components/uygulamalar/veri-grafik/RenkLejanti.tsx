@@ -6,8 +6,8 @@
  * aynı bileşeni kullanır.
  */
 import React from 'react';
-import type { RenkEslemesi } from './kategorik';
-import { RENK } from './ortak';
+import { kenarGerekir, type RenkEslemesi } from './kategorik';
+import { RENK } from './grafikOrtak';
 
 export interface RenkLejantiProps {
   eslem: RenkEslemesi;
@@ -48,7 +48,7 @@ export function RenkLejanti({ eslem, x, y, sagSinir, sayilar, ekler }: RenkLejan
     }
     ogeler.push(
       <g key={k} transform={`translate(${imlec}, ${y - 4.5})`}>
-        <circle cx={7} cy={0} r={7} fill={eslem.renkler.get(k)} stroke={RENK.kart} strokeWidth={1.5} />
+        <circle cx={7} cy={0} r={7} fill={eslem.renkler.get(k)} stroke={kenarGerekir(eslem.renkler.get(k) ?? '') ? RENK.metin : RENK.kart} strokeWidth={1.5} />
         <text x={19} y={4.5} fontSize={13} fontWeight={700} fill={RENK.metin}>
           {metin}
         </text>

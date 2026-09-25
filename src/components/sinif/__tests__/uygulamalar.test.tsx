@@ -7,13 +7,15 @@ import { manifest as veriGrafikManifesti } from '@/components/uygulamalar/veri-g
 import { manifest as olasilikManifesti } from '@/components/uygulamalar/olasilik/manifest';
 import { manifest as veriGrafikIndex } from '@/components/uygulamalar/veri-grafik';
 import { manifest as olasilikIndex } from '@/components/uygulamalar/olasilik';
+import { manifest as algoritmaManifesti } from '@/components/uygulamalar/algoritma/manifest';
+import { manifest as algoritmaIndex } from '@/components/uygulamalar/algoritma';
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
 describe('uygulama kayıt defteri', () => {
-  it('üç uygulama, sabit sırada: Çizim Stüdyosu, Veri ve Grafik, Olasılık', () => {
-    expect(UYGULAMALAR.map((u) => u.id)).toEqual([CIZIM_KIMLIGI, 'veri-grafik', 'olasilik']);
-    expect(UYGULAMALAR.map((u) => u.kisaAd)).toEqual(['Çizim Stüdyosu', 'Veri ve Grafik', 'Olasılık']);
+  it('dört uygulama, sabit sırada: Çizim Stüdyosu, Veri ve Grafik, Olasılık, Algoritma', () => {
+    expect(UYGULAMALAR.map((u) => u.id)).toEqual([CIZIM_KIMLIGI, 'veri-grafik', 'olasilik', 'algoritma']);
+    expect(UYGULAMALAR.map((u) => u.kisaAd)).toEqual(['Çizim Stüdyosu', 'Veri ve Grafik', 'Olasılık', 'Algoritma']);
     expect(UYGULAMALAR[0].ad).toBe('Serbest Çizim Stüdyosu');
   });
 
@@ -49,6 +51,8 @@ describe('uygulama kayıt defteri', () => {
     expect(uygulamaBul('olasilik')?.ad).toBe(olasilikManifesti.ad);
     expect(veriGrafikIndex).toBe(veriGrafikManifesti);
     expect(olasilikIndex).toBe(olasilikManifesti);
+    expect(uygulamaBul('algoritma')?.ad).toBe(algoritmaManifesti.ad);
+    expect(algoritmaIndex).toBe(algoritmaManifesti);
     expect(uygulamaBul('yok')).toBeUndefined();
   });
 

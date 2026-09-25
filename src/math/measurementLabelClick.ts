@@ -7,6 +7,11 @@ import type { MathObject } from '@/types/math';
  *   açıyı yayı ve rozetiyle birlikte TEK geçmiş adımında siler. Eskiden yalnızca rozet gizleniyor,
  *   turuncu yay ekranda sahipsiz kalıyordu ("açı silindiğinde açı çizgisi silinmeden kalıyor").
  *   Yalnızca değeri gizlemek isteyen kullanıcı sağ tık menüsündeki "Açı değerini gizle"yi kullanır.
+ *   İSTİSNA — `esitlikIsaretli`: açıda eşitlik çentiği varsa yay artık sahipsiz kalmaz, çentik onu
+ *   okunur bir eşlik bilgisi olarak ayakta tutar. Kullanıcı isteği (2026-09-25): "eş açı bilgisi varsa
+ *   yazı olan açıya tıklandığında yazı silinse de açı silinmemeli; açıya da ayrıca tıklanarak silme
+ *   yapılmalı." Bu durumda rozet tıklaması yalnız YAZIYI gizler ('gizle'); açının kendisi yaya
+ *   tıklanarak silinir.
  * - 'olcumuSil': Sil aracı seçiliyken bağımsız ölçüm nesnesinin (eğim, oranlar, |AP|) etiketine tıklamak
  *   o ölçüm nesnesini siler. Gizlemek, tuvalde sağ tıklanacak hiçbir parçası kalmayan bir nesne bırakıyordu.
  *   YAY ölçümünün ("BD yayı") rozeti ölçümün okunan parçasıdır: HER araçta tıklamak ölçümü (vurgulu yayıyla
@@ -21,10 +26,12 @@ export function etiketTiklamaEylemi(
   obj: MathObject | undefined,
   kind: string,
   activeTool: string,
-  gizlenebilir = true
+  gizlenebilir = true,
+  /** Açıda eşitlik çentiği var mı? Varsa rozet tıklaması açıyı silmez, yalnız yazıyı gizler. */
+  esitlikIsaretli = false
 ): EtiketTiklamaEylemi {
   if (!gizlenebilir) return 'yok';
-  if (kind === 'angle' && obj?.type === 'angle') return 'aciyiSil';
+  if (kind === 'angle' && obj?.type === 'angle') return esitlikIsaretli ? 'gizle' : 'aciyiSil';
   if (kind === 'measure' && obj?.type === 'measurement' && obj.kind === 'arc') return 'olcumuSil';
   if (activeTool === 'delete' && kind === 'measure' && obj?.type === 'measurement') return 'olcumuSil';
   return 'gizle';
@@ -38,10 +45,11 @@ export function etiketSilAraciylaSilinirMi(
   obj: MathObject | undefined,
   kind: string,
   activeTool: string,
-  gizlenebilir = true
+  gizlenebilir = true,
+  esitlikIsaretli = false
 ): boolean {
   if (activeTool !== 'delete') return false;
-  const eylem = etiketTiklamaEylemi(obj, kind, activeTool, gizlenebilir);
+  const eylem = etiketTiklamaEylemi(obj, kind, activeTool, gizlenebilir, esitlikIsaretli);
   return eylem === 'aciyiSil' || eylem === 'olcumuSil';
 }
 

@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { ReactElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type { MathObject } from '@/types/math';
 import { esitlikIsaretleri, esitlikYamalariniUygula, etkinEsitlik } from '@/math/esitlikIsaretleri';
 import { esitlikMenuMaddeleri, esitUzunluklarMaddesi } from '../EsitlikIsaretleri';
@@ -14,7 +16,7 @@ const sahne = (): MathObject[] => [
 ];
 
 describe('eşitlik menüsü', () => {
-  it('parça: "Eşitlik işareti" alt menüsü, beş seçenek, etkin değer işaretli', () => {
+  it('parça: "Eşitlik işareti" alt menüsü, sekiz çizgi türü, etkin değer işaretli', () => {
     const objects = sahne();
     const sonuc = esitlikIsaretleri(objects);
     const uygula = vi.fn();
@@ -22,7 +24,7 @@ describe('eşitlik menüsü', () => {
     expect(m.map((x) => x.id)).toEqual(['esitlik-isareti']);
     expect(m[0].label).toBe('Eşitlik işareti');
     const alt = m[0].submenu!;
-    expect(alt.map((x) => x.label)).toEqual(['Otomatik', 'Tek çizgi', 'İki çizgi', 'Üç çizgi', 'İşaretsiz']);
+    expect(alt.map((x) => x.label)).toEqual(['Otomatik', 'Tek çizgi', 'İki çizgi', 'Üç çizgi', 'Dört çizgi', 'Beş çizgi', 'Altı çizgi', 'Yedi çizgi', 'Sekiz çizgi', 'İşaretsiz']);
     expect(alt.every((x) => x.radio)).toBe(true);
     expect(alt.filter((x) => x.checked).map((x) => x.label)).toEqual(['İki çizgi']);
     alt[0].onSelect!();
@@ -32,6 +34,23 @@ describe('eşitlik menüsü', () => {
     const sonra = esitlikYamalariniUygula(objects, yamalar);
     expect('equalityMark' in sonra.find((o) => o.id === 'CD')!).toBe(false);
     expect(m.concat(alt).some((x) => x.id.startsWith('olc-'))).toBe(false);
+  });
+
+  it.each([{ sayi: 5, ad: 'Beş çizgi' }, { sayi: 8, ad: 'Sekiz çizgi' }])('$ad seçimi eş gruba uygulanır ve simgesi doğru sayıda çentik gösterir', ({ sayi, ad }) => {
+    const objects = sahne();
+    const sonuc = esitlikIsaretleri(objects);
+    const uygula = vi.fn();
+    const m = esitlikMenuMaddeleri({ hedef: objects.find(o => o.id === 'AC')!, kenarNo: null, objects, seciliIdler: [], sonuc, uygula });
+    const secenek = m[0].submenu!.find(x => x.label === ad)!;
+    const svg = renderToStaticMarkup(secenek.icon as ReactElement);
+    const xs = [...svg.matchAll(/M([\d.]+) 4\.6V11\.4/g)].map(m => Number(m[1]));
+    expect(xs).toHaveLength(sayi);
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(3.4);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(12.6);
+    secenek.onSelect!();
+    const sonra = esitlikIsaretleri(esitlikYamalariniUygula(objects, uygula.mock.calls[0][0]));
+    expect(etkinEsitlik(sonra, 'seg:AC')).toMatchObject({ elle: sayi, sayi });
+    expect(etkinEsitlik(sonra, 'seg:AD')).toMatchObject({ elle: sayi, sayi });
   });
 
   it('çokgen: kenar yoksa madde yok; kenarda alt menü; doğru için madde yok', () => {
@@ -65,7 +84,7 @@ describe('eşitlik menüsü', () => {
   it('boş alan maddesi', () => {
     const fn = vi.fn();
     const m = esitUzunluklarMaddesi(true, fn);
-    expect(m).toMatchObject({ id: 'esit-uzunluklar', label: 'Eşit Uzunlukları İşaretle', checked: true });
+    expect(m).toMatchObject({ id: 'esit-uzunluklar', label: 'Eş Uzunluk ve Açıları İşaretle', checked: true });
     m.onSelect!();
     expect(fn).toHaveBeenCalled();
     expect(esitUzunluklarMaddesi(false, fn).checked).toBe(false);

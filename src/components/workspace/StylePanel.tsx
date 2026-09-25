@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown, Minus, Type, CircleDot, RotateCcw, Eye } from 'lucide-react';
+import { ChevronDown, Minus, Type, CircleDot, RotateCcw, Eye, Sigma } from 'lucide-react';
 import { useWorkspace } from '@/state/WorkspaceContext';
 import { DEFAULT_STYLE_SETTINGS, StyleSettings } from '@/types/workspace';
 import { formatTurkishNumber } from '@/math/coordinates';
+import type { AciYazimi, OlcuYazimi, YazimAyari } from '@/math/matematikYazimi';
+import { MatematikMetni } from '@/components/workspace/MatematikMetni';
 
 interface AyarKaydiriciProps {
   etiket: string;
@@ -69,6 +71,73 @@ function AyarOnay({
   );
 }
 
+interface AyarSecenegi<T extends string> {
+  deger: T;
+  etiket: string;
+  /** Seçeneğin MEB yazımıyla canlı önizlemesi ("|AB| = 5 br") */
+  ornek: string;
+  /** Önizleme HER ZAMAN kendi seçeneğinin biçiminde çizilir, o an geçerli olan ayarda değil. */
+  ornekAyari?: YazimAyari;
+}
+
+/**
+ * İki-üç seçenekli ayar (bölmeli düğme kümesi). Her seçenek ne yaptığını ÖRNEKLE gösterir:
+ * kullanıcı "tam" / "kısa" gibi sözcükleri değil, ekranda göreceği yazımı seçer.
+ */
+function AyarSecim<T extends string>({
+  etiket,
+  deger,
+  secenekler,
+  onChange,
+}: {
+  etiket: string;
+  deger: T;
+  secenekler: readonly AyarSecenegi<T>[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <span className="text-[11px] font-bold text-foreground">{etiket}</span>
+      <div role="radiogroup" aria-label={etiket} className="flex flex-col gap-1.5">
+        {secenekler.map((s) => {
+          const secili = deger === s.deger;
+          return (
+            <button
+              key={s.deger}
+              type="button"
+              role="radio"
+              aria-checked={secili}
+              onClick={() => onChange(s.deger)}
+              className={`flex items-center justify-between gap-2 rounded-xl border px-2.5 py-1.5 text-left transition-colors cursor-pointer ${
+                secili
+                  ? 'border-primary/60 bg-primary/10 text-foreground'
+                  : 'border-border/60 bg-muted/40 text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              <span className="text-[11px] font-bold">{s.etiket}</span>
+              <MatematikMetni
+                metin={s.ornek}
+                ayar={s.ornekAyari}
+                className={`shrink-0 text-[11px] leading-[1.45] ${secili ? 'text-primary font-bold' : 'text-muted-foreground'}`}
+              />
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const OLCU_SECENEKLERI: readonly AyarSecenegi<OlcuYazimi>[] = [
+  { deger: 'tam', etiket: 'Adıyla', ornek: '|AB| = 5 br' },
+  { deger: 'kisa', etiket: 'Yalnızca değer', ornek: '5 br' },
+];
+
+const ACI_SECENEKLERI: readonly AyarSecenegi<AciYazimi>[] = [
+  { deger: 'sapka', etiket: 'Şapkalı (MEB)', ornek: 'm(∠ABC) = 60°', ornekAyari: { olcuYazimi: 'tam', aciYazimi: 'sapka' } },
+  { deger: 'isaret', etiket: '∠ işaretli', ornek: 'm(∠ABC) = 60°', ornekAyari: { olcuYazimi: 'tam', aciYazimi: 'isaret' } },
+];
+
 /**
  * Sağ paneldeki "Stil" sekmesi.
  *
@@ -80,7 +149,7 @@ export function StylePanel() {
   const { styleSettings, setStyleSettings, viewport, setViewport } = useWorkspace();
   const [yaziAcik, setYaziAcik] = useState(false);
 
-  const guncelle = (alan: keyof StyleSettings, v: number | boolean) =>
+  const guncelle = (alan: keyof StyleSettings, v: number | boolean | string) =>
     setStyleSettings((prev) => ({ ...prev, [alan]: v }));
 
   const varsayilanMi =
@@ -191,6 +260,36 @@ export function StylePanel() {
           )}
         </div>
 
+        {/* ÖLÇÜ YAZIMI (MEB) */}
+        <div className="space-y-2.5 p-3 rounded-2xl bg-muted/30 border border-border/70">
+          <h3 className="text-[11px] font-black text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <Sigma className="w-3.5 h-3.5" />
+            <span>Ölçü Yazımı</span>
+          </h3>
+          <AyarSecim
+            etiket="Ölçü yazımı"
+            deger={styleSettings.olcuYazimi}
+            secenekler={OLCU_SECENEKLERI}
+            onChange={(v) => guncelle('olcuYazimi', v)}
+          />
+          <AyarSecim
+            etiket="Açı yazımı"
+            deger={styleSettings.aciYazimi}
+            secenekler={ACI_SECENEKLERI}
+            onChange={(v) => guncelle('aciYazimi', v)}
+          />
+          <AyarOnay
+            etiket="Ölçüleri tam sayı yaz"
+            ipucu="Uzunluk, açı, alan ve çevre tam sayı yazılır; yuvarlanan değerin önünde ≈ durur. Alan ve çevre ekranda görünen tam sayılardan hesaplanır (dikdörtgende görünen kenarların çarpımı, çevrede görünen kenarların toplamı); bir çokgenin bütün iç açıları ölçülmüşse toplamları korunur. Tam sayılardan çıkan kesin sonuç virgüllü olabilir (3 × 5 ÷ 2 = 7,5)."
+            isaretli={styleSettings.tamSayiOlcu}
+            onChange={(v) => guncelle('tamSayiOlcu', v)}
+          />
+          <p className="text-[10px] text-muted-foreground leading-snug">
+            Yazı ölçtüğü kenarın ya da açının yanındayken yalnızca değer yazılır (5 br); etiketi
+            uzaklaştırınca adıyla birlikte tam yazılır (|AB| = 5 br). Tam yazım ipucunda ve panelde her zaman durur.
+          </p>
+        </div>
+
         {/* SADELEŞTİRME & DİĞER */}
         <div className="space-y-2 p-3 rounded-2xl bg-muted/30 border border-border/70">
           <h3 className="text-[11px] font-black text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -199,9 +298,9 @@ export function StylePanel() {
           </h3>
           <AyarOnay
             etiket="Etiket kutularını kaldır"
-            ipucu="Ölçüm yazıları arka plan kutusu olmadan, düz metin olarak görünür."
-            isaretli={styleSettings.hideLabelBoxes}
-            onChange={(v) => guncelle('hideLabelBoxes', v)}
+            ipucu="Ölçüm yazıları arka plan kutusu olmadan, düz metin olarak görünür (varsayılan). İşareti kaldırınca kutular geri gelir."
+            isaretli={!styleSettings.showLabelBoxes}
+            onChange={(v) => guncelle('showLabelBoxes', !v)}
           />
           <AyarOnay
             etiket="Dolgu rengini kaldır"

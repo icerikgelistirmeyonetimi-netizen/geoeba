@@ -95,6 +95,15 @@ export function polinomDegeri(katsayilar: number[], x: number): number {
 }
 
 /**
+ * Polinom noktaların HEPSİNDEN geçiyor mu? "Noktalardan tam geçiyor" yalnızca artıklar hesap gürültüsü
+ * düzeyindeyken söylenir: R² = 0,9994 gibi 1'e çok yakın bir regresyon doğrusunda noktalar yine de doğrunun dışındadır.
+ */
+export function noktalardanTamGeciyor(points: Point2D[], katsayilar: number[]): boolean {
+  const olcek = Math.max(1, ...points.map((p) => Math.abs(p.y)));
+  return points.every((p) => Math.abs(polinomDegeri(katsayilar, p.x) - p.y) <= 1e-6 * olcek);
+}
+
+/**
  * Katsayıları, ifade ayrıştırıcısının anlayacağı bir metne çevirir: "2*x^2 - 3*x + 1".
  * Çok küçük katsayılar atılır; aksi hâlde "0.0000000001*x^3" gibi gürültü kalırdı.
  */

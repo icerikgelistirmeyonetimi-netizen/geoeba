@@ -28,18 +28,26 @@ export type AciYazimi = 'sapka' | 'isaret';
 export interface YazimAyari {
   olcuYazimi: OlcuYazimi;
   aciYazimi: AciYazimi;
+  /**
+   * Uzunluk, açı, alan, çevre ve yay yazıları TAM SAYIYA yuvarlanır (yuvarlanan değer '≈' alır).
+   * Kullanıcı isteği (2026-09-25): "açı ve uzunluklar virgüllü değer almasın, hep tam sayı olsun".
+   * Eğim, trigonometrik oran ve koordinat yuvarlanmaz: tam sayıda anlamsızlaşırlar (0,99 → 1).
+   */
+  tamSayi?: boolean;
 }
-export const VARSAYILAN_YAZIM: YazimAyari = { olcuYazimi: 'tam', aciYazimi: 'sapka' };
+/** Motorun ve ayarsız çağrıların varsayılanı: tam sayı KAPALI (komut yanıtları kesin değer verir). */
+export const VARSAYILAN_YAZIM: YazimAyari = { olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: false };
 export const OLCU_YAZIMLARI: readonly OlcuYazimi[] = ['tam', 'kisa'];
 export const ACI_YAZIMLARI: readonly AciYazimi[] = ['sapka', 'isaret'];
 
 /** StyleSettings'ten (eski kayıtlarda alanlar eksik olabilir) güvenli ayar. */
-export function yazimAyari(s?: { olcuYazimi?: unknown; aciYazimi?: unknown } | null): YazimAyari {
+export function yazimAyari(s?: { olcuYazimi?: unknown; aciYazimi?: unknown; tamSayiOlcu?: unknown } | null): YazimAyari {
   const olcu = s?.olcuYazimi;
   const aci = s?.aciYazimi;
   return {
     olcuYazimi: OLCU_YAZIMLARI.includes(olcu as OlcuYazimi) ? (olcu as OlcuYazimi) : 'tam',
     aciYazimi: ACI_YAZIMLARI.includes(aci as AciYazimi) ? (aci as AciYazimi) : 'sapka',
+    tamSayi: s?.tamSayiOlcu === true,
   };
 }
 
@@ -87,8 +95,35 @@ export interface Olcu {
   disAci?: boolean;
   /** Değer formülle yaklaşık hesaplandı (elips çevresi): her zaman '≈' */
   yaklasik?: boolean;
+  /**
+   * Basamak KESİNDİR, tam sayı ayarı onu değiştirmez: görünen tam sayılardan hesaplanmış türetilmiş değer
+   * (dik üçgenin alanı 3 × 5 / 2 = 7,5). Yuvarlamak öğrencinin elle bulduğu sonuçla çelişirdi.
+   */
+  sabitBasamak?: boolean;
+  /**
+   * '≈' HİÇ yazılmaz (tam sayı yazımı; kullanıcı, 2026-09-25: "virgüllü yazım aktif değilken yaklaşık
+   * işareti de kullanılmamalı"). Bağlaç '=' olur, sesli okunuşta "yaklaşık" denmez.
+   */
+  yaklasikYok?: boolean;
   /** trig: fonksiyon ve oranı kuran kenarlar */
   trig?: { fn: TrigFn; pay: string[] | null; payda: string[] | null; payDeger: number; paydaDeger: number };
+}
+
+// ------------------------------------------------------------------------------------------------ tam sayı ayarı
+
+/** Tam sayıya yuvarlanan ölçü türleri. */
+const TAM_SAYI_TURLERI: ReadonlySet<OlcuTuru> = new Set<OlcuTuru>([
+  'uzunluk', 'aci', 'merkezAci', 'yayOlcusu', 'yayUzunlugu', 'alan', 'cevre', 'dilimAlani', 'dilimCevresi',
+  'yaricap', 'kiris', 'cap', 'daireAlani', 'cemberCevresi', 'elipsAlani', 'elipsCevresi',
+]);
+
+/**
+ * Ayarda tam sayı açıksa: basamak 0'a iner (sabit basamaklı türetilmiş değer — 7,5 — dokunulmaz) ve '≈'
+ * kullanılmaz (kullanıcı: "virgüllü yazım aktif değilken yaklaşık işareti de kullanılmamalı").
+ */
+export function tamSayiUygula(o: Olcu, ayar?: YazimAyari): Olcu {
+  if (!ayar?.tamSayi || !TAM_SAYI_TURLERI.has(o.tur)) return o;
+  return { ...o, basamak: o.sabitBasamak ? o.basamak : 0, yaklasik: undefined, yaklasikYok: true };
 }
 
 // ------------------------------------------------------------------------------------------------ sayılar
@@ -250,6 +285,7 @@ function birimOf(o: Olcu): Birim | null {
 }
 
 function yaklasikMi(o: Olcu): boolean {
+  if (o.yaklasikYok) return false;
   return !!o.yaklasik || (o.deger !== null && yuvarlandiMi(o.deger, o.basamak));
 }
 
@@ -293,7 +329,7 @@ export interface DugumSecenegi {
 
 /** Ölçünün görüntü ağacı. */
 export function olcuDugumleri(o: Olcu, ayar: YazimAyari = VARSAYILAN_YAZIM, sec: DugumSecenegi = {}): Dugum[] {
-  const d = olcuDugumleriHam(o, ayar);
+  const d = olcuDugumleriHam(tamSayiUygula(o, ayar), ayar);
   const ilk = d[0];
   if (sec.cumleIci && ilk?.t === 'kelime') d[0] = { ...ilk, s: ilk.s.charAt(0).toLocaleLowerCase('tr') + ilk.s.slice(1) };
   return d;
@@ -564,7 +600,20 @@ const HARF: Record<string, string> = {
   W: 'dabılyu', X: 'iks', Y: 'ye', Z: 'ze',
 };
 /** Harf harf okunmayan kısaltmalar. */
-const KISALTMALAR = new Set(['MEB', 'PDF', 'PNG', 'SVG', 'JPG', 'JPEG', 'GIF', 'USB', 'LGS', 'TYT', 'AYT', 'ÖSYM', 'HTML', 'CSV', 'GLB']);
+export const KISALTMALAR = new Set(['MEB', 'EBA', 'PDF', 'PNG', 'SVG', 'JPG', 'JPEG', 'GIF', 'USB', 'MB', 'GB', 'LGS', 'TYT', 'AYT', 'ÖSYM', 'HTML', 'CSV', 'GLB']);
+/**
+ * Arayüz metinlerinde VURGU için büyük yazılan Türkçe sözcükler. Bunlar nokta adı değildir: harf harf
+ * okunursa "İki FARKLI şekil seçmelisiniz" ekran okuyucuda "iki fe a re ke le ı şekil" olur (ölçülen
+ * kusur, 2026-09-25). Sözcük olarak, küçük harfle okunurlar.
+ *
+ * Listeye eklemeyi unutmayı seslendirmeSozcukleri.test.ts yakalar: kaynaktaki Türkçe cümlelerde geçen
+ * her büyük harf dizisi ya burada, ya KISALTMALAR'da ya da testteki ad beyaz listesinde olmalıdır.
+ */
+export const VURGU_SOZCUKLERI = new Set([
+  'AÇININ', 'AYNI', 'BAŞLANGIÇ', 'BİTİŞ', 'DEĞİL', 'DOĞRULARLA', 'FARKLI', 'FONKSİYON', 'HER', 'İKİ',
+  'KAYDIRICI', 'KENARI', 'KÖŞESİNE', 'NOKTA', 'NOKTALAR', 'NOKTALARA', 'ÖNCE', 'SONRA', 'ŞEKİL', 'ŞEKLE',
+  'TÜM', 'UÇLARINDAN', 'ÜZERİNDE', 'YALNIZ', 'YALNIZCA',
+]);
 
 /** Nokta adını harf harf okur: "A_1" → "a bir", "B'" → "be üssü". Ses motoru "AB"yi tek sözcük okumasın. */
 export function adOku(s: string): string {
@@ -618,7 +667,8 @@ function ozne(o: Olcu, oku: (a: string[]) => string): string {
  * Sesli okunuş: sembol, rakam ya da kısaltma İÇERMEZ ("m", "|", "°", "br²", "≈" okunmaz).
  * Ekran okuyucu (aria-label, canlı bölge) ve ileride eklenecek konuşma çıktısı bunu kullanır.
  */
-export function sesli(o: Olcu): string {
+export function sesli(girdi: Olcu, ayar?: YazimAyari): string {
+  const o = tamSayiUygula(girdi, ayar);
   const bas = ozne(o, adlariOku);
   if (o.deger === null) return `${bas} tanımsız`;
   if (o.tur === 'koordinat') return `${bas} ${sayiOku(sayiMetni(o.deger, o.basamak))} ve ${sayiOku(sayiMetni(o.deger2 ?? 0, o.basamak))}`;
@@ -628,7 +678,8 @@ export function sesli(o: Olcu): string {
 }
 
 /** Açıklama: fare ipucu (<title>) ve kısa yazımda tam ad; adlar ve rakamlar ekrandaki gibi. */
-export function aciklama(o: Olcu): string {
+export function aciklama(girdi: Olcu, ayar?: YazimAyari): string {
+  const o = tamSayiUygula(girdi, ayar);
   const bas = ozne(o, (a) => a.join(''));
   const ilk = bas.charAt(0).toLocaleUpperCase('tr') + bas.slice(1);
   if (o.deger === null) return `${ilk} tanımsız`;
@@ -664,6 +715,9 @@ const PARCA = new RegExp(
     // Tek başına duran küçük latin harfi (r, x, y, n) matematik kipinde eğik kalır; 'π' harften sayılmaz.
     '(?<tekharf>(?<![A-Za-zÇĞİÖŞÜçğıöşü])[a-z](?![A-Za-zÇĞİÖŞÜçğıöşü]))',
     '(?<yunan>[\\u0391-\\u03C9])',
+    // Yunan harfini izleyen kısa küçük harf dizisi de değişkendir ('πab' → \pi ab, \pi \text{ab} değil):
+    // düğüm yolundaki elipsAlani ile metin yolu aynı LaTeX'i versin.
+    '(?<yunanDegiskeni>(?<=[\\u0391-\\u03C9])[a-z]{1,2}(?![A-Za-zÇĞİÖŞÜçğıöşü]))',
     "(?<kelime>[\\p{L}][\\p{L}\\d’']*)",
     '(?<simge>[^\\p{L}\\d]+)',
     // Hiçbir kurala uymayan tek karakter (ör. 'c1' içindeki rakam) düşmesin: duzMetin geri dönebilmeli.
@@ -690,6 +744,7 @@ export function metinDugumleri(metin: string): Dugum[] {
     else if (g.ad) for (const a of g.ad.match(new RegExp(AD, 'gu')) ?? []) ekle(ad(a));
     else if (g.tekharf) ekle(sembol(g.tekharf));
     else if (g.yunan) ekle(sembol(g.yunan));
+    else if (g.yunanDegiskeni) ekle(sembol(g.yunanDegiskeni));
     else if (g.kelime) ekle(kelime(g.kelime));
     else if (g.simge) {
       // Sözcükler arası boşluk, noktalama ve tırnaklar sözcüğe aittir; matematik simgeleri ayrı kalır.
@@ -798,7 +853,11 @@ function seslendirHam(metin: string): string {
     .replace(/(?<!\p{L})(sin|cos|tan)(?!\p{L})/gu, (fn: string) => ` ${FN_OKU[fn as TrigFn]}${IM} `)
     .replace(A(`∠(${ADLAR})(?: açısı)?`), (_, a: string) => ` ${adBol(a)} açısı `)
     .replace(A(`(${AD})\\u0302(?: açısı)?`), (_, a: string) => ` ${adBol(a)} açısı `)
-    .replace(A(`\\[(${ADLAR})\\]`), (_, a: string) => ` ${adBol(a)} doğru parçası `)
+    // Ardından gelen ' doğru parçası' / ' parçası' YUTULUR (eki korunur): "[AB] doğru parçası çizildi.",
+    // "[AB] doğru parçasının uzunluğu" ve "[AB] parçasının orta noktası" iki kez "parçası" okutmasın
+    // ("a be doğru parçası parçasının orta noktasıdır" ölçülen kusurdu, 2026-09-25).
+    .replace(A(`\\[(${ADLAR})\\](?:\\s+(?:doğru )?parçası(\\p{L}*))?`),
+      (_, a: string, ek: string | undefined) => ` ${adBol(a)} doğru parçası${ek ?? ''} `)
     .replace(A(`(${YAY_ADI})`), (_, a: string) => ` ${adBol(a)} yayı `)
     // koordinat: "A(2; -3) noktası" → "a noktası, iki ve eksi üç" (tek 'noktası')
     .replace(A(`(?<![\\p{L}\\d])(${AD})\\((-?\\d+(?:,\\d+)?); (-?\\d+(?:,\\d+)?)\\)(\\s+noktası\\p{L}*)?`),
@@ -821,10 +880,18 @@ function seslendirHam(metin: string): string {
     // sıra sayısı: "2. sınıf" → "ikinci sınıf" (cümle sonu noktası değil: ardından küçük harf gelmeli)
     .replace(/(?<![\d,])(\d{1,3})\.(?=\s+\p{Ll})/gu, (_, n: string) => siraOku(n))
     .replace(/(\d)(\p{Ll})/gu, '$1 $2')
-    // büyük harf dizileri (kısaltmalar dışında) harf harf
+    // uygulamanın kendi ürettiği adlar (c1, c12, f1, f2): harf kendi adıyla, sayı AYRI sözcük okunur.
+    // Ayırmadan "c1" → "cbir", "c12" → "con iki" çıkıyordu.
+    .replace(/(?<![\p{L}\d_])(\p{Ll})(\d{1,3})(?![\p{L}\d,])/gu,
+      (_, h: string, n: string) => ` ${adOku(h.toLocaleUpperCase('tr'))} ${sayiOku(n)} `)
+    // büyük harf dizileri harf harf okunur; kısaltmalar olduğu gibi, VURGU sözcükleri küçük harfle
     .replace(/(?<![\p{L}\d+])(\p{Lu}(?:_?\d{1,3})?(?:['′](?!\p{Ll}))*(?:\p{Lu}(?:_?\d{1,3})?(?:['′](?!\p{Ll}))*)*)(?!\p{Ll})/gu,
-      (w: string) => (KISALTMALAR.has(w) ? w : ` ${adBol(w)} `))
+      (w: string) => (KISALTMALAR.has(w) ? w
+        : VURGU_SOZCUKLERI.has(w) ? w.toLocaleLowerCase('tr')
+        : ` ${adBol(w)} `))
     .replace(/≈/g, ' yaklaşık ')
+    // oran: "2:1 oranında" → "iki bölü bir oranında" (iki yanı da rakam; "Ölçüm: 5 br"deki iki nokta değil)
+    .replace(/(\d)\s*:\s*(?=\d)/g, '$1 bölü ')
     .replace(/(\d)\s*°/g, '$1 derece')
     .replace(/(^|[\s(=:])[-−](?=\d)/g, '$1eksi ')
     .replace(/\s[-−]\s/g, ' eksi ').replace(/\s\+\s/g, ' artı ')

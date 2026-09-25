@@ -4,12 +4,14 @@
  * Eşitlik çentiği menü simgeleri (16×16, currentColor; GrafikMenuSimgeleri ile aynı biçem).
  */
 import React from 'react';
+import { ESITLIK_EN_COK } from '@/math/esitlikIsaretleri';
 
 /** Yatay bir parça ve üzerinde `sayi` kadar dik çentik (0: çentiksiz parça). */
 export function EsitlikSimgesi({ sayi }: { sayi: number }) {
-  const k = Math.max(0, Math.min(4, Math.round(sayi)));
+  const k = Math.max(0, Math.min(ESITLIK_EN_COK, Math.round(sayi)));
+  const aralik = k > 1 ? Math.min(2.6, 9.2 / (k - 1)) : 2.6;
   const d = Array.from({ length: k }, (_, j) => {
-    const x = 8 + (j - (k - 1) / 2) * 2.6;
+    const x = 8 + (j - (k - 1) / 2) * aralik;
     return `M${x.toFixed(2)} 4.6V11.4`;
   }).join('');
   return (
@@ -18,7 +20,7 @@ export function EsitlikSimgesi({ sayi }: { sayi: number }) {
       {/* Uç noktalar: simge "+" değil, çentikli bir doğru parçası olarak okunsun */}
       <circle cx="1.9" cy="8" r="1.3" fill="currentColor" stroke="none" />
       <circle cx="14.1" cy="8" r="1.3" fill="currentColor" stroke="none" />
-      {d && <path d={d} strokeWidth="1.2" />}
+      {d && <path d={d} strokeWidth={k > 4 ? 0.9 : 1.2} />}
     </svg>
   );
 }

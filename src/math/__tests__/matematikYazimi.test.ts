@@ -92,8 +92,11 @@ describe('düz metin (MEB yazımı)', () => {
     expect(yazimAyari(undefined)).toEqual(VARSAYILAN_YAZIM);
     expect(yazimAyari(null)).toEqual(VARSAYILAN_YAZIM);
     expect(yazimAyari({})).toEqual(VARSAYILAN_YAZIM);
-    expect(yazimAyari({ olcuYazimi: 'kisa', aciYazimi: 'x' })).toEqual({ olcuYazimi: 'kisa', aciYazimi: 'sapka' });
-    expect(yazimAyari({ olcuYazimi: 3, aciYazimi: 'isaret' })).toEqual({ olcuYazimi: 'tam', aciYazimi: 'isaret' });
+    expect(yazimAyari({ olcuYazimi: 'kisa', aciYazimi: 'x' })).toEqual({ olcuYazimi: 'kisa', aciYazimi: 'sapka', tamSayi: false });
+    expect(yazimAyari({ olcuYazimi: 3, aciYazimi: 'isaret' })).toEqual({ olcuYazimi: 'tam', aciYazimi: 'isaret', tamSayi: false });
+    // Tam sayı yalnız açıkça true iken açılır (bozuk değer kapalı sayılır)
+    expect(yazimAyari({ tamSayiOlcu: 'evet' }).tamSayi).toBe(false);
+    expect(yazimAyari({ tamSayiOlcu: true }).tamSayi).toBe(true);
   });
 
   it('sayı ve yuvarlama kuralı', () => {
@@ -188,6 +191,13 @@ describe('metniSeslendir: yanıtlar ve ipuçları', () => {
     ['Pergelle A merkezli çember çizildi (r = 3 br).', 'Pergelle a merkezli çember çizildi (yarıçap üç birim).'],
     ['Hayır, 45 değil.', 'Hayır, kırk beş değil.'],
     ['[AB] çizildi.', 'a be doğru parçası çizildi.'],
+    // Ardından gelen 'doğru parçası' yutulur (eki korunur): aynı sözcük iki kez okunmaz.
+    ['[AB] doğru parçası çizildi.', 'a be doğru parçası çizildi.'],
+    ['[AB] doğru parçasının uzunluğu 5 br.', 'a be doğru parçasının uzunluğu beş birim.'],
+    // Uygulamanın kendi ürettiği adlarda harf ile sayı AYRI okunur ('cbir' / 'con iki' değil).
+    ['c1: r = 3 br.', 'ce bir: yarıçap üç birim.'],
+    ['c12 çemberi çizildi.', 'ce on iki çemberi çizildi.'],
+    ['f1 fonksiyonu çizildi.', 'fe bir fonksiyonu çizildi.'],
   ])('metniSeslendir(%j)', (metin, beklenen) => {
     const s = metniSeslendir(metin);
     expect(s).toBe(beklenen);

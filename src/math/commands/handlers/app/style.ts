@@ -43,7 +43,7 @@ const STYLE_RESET = /\bstil\w* (?:sifirla|varsayilan)\w*|\bvarsayilan stil\w*|\b
 
 type Plan =
   | { kind: 'reset' }
-  | { kind: 'bool'; key: 'hideFills' | 'hideLabelBoxes'; value: boolean }
+  | { kind: 'bool'; key: 'hideFills' | 'showLabelBoxes'; value: boolean }
   | { kind: 'numeric'; keys: NumKey[]; global: boolean };
 
 /**
@@ -59,8 +59,8 @@ function plan(c: Clause): Plan | null {
   if (STYLE_RESET.test(text)) return { kind: 'reset' };
   const sized = GROW.test(text) || SHRINK.test(text) || (c.numbers.length > 0 && SET.test(text)) || /#\d+\s*kat/.test(c.text);
   if (LABEL_BOXES.test(text) && !sized) {
-    if (OFF.test(text)) return { kind: 'bool', key: 'hideLabelBoxes', value: true };
-    if (ON.test(text)) return { kind: 'bool', key: 'hideLabelBoxes', value: false };
+    if (OFF.test(text)) return { kind: 'bool', key: 'showLabelBoxes', value: false };
+    if (ON.test(text)) return { kind: 'bool', key: 'showLabelBoxes', value: true };
   }
   if (FILLS.test(text)) {
     if (/\bbos\b/.test(text) || OFF.test(text)) return { kind: 'bool', key: 'hideFills', value: true };
@@ -113,7 +113,7 @@ function nextValue(c: Clause, scene: CommandScene, item: (typeof NUMERIC)[number
 export const style: CommandHandler = {
   id: 'app.style',
   examples: ['yazıları büyüt', 'tüm yazıları küçült', 'tüm yazıların boyutunu 1,5 yap', 'noktaları küçült', 'noktaların boyutunu 8 piksel yap', 'çizgileri kalınlaştır', 'çizgi kalınlığını 2 yap',
-    'dolguları kaldır', 'dolguları geri getir', 'etiket kutularını gizle', 'stili sıfırla', 'nokta adlarını büyüt'],
+    'dolguları kaldır', 'dolguları geri getir', 'etiket kutularını göster', 'stili sıfırla', 'nokta adlarını büyüt'],
   match(c) {
     const p = plan(c);
     if (!p) return 0;
@@ -136,7 +136,7 @@ export const style: CommandHandler = {
     if (p.kind === 'bool') {
       scene.act({ kind: 'styleSettings', patch: { [p.key]: p.value } });
       if (p.key === 'hideFills') scene.say(p.value ? 'Şekillerin dolguları kaldırıldı; yalnızca kenar çizgileri görünüyor.' : 'Şekillerin dolguları geri getirildi.');
-      else scene.say(p.value ? 'Ölçüm etiketlerinin kutuları kaldırıldı; yazılar düz metin görünüyor.' : 'Ölçüm etiketlerinin kutuları geri getirildi.');
+      else scene.say(p.value ? 'Ölçüm etiketleri kutu içinde gösteriliyor.' : 'Ölçüm etiketlerinin kutuları kaldırıldı; yazılar düz metin görünüyor.');
       return;
     }
     const patch: Partial<StyleSettings> = {};

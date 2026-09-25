@@ -24,6 +24,23 @@ göre kısar, böylece ibre iletkinin 0–180 bandı dışına taşmaz. `owner`
 kutusu bu parçaların kutusuyla birleştirilir. Hareketin zamanlaması/genliği JSON'da
 DEĞİL, `src/components/adalar/adaSahnesi.ts` sabitlerindedir. Model/JSON elle düzenlenmez.
 
+Adaların hareketli parçaları da (`PARCA_TANIMLARI`, her sayfada; sahibi nesnenin adası ya da
+sınıf binası) aynı yolla ayrılır ve **yalnız sahibinin üzerine gelince** oynar, sürekli döngü yoktur
+(kullanıcı isteği, 2026-09-24):
+
+- `arac:saat-akrep`, `arac:saat-yelkovan`, `arac:saat-saniye` (`motion: "saat"`, `hand`,
+  `restAngle` = 12'den saat yönünde duruş açısı): ilkokul parkının saati dururken modeldeki 10:00'ı,
+  üzerindeyken cihazın saatini gösterir; saniye ibresi tikler. Saniye ibresi kaynakta yoktur,
+  dışa aktarımda yelkovandan türetilir (`saniye_ibresi_ekle`); yelkovan ve saniye kadrandan öne
+  alınır (`one`) ki dönerken ibreler iç içe geçmesin.
+- `arac:kubbe` (`shadow: true`, kabuk + teleskop) ve `arac:kubbe-kaburga` (kaburgalar, yarık
+  kenarları; gölge vermez): lise gözlemevinin kubbesi düşey eksende bir kez iki yana tarar.
+- `arac:piramit` (cam yüzler, kaburgalar, çıtalar, tepe; menteşe arka taban kenarı, eksen −X) ve
+  `arac:roket` (`rise`): ortaokul piramidi geriye yatar, zeminin altındaki roket yükselir, fırlar,
+  piramit kapanır. Roket kaynakta yoktur; `roket.py` dışa aktarımda adanın kendi malzemeleriyle kurar
+  (girişin solunda, kapak 45° açıkken yolu serbest kalan şerit). Alev ve duman `roketFirlatma.ts`
+  içinde sprite'tır.
+
 ## Modelleri yeniden üretme (Blender 4.4)
 
 Kaynak sahneler depoda tutulmaz; `matematik-atolye-adasi/takimadalar-atolye.blend`,

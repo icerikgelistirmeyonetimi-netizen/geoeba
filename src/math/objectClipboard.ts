@@ -10,7 +10,7 @@ function references(value: unknown, key = ''): string[] {
   // izlenseydi çemberi (ya da dönüşüm görüntüsünü) kopyalamak başka noktaları da panoya taşırdı.
   // armOfAngleId de bağımlılık değildir: tek bir kolu kopyalamak açının tamamını panoya çekmemeli.
   // Yazının hizalama grubu yalnızca görünümü belirler; tek kenarı kopyalamak grubun tamamını çekmez.
-  if (key === 'releasedRadiusPointId' || key === 'armOfAngleId' || key === 'labelAnchors') return [];
+  if (key === 'releasedRadiusPointId' || key === 'armOfAngleId' || key === 'labelAnchors' || key === 'bindingTarget') return [];
   if (key === 'sliderBindings' && value && typeof value === 'object') return Object.values(value).flatMap(v => references(v, 'sliderId'));
   if (typeof value === 'string') return /Ids?$/.test(key) ? [value] : [];
   if (Array.isArray(value)) return value.flatMap(v => references(v, key));
@@ -69,6 +69,8 @@ export function pasteObjects(clipboard: ObjectClipboard, scene: MathObject[], lo
   }
   const objects = clipboard.objects.map(source => {
     const object = remap(source) as MathObject;
+    // Tek başına kopyalanan kaydırıcı eski sahnenin ölçü adını taşımamalı.
+    if (object.type === 'slider' && source.type === 'slider' && source.bindingTarget && !idMap.has(source.bindingTarget.objectId)) delete object.bindingTarget;
     if (source.labelAnchors && object.labelAnchors) {
       const anchors = Object.fromEntries(Object.entries(object.labelAnchors).filter(([kind]) =>
         source.labelAnchors![kind].pointIds.every(id => idMap.has(id))));

@@ -1,5 +1,7 @@
+// Sahip: D1 (vg/grafik.ts)
 import { describe, expect, it } from 'vitest';
 import {
+  SERI_RENKLERI,
   adimOndalik,
   adimaYuvarla,
   aralikSecenekleri,
@@ -9,22 +11,72 @@ import {
   dilimYenidenDagit,
   dilimYolu,
   dogrusalOlcek,
+  enBuyukKalanlaYuvarla,
   enYuksekYigin,
   frekansSutunlari,
+  gosterimOndaligi,
   gruplamaVar,
   isaretciAcisi,
   kutupNoktasi,
   noktaYaricapi,
+  payliGuzelEksen,
   seriRengi,
+  siklikEkseni,
   sinirSurukle,
   sinirdanDeger,
   surukleDegeri,
+  tamSayiliMi,
   varsayilanAralik,
   veriCozunurlugu,
+  yaziBoyu,
   yiginla,
 } from '../grafik';
+import { guzelEksen, temizle, type Eksen } from '../istatistik';
+import { sayiYaz } from '../veri';
 
 const nokta = (degerler: number[]) => degerler.map((deger, satir) => ({ satir, deger }));
+
+/** WCAG bağıl parlaklık ve karşıtlık oranı */
+function parlaklik(hex: string): number {
+  const d = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * d(parseInt(hex.slice(1, 3), 16)) + 0.7152 * d(parseInt(hex.slice(3, 5), 16)) + 0.0722 * d(parseInt(hex.slice(5, 7), 16));
+}
+const karsitlik = (a: string, b: string) => {
+  const x = parlaklik(a);
+  const y = parlaklik(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+};
+/** Kart zemini: açık tema hsl(43 100% 98%), koyu tema hsl(173 39% 14%) */
+const ACIK_KART = '#fffbf5';
+const KOYU_KART = '#16322e';
+
+/** SacilimGrafigi.tsx'teki ilk tanım (D2 onu grafik.ts'tekine çevirince silinecek; burada karşılaştırma için) */
+function eskiPayliGuzelEksen(degerler: number[], hedef: number): Eksen {
+  const min = Math.min(...degerler);
+  const max = Math.max(...degerler);
+  const pay = (max - min || Math.abs(max) || 1) * 0.06;
+  const e = guzelEksen(min - pay, max + pay, hedef);
+  if (e.adim >= 1 || !degerler.every((d) => Number.isInteger(d))) return e;
+  const alt = Math.floor(min - pay);
+  const ust = Math.ceil(max + pay);
+  return { min: alt, max: ust, adim: 1, isaretler: Array.from({ length: ust - alt + 1 }, (_, i) => alt + i) };
+}
+
+/** Kararlı sözde rastgele (mulberry32) */
+function rastgele(tohum: number): () => number {
+  let t = tohum >>> 0;
+  return () => {
+    t = (t + 0x6d2b79f5) >>> 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const katMi = (deger: number, adim: number) => Math.abs(deger / adim - Math.round(deger / adim)) < 1e-6;
 
 describe('grafik: yığma', () => {
   it('tam sayılar birebir yığılır; sıra satır sırasını korur', () => {
@@ -175,9 +227,23 @@ describe('grafik: ölçek ve sürükleme', () => {
   });
 
   it('seriRengi paletin dışına taşmaz', () => {
-    expect(seriRengi(0)).toBe('#216a78');
-    expect(seriRengi(1)).toBe('#d9805f');
-    expect(seriRengi(5)).toBe('#216a78');
+    expect(seriRengi(0)).toBe(SERI_RENKLERI[0]);
+    expect(seriRengi(1)).toBe(SERI_RENKLERI[1]);
+    expect(seriRengi(5)).toBe(SERI_RENKLERI[0]);
+    expect(seriRengi(-1)).toBe(SERI_RENKLERI[SERI_RENKLERI.length - 1]);
+  });
+
+  it('seri renkleri açık ve koyu kart zemininde en az 3:1 karşıtlık verir (M17)', () => {
+    expect(new Set(SERI_RENKLERI).size).toBe(SERI_RENKLERI.length);
+    for (const r of SERI_RENKLERI) {
+      expect(karsitlik(r, ACIK_KART), `${r} açık`).toBeGreaterThanOrEqual(3);
+      expect(karsitlik(r, KOYU_KART), `${r} koyu`).toBeGreaterThanOrEqual(3);
+      // Orta ton: bağıl parlaklık 0,16–0,28 bandında
+      expect(parlaklik(r)).toBeGreaterThanOrEqual(0.16);
+      expect(parlaklik(r)).toBeLessThanOrEqual(0.28);
+    }
+    // İkinci seri (karşılaştırmanın ikinci paneli) mercan tonudur
+    expect(seriRengi(1)).toBe('#c8684a');
   });
 });
 
@@ -251,5 +317,222 @@ describe('grafik: daire', () => {
     expect(sinirSurukle([10, 20, 0], 1, 90)).toEqual([7.5, 22.5, 0]);
     expect(sinirSurukle([0, 0], 0, 90)).toEqual([0, 0]);
     expect(sinirSurukle([1, 2], 4, 90)).toEqual([1, 2]);
+  });
+});
+
+// ── grafik.ts: eksen ve gösterim yardımcıları ───────────────────────────────
+
+describe('grafik: tamSayiliMi', () => {
+  it('bütün sonlu değerler tam sayı mı', () => {
+    expect(tamSayiliMi([1, 2, 3])).toBe(true);
+    expect(tamSayiliMi([-4, 0, 12])).toBe(true);
+    expect(tamSayiliMi([1, 2.5])).toBe(false);
+    expect(tamSayiliMi([0.125])).toBe(false);
+    // Kayan nokta artığı tam sayı sayılır
+    expect(tamSayiliMi([(0.1 + 0.2) * 10, 15.000000000000002])).toBe(true);
+    // Sonlu olmayanlar yok sayılır; boş dizi true
+    expect(tamSayiliMi([1, Number.NaN, Infinity])).toBe(true);
+    expect(tamSayiliMi([])).toBe(true);
+  });
+});
+
+describe('grafik: payliGuzelEksen', () => {
+  it("SacilimGrafigi'ndeki ilk tanımla aynı sonucu verir", () => {
+    const veriler: [number[], number][] = [
+      [[15, 18, 16, 17, 19], 6],
+      [[4.5, 5.5, 6.25], 6],
+      [[1, 2, 3, 4, 5, 6], 12],
+      [[5, 5, 5], 6],
+      [[0, 1000], 6],
+      [[-3, 7, 2], 5],
+      [[0.001, 0.002, 0.0015], 6],
+      [[148, 152, 161, 170, 155], 8],
+      [[12.5, 13, 14.5], 4],
+      [[0], 6],
+      [[7], 3],
+    ];
+    for (const [d, h] of veriler) expect(payliGuzelEksen(d, h), JSON.stringify(d)).toEqual(eskiPayliGuzelEksen(d, h));
+  });
+
+  it('tam sayılı veride işaret adımı en az 1 ve işaretler tam sayı', () => {
+    for (const [d, h] of [
+      [[15, 18, 16, 17, 19], 6],
+      [[1, 2, 3, 4, 5, 6], 12],
+      [[2, 3], 10],
+      [[5, 5, 5], 8],
+      [[0, 1, 1, 2, 7], 20],
+    ] as [number[], number][]) {
+      const e = payliGuzelEksen(d, h);
+      expect(e.adim).toBeGreaterThanOrEqual(1);
+      expect(e.isaretler.every((v) => Number.isInteger(v))).toBe(true);
+      expect(e.min).toBeLessThan(Math.min(...d));
+      expect(e.max).toBeGreaterThan(Math.max(...d));
+    }
+    // Ondalıklı veride güzel adım kalır
+    expect(payliGuzelEksen([4.5, 5.5, 6.25], 6).adim).toBeLessThan(1);
+  });
+
+  it('sonlu olmayan değerler yok sayılır; değer yoksa [0, 1] ekseni', () => {
+    expect(payliGuzelEksen([15, Number.NaN, 18, Infinity, 16, 17, 19], 6)).toEqual(payliGuzelEksen([15, 18, 16, 17, 19], 6));
+    expect(payliGuzelEksen([], 6)).toEqual({ min: 0, max: 1, adim: 1, isaretler: [0, 1] });
+    expect(payliGuzelEksen([Number.NaN], 6)).toEqual({ min: 0, max: 1, adim: 1, isaretler: [0, 1] });
+  });
+});
+
+describe('grafik: gosterimOndaligi', () => {
+  it('tam sayılı ve 2 ondalıklı veride bugünkü 2', () => {
+    expect(gosterimOndaligi([])).toBe(2);
+    expect(gosterimOndaligi([1, 2, 3])).toBe(2);
+    expect(gosterimOndaligi([0.5, 1.25, 17])).toBe(2);
+    expect(gosterimOndaligi([0, Number.NaN])).toBe(2);
+    // Sonlu olmayan ondalık (ortalama) iki anlamlı basamaktan fazlasını istemez
+    expect(gosterimOndaligi([14.958333333333334])).toBe(2);
+    expect(gosterimOndaligi([1 / 3])).toBe(2);
+    expect(gosterimOndaligi([(0.1 + 0.2) * 1])).toBe(2);
+  });
+
+  it('küçük ve ince değerler silinmez (M22)', () => {
+    expect(gosterimOndaligi([0.125, 0.25, 0.375])).toBe(3);
+    expect(gosterimOndaligi([0.375])).toBe(3);
+    expect(gosterimOndaligi([0.001, 0.002, 0.0015, 0.003])).toBe(4);
+    expect(gosterimOndaligi([0.001875])).toBe(4);
+    expect(gosterimOndaligi([-0.125])).toBe(3);
+    // Üst sınır
+    expect(gosterimOndaligi([0.00001])).toBe(4);
+    expect(gosterimOndaligi([0.00001], 2, 6)).toBe(5);
+    expect(gosterimOndaligi([0.0000123], 2, 8)).toBe(7);
+    // Tam yazılamayan küçük değer: iki anlamlı basamak (0,0000123456… → 6)
+    expect(gosterimOndaligi([0.0000123456789], 2, 8)).toBe(6);
+  });
+
+  it('alt sınır ayarlanabilir', () => {
+    expect(gosterimOndaligi([3, 4], 0)).toBe(0);
+    expect(gosterimOndaligi([2.5, 3], 0)).toBe(1);
+    expect(gosterimOndaligi([0.25], 0, 1)).toBe(1);
+    // Ters verilen sınırlar: üst, alttan küçük olamaz
+    expect(gosterimOndaligi([0.125], 3, 1)).toBe(3);
+  });
+
+  it('sayiYaz ile: 0,125 → "0,125"; 0,001 → "0,001"; 14,958… → "14,96"', () => {
+    const yaz = (d: number, degerler = [d]) => sayiYaz(d, gosterimOndaligi(degerler));
+    expect(yaz(0.125)).toBe('0,125');
+    expect(yaz(0.375)).toBe('0,375');
+    expect(yaz(0.001)).toBe('0,001');
+    expect(yaz(0.0015)).toBe('0,0015');
+    expect(yaz(14.958333333333334, [15, 14, 16])).toBe('14,96');
+    expect(yaz(0.001875, [0.001, 0.002, 0.0015, 0.003])).toBe('0,0019');
+  });
+});
+
+describe('grafik: enBuyukKalanlaYuvarla', () => {
+  const toplami = (d: number[]) => temizle(d.reduce((t, x) => t + x, 0));
+
+  it('toplamı korur: [33,3; 33,3; 33,4], adım 0,5 → toplam 100', () => {
+    const s = enBuyukKalanlaYuvarla([33.3, 33.3, 33.4], 0.5);
+    expect(s).toEqual([33.5, 33, 33.5]);
+    expect(toplami(s)).toBe(100);
+    expect(toplami(enBuyukKalanlaYuvarla([33.3, 33.3, 33.4], 0.5, 100))).toBe(100);
+  });
+
+  it('yüzdeler %100, merkez açıları 360° verir', () => {
+    // Üç eşit pay: 33,3… × 3 → 34 + 33 + 33
+    expect(enBuyukKalanlaYuvarla([100 / 3, 100 / 3, 100 / 3], 1, 100)).toEqual([34, 33, 33]);
+    // Sıklıklardan doğrudan: 7 · 6 · 5 · 4 → yüzde (0,1 adım)
+    const yuzde = enBuyukKalanlaYuvarla([7, 6, 5, 4], 0.1, 100);
+    expect(yuzde).toEqual([31.8, 27.3, 22.7, 18.2]);
+    expect(toplami(yuzde)).toBe(100);
+    // Açılar (1° adım)
+    const aci = enBuyukKalanlaYuvarla([7, 6, 5, 4], 1, 360);
+    expect(toplami(aci)).toBe(360);
+    expect(aci).toEqual([115, 98, 82, 65]);
+    // Bir değer tek başına: hepsi ona
+    expect(enBuyukKalanlaYuvarla([0, 5, 0], 0.1, 100)).toEqual([0, 100, 0]);
+  });
+
+  it('adımın katı ve toplamı tutan değerler aynen döner (daire gidiş-dönüşü)', () => {
+    expect(enBuyukKalanlaYuvarla([9, 7, 8], 1, 24)).toEqual([9, 7, 8]);
+    expect(enBuyukKalanlaYuvarla([0.1, 0.2, 0.7], 0.1)).toEqual([0.1, 0.2, 0.7]);
+    expect(enBuyukKalanlaYuvarla([12.5, 7.5, 4], 0.5, 24)).toEqual([12.5, 7.5, 4]);
+    // Kayan nokta artığı temizlenir, toplam kaymaz
+    expect(enBuyukKalanlaYuvarla([8.9999999999, 7.0000000001, 8.00000000002], 1, 24)).toEqual([9, 7, 8]);
+    expect(enBuyukKalanlaYuvarla([0.1 + 0.2, 0.7], 0.1, 1)).toEqual([0.3, 0.7]);
+  });
+
+  it('uç durumlar', () => {
+    expect(enBuyukKalanlaYuvarla([], 1)).toEqual([]);
+    expect(enBuyukKalanlaYuvarla([1.23, 4.56], 0)).toEqual([1.23, 4.56]);
+    expect(enBuyukKalanlaYuvarla([1.23, 4.56], Number.NaN)).toEqual([1.23, 4.56]);
+    expect(enBuyukKalanlaYuvarla([0, 0, 0], 1, 100)).toEqual([0, 0, 0]);
+    expect(enBuyukKalanlaYuvarla([Number.NaN, 2.6, 1.4], 1)).toEqual([0, 3, 1]);
+    // Negatif değerle: ölçekleme yok, toplam korunur
+    const n = enBuyukKalanlaYuvarla([-1.5, 3.5], 1);
+    expect(toplami(n)).toBe(2);
+    expect(n.every((x) => Number.isInteger(x))).toBe(true);
+  });
+
+  it('rastgele verilerde: toplam hedefe eşit, her değer adımın katı ve bir adımdan az sapar', () => {
+    const rnd = rastgele(20260924);
+    for (let deneme = 0; deneme < 300; deneme++) {
+      const n = 1 + Math.floor(rnd() * 12);
+      const adim = [1, 0.5, 0.1, 0.25, 5][deneme % 5];
+      const toplam = [100, 360, 24, 1000, 7.5][Math.floor(deneme / 5) % 5];
+      const degerler = Array.from({ length: n }, () => rnd() * 50);
+      const ham = degerler.reduce((t, d) => t + d, 0);
+      const sonuc = enBuyukKalanlaYuvarla(degerler, adim, toplam);
+      const hedef = temizle(Math.round(toplam / adim) * adim);
+      expect(sonuc).toHaveLength(n);
+      expect(Math.abs(toplami(sonuc) - hedef)).toBeLessThan(1e-9);
+      sonuc.forEach((x, i) => {
+        expect(katMi(x, adim)).toBe(true);
+        expect(Math.abs(x - (degerler[i] * toplam) / ham)).toBeLessThan(adim + 1e-9);
+        expect(x).toBeGreaterThanOrEqual(0);
+      });
+    }
+  });
+});
+
+describe('grafik: yaziBoyu', () => {
+  it('800 px ve altında 13; her 200 px 1 px büyür; en çok 16', () => {
+    expect(yaziBoyu(240)).toBe(13);
+    expect(yaziBoyu(800)).toBe(13);
+    expect(yaziBoyu(1000)).toBe(14);
+    expect(yaziBoyu(1200)).toBe(15);
+    expect(yaziBoyu(1366)).toBe(15.8);
+    expect(yaziBoyu(1400)).toBe(16);
+    expect(yaziBoyu(2560)).toBe(16);
+    expect(yaziBoyu(Number.NaN)).toBe(13);
+    for (let w = 0; w <= 3000; w += 37) {
+      expect(yaziBoyu(w)).toBeGreaterThanOrEqual(13);
+      expect(yaziBoyu(w)).toBeLessThanOrEqual(16);
+    }
+  });
+});
+
+describe('grafik: siklikEkseni', () => {
+  it('0 ile başlar, işaretler tam sayı, üst sınır en az en çok sıklık ve enAz', () => {
+    for (const [enCok, hedef] of [
+      [1, 5],
+      [2, 8],
+      [3, 5],
+      [7, 6],
+      [9, 4],
+      [24, 6],
+      [1000, 6],
+    ] as [number, number][]) {
+      const e = siklikEkseni(enCok, hedef);
+      expect(e.min).toBe(0);
+      expect(e.isaretler[0]).toBe(0);
+      expect(e.max).toBeGreaterThanOrEqual(enCok);
+      expect(e.adim).toBeGreaterThanOrEqual(1);
+      expect(e.isaretler.every((v) => Number.isInteger(v))).toBe(true);
+      // Yarım çentik yok: 1,5 / 2,5 yazılmaz
+      expect(e.isaretler.some((v) => v % 1 !== 0)).toBe(false);
+    }
+    // Veri yokken [0, 1]
+    expect(siklikEkseni(0, 5)).toEqual({ min: 0, max: 1, adim: 1, isaretler: [0, 1] });
+    // enAz: toplama sürerken üst sınır yalnız büyür
+    expect(siklikEkseni(3, 5, 12).max).toBeGreaterThanOrEqual(12);
+    expect(siklikEkseni(20, 5, 12).max).toBeGreaterThanOrEqual(20);
+    expect(siklikEkseni(Number.NaN, 5).max).toBe(1);
   });
 });

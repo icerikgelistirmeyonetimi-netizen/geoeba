@@ -1,15 +1,21 @@
 /**
  * Veri ve Grafik — grafik geometrisi (saf, React'siz).
  * Nokta grafiği yığma, aralık genişliği, dağınık başlangıç konumları, doğrusal ölçek,
- * daire dilim açıları ve sınır sürükleme yeniden dağıtımı, sütun sürükleme yuvarlaması, Δ / % değişim.
+ * daire dilim açıları ve sınır sürükleme yeniden dağıtımı, sütun sürükleme yuvarlaması, Δ / % değişim;
+ * paylaşılan eksen ve gösterim yardımcıları (payli güzel eksen, tam sayı sınaması, gösterim ondalığı,
+ * en büyük kalan yöntemiyle yuvarlama, yazı boyutu).
  */
-import { guzelAdim, temizle } from './istatistik';
+import { guzelAdim, guzelEksen, temizle, type Eksen } from './istatistik';
 import type { DegerNoktasi } from './veri';
 
-export type { DegerNoktasi };
+export type { DegerNoktasi, Eksen };
 
-/** Seri renkleri (ada paleti): deniz, mercan, lavanta, altın, vurgu */
-export const SERI_RENKLERI = ['#216a78', '#d9805f', '#7f88c4', '#b9884a', '#2a9d94'] as const;
+/**
+ * Seri renkleri (ada paletinin orta tonları): deniz, mercan, lavanta, altın, zümrüt. Kategori paletinin ilk beş
+ * rengiyle aynıdır; bağıl parlaklıkları 0,19–0,27 bandında olduğundan açık (fildişi) ve koyu (mürekkep) kart
+ * zemininde en az 3:1 karşıtlık verir (koyu temada da çizgiler, dilimler ve ikinci panelin noktaları seçilir).
+ */
+export const SERI_RENKLERI = ['#2f8394', '#c8684a', '#7f88c4', '#a8782f', '#22a06f'] as const;
 
 export function seriRengi(indeks: number): string {
   return SERI_RENKLERI[((indeks % SERI_RENKLERI.length) + SERI_RENKLERI.length) % SERI_RENKLERI.length];
@@ -175,6 +181,153 @@ export function surukleDegeri(pikselY: number, olcek: DogrusalOlcek, adim: numbe
   const ham = olcek.geri(pikselY);
   const sinirli = Math.min(max, Math.max(min, ham));
   return adimaYuvarla(sinirli, adim);
+}
+
+// ── Eksen ve gösterim (nokta, sütun, saçılım, çizgi, daire ve istatistik ortak kullanır) ──────
+
+/** Grafiğin eksen penceresi (değer uzayında): anahtar = değişken kimliği (nokta grafiğinde | grup genişliği | gruplama) */
+export interface EksenPenceresi {
+  anahtar: string;
+  min: number;
+  max: number;
+}
+
+/**
+ * Eksen penceresinin yeni hâli. Aynı anahtarda önceki pencereyle birleşir: pencere yalnız genişler (hücre düzenlemesi,
+ * rehber eylemi, sütun sürükleme, satır silme ekseni daraltmaz; ortalama ve ortanca çizgisi kendi değeriyle kayar,
+ * eksenle değil). Anahtar değişince (başka değişken, grup genişliği, yeniden yüklenen örneğin yeni sütun kimliği) ya da
+ * veri önceki pencerenin üçte birinden dar bir alana inince (yanlış yazılan 600 düzeltildi) pencere veriye yeniden sığar.
+ */
+export function pencereyiGuncelle(onceki: EksenPenceresi | null, anahtar: string, min: number, max: number): EksenPenceresi {
+  if (onceki && onceki.anahtar === anahtar) {
+    const eskiG = onceki.max - onceki.min;
+    if (!(eskiG > 0 && max - min < eskiG / 3)) return { anahtar, min: Math.min(min, onceki.min), max: Math.max(max, onceki.max) };
+  }
+  return { anahtar, min, max };
+}
+
+/**
+ * Bütün (sonlu) değerler tam sayı mı? Kayan nokta artığı (15,000000000000002) tam sayı sayılır; sonlu olmayan
+ * değerler yok sayılır. Boş dizide true: veri gelmeden çizilen eksen tam sayı işaretleriyle başlar.
+ */
+export function tamSayiliMi(degerler: readonly number[]): boolean {
+  return degerler.every((d) => !Number.isFinite(d) || Number.isInteger(temizle(d)));
+}
+
+/**
+ * Değerlerin iki yanına küçük pay bırakan güzel eksen (uçtaki nokta eksen çizgisine yapışmasın). Değerler tam
+ * sayıysa adım 1'den küçük olmaz: eksen 14,5 / 15,5 gibi ara değerler yazmaz. Sonlu olmayan değerler yok
+ * sayılır; hiç değer yoksa [0, 1] ekseni (adım 1) döner. `SacilimGrafigi`'ndeki ilk tanımla aynı sonucu verir.
+ */
+export function payliGuzelEksen(degerler: readonly number[], hedef: number): Eksen {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const d of degerler) {
+    if (!Number.isFinite(d)) continue;
+    if (d < min) min = d;
+    if (d > max) max = d;
+  }
+  if (min > max) return { min: 0, max: 1, adim: 1, isaretler: [0, 1] };
+  const pay = (max - min || Math.abs(max) || 1) * 0.06;
+  const e = guzelEksen(min - pay, max + pay, hedef);
+  if (e.adim >= 1 || !tamSayiliMi(degerler)) return e;
+  const alt = Math.floor(min - pay);
+  const ust = Math.ceil(max + pay);
+  return { min: alt, max: ust, adim: 1, isaretler: Array.from({ length: ust - alt + 1 }, (_, i) => alt + i) };
+}
+
+/**
+ * Sıklık (sayım) ekseni: 0'dan başlar, işaretler tam sayıdır (yarım çentik yok), üst sınır en az `enCok` ve
+ * `enAz` kadardır. Toplama sürerken `enAz` verilirse eksen yalnız büyür, sütunlar sabit çerçevede uzar.
+ */
+export function siklikEkseni(enCok: number, hedef: number, enAz = 0): Eksen {
+  const ust = Math.max(1, Number.isFinite(enCok) ? enCok : 0, Number.isFinite(enAz) ? enAz : 0);
+  const e = guzelEksen(0, ust, Math.max(1, hedef));
+  if (e.adim >= 1) return { ...e, min: 0, isaretler: e.isaretler.filter((v) => v >= 0) };
+  const max = Math.ceil(ust - 1e-9);
+  return { min: 0, max, adim: 1, isaretler: Array.from({ length: max + 1 }, (_, i) => i) };
+}
+
+/** Değerin tam yazılması için gereken ondalık basamak; `enCok` basamakta tam yazılamıyorsa iki anlamlı basamak */
+function degerOndaligi(deger: number, enCok: number): number {
+  for (let k = 0; k <= enCok; k++) {
+    const olcekli = deger * 10 ** k;
+    if (Math.abs(olcekli - Math.round(olcekli)) <= 1e-9 * Math.abs(olcekli)) return k;
+  }
+  return Math.max(0, 1 - Math.floor(Math.log10(Math.abs(deger))));
+}
+
+/**
+ * Değerleri yazarken kullanılacak en çok ondalık basamak (`sayiYaz(sayi, ondalik)` için). Bugünkü 2 basamak
+ * alt sınırdır; küçük ya da ince değerler için `enCok`a kadar artar:
+ * - bir değer `enCok` basamakta tam yazılabiliyorsa o kadar basamak ister (0,125 → 3; 0,0015 → 4);
+ * - yazılamıyorsa (1/3, 0,001875 …) iki anlamlı basamak ister (0,001875 → 4; 14,958… → 0).
+ * Sonuç, değerlerin istediği en büyük sayıdır ve [enAz, enCok] aralığına kıstırılır. Böylece 0,001'lik veri
+ * "0" görünmez; tam sayılı ve 2 ondalıklı veri bugünkü gibi yazılır. Sıfır ve sonlu olmayan değerler yok sayılır.
+ */
+export function gosterimOndaligi(degerler: readonly number[], enAz = 2, enCok = 4): number {
+  const alt = Math.max(0, Math.floor(Number.isFinite(enAz) ? enAz : 2));
+  const ust = Math.max(alt, Math.floor(Number.isFinite(enCok) ? enCok : 4));
+  let gereken = alt;
+  for (const d of degerler) {
+    if (!Number.isFinite(d) || d === 0) continue;
+    gereken = Math.max(gereken, degerOndaligi(d, ust));
+    if (gereken >= ust) return ust;
+  }
+  return gereken;
+}
+
+/**
+ * En büyük kalan yöntemi: değerler `adim`ın katlarına yuvarlanır ve toplamları birebir korunur. Önce hepsi
+ * aşağı yuvarlanır; eksik kalan adımlar, atılan kalanı en büyük olandan başlayarak birer birer verilir
+ * (eşitlikte önce gelen). Yüzdelerin toplamı %100, merkez açılarının toplamı 360° olur; daire sürüklemesinde
+ * toplam kaymaz. Ör. ([33,3; 33,3; 33,4], 0,5) → [33,5; 33; 33,5].
+ * - `toplam` verilmezse hedef, değerlerin toplamının adıma yuvarlanmışıdır.
+ * - `toplam` verilirse hedef odur (adımın katı değilse en yakın kata yuvarlanır). Negatif değer yoksa ve
+ *   değerlerin toplamı ondan farklıysa değerler önce orantılı ölçeklenir: ([7, 6, 5, 4], 0,1, 100) →
+ *   [31,8; 27,3; 22,7; 18,2]. Değerlerin hepsi 0 ise sıfırlar döner.
+ * - Adımın katı olan ve toplamı hedefe eşit değerler aynen döner (gidiş-dönüşte değer kaymaz).
+ * - Sonlu olmayan değer 0 sayılır; adım geçersizse değerler olduğu gibi döner.
+ */
+export function enBuyukKalanlaYuvarla(degerler: readonly number[], adim: number, toplam?: number): number[] {
+  const temiz = degerler.map((d) => (Number.isFinite(d) ? d : 0));
+  if (temiz.length === 0 || !(adim > 0) || !Number.isFinite(adim)) return temiz;
+  const ham = temiz.reduce((t, d) => t + d, 0);
+  const verilen = toplam !== undefined && Number.isFinite(toplam);
+  const hedefToplam = verilen ? (toplam as number) : ham;
+  if (temiz.every((d) => d === 0)) return temiz.map(() => 0);
+  const olcekli =
+    verilen && ham > 0 && temiz.every((d) => d >= 0) && Math.abs(ham - hedefToplam) > 1e-9 * Math.max(1, Math.abs(hedefToplam))
+      ? temiz.map((d) => (d * hedefToplam) / ham)
+      : temiz;
+  const birimler = olcekli.map((d) => temizle(d / adim));
+  const tabanlar = birimler.map((b) => Math.floor(b));
+  const n = tabanlar.length;
+  let eksik = Math.round(temizle(hedefToplam / adim)) - tabanlar.reduce((t, b) => t + b, 0);
+  // Çok büyük fark (verilen toplam değerlerden çok uzak) önce herkese eşit dağıtılır
+  const herkese = Math.trunc(eksik / n);
+  if (herkese !== 0) {
+    for (let i = 0; i < n; i++) tabanlar[i] += herkese;
+    eksik -= herkese * n;
+  }
+  if (eksik !== 0) {
+    const artir = eksik > 0;
+    const sira = birimler
+      .map((b, i) => ({ i, kalan: temizle(b - Math.floor(b)) }))
+      .sort((p, q) => (artir ? q.kalan - p.kalan : p.kalan - q.kalan) || p.i - q.i);
+    for (let j = 0; j < Math.abs(eksik); j++) tabanlar[sira[j].i] += artir ? 1 : -1;
+  }
+  return tabanlar.map((b) => temizle(b * adim));
+}
+
+/**
+ * Grafik yazılarının boyutu (px), grafiğin gerçek genişliğine göre: 800 px ve altında 13, sonra her 200 px'te
+ * 1 px büyür (13 + (W − 800) ÷ 200), en çok 16. Ondalığın birinci basamağına yuvarlanır.
+ */
+export function yaziBoyu(genislik: number): number {
+  if (!Number.isFinite(genislik)) return 13;
+  const ham = 13 + (genislik - 800) / 200;
+  return Math.min(16, Math.max(13, Math.round(ham * 10) / 10));
 }
 
 // ── Çizgi grafiği ─────────────────────────────────────────────────────────────

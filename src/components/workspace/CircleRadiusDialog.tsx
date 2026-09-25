@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { useWorkspace } from '@/state/WorkspaceContext';
 import { Point2D, PointObject, CircleObject } from '@/types/math';
 import { formatTurkishNumber } from '@/math/coordinates';
+import { cemberCevresi, daireAlani, olcuDugumleri, sesli } from '@/math/matematikYazimi';
+import { MatematikMetni } from '@/components/workspace/MatematikMetni';
 import { generateNextPointLabel } from '@/math/geometry';
 import { createId } from '@/state/ids';
 import { Modal } from '@/components/ui/Modal';
@@ -170,9 +172,9 @@ export function CircleRadiusDialog({ isOpen, onClose, targetPos = { x: 0, y: 0 }
 
           {/* Canlı matematiksel bilgi */}
           {gecerli && radius !== null && (
-            <div className="p-2.5 rounded-xl bg-ada-lavanta/15 border border-ada-lavanta/30 text-[11px] font-mono text-ada-deniz-koyu dark:text-ada-kum space-y-0.5">
-              <div>Çevre = 2πr = {formatTurkishNumber(2 * Math.PI * radius)} br</div>
-              <div>Alan = πr² = {formatTurkishNumber(Math.PI * radius * radius)} br²</div>
+            <div className="p-2.5 rounded-xl bg-ada-lavanta/15 border border-ada-lavanta/30 text-[11px] text-ada-deniz-koyu dark:text-ada-kum space-y-0.5 leading-[1.45]">
+              <MatematikMetni as="div" dugumler={olcuDugumleri(cemberCevresi(2 * Math.PI * radius))} sesli={sesli(cemberCevresi(2 * Math.PI * radius))} />
+              <MatematikMetni as="div" dugumler={olcuDugumleri(daireAlani(Math.PI * radius * radius))} sesli={sesli(daireAlani(Math.PI * radius * radius))} />
             </div>
           )}
 

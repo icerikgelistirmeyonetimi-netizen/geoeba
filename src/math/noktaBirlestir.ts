@@ -183,6 +183,8 @@ export function baglariYonlendir(o: MathObject, eski: string, yeni: string): Mat
       [kind, { ...anchor, pointIds: benzersiz(rList(anchor.pointIds)) }])) } as MathObject;
   }
   switch (o.type) {
+    case 'slider': return o.bindingTarget?.objectId === eski
+      ? { ...o, bindingTarget: { ...o.bindingTarget, objectId: yeni } } : o;
     case 'segment': return { ...o, startPointId: r(o.startPointId), endPointId: r(o.endPointId) };
     case 'line': return { ...o, point1Id: r(o.point1Id), point2Id: r(o.point2Id) };
     case 'ray': return { ...o, startPointId: r(o.startPointId), throughPointId: r(o.throughPointId) };
@@ -431,10 +433,12 @@ export function noktalariBirlestir(objects: MathObject[], idA: string, idB: stri
   let sonuc = objects.filter(o => o.id !== dropId).map(o => baglariYonlendir(o, dropId, keepId));
 
   // 2) Çokgenlerdeki ardışık yinelenen köşeleri düşür (kenar etiketleri ve çentikleri taşınır)
+  const yenidenIndekslenen = new Set<string>();
   sonuc = sonuc.map(o => {
     if (o.type !== 'polygon') return o;
     const { pointIds, kenarEslemesi } = cokgeniTopla(o.pointIds);
     if (pointIds.length === o.pointIds.length) return o;
+    yenidenIndekslenen.add(o.id);
     const cokgen = { ...o, pointIds };
     if (o.edgeLabels) cokgen.edgeLabels = [...new Set(o.edgeLabels.map(i => kenarEslemesi.get(i)).filter((i): i is number => i !== undefined))];
     if (o.edgeEqualityMarks) {
@@ -455,6 +459,14 @@ export function noktalariBirlestir(objects: MathObject[], idA: string, idB: stri
   const kaldirilacak = zinciriTopla(sonuc, bozuklar);
   const kaldirilanlar = sonuc.filter(o => kaldirilacak.has(o.id));
   if (kaldirilacak.size) sonuc = sonuc.filter(o => !kaldirilacak.has(o.id)).map(o => kolBaginiCoz(o, kaldirilacak));
+  // Değişen köşe indeksindeki eski ölçü adı başka bir kenarı gösteremez.
+  // Hedef silindiyse de yalnız süs bilgisi düşer; kaydırıcı sahnede kalır.
+  sonuc = sonuc.map(o => {
+    if (o.type !== 'slider' || !o.bindingTarget
+      || (!kaldirilacak.has(o.bindingTarget.objectId) && !yenidenIndekslenen.has(o.bindingTarget.objectId))) return o;
+    const { bindingTarget: _bindingTarget, ...rest } = o;
+    return rest;
+  });
 
   // 4) Sahne gerçekten çözülebiliyor mu? Commit sırasında da `resolveCommandBindings` çalışır; orada
   //    patlayan bir kurulum kalsaydı adım sessizce reddedilir, kullanıcıya ise "birleştirildi" denirdi.

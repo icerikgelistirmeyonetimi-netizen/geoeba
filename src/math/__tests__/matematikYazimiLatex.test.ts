@@ -38,6 +38,7 @@ export const YAZIM_ORNEKLERI = [
   'A(2; -3) noktası oluşturuldu.',
   '[OH] ⊥ d, AB ∥ CD.',
   'Ölçüler adıyla yazılıyor: |AB| = 5 br.',
+  'E Merkezli Elips: alan = πab ≈ 18,85 br², çevre ≈ 15,87 br.',
 ] as const;
 
 describe('LaTeX (düğüm yolundan)', () => {
@@ -92,6 +93,8 @@ describe('LaTeX (düz metin yolundan)', () => {
     ['|A͡C͡B| ≈ 14,14 br', '|\\overset{\\frown}{\\mathrm{A}\\mathrm{C}\\mathrm{B}}| \\approx 14{,}14\\ \\mathrm{br}'],
     ['[OH] ⊥ d, AB ∥ CD.',
       '[\\mathrm{O}\\mathrm{H}] \\perp d, \\mathrm{A}\\mathrm{B} \\parallel \\mathrm{C}\\mathrm{D}.'],
+    // 'πab' düğüm yolundaki elipsAlani ile AYNI LaTeX'i verir: değişkenler eğik ('\\text{ab}' değil).
+    ['alan = πab ≈ 18,85 br²', '\\text{alan} = \\pi ab \\approx 18{,}85\\ \\mathrm{br}^2'],
   ])('%s', (metin, beklenen) => expect(latex(metniCozumle(metin))).toBe(beklenen));
 
   it('latexDenetle ondalık virgülü ve dengesiz parantezi yakalar', () => {

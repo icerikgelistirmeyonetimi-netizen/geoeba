@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aciEtiketiUzakta, cizgiEtiketiUzakta, etiketAcisi, etiketDondurme, yayEtiketiYerlesimi, type YayEtiketGeometrisi } from '../olcuEtiketi';
+import { aciEtiketiUzakta, cizgiEtiketiUzakta, etiketAcisi, etiketDondurme, yayEtiketiYerlesimi, type YayEtiketGeometrisi, cizgiCercevesi, kenarEksenine, kenarEkseninden } from '../olcuEtiketi';
 
 describe('etiketAcisi — ölçü etiketi çizgiye paralel', () => {
   it('yatay çizgide yön ne olursa olsun 0°', () => {
@@ -221,5 +221,49 @@ describe('yay etiketi sonlu yaya yakınlığı ve teğet yönünü izler', () =>
     expect(karar(sifir, bas, merkez)).toEqual({ uzak: false, donmeAcisi: 0 });
     expect(karar(sifir, bas, nokta(90, 20))).toEqual({ uzak: false, donmeAcisi: 0 });
     expect(karar(sifir, bas, nokta(0, 39))).toEqual({ uzak: true, donmeAcisi: 0 });
+  });
+});
+
+describe('kenar ekseni: etiket çizgiye göre saklanır (kullanıcı, 2026-09-25)', () => {
+  const A = { x: 0, y: 0 };
+  it('ekran yeri kenar eksenine çevrilip geri alınınca aynı kalır', () => {
+    const c = cizgiCercevesi(A, { x: 300, y: -150 })!;
+    const p = { x: 190, y: -60 };
+    const geri = kenarEkseninden(kenarEksenine(p, c, 40), c, 40);
+    expect(geri.x).toBeCloseTo(p.x, 9);
+    expect(geri.y).toBeCloseTo(p.y, 9);
+  });
+
+  it('kenar yarıya inince etiket aynı ORANDA kalır, çizgiye uzaklığı değişmez', () => {
+    const uzun = cizgiCercevesi(A, { x: 400, y: 0 })!;
+    const eksen = kenarEksenine({ x: 280, y: -20 }, uzun, 40); // %70'te, çizginin 20 px üstünde
+    expect(eksen.boyunca).toBeCloseTo(0.2, 9);
+    const kisa = cizgiCercevesi(A, { x: 200, y: 0 })!;
+    const p = kenarEkseninden(eksen, kisa, 40);
+    expect(p.x).toBeCloseTo(140, 9); // yine %70
+    expect(p.y).toBeCloseTo(-20, 9); // çizgiye uzaklık aynı
+  });
+
+  it('çizginin ÜSTÜNE konmuş etiket parça dikeyden geçerken çizgide kalır (fırlamaz)', () => {
+    const yatik = cizgiCercevesi(A, { x: 20, y: -200 })!; // neredeyse dikey
+    const eksen = kenarEksenine({ x: 10, y: -100 }, yatik, 40); // tam orta noktada, çizginin üstünde
+    expect(eksen.dik).toBeCloseTo(0, 9);
+    const dikey = cizgiCercevesi(A, { x: 0, y: -200 })!; // tam dikey
+    const p = kenarEkseninden(eksen, dikey, 40);
+    expect(p.x).toBeCloseTo(0, 9);
+    expect(p.y).toBeCloseTo(-100, 9);
+  });
+
+  it('kenar dönünce etiket de onunla döner (aynı eksende kalır)', () => {
+    const yatay = cizgiCercevesi(A, { x: 200, y: 0 })!;
+    const eksen = kenarEksenine({ x: 150, y: 0 }, yatay, 40);
+    const dikey = cizgiCercevesi(A, { x: 0, y: -200 })!;
+    const p = kenarEkseninden(eksen, dikey, 40);
+    expect(p.x).toBeCloseTo(0, 9);
+    expect(p.y).toBeCloseTo(-150, 9);
+  });
+
+  it('noktaya dönüşmüş kenarın çerçevesi yoktur (eski x/y kullanılır)', () => {
+    expect(cizgiCercevesi(A, { x: 0, y: 0 })).toBeNull();
   });
 });

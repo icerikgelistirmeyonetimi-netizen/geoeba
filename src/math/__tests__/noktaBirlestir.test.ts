@@ -41,6 +41,27 @@ function sarkikBasvurular(objects: MathObject[]): string[] {
 /** Sahnenin tamamında kaldırılan kimliğin kaç kez geçtiği (ham JSON taraması: hiçbir alan atlanmasın). */
 const gecisSayisi = (objects: MathObject[], id: string) => (JSON.stringify(objects).match(new RegExp(`"${id}"`, 'g')) ?? []).length;
 
+describe('kaydırıcının görsel ölçü hedefinin birleşmesi', () => {
+  const slider = (objectId: string, propertyKey: string) => yap({ id: 'slider', type: 'slider', variableName: 'a', min: 1, max: 10, step: 1, value: 5, bindingTarget: { objectId, propertyKey } });
+
+  it('nokta hedefini yönlendirir ama geometrik bağımlılık olarak saymaz', () => {
+    const source = slider('B', 'x'), snapshot = JSON.stringify(source);
+    expect(baglariYonlendir(source, 'B', 'A')).toMatchObject({ bindingTarget: { objectId: 'A', propertyKey: 'x' } });
+    expect(bagimliliklar(source)).toEqual([]);
+    expect(JSON.stringify(source)).toBe(snapshot);
+  });
+
+  it('çokgen kenarları yeniden indekslenirse eski ölçü hedefini temizler, kaydırıcıyı korur', () => {
+    const shape = yap({ id: 'poly', type: 'polygon', pointIds: ['A', 'B', 'C', 'D'] });
+    const objects = [nokta('A'), nokta('B'), nokta('C', 3, 2), nokta('D', 0, 2), shape, slider('poly', 'edge:2')];
+    const result = noktalariBirlestir(objects, 'A', 'B');
+    expect(result.changed).toBe(true);
+    expect(result.objects.find(o => o.id === 'poly')).toMatchObject({ pointIds: ['A', 'C', 'D'] });
+    expect(result.objects.find(o => o.id === 'slider')).not.toHaveProperty('bindingTarget');
+    expect(objects.find(o => o.id === 'slider')).toHaveProperty('bindingTarget');
+  });
+});
+
 describe('ölçüm etiketi çapalarının nokta birleştirmesi', () => {
   it('dekoratif grup noktalarını yönlendirir ve aynı noktayı iki kez saymaz', () => {
     const shape = yap({ id: 's', type: 'segment', startPointId: 'A', endPointId: 'D',

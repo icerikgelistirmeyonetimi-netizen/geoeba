@@ -90,7 +90,8 @@ const EXAMPLE_SCENES: Record<string, Setup> = {
   'a için girdi kutusu ekle': inRich, 'f fonksiyonu için girdi kutusu': inRich, 'g(x) için giriş kutusu oluştur': inRich, 'a ve b için girdi kutuları ekle': inRich,
   'resim ekle': empty, 'görsel ekle': empty, 'fotoğraf yükle': empty, 'serbest çizim yap': empty, 'kalemle çiz': empty, 'elle çizmek istiyorum': empty,
   'fonksiyon oluştur': empty, 'bir grafik çiz': empty, 'fonksiyon tanımla': empty, 'fonksiyon eklemek istiyorum': empty,
-  'A, B, C, D noktalarına en uygun parabolü uydur': { scene: fitScene }, 'm = 0,5': empty, 'n = 2*a': inRich, 'c = -3': empty,
+  'A, B, C, D noktalarına en uygun parabolü uydur': { scene: fitScene }, 'm = 0,5': empty,
+  'seçili noktaları doğrusal fonksiyona dönüştür': { scene: fitScene, select: o => byType(o, 'point').map(p => p.id) }, 'n = 2*a': inRich, 'c = -3': empty,
   'b kaç': inRich, 'a kaydırıcısının değeri ne': inRich, 'k nedir': inRich, 'oynat': inRich, 'kaydırıcıları canlandır': inRich, 'a ve b kaydırıcılarını oynat': inRich,
   'Soru yazısını koy': empty, 'Çözüm notu ekle': empty, 'metin ekle': empty, 'tüm çemberler için onay kutusu ekle': inRich,
   'b kaydırıcısı için girdi kutusu': inRich, 'seçili fonksiyon için girdi kutusu': { scene: rich, select: o => [idOf(o, 'f(x) = x^2')] },
@@ -238,7 +239,8 @@ describe('polynomial fit', () => {
   it('fits a parabola through A, B, C despite the "2." split and removes the helper message', () => {
     const r = ok('A, B, C noktalarına 2. dereceden polinom uydur', fitScene());
     const [fn] = byType(r.objects, 'function');
-    expect(fn.color).toBe('#db2777');
+    expect(fn.color).toBe('#2563eb'); // fonksiyon rengi; seçim pembesiyle karışmaz
+    expect(r.selectedIds).toEqual([fn.id]); // noktalar değil eğri seçili: Delete eğriyi siler
     expect(fn.thickness).toBe(2.5);
     expect(fn.label.startsWith('f(x) = ')).toBe(true);
     for (const x of [-3, 0.5, 5]) expect(fnValue(fn, x)).toBeCloseTo(x * x, 6);
@@ -249,12 +251,28 @@ describe('polynomial fit', () => {
   it('supports ordinal words, selection, "tüm noktalar" and cubic', () => {
     const scene = fitScene();
     expect(fnValue(byType(ok('A, B ve C noktalarına ikinci dereceden polinom uydur', scene).objects, 'function')[0], 3)).toBeCloseTo(9, 6);
-    const linear = byType(ok('seçili noktalara doğrusal regresyon uygula', scene, byType(scene, 'point').map(p => p.id)).objects, 'function')[0];
+    const secili = ok('seçili noktalara doğrusal regresyon uygula', scene, byType(scene, 'point').map(p => p.id));
+    const linear = byType(secili.objects, 'function')[0];
+    expect(secili.selectedIds).toEqual([linear.id]); // seçim noktalardan uydurulan fonksiyona geçer
     expect(fnValue(linear, 0)).toBeCloseTo(1, 6);
     expect(fnValue(linear, 2)).toBeCloseTo(3, 6);
     const cubic = byType(ok('tüm noktalara 3. derece polinom uydur', scene).objects, 'function')[0];
     for (const p of byType(scene, 'point')) expect(fnValue(cubic, p.x)).toBeCloseTo(p.y, 6);
     expect(fnValue(byType(ok('ABCD noktalarından geçen kübik polinomu bul', scene).objects, 'function')[0], -1)).toBeCloseTo(1, 6);
+  });
+  it('line of best fit from "doğrusal fonksiyona dönüştür" wordings, without a false "tam geçiyor"', () => {
+    const scene = build(s => { ([[0, 1], [1, 3], [2, 5], [3, 7.2]] as const).forEach(([x, y], i) => s.addPoint({ x, y }, { label: 'KLMN'[i] })); });
+    const ids = byType(scene, 'point').map(p => p.id);
+    for (const [text, selection] of [['seçili noktaları doğrusal fonksiyona dönüştür', ids], ['K, L, M, N noktalarından doğrusal fonksiyon oluştur', []]] as const) {
+      const r = ok(text, scene, [...selection]);
+      const fn = byType(r.objects, 'function')[0];
+      expect(fnValue(fn, 0)).toBeCloseTo(0.96, 6);
+      expect(fnValue(fn, 1)).toBeCloseTo(3.02, 6);
+      expect(r.message).toContain('en uygun doğru');
+      expect(r.message).not.toContain('tam geçiyor'); // R² = 0,9994 ama noktalar doğrunun dışında
+    }
+    // Noktalar anılmadan "doğrusal fonksiyon çiz" uydurma değildir (Fonksiyon penceresi açılır)
+    expect(byType(ok('doğrusal fonksiyon çiz', scene).objects, 'function')).toHaveLength(0);
   });
   it('uses a default degree and says so; rejects too few points, unknown points and repeated x', () => {
     const r = ok('A, B noktalarına polinom uydur', fitScene());

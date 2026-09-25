@@ -11,12 +11,32 @@ export type ScreenPoint = {
 };
 
 /** Ölçüm yazısının ortak şekil grubuna bağlı, deformasyonda hizasını koruyan çapası. */
+/**
+ * Ölçüm etiketinin kayıklığı (dünya birimi). DOĞRUSAL ölçülerde (parça, çokgen kenarı, doğru, ışın,
+ * uzunluk ölçümü) etiket merkezi ayrıca kenarın KENDİ EKSENİNE göre saklanır: `eksenBoyunca` orta
+ * noktadan kenar boyunun kesri, `eksenDik` ÇİZGİNİN kendisinden işaretli dik uzaklık (dünya birimi).
+ * Verildiğinde x/y yerine bunlar kullanılır; böylece kenar kısalıp uzadıkça ya da döndükçe yazı aynı
+ * ORANDA ve çizgiye göre aynı yerde kalır (kullanıcı, 2026-09-25: "uzunluğu kısalttığımda yazı
+ * orantısal olarak aynı eksende kaymıyor", "dik açıya kaydırdığımda uzunluk ölçümünü uzağa fırlatıyor").
+ */
+export interface LabelOffset extends Point2D {
+  eksenBoyunca?: number;
+  eksenDik?: number;
+}
+
 export interface MeasurementLabelAnchor {
   /** Merkezi birlikte belirleyen noktalar; geometrik bağımlılık değildir. */
   pointIds: string[];
   /** Hizalama noktasının, noktaların aritmetik merkezine göre dünya birimindeki kayıklığı. */
   offset: Point2D;
   alignment: 'left' | 'center' | 'right';
+  /** Sürükleme anındaki MUTLAK dünya konumu (yalnızca `ref` ile birlikte anlamlıdır). */
+  base?: Point2D;
+  /**
+   * Sürükleme anındaki nokta konumları. Kullanıcı isteği: taşınmış ölçü yazısı, bir köşe ya da kenar
+   * oynayınca YERİNDE kalır; yalnızca nesnenin TAMAMI aynı vektörle taşınırsa onunla birlikte gider.
+   */
+  ref?: { id: string; x: number; y: number }[];
 }
 
 export type ObjectType =
@@ -73,11 +93,16 @@ export interface BaseMathObject {
    * Ölçüm etiketlerinin varsayılan konumdan DÜNYA birimi cinsinden kayıklığı.
    * Kayıklık şekle GÖRE tutulduğu için şekil taşındığında etiket de onunla birlikte gider.
    */
-  labelOffsets?: Record<string, Point2D>;
+  labelOffsets?: Record<string, LabelOffset>;
   /** Uzaklaştırılmış ölçüm yazılarının ortak şekil merkezine bağlı konumları. */
   labelAnchors?: Record<string, MeasurementLabelAnchor>;
   /** Nesne hareket ettikçe ekranda kalıcı iz bırakır mı (GeoGebra Show Trace) */
   showTrace?: boolean;
+  /**
+   * Yalnızca ÖLÇMEK için kurulmuş şekil (Alanı Bul, Çevre Hesapla gibi araçlar var olan noktaları kullanır).
+   * Silinince kendi noktalarını GÖTÜRMEZ: noktalar kullanıcınındır.
+   */
+  olcumSekli?: boolean;
 }
 
 export interface PointObject extends BaseMathObject {
@@ -148,7 +173,7 @@ export interface SegmentObject extends BaseMathObject {
    * Açının kendisi silinince, başka hiçbir nesnenin kullanmadığı bu kollar da gider (collectDependentIds).
    */
   armOfAngleId?: string;
-  /** Elle konmuş eşitlik çentiği: 0 = işaretsiz, 1–4 = çizgi sayısı; yoksa otomatik (esitlikIsaretleri.ts). */
+  /** Elle konmuş eşitlik çentiği: 0 = işaretsiz, 1–8 = çizgi sayısı; yoksa otomatik (esitlikIsaretleri.ts). */
   equalityMark?: number;
 }
 
@@ -188,6 +213,11 @@ export interface CircleObject extends BaseMathObject {
   fillOpacity?: number;
   showArea?: boolean;
   showPerimeter?: boolean;
+  /**
+   * Yarıçap etiketi (r = |OT| = …). Verilmemişse alan/çevre etiketleriyle birlikte görünür;
+   * etikete tıklamak false yazar, sağ tık menüsü geri açar (cemberYaricapiGorunur).
+   */
+  showRadius?: boolean;
 }
 
 /**
@@ -227,7 +257,7 @@ export interface ArcObject extends BaseMathObject {
   showArcLength?: boolean;
   /** Merkez açı yazısı görünür mü? (varsayılan: evet) */
   showCentralAngle?: boolean;
-  /** Elle konmuş eşitlik çentiği: 0 = işaretsiz, 1–4 = çizgi sayısı; yoksa otomatik (esitlikIsaretleri.ts). */
+  /** Elle konmuş eşitlik çentiği: 0 = işaretsiz, 1–8 = çizgi sayısı; yoksa otomatik (esitlikIsaretleri.ts). */
   equalityMark?: number;
 }
 
@@ -246,7 +276,7 @@ export interface SectorObject extends BaseMathObject {
   showPerimeter?: boolean;
   /** Merkez açı yazısı görünür mü? (varsayılan: evet) */
   showCentralAngle?: boolean;
-  /** Elle konmuş eşitlik çentiği: 0 = işaretsiz, 1–4 = çizgi sayısı; yoksa otomatik (esitlikIsaretleri.ts). */
+  /** Elle konmuş eşitlik çentiği: 0 = işaretsiz, 1–8 = çizgi sayısı; yoksa otomatik (esitlikIsaretleri.ts). */
   equalityMark?: number;
 }
 
@@ -264,6 +294,8 @@ export interface AngleObject extends BaseMathObject {
    * Örn. iç açı 72° iken dış açı 288° olarak çizilir ve yazılır.
    */
   reflex?: boolean;
+  /** Elle konmuş eşitlik çentiği: 0 = işaretsiz, 1–8 = çizgi sayısı; yoksa otomatik (esitlikIsaretleri.ts). */
+  equalityMark?: number;
 }
 
 export interface PolygonObject extends BaseMathObject {
@@ -274,7 +306,7 @@ export interface PolygonObject extends BaseMathObject {
    * arasındaki kenardır (son kenar pointIds[n-1] -> pointIds[0]).
    */
   edgeLabels?: number[];
-  /** Kenar dizini ('0', '1', …; i. kenar pointIds[i] → pointIds[i+1]) → elle eşitlik çentiği (0 = işaretsiz, 1–4 çizgi). */
+  /** Kenar dizini ('0', '1', …; i. kenar pointIds[i] → pointIds[i+1]) → elle eşitlik çentiği (0 = işaretsiz, 1–8 çizgi). */
   edgeEqualityMarks?: Record<string, number>;
   fillColor?: string;
   fillOpacity?: number;
@@ -294,6 +326,8 @@ export interface FunctionObject extends BaseMathObject {
 export interface SliderObject extends BaseMathObject {
   type: 'slider';
   variableName: string; // Örn: 'a', 'b', 'm'
+  /** Görünen ölçü adının kaynağıdır; geometrik bağımlılık oluşturmaz. */
+  bindingTarget?: { objectId: string; propertyKey: string };
   min: number;
   max: number;
   step: number;
@@ -396,6 +430,9 @@ export interface InputBoxObject extends BaseMathObject {
  * saklanır: noktalar taşındığında değer kendiliğinden güncellenir, etiket sürüklenebilir
  * ve tıklanınca gizlenebilir.
  */
+/** Trigonometrik oran ölçümünün ayrı etiketleri (sırasıyla çizilir). */
+export type TrigSatiri = 'angle' | 'sin' | 'cos' | 'tan';
+
 export interface MeasurementObject extends BaseMathObject {
   type: 'measurement';
   /**
@@ -407,6 +444,11 @@ export interface MeasurementObject extends BaseMathObject {
   pointIds: string[];
   /** Değer yazısı görünür mü? (tıklayınca kapanır) */
   showValue?: boolean;
+  /**
+   * trig: gizlenen etiketler. Açı, sin, cos ve tan AYRI etiketlerdir; tıklanan yalnızca kendisi gizlenir.
+   * Sonuncusu gizlenince ölçüm bütünüyle kapanır (showValue = false) ve liste temizlenir.
+   */
+  hiddenRatios?: TrigSatiri[];
   /** arc: yayın üzerinde durduğu çember. Çember silinince ölçüm de silinir. */
   circleId?: string;
   /**

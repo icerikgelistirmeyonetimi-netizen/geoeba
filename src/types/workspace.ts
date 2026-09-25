@@ -113,14 +113,23 @@ export interface StyleSettings {
   measurementScale: number;
   /** Ayrıntılı: eksen sayıları ve bölge etiketleri */
   axisScale: number;
-  /** Ölçüm etiketlerinin arka plan kutusunu kaldırır: yazılar düz metin olarak görünür. */
-  hideLabelBoxes: boolean;
+  /**
+   * Ölçüm etiketlerini arka plan kutusu içinde gösterir. Kapalıyken (varsayılan) yazılar kutusuz, tuval rengi
+   * haleyle okunur. Eski kayıtlardaki hideLabelBoxes: false yalnızca eski varsayılandı; yeni ad sayesinde
+   * bu kayıtlar da kutusuz açılır.
+   */
+  showLabelBoxes: boolean;
   /** Şekillerin iç dolgusunu kaldırır: yalnızca kenar çizgileri kalır. */
   hideFills: boolean;
   /** Ölçü yazımı: 'tam' = adıyla (|AB| = 5 br), 'kisa' = yalnızca değer (5 br). Yalnızca tuval etiketlerini etkiler. */
   olcuYazimi: OlcuYazimi;
   /** Açı yazımı: 'sapka' = m(ABC^) (MEB), 'isaret' = m(∠ABC). */
   aciYazimi: AciYazimi;
+  /**
+   * Uzunluk, açı, alan ve çevre TAM SAYI yazılır; alan ve çevre görünen tam sayılardan hesaplanır
+   * (kullanıcı isteği, 2026-09-25: "hesaplamalarda tam sayıya göre olmalı ki hatalı sonuç almayalım").
+   */
+  tamSayiOlcu: boolean;
 }
 
 export const DEFAULT_STYLE_SETTINGS: StyleSettings = {
@@ -130,10 +139,11 @@ export const DEFAULT_STYLE_SETTINGS: StyleSettings = {
   pointLabelScale: 1,
   measurementScale: 1,
   axisScale: 1,
-  hideLabelBoxes: false,
+  showLabelBoxes: false,
   hideFills: false,
   olcuYazimi: 'tam',
   aciYazimi: 'sapka',
+  tamSayiOlcu: true,
 };
 
 /** Metin (seçenek) alanlarının kabul edilen değerleri; kayıttan okurken ve proje dosyasında denetlenir. */
