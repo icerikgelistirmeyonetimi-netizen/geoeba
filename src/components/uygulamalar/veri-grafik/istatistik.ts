@@ -1,7 +1,8 @@
 /**
  * Veri ve Grafik — saf istatistik yardımcıları.
- * Aritmetik ortalama, ortanca (medyan), tepe değer, açıklık, ortalama mutlak sapma, "güzel" eksen aralıkları ve
- * İstatistik panelinin hesaplama adımlarında gösterilen (yuvarlanmış ya da tam) sayılar.
+ * Aritmetik ortalama, ortanca (medyan), tepe değer, açıklık, ortalama mutlak sapma, standart sapma (örneklem: veri
+ * sayısı − 1; lise ölçüsü), "güzel" eksen aralıkları ve İstatistik panelinin hesaplama adımlarında gösterilen
+ * (yuvarlanmış ya da tam) sayılar.
  * Boş dizi için null döner; bileşenler bunu "veri yok" olarak gösterir.
  * Bu dosya `grafik.ts`'i içe aktarmaz (tersi içe aktarır); gösterim ondalığı çağırandan gelir.
  */
@@ -34,6 +35,19 @@ export function ortalamaMutlakSapma(degerler: readonly number[]): number | null 
   let t = 0;
   for (const d of degerler) t += Math.abs(d - ort);
   return t / degerler.length;
+}
+
+/**
+ * Standart sapma (örneklem; MEB lise kitapları ve tablolama programlarının varsayılanı): ortalamaya uzaklıkların
+ * karelerinin toplamı ÷ (veri sayısı − 1), karekökü. Tek veride tanımsız (null). Ortaokul programındaki ölçü ortalama
+ * mutlak sapmadır; bu ölçü 9. sınıf (lise) içindir ve onun yanında sunulur.
+ */
+export function standartSapma(degerler: readonly number[]): number | null {
+  const ort = ortalama(degerler);
+  if (ort === null || degerler.length < 2) return null;
+  let t = 0;
+  for (const d of degerler) t += (d - ort) * (d - ort);
+  return Math.sqrt(t / (degerler.length - 1));
 }
 
 export function enKucuk(degerler: readonly number[]): number | null {
@@ -87,6 +101,8 @@ export interface Ozet {
   /** en büyük sıklık (tepe değerin görülme sayısı; tepe yoksa her değerin ortak sıklığı) */
   tepeSayisi: number;
   oms: number | null;
+  /** standart sapma (örneklem, veri sayısı − 1); tek veride null */
+  standartSapma: number | null;
   enKucuk: number | null;
   enBuyuk: number | null;
   aciklik: number | null;
@@ -101,6 +117,7 @@ export function ozetHesapla(degerler: readonly number[]): Ozet {
     tepe: tepe.degerler,
     tepeSayisi: tepe.sayi,
     oms: ortalamaMutlakSapma(degerler),
+    standartSapma: standartSapma(degerler),
     enKucuk: enKucuk(degerler),
     enBuyuk: enBuyuk(degerler),
     aciklik: aciklik(degerler),
@@ -216,6 +233,10 @@ export interface AdimSatiri {
   yaklasik: boolean;
   /** farkın yazılacak ondalık basamağı */
   ondalik: number;
+  /** uzaklık × uzaklık (gösterildiği gibi; standart sapma adımı) */
+  kareUzaklik: number;
+  /** kare uzaklık yuvarlanarak yazıldı */
+  kareYaklasik: boolean;
 }
 
 /** Sıklık tablosu satırı (çok veride adımlar bu biçimdedir) */
@@ -228,6 +249,10 @@ export interface SiklikSatiri {
   uzaklik: number;
   /** sıklık × uzaklık */
   uzaklikCarpim: number;
+  /** uzaklık × uzaklık (standart sapma adımı) */
+  kareUzaklik: number;
+  /** sıklık × kare uzaklık */
+  kareUzaklikCarpim: number;
 }
 
 /** Bu kadar veriden sonra adımlar sıklık tablosu biçimine geçer */
@@ -264,6 +289,14 @@ export interface HesaplamaAdimlari {
   sagUzaklikToplami: number;
   /** uzaklıkların toplamı ÷ veri sayısı */
   omsGosterim: Gosterim;
+  /** gösterilen kare uzaklıkların toplamı (standart sapma adımı) */
+  kareUzaklikToplami: number;
+  /** kare uzaklıkların toplamı ÷ (veri sayısı − 1); tek veride null */
+  kareBolumGosterim: Gosterim | null;
+  /** standart sapma: kare bölümün karekökü (gösterilen terimlerden); tek veride null */
+  standartSapmaGosterim: Gosterim | null;
+  /** kesin standart sapma (kartla bağ kuran not için); tek veride null */
+  standartSapma: number | null;
   /** farklı değerlerin sıklık tablosu, küçükten büyüğe */
   sikliklar: SiklikSatiri[];
   /** n > 30: adımlar sıklık tablosu biçiminde yazılır */
@@ -301,21 +334,31 @@ export function hesaplamaAdimlari(degerler: readonly number[], ondalik = 2): Hes
   const m = ortalamaGosterim.deger;
   const satirlar: AdimSatiri[] = degerler.map((deger) => {
     const f = adimGosterimi(deger - m, d);
-    return { deger, fark: f.deger, uzaklik: Math.abs(f.deger), yaklasik: f.yaklasik, ondalik: f.ondalik };
+    const uzaklik = Math.abs(f.deger);
+    // Kare uzaklık gösterilen uzaklıktan (standart sapma adımı): terimler tabloyu tutar
+    const kare = adimGosterimi(uzaklik * uzaklik, d);
+    return { deger, fark: f.deger, uzaklik, yaklasik: f.yaklasik, ondalik: f.ondalik, kareUzaklik: kare.deger, kareYaklasik: kare.yaklasik };
   });
   const farkToplami = tamToplam(satirlar.map((s) => s.fark));
   const uzaklikToplami = tamToplam(satirlar.map((s) => s.uzaklik));
+  const kareUzaklikToplami = tamToplam(satirlar.map((s) => s.kareUzaklik));
   const uzaklikBul = new Map(satirlar.map((s) => [s.deger, s.uzaklik]));
+  const kareBul = new Map(satirlar.map((s) => [s.deger, s.kareUzaklik]));
   const sikliklar: SiklikSatiri[] = degerSikliklari(degerler).map(({ deger, siklik }) => {
     const uzaklik = uzaklikBul.get(deger) ?? Math.abs(deger - m);
+    const kareUzaklik = kareBul.get(deger) ?? adimGosterimi(uzaklik * uzaklik, d).deger;
     return {
       deger,
       siklik,
       carpim: adimGosterimi(deger * siklik, d).deger,
       uzaklik,
       uzaklikCarpim: adimGosterimi(uzaklik * siklik, d).deger,
+      kareUzaklik,
+      kareUzaklikCarpim: adimGosterimi(kareUzaklik * siklik, d).deger,
     };
   });
+  // Standart sapma (örneklem): gösterilen kare uzaklıkların toplamı ÷ (n − 1), karekökü; tek veride tanımsız
+  const kareBolum = n > 1 ? kareUzaklikToplami / (n - 1) : null;
   const orn = medyan(degerler) as number;
   return {
     n,
@@ -336,6 +379,10 @@ export function hesaplamaAdimlari(degerler: readonly number[], ondalik = 2): Hes
     solUzaklikToplami: tamToplam(satirlar.filter((s) => s.fark < 0).map((s) => s.uzaklik)),
     sagUzaklikToplami: tamToplam(satirlar.filter((s) => s.fark > 0).map((s) => s.uzaklik)),
     omsGosterim: adimGosterimi(uzaklikToplami / n, d),
+    kareUzaklikToplami,
+    kareBolumGosterim: kareBolum === null ? null : adimGosterimi(kareBolum, d),
+    standartSapmaGosterim: kareBolum === null ? null : adimGosterimi(Math.sqrt(kareBolum), d),
+    standartSapma: standartSapma(degerler),
     sikliklar,
     siklikBicimi: n > SIKLIK_BICIMI_SINIRI,
     ortancaKonumlari: ortaIndeksler.map((i) => i + 1),

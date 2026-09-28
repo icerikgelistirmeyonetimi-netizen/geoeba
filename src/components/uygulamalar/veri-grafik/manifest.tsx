@@ -10,7 +10,7 @@ export const manifest = {
   id: 'veri-grafik',
   ad: 'Veri ve Grafik',
   kisaAd: 'Veri ve Grafik',
-  aciklama: 'Veri tablosu ile nokta, sütun, çizgi ve daire grafikleri; ortalama ve ortalama mutlak sapma.',
+  aciklama: 'Veri tablosu ile nokta, sütun, çizgi ve daire grafikleri; ortalama, ortalama mutlak sapma ve standart sapma.',
   renk: '#216a78',
   simge: (
     <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">

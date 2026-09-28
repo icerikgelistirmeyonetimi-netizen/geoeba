@@ -12,6 +12,7 @@
 import type { NoktaSecenekleri } from './NoktaGrafigi';
 import {
   ORNEK_VERILER,
+  bosTablo,
   ornekBul,
   ornekVeriOlustur,
   tabloDogrula,
@@ -227,7 +228,14 @@ function adDogrula(ham: unknown): string | null {
 
 function seceneklerDogrula(ham: unknown): NoktaSecenekleri {
   const s = ham && typeof ham === 'object' ? (ham as Record<string, unknown>) : {};
-  return { ortalama: s.ortalama === true, oms: s.oms === true, etiketler: s.etiketler === true, ortanca: s.ortanca === true };
+  return {
+    ortalama: s.ortalama === true,
+    oms: s.oms === true,
+    etiketler: s.etiketler === true,
+    ortanca: s.ortanca === true,
+    // Standart sapma (lise ölçüsü) yalnız açıkken yazılır: eski kayıtlar ve varsayılan seçenek nesneleri değişmez
+    ...(s.standartSapma === true ? { standartSapma: true } : {}),
+  };
 }
 
 function gorunumTamDogrula(ham: unknown): GorunumTam {
@@ -789,6 +797,17 @@ export function ornegiYukle(d: Durum, ornekId: string): { durum: Durum; onceki: 
     },
   });
   return { durum: { ...durum, ipucu: 'kart', daireModu: null }, onceki };
+}
+
+/**
+ * Boş tablo açar (başlangıç penceresi "Boş tablo"): Tablom `bosTablo()` ("Etiket | Değer", satırsız) olur; korunmaya
+ * değer eski tablo `tabloDegistir` ile görünümüyle "Önceki tabloya dön" için saklanır (değiştirilmemiş örnek saklanmaz:
+ * Örnek veri'den yeniden açılır). Örnek bağı ve tablo adı yok (menüde ilk değişkenin adı), Keşif kartı kapalı, daire modu
+ * otomatik, Veri topla paneli kapanır (bağlı plan bağsız kalır: "Son araştırma"). `onceki` bütün eski durumdur ([Geri al]).
+ */
+export function bosTabloAc(d: Durum): { durum: Durum; onceki: Durum } {
+  const { durum } = tabloDegistir(d, { tablo: bosTablo(), ad: '', ornekId: null });
+  return { durum: { ...durum, ornekTemiz: false, ipucu: 'kapali', daireModu: null, toplamaAcik: false }, onceki: d };
 }
 
 /**

@@ -564,13 +564,15 @@ describe('C-4 / C-5: "Veri topla" paneli (yerleşim, soru şeridi, tablo bandı,
     expect(html.indexOf('data-tablo-bandi-kabi')).toBeGreaterThan(html.indexOf('id="vg-grafik-alani"'));
   });
 
-  it('eski örnekleyici kaydı (deney dolu, panel açık, Saçılım): Veri topla paneli açık, Tablom aynen, sekme Nokta, eski deney önceki tabloda', () => {
+  it('eski örnekleyici kaydı (deney dolu, panel açık, Saçılım): başlangıç penceresi açık, panel kapalı, Tablom aynen, sekme Nokta, eski deney önceki tabloda', () => {
     const tablo = ornekVeriOlustur('boy');
     const html = pencereyle({ [DEPO_ANAHTARI]: eskiKayit() }, () => renderToStaticMarkup(<VeriGrafikUygulamasi pencereGenisligi={1366} />));
-    // Eski panel açıktı: Veri topla paneli açık gelir (sade 2 panel, "Ne araştıralım?")
-    expect(html).toContain('data-yerlesim="bantli"');
-    expect(html).toContain('data-veri-topla-paneli="" data-gorunum="baslangic"');
-    expect(html).toMatch(/aria-pressed="true"[^>]*data-veri-topla-dugmesi/);
+    // Eski panel açıktı ama bağlı bir toplama yoktu: panelin "Ne araştıralım?" görünümü artık başlangıç penceresidir
+    // (paneliDuzelt): panel kapalı, tablo | grafik düzeni, pencere seçim adımında
+    expect(html).toContain('data-yerlesim="iki-sutun"');
+    expect(html).not.toContain('data-veri-topla-paneli');
+    expect(html).toContain('data-baslangic-modali="secim"');
+    expect(html).toMatch(/aria-pressed="false"[^>]*data-veri-topla-dugmesi/);
     for (const eski of ['Deneyle topla', 'data-ornekleyici', 'Deney sonuçları', 'Ölçümler']) expect(html).not.toContain(eski);
     // Tablom aynen (24 satır; bantta son satırın değeri); küme seçici yok
     expect(html).toContain(`${tablo.satirlar.length} satır`);

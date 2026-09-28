@@ -29,6 +29,7 @@ import { ozeteGec, planiUygula, toplamaKapat, toplamaVerisiYaz } from '../toplam
 import { sonucDegerleri } from '../deney';
 import { OgretmenKarti, type OgretmenBolumu } from '../toplama/OgretmenKarti';
 import { KesifKarti } from '../KesifKarti';
+import { BaslangicModali } from '../BaslangicModali';
 
 const bos = () => undefined;
 const VG = path.resolve(__dirname, '..');
@@ -218,7 +219,7 @@ describe('bütünlük: 16 örnek × 6 sekme (uygulama kökü, sunucu çizimi)', 
           ['açılış dar', { ...yuklu, sekme }, DAR],
           [
             'ölçüler',
-            { ...yuklu, sekme, ipucu: 'serit', adimlariGoster: true, degerleriGoster: true, secenekler: { ortalama: true, oms: true, etiketler: true, ortanca: true } },
+            { ...yuklu, sekme, ipucu: 'serit', adimlariGoster: true, degerleriGoster: true, secenekler: { ortalama: true, oms: true, etiketler: true, ortanca: true, standartSapma: true } },
           ],
         ];
         if (sekme === 'nokta') cesitler.push(['sütun modu', { ...yuklu, sekme, sutunModu: true, ipucu: 'kapali', secenekler: { ortalama: true, oms: true, etiketler: true, ortanca: true } }]);
@@ -238,10 +239,11 @@ describe('bütünlük: 16 örnek × 6 sekme (uygulama kökü, sunucu çizimi)', 
 
   it('tarama gerçekten çizilen içeriği kapsar: ölçü yazıları, hesaplama adımları, Keşif kartı ve tablo çıktıda', () => {
     const boy = ornegiYukle(baslangicDurumu(), 'boy')!.durum;
-    const olculer = { ortalama: true, oms: true, etiketler: true, ortanca: true };
+    const olculer = { ortalama: true, oms: true, etiketler: true, ortanca: true, standartSapma: true };
     const nokta = okunanMetin(uygulamaCiz({ ...boy, sekme: 'nokta', ipucu: 'serit', secenekler: olculer }));
     expect(nokta).toMatch(/Ortalama = /);
     expect(nokta).toMatch(/Ort\. mutlak sapma = /);
+    expect(nokta).toMatch(/Standart sapma [=≈] /);
     expect(nokta).toMatch(/Ortanca/);
     expect(nokta).toContain(ORNEK_VERILER.find((o) => o.id === 'boy')!.hikaye.arastirmaSorusu);
     const ist = okunanMetin(uygulamaCiz({ ...boy, sekme: 'istatistik', adimlariGoster: true }));
@@ -262,9 +264,33 @@ describe('bütünlük: 16 örnek × 6 sekme (uygulama kökü, sunucu çizimi)', 
 // ── Veri topla paneli ────────────────────────────────────────────────────────────────────────────────────────
 
 describe('bütünlük: "Veri topla" paneli (uygulama kökü, sunucu çizimi)', () => {
-  it('"Ne araştıralım?": 18 hazır soru kartı, üç yöntem grubu; adım yolu yok; temiz', () => {
-    const html = uygulamaCiz({ ...baslangicDurumu(), toplamaAcik: true });
-    expect(html).toContain('data-veri-topla-paneli="" data-gorunum="baslangic"');
+  it('"Ne araştıralım?" başlangıç penceresinin Veri topla adımıdır: 18 hazır soru kartı, üç yöntem grubu; bağsız açık panel kapalı gelir; temiz', () => {
+    // Bağsız açık panel kaydı: panel kapalı, pencere seçim adımında (paneliDuzelt); kök temiz
+    const kok = uygulamaCiz({ ...baslangicDurumu(), toplamaAcik: true });
+    expect(kok).not.toContain('data-veri-topla-paneli');
+    expect(kok).toContain('data-baslangic-modali="secim"');
+    expect(ihlaller(kok, 'başlangıç penceresi')).toEqual([]);
+    const d = baslangicDurumu();
+    const html = renderToStaticMarkup(
+      <BaslangicModali
+        baslangic="topla"
+        onKapat={bos}
+        genislik={1366}
+        simdiki={{ ad: 'Boy (cm)', satirSayisi: d.tablo.satirlar.length }}
+        yukluOrnekId={d.ornekId}
+        onceki={null}
+        onOrnekYukle={bos}
+        onOncekiTabloyaDon={bos}
+        arastirma={null}
+        bagli={false}
+        tablo={d.tablo}
+        onPlaniUygula={bos}
+        onDevam={bos}
+        planUyarisi={() => null}
+        onBosTablo={bos}
+      />,
+    );
+    expect(html).toContain('data-baslangic-modali="topla"');
     expect(html.match(/data-hazir-soru="/g)).toHaveLength(HAZIR_SORULAR.length);
     expect(HAZIR_SORULAR).toHaveLength(18);
     expect(html).not.toMatch(/data-adim-yolu|Soru · Plan · Topla/);
@@ -336,7 +362,9 @@ describe('bütünlük: "Veri topla" paneli (uygulama kökü, sunucu çizimi)', (
       ornekleyiciAcik: true,
     };
     const html = uygulamaCiz(JSON.stringify(eski));
-    expect(html).toContain('data-veri-topla-paneli');
+    // Eski panel açıktı: panelin "Ne araştıralım?" görünümü artık başlangıç penceresidir; panel kapalı, pencere açık gelir
+    expect(html).not.toContain('data-veri-topla-paneli');
+    expect(html).toContain('data-baslangic-modali="secim"');
     expect(html).not.toContain('data-ornekleyici');
     expect(ihlaller(html, 'göç')).toEqual([]);
   });

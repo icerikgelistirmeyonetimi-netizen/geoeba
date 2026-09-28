@@ -30,6 +30,15 @@ export interface Oynatici {
   sonaGit: () => void;
 }
 
+/**
+ * Ekranın kullanacağı konum. Program değişince ekran yeni izi hemen hesaplar ama oynatıcı onu etkide (bir çizim
+ * sonra) yükler; o arada oynatıcının konumu eski ize aittir ve yeni izin adımlarını aşabilir. Yüklü iz ekrandaki izle
+ * aynı değilse ya da konum izin dışındaysa başlangıç (−1) döner: `adimlar[konum].durum` okunmaz kalmaz.
+ */
+export function ekranKonumu(yuklu: Iz | null, iz: Iz, konum: number): number {
+  return yuklu === iz && konum < iz.adimlar.length ? konum : -1;
+}
+
 export function useOynatici(sahne: React.RefObject<SahneTutamaci | null>, hiz: number, onBitti?: (iz: Iz) => void): Oynatici {
   const [iz, setIz] = useState<Iz | null>(null);
   const [konum, setKonum] = useState(-1);

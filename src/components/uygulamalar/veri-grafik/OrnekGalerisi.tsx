@@ -1,9 +1,10 @@
 'use client';
 
 /**
- * Veri ve Grafik — "Örnek veri" menüsünün içeriği: sınıf düzeyine göre gruplanmış örnek galerisi.
+ * Veri ve Grafik — başlangıç penceresinin "Örnek veri" adımı: sınıf düzeyine göre gruplanmış örnek galerisi.
  *
- * Menü kabı (`role="menu"`, konum, en büyük yükseklik) ve klavye gezinmesi C'dedir; burada yalnız öğeler çizilir.
+ * Menü kabı (`role="menu"`, kaydırma) ve klavye gezinmesi başlangıç penceresindedir (BaslangicModali); burada yalnız
+ * öğeler çizilir.
  * - En üstte, önceki tablo saklıysa "Önceki tabloya dön" (`data-onceki-tablo`) ve bir ayraç.
  * - Grup başlıkları (`ORNEK_KONULARI.ad`) bütün satırı kaplar; öğeler geniş menüde iki, darda tek sütundur.
  * - Her öğe (≥ 56 px): örneğin kendi verisinden çizilmiş küçük grafik (önerilen grafik türünde), ad (ilk `span`),

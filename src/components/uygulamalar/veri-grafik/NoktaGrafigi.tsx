@@ -9,7 +9,8 @@
  *   sıklıkla doğru orantılıdır; solda tam sayı çentikli "Sıklık" ekseni belirir. Renk anahtarı varsa noktalar
  *   anahtar sırasıyla dizilir ve sütunlar anahtar kategorilerine göre yığılır.
  * - Ortalama (mercan çizgi), ortanca (lavanta kesikli çizgi), ortalama mutlak sapma (altın bant, ayraç ve
- *   n ≤ 40 iken eksenin altında uzaklık şeridi) seçeneklidir; sayılar `gosterimOndaligi` ile, İstatistik'teki gibi
+ *   n ≤ 40 iken eksenin altında uzaklık şeridi) ve standart sapma (zeytin bant: ortalama ± s, kenar değerleri; lise
+ *   ölçüsü, altın bantla birlikte de açılabilir) seçeneklidir; sayılar `gosterimOndaligi` ile, İstatistik'teki gibi
  *   `sayiMetni` biçiminde (bölük boşluğu, gerçek eksi) yazılır; yuvarlanmış ölçü "Ortalama ≈ 3,43" olur.
  * - Ölçü satırlarının yeri baştan ayrılır: düğmeye basınca noktalar küçülmez, yerinden oynamaz (TinkerPlots nesne
  *   sürekliliği). Uzaklık şeridi yalnız yığınların üstünde boş yer varsa çizilir.
@@ -19,7 +20,7 @@
  * - Ölçüler gerçek pikseldir (viewBox = kabın ölçüsü): yazılar 13 px kalır, alçak panelde yalnız noktalar küçülür.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { kartGosterimi, medyan, ortalama, ortalamaMutlakSapma, sayiMetni, temizle, type Eksen } from './istatistik';
+import { kartGosterimi, medyan, ortalama, ortalamaMutlakSapma, sayiMetni, standartSapma, temizle, type Eksen } from './istatistik';
 import {
   dagitikKonum,
   dogrusalOlcek,
@@ -56,6 +57,8 @@ export interface NoktaSecenekleri {
   etiketler: boolean;
   /** Ortanca çizgisi ve etiketi (yalnız sayısal değişkende) */
   ortanca?: boolean;
+  /** Standart sapma bandı: ortalama ± s (lise ölçüsü; örneklem, veri sayısı − 1); yalnız açıkken yazılır */
+  standartSapma?: boolean;
 }
 
 export interface NoktaGrafigiProps {
@@ -154,6 +157,8 @@ const ORTANCA_KUTUSU = '#98a0d2';
 const OMS_RENGI = RENK.altin;
 const SERIT_SOL = '#b9884a';
 const SERIT_SAG = '#6b8e3a';
+/** Standart sapma bandı: zeytin (uzaklık şeridinin sağ tonuyla aynı aile; altın banttan ve nokta renklerinden ayrı) */
+const SS_RENGI = '#6b8e3a';
 
 /** Odak halkası yalnız klavyeyle odaklanınca görünür; yeni nokta halkası genişleyip söner */
 const TEMEL_STIL =
@@ -454,6 +459,7 @@ export function NoktaGrafigi({
     const ondalik = gosterimOndaligi(degerler);
     const ort = ortalama(degerler);
     const oms = ortalamaMutlakSapma(degerler);
+    const ss = standartSapma(degerler);
     const ortancaDeger = medyan(degerler);
     const gruplu = degerler.length > 0 && gruplamaVar(degerler, aralik);
     const yiginlar = yiginla(noktalar, aralik, gruplu);
@@ -524,10 +530,12 @@ export function NoktaGrafigi({
 
     const ortGoster = sayisal && secenekler.ortalama && ort !== null && olcek !== null;
     const omsGoster = sayisal && secenekler.oms && ort !== null && oms !== null && olcek !== null;
+    const ssGoster = sayisal && secenekler.standartSapma === true && ort !== null && ss !== null && olcek !== null;
     const ortancaGoster = sayisal && !!secenekler.ortanca && ortancaDeger !== null && olcek !== null;
     /** Ölçü düğmeleri kapalıyken de açılabilir mi: satırlarının yeri baştan ayrılır (açılınca noktalar küçülmez, kaymaz) */
     const ortMumkun = sayisal && ort !== null && olcek !== null;
     const omsMumkun = ortMumkun && oms !== null;
+    const ssMumkun = ortMumkun && ss !== null;
     const ortancaMumkun = sayisal && ortancaDeger !== null && olcek !== null;
     const mx = ort !== null && olcek ? olcek.ileri(ort) : 0;
 
@@ -543,8 +551,13 @@ export function NoktaGrafigi({
     const omsG = omsMetni.length * HARF;
     const sagKenar = omsMumkun && olcek ? olcek.ileri((ort as number) + (oms as number)) : 0;
     const solKenar = omsMumkun && olcek ? olcek.ileri((ort as number) - (oms as number)) : 0;
+    /** Standart sapma etiketi (renk kutucuğu + yazı) ve bandın kenarları (ortalama ± s) */
+    const ssMetni = ss !== null ? olcuMetni('Standart sapma', ss, ondalik) : '';
+    const ssG = ssMetni.length * HARF + 16;
+    const ssSag = ssMumkun && olcek ? olcek.ileri((ort as number) + (ss as number)) : 0;
+    const ssSol = ssMumkun && olcek ? olcek.ileri((ort as number) - (ss as number)) : 0;
     /** Üst satırların yerleşimi: hangi ölçüler açıksa (ya da yer ayırmak için "açık olsaydı") */
-    const ustDuzeni = (ortAcik: boolean, omsAcik: boolean) => {
+    const ustDuzeni = (ortAcik: boolean, omsAcik: boolean, ssAcik: boolean) => {
       // Ayracın etiketi ölçü satırında: ortalama kutusunun sağında, sığmazsa solunda, o da olmazsa kendi satırında
       let omsX: number | null = null;
       if (omsAcik) {
@@ -552,8 +565,18 @@ export function NoktaGrafigi({
         else if (ortX + ortG + 10 + omsG <= W - SAG) omsX = ortX + ortG + 10;
         else if (ortX - 10 - omsG >= SOL) omsX = ortX - 10 - omsG;
       }
-      const olcuSatiri = ortAcik || (omsAcik && omsX !== null);
-      const olcuBasi = Math.min(ortAcik ? ortX : Infinity, omsX ?? Infinity);
+      // Standart sapma etiketi: satırdaki en sağdaki etiketin sağına, sığmazsa en soldakinin soluna, o da olmazsa
+      // kendi satırına (aşağıda); ölçü satırı boşsa bandın ortasına
+      let ssX: number | null = null;
+      if (ssAcik) {
+        const sagUc = Math.max(ortAcik ? ortX + ortG : -Infinity, omsAcik && omsX !== null ? omsX + omsG : -Infinity);
+        const solUc = Math.min(ortAcik ? ortX : Infinity, omsAcik && omsX !== null ? omsX : Infinity);
+        if (sagUc === -Infinity) ssX = sinirla(mx - ssG / 2, SOL, W - SAG - ssG);
+        else if (sagUc + 10 + ssG <= W - SAG) ssX = sagUc + 10;
+        else if (solUc - 10 - ssG >= SOL) ssX = solUc - 10 - ssG;
+      }
+      const olcuSatiri = ortAcik || (omsAcik && omsX !== null) || (ssAcik && ssX !== null);
+      const olcuBasi = Math.min(ortAcik ? ortX : Infinity, omsX ?? Infinity, ssX ?? Infinity);
       const birlesik = baslikSatiri && olcuSatiri && olcuBasi > baslikSonu + 12;
       let ustY = 6;
       if (baslikSatiri) ustY += 22;
@@ -571,11 +594,17 @@ export function NoktaGrafigi({
         omsEtiketY = ustY + 13;
         ustY += 18;
       }
+      let ssEtiketY: number | null = null;
+      if (ssAcik && ssX === null) {
+        ssX = sinirla(mx - ssG / 2, SOL, W - SAG - ssG);
+        ssEtiketY = ustY + 13;
+        ustY += 18;
+      }
       const ayracY = omsAcik ? ustY + 10 : 0;
       if (omsAcik) ustY += 20;
-      return { omsX, olcuY, omsEtiketY, ayracY, UST: ustY + 8 };
+      return { omsX, olcuY, omsEtiketY, ssX, ssEtiketY, ayracY, UST: ustY + 8 };
     };
-    const { omsX, olcuY, omsEtiketY, ayracY, UST } = ustDuzeni(ortGoster, omsGoster);
+    const { omsX, olcuY, omsEtiketY, ssX, ssEtiketY, ayracY, UST } = ustDuzeni(ortGoster, omsGoster, ssGoster);
     const baslikY = 20;
 
     // ── Alt satırlar: işaretler, eksen adı (+ ortanca), ortanca, uzaklık şeridi ─────────────
@@ -663,9 +692,9 @@ export function NoktaGrafigi({
      * altına iterse) önce ortanca satırının, sonra üst satırların payından vazgeçilir.
      */
     const dikeyIcin = (ust: number, alt: number) => Math.max(0, Math.max(ust + 1, H - (alt + 4)) - ust - 16);
-    const ustSade = ustDuzeni(false, false).UST;
+    const ustSade = ustDuzeni(false, false, false).UST;
     const altSade = altDuzeni(false).altY;
-    const ustTam = ustDuzeni(ortMumkun, omsMumkun).UST;
+    const ustTam = ustDuzeni(ortMumkun, omsMumkun, ssMumkun).UST;
     const hedefR = Math.min(yaricapBul(dikeyIcin(ustSade, altSade)).r, 8);
     const paylar = [
       { ust: ustTam, alt: altDuzeni(ortancaMumkun).altY },
@@ -886,6 +915,13 @@ export function NoktaGrafigi({
       ayracY,
       solKenar,
       sagKenar,
+      ss,
+      ssGoster,
+      ssMetni,
+      ssX,
+      ssEtiketY,
+      ssSol,
+      ssSag,
       adMetni,
       eksikMetni,
       adY,
@@ -930,6 +966,7 @@ export function NoktaGrafigi({
     ortakYigin,
     secenekler.ortalama,
     secenekler.oms,
+    secenekler.standartSapma,
     secenekler.ortanca,
     baslik,
     sutunModu,
@@ -1094,6 +1131,15 @@ export function NoktaGrafigi({
           <rect x={c.solKenar} y={c.ayracY} width={Math.max(0, c.sagKenar - c.solKenar)} height={Math.max(0, taban - c.ayracY)} fill={OMS_RENGI} fillOpacity={0.16} rx={3} />
           <line x1={c.solKenar} x2={c.solKenar} y1={c.ayracY - 5} y2={taban} stroke={OMS_RENGI} strokeWidth={1.5} strokeDasharray="4 4" />
           <line x1={c.sagKenar} x2={c.sagKenar} y1={c.ayracY - 5} y2={taban} stroke={OMS_RENGI} strokeWidth={1.5} strokeDasharray="4 4" />
+        </g>
+      )}
+
+      {/* Standart sapma bandı (zeytin; ortalama ± s): lise ölçüsü, altın bantla birlikte de çizilebilir */}
+      {c.ssGoster && (
+        <g data-standart-sapma-bandi>
+          <rect x={c.ssSol} y={UST - 6} width={Math.max(0, c.ssSag - c.ssSol)} height={Math.max(0, taban - UST + 6)} fill={SS_RENGI} fillOpacity={0.12} rx={3} />
+          <line x1={c.ssSol} x2={c.ssSol} y1={UST - 6} y2={taban} stroke={SS_RENGI} strokeWidth={1.5} strokeDasharray="7 3" />
+          <line x1={c.ssSag} x2={c.ssSag} y1={UST - 6} y2={taban} stroke={SS_RENGI} strokeWidth={1.5} strokeDasharray="7 3" />
         </g>
       )}
 
@@ -1432,6 +1478,35 @@ export function NoktaGrafigi({
                     {solMetin}
                   </text>
                   <text x={sagDisari ? c.sagKenar + 6 : c.sagKenar - 6} y={c.ayracY + 4} fontSize={13} fontWeight={700} textAnchor={sagDisari ? 'start' : 'end'} fill={RENK.metin}>
+                    {sagMetin}
+                  </text>
+                </>
+              );
+            })()}
+          </g>
+        </g>
+      )}
+
+      {/* Standart sapma etiketi (ölçü satırında ya da kendi satırında; zeytin renk kutucuğuyla) ve bandın kenar değerleri */}
+      {c.ssGoster && c.ssX !== null && c.ort !== null && c.ss !== null && (
+        <g data-standart-sapma-etiketi style={{ paintOrder: 'stroke', stroke: RENK.kart, strokeWidth: 3, strokeLinejoin: 'round' }}>
+          <rect x={c.ssX} y={(c.ssEtiketY ?? c.olcuY + 16) - 10} width={10} height={10} rx={2} fill={SS_RENGI} stroke="none" />
+          <text x={c.ssX + 16} y={c.ssEtiketY ?? c.olcuY + 16} fontSize={13} fontWeight={800} fill={RENK.metin}>
+            {c.ssMetni}
+          </text>
+          <g data-standart-sapma-kenarlari>
+            {(() => {
+              const solMetin = sayiMetni(c.ort - c.ss, c.ondalik);
+              const sagMetin = sayiMetni(c.ort + c.ss, c.ondalik);
+              const solDisari = c.ssSol - 6 - solMetin.length * HARF >= 2;
+              const sagDisari = c.ssSag + 6 + sagMetin.length * HARF <= W - 2;
+              const y = UST + 8;
+              return (
+                <>
+                  <text x={solDisari ? c.ssSol - 6 : c.ssSol + 6} y={y} fontSize={12} fontWeight={700} textAnchor={solDisari ? 'end' : 'start'} fill={SS_RENGI}>
+                    {solMetin}
+                  </text>
+                  <text x={sagDisari ? c.ssSag + 6 : c.ssSag - 6} y={y} fontSize={12} fontWeight={700} textAnchor={sagDisari ? 'start' : 'end'} fill={SS_RENGI}>
                     {sagMetin}
                   </text>
                 </>

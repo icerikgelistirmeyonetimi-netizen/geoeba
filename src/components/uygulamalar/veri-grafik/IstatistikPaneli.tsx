@@ -3,9 +3,11 @@
 /**
  * İstatistik paneli: seçili sayısal değişkenin ölçüleri iki başlık altında:
  * - Merkezi eğilim ölçüleri: aritmetik ortalama, ortanca, tepe değer;
- * - Yayılım ölçüleri: açıklık (en büyük − en küçük), ortalama mutlak sapma.
+ * - Yayılım ölçüleri: açıklık (en büyük − en küçük), ortalama mutlak sapma, standart sapma (lise ölçüsü; örneklem:
+ *   veri sayısı − 1; ortalama mutlak sapmanın yanında durur, onun yerini almaz).
  * "Hesaplama adımlarını göster" ders kitabı düzeninde adımları açar: toplam ve bölme, sıralama ve ortanca konumu,
- * sıklık sayımı, açıklık, fark / ortalamaya uzaklık tablosu. Gösterilen her terim gösterilen toplamı tutar;
+ * sıklık sayımı, açıklık, fark / ortalamaya uzaklık tablosu, kare uzaklık tablosu ve karekök. Gösterilen her terim
+ * gösterilen toplamı tutar;
  * yuvarlanan her sonuçta "≈" yazılır. 30'dan çok veride adımlar sıklık tablosu biçimindedir.
  * `ikinciSutun` verilirse iki değişken yan yana karşılaştırılır (Ölçü | A | B) ve bir yorum satırı yazılır.
  * Renk anahtarı seçiliyse aynı ölçüler anahtarın her grubu için ayrıca ("Gruplara göre") karşılaştırılır.
@@ -191,6 +193,7 @@ function OlcuKartlari({ ozet, ondalik }: { ozet: Ozet; ondalik: number }) {
   const ort = ozetGosterim(ozet.ortalama, ondalik);
   const orn = ozetGosterim(ozet.medyan, ondalik);
   const oms = ozetGosterim(ozet.oms, ondalik);
+  const ss = ozetGosterim(ozet.standartSapma, ondalik);
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-3" data-olcu-kartlari>
       <OlcuGrubu baslik="Merkezi eğilim ölçüleri" soru="veriler nerede toplanıyor?" sinif="grow-[3] basis-[500px]">
@@ -204,12 +207,20 @@ function OlcuKartlari({ ozet, ondalik }: { ozet: Ozet; ondalik: number }) {
           <span>{tepeMetni(ozet, ondalik)}</span>
         </Kart>
       </OlcuGrubu>
-      <OlcuGrubu baslik="Yayılım ölçüleri" soru="veriler ne kadar dağınık?" sinif="grow-[2] basis-[330px]">
+      <OlcuGrubu baslik="Yayılım ölçüleri" soru="veriler ne kadar dağınık?" sinif="grow-[3] basis-[480px]">
         <Kart baslik="Açıklık" aciklama="en büyük − en küçük" veri="aciklik">
           <AciklikIfadesi ozet={ozet} ondalik={ondalik} />
         </Kart>
         <Kart baslik="Ortalama mutlak sapma" aciklama="ortalamaya uzaklıkların toplamı ÷ veri sayısı" veri="oms">
           {oms ? <Sayi g={oms} /> : '—'}
+        </Kart>
+        {/* Lise ölçüsü (9. sınıf): ortaokulun ortalama mutlak sapmasının yanında; örneklem, veri sayısı − 1 */}
+        <Kart
+          baslik="Standart sapma"
+          aciklama={ozet.n === 1 ? 'tek veriyle hesaplanmaz (veri sayısı − 1 = 0)' : 'kare uzaklıkların toplamı ÷ (veri sayısı − 1), karekökü'}
+          veri="standartSapma"
+        >
+          {ss ? <Sayi g={ss} /> : '—'}
         </Kart>
       </OlcuGrubu>
     </div>
@@ -221,6 +232,8 @@ function OlcuKartlari({ ozet, ondalik }: { ozet: Ozet; ondalik: number }) {
 function KarsilastirmaTablosu({ adlar, ozetler, ondalik }: { adlar: [string, string]; ozetler: [Ozet, Ozet]; ondalik: number }) {
   const omsler = ozetler.map((o) => (o.oms === null ? 0 : o.oms));
   const enBuyukOms = Math.max(...omsler, 0);
+  const ssler = ozetler.map((o) => o.standartSapma ?? 0);
+  const enBuyukSs = Math.max(...ssler, 0);
   const yorum = karsilastirmaYorumu({ ad: adlar[0], ozet: ozetler[0] }, { ad: adlar[1], ozet: ozetler[1] }, ondalik);
   const hucre = 'h-10 px-3 text-right align-middle';
   const satirBasi = 'h-10 pr-3 text-left align-middle font-semibold text-foreground';
@@ -328,6 +341,25 @@ function KarsilastirmaTablosu({ adlar, ozetler, ondalik }: { adlar: [string, str
                 </td>
               ))}
             </tr>
+            <tr data-standart-sapma-satiri>
+              <th scope="row" className={satirBasi}>
+                Standart sapma
+              </th>
+              {ozetler.map((o, i) => (
+                <td key={i} className={hucre}>
+                  <span className="inline-flex items-center justify-end gap-2">
+                    <span className="font-bold">{sayiHucresi(o.standartSapma)}</span>
+                    <span className="block h-2.5 w-20 overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                      <span
+                        className={`block h-full rounded-full ${SERI_SINIFI[i]}`}
+                        style={{ width: `${enBuyukSs > 0 ? Math.max(2, (ssler[i] / enBuyukSs) * 100) : 0}%` }}
+                        data-standart-sapma-cubugu
+                      />
+                    </span>
+                  </span>
+                </td>
+              ))}
+            </tr>
           </tbody>
         </table>
       </div>
@@ -422,6 +454,8 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
   })();
 
   const uzaklikTerimleri = a.siklikBicimi ? a.sikliklar.map((s) => terimMetni(s.uzaklikCarpim)) : a.satirlar.map((s) => terimMetni(s.uzaklik));
+  const kareTerimleri = a.siklikBicimi ? a.sikliklar.map((s) => terimMetni(s.kareUzaklikCarpim)) : a.satirlar.map((s) => terimMetni(s.kareUzaklik));
+  const kartSs = a.standartSapma === null ? null : kartGosterimi(a.standartSapma, ondalik);
 
   return (
     <div className="space-y-2" data-hesaplama-adimlari>
@@ -615,8 +649,162 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
             not={a.omsGosterim.deger !== kartOms.deger || a.omsGosterim.yaklasik !== kartOms.yaklasik ? `(kartta ${gosterimMetni(kartOms)})` : undefined}
           />
         </Adim>
+
+        {/* Lise ölçüsü (9. sınıf): uzaklıkların karesi, toplamı ÷ (veri sayısı − 1), karekök; formül simgesi yerine sözle */}
+        <Adim no={6} baslik="Standart sapma" veri="standartSapma" genis>
+          <p>
+            Lise ölçüsü: her uzaklığın karesi alınır (<strong>kare uzaklık = uzaklık × uzaklık</strong>); büyük uzaklıklar daha çok ağırlık kazanır.
+          </p>
+          {a.n < 2 || !a.kareBolumGosterim || !a.standartSapmaGosterim ? (
+            <p className="text-muted-foreground" data-standart-sapma-yok>
+              Tek veriyle standart sapma hesaplanmaz: veri sayısı − 1 = 0.
+            </p>
+          ) : (
+            <>
+              <div className="overflow-x-auto py-1">
+                {a.siklikBicimi ? (
+                  <KareSiklikTablosu adimlar={a} yaz={yaz} />
+                ) : (
+                  <KareTablosu adimlar={a} yaz={yaz} etiket={etiket} etiketBasligi={etiketBasligi} noktalar={noktalar} anahtar={anahtar} />
+                )}
+              </div>
+              <Esitlik ad="Kare uzaklıkların toplamı" ifade={toplamIfadesi(kareTerimleri, a.siklikBicimi ? 'değer' : 'veri')} sonuc={sayiMetni(a.kareUzaklikToplami, 4)} />
+              <p className="text-muted-foreground">Standart sapma = kare uzaklıkların toplamı ÷ (veri sayısı − 1), sonra karekök</p>
+              <Esitlik ad="Kare uzaklıkların toplamı ÷ (veri sayısı − 1)" ifade={`${sayiMetni(a.kareUzaklikToplami, 4)} ÷ ${a.n - 1}`} sonuc={a.kareBolumGosterim} />
+              <Esitlik
+                ad="Standart sapma"
+                ifade={`√${gosterimMetni(a.kareBolumGosterim, false)}`}
+                sonuc={a.standartSapmaGosterim}
+                not={kartSs && (a.standartSapmaGosterim.deger !== kartSs.deger || a.standartSapmaGosterim.yaklasik !== kartSs.yaklasik) ? `(kartta ${gosterimMetni(kartSs)})` : undefined}
+              />
+            </>
+          )}
+        </Adim>
       </div>
     </div>
+  );
+}
+
+/** Standart sapma adımı: Değer · Ortalamaya uzaklık · Kare uzaklık (uzaklık × uzaklık); toplam satırı */
+function KareTablosu({
+  adimlar: a,
+  yaz,
+  etiket,
+  etiketBasligi,
+  noktalar,
+  anahtar,
+}: {
+  adimlar: HesaplamaAdimlari;
+  yaz: (v: number) => string;
+  etiket: (satir: number) => string;
+  etiketBasligi: string;
+  noktalar: DegerNoktasi[];
+  anahtar: RenkEslemesi | null;
+}) {
+  return (
+    <table className="min-w-[360px] text-[13px] tabular-nums" data-kare-tablosu>
+      <thead>
+        <tr className="text-left text-muted-foreground">
+          <th scope="col" className="h-9 pr-4 font-bold">
+            {etiketBasligi}
+          </th>
+          <th scope="col" className="pr-4 text-right font-bold">
+            Değer
+          </th>
+          <th scope="col" className="pr-4 text-right font-bold">
+            Ortalamaya uzaklık
+          </th>
+          <th scope="col" className="text-right font-bold">
+            Kare uzaklık <span className="font-semibold">(uzaklık × uzaklık)</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {a.satirlar.map((s, i) => {
+          const satir = noktalar[i]?.satir ?? i;
+          return (
+            <tr key={`${satir}-${i}`} className="border-t border-border/60">
+              <td className="h-9 pr-4">
+                <span className="inline-flex items-center gap-2">
+                  {anahtar && <RenkNoktasi renk={satirRengi(anahtar, satir)} />}
+                  {etiket(satir)}
+                </span>
+              </td>
+              <td className="pr-4 text-right">{yaz(s.deger)}</td>
+              <td className="pr-4 text-right">{sayiMetni(s.uzaklik, s.ondalik)}</td>
+              <td className="text-right">
+                <strong>{`${s.kareYaklasik ? '≈ ' : ''}${sayiMetni(s.kareUzaklik, 4)}`}</strong>
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+      <tfoot>
+        <tr className="border-t-2 border-border font-bold">
+          <th scope="row" className="h-9 pr-4 text-left">
+            Toplam
+          </th>
+          <td className="pr-4 text-right">{gosterimMetni(a.toplamGosterim)}</td>
+          <td className="pr-4 text-right">{sayiMetni(a.uzaklikToplami, 4)}</td>
+          <td className="text-right" data-kare-toplami>
+            {sayiMetni(a.kareUzaklikToplami, 4)}
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  );
+}
+
+/** Çok veride standart sapma: Değer · Sıklık · Kare uzaklık · Sıklık × kare uzaklık */
+function KareSiklikTablosu({ adimlar: a, yaz }: { adimlar: HesaplamaAdimlari; yaz: (v: number) => string }) {
+  const gorunen = a.sikliklar.slice(0, SIKLIK_SATIR_SINIRI);
+  const kalan = a.sikliklar.length - gorunen.length;
+  return (
+    <table className="min-w-[420px] text-[13px] tabular-nums" data-kare-siklik-tablosu>
+      <thead>
+        <tr className="text-muted-foreground">
+          <th scope="col" className="h-9 pr-4 text-right font-bold">
+            Değer
+          </th>
+          <th scope="col" className="pr-4 text-right font-bold">
+            Sıklık
+          </th>
+          <th scope="col" className="pr-4 text-right font-bold">
+            Kare uzaklık
+          </th>
+          <th scope="col" className="text-right font-bold">
+            Sıklık × kare uzaklık
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {gorunen.map((s) => (
+          <tr key={s.deger} className="border-t border-border/60">
+            <td className="h-8 pr-4 text-right font-semibold">{yaz(s.deger)}</td>
+            <td className="pr-4 text-right">{s.siklik}</td>
+            <td className="pr-4 text-right">{sayiMetni(s.kareUzaklik, 4)}</td>
+            <td className="text-right">{sayiMetni(s.kareUzaklikCarpim, 4)}</td>
+          </tr>
+        ))}
+        {kalan > 0 && (
+          <tr className="border-t border-border/60 text-muted-foreground">
+            <td colSpan={4} className="h-8 text-center">{`… ${kalan} değer daha`}</td>
+          </tr>
+        )}
+      </tbody>
+      <tfoot>
+        <tr className="border-t-2 border-border font-bold">
+          <th scope="row" className="h-9 pr-4 text-right">
+            Toplam
+          </th>
+          <td className="pr-4 text-right">{a.n}</td>
+          <td className="pr-4 text-right text-muted-foreground">—</td>
+          <td className="text-right" data-kare-toplami>
+            {sayiMetni(a.kareUzaklikToplami, 4)}
+          </td>
+        </tr>
+      </tfoot>
+    </table>
   );
 }
 
@@ -733,7 +921,7 @@ export function IstatistikPaneli({ tablo, sutun, seciliSatir, onSatirSec, adimla
           Gruplara göre <span className="text-muted-foreground">({anahtar.ad})</span>
         </h3>
         <div className="overflow-x-auto">
-          <table className="min-w-[600px] text-[13px] tabular-nums text-foreground">
+          <table className="min-w-[700px] text-[13px] tabular-nums text-foreground">
             <thead>
               <tr className="text-[12px] text-muted-foreground">
                 <th colSpan={2} />
@@ -741,7 +929,7 @@ export function IstatistikPaneli({ tablo, sutun, seciliSatir, onSatirSec, adimla
                   Merkezi eğilim ölçüleri
                 </th>
                 <th className="w-3" />
-                <th colSpan={2} scope="colgroup" className="border-b border-border pb-0.5 text-center font-bold">
+                <th colSpan={3} scope="colgroup" className="border-b border-border pb-0.5 text-center font-bold">
                   Yayılım ölçüleri
                 </th>
               </tr>
@@ -765,8 +953,11 @@ export function IstatistikPaneli({ tablo, sutun, seciliSatir, onSatirSec, adimla
                 <th scope="col" className="pr-4 text-right font-bold">
                   Açıklık
                 </th>
-                <th scope="col" className="text-right font-bold">
+                <th scope="col" className="pr-4 text-right font-bold">
                   Ort. mutlak sapma
+                </th>
+                <th scope="col" className="text-right font-bold">
+                  Standart sapma
                 </th>
               </tr>
             </thead>
@@ -788,7 +979,8 @@ export function IstatistikPaneli({ tablo, sutun, seciliSatir, onSatirSec, adimla
                   <td className="pr-4 text-right">{g.ozet.n === 0 ? '—' : tepeMetni(g.ozet, ondalik)}</td>
                   <td />
                   <td className="pr-4 text-right">{grupHucresi(g.ozet.aciklik)}</td>
-                  <td className="text-right">{grupHucresi(g.ozet.oms)}</td>
+                  <td className="pr-4 text-right">{grupHucresi(g.ozet.oms)}</td>
+                  <td className="text-right">{grupHucresi(g.ozet.standartSapma)}</td>
                 </tr>
               ))}
             </tbody>

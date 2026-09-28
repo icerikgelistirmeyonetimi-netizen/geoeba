@@ -18,6 +18,7 @@ import {
   ortanca,
   ozetHesapla,
   sayiMetni,
+  standartSapma,
   tamToplam,
   temizle,
   tepeDeger,
@@ -48,6 +49,27 @@ describe('istatistik: merkezi eğilim', () => {
     expect(ortalamaMutlakSapma([])).toBeNull();
   });
 
+  it('standart sapma (örneklem, veri sayısı − 1): Selma ≈ 9,82; Yasemin ≈ 1,58; tek veride ve boşta yok', () => {
+    // Selma: kare uzaklıklar 1, 144, 225, 0, 16 → 386 ÷ 4 = 96,5 → √96,5; Yasemin: 0, 4, 4, 1, 1 → 10 ÷ 4 = 2,5 → √2,5
+    expect(standartSapma(SELMA)).toBeCloseTo(Math.sqrt(96.5), 10);
+    expect(standartSapma(YASEMIN)).toBeCloseTo(Math.sqrt(2.5), 10);
+    expect(standartSapma([7])).toBeNull();
+    expect(standartSapma([])).toBeNull();
+    // Adımlar: gösterilen kare uzaklıklar, toplam, bölüm (tam) ve karekök (yaklaşık); tek veride adım yok
+    const a = hesaplamaAdimlari(SELMA)!;
+    expect(a.satirlar.map((s) => s.kareUzaklik)).toEqual([1, 144, 225, 0, 16]);
+    expect(a.satirlar.every((s) => !s.kareYaklasik)).toBe(true);
+    expect(a.kareUzaklikToplami).toBe(386);
+    expect(a.kareBolumGosterim).toEqual({ deger: 96.5, yaklasik: false, ondalik: 1 });
+    expect(a.standartSapmaGosterim).toEqual({ deger: 9.82, yaklasik: true, ondalik: 2 });
+    expect(a.standartSapma).toBeCloseTo(Math.sqrt(96.5), 10);
+    expect(a.sikliklar.find((s) => s.deger === 5)).toMatchObject({ kareUzaklik: 144, kareUzaklikCarpim: 144 });
+    const tek = hesaplamaAdimlari([7])!;
+    expect(tek.kareBolumGosterim).toBeNull();
+    expect(tek.standartSapmaGosterim).toBeNull();
+    expect(tek.standartSapma).toBeNull();
+  });
+
   it('en küçük / en büyük / açıklık', () => {
     expect(enKucuk(SELMA)).toBe(5);
     expect(enBuyuk(SELMA)).toBe(32);
@@ -57,7 +79,7 @@ describe('istatistik: merkezi eğilim', () => {
 
   it('ozetHesapla tüm alanları doldurur', () => {
     const o = ozetHesapla(YASEMIN);
-    expect(o).toEqual({ n: 5, ortalama: 17, medyan: 17, tepe: [], tepeSayisi: 1, oms: 1.2, enKucuk: 15, enBuyuk: 19, aciklik: 4 });
+    expect(o).toEqual({ n: 5, ortalama: 17, medyan: 17, tepe: [], tepeSayisi: 1, oms: 1.2, standartSapma: Math.sqrt(2.5), enKucuk: 15, enBuyuk: 19, aciklik: 4 });
   });
 
   it('hesaplamaAdimlari: toplam/n, |x−x̄| listesi, sıralı dizi ve medyan indeksleri', () => {

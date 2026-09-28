@@ -25,7 +25,7 @@ import { blokSayisi, bloklar, sayiMetni, type Program } from './program';
 import { izgara, koordinatlar } from './dunya';
 import { calistir, type Iz } from './yorumlayici';
 import { sonucIletisi } from './degerlendirme';
-import { useOynatici } from './useOynatici';
+import { ekranKonumu, useOynatici } from './useOynatici';
 import { adimAnlatimi, baslangicAnlatimi } from './anlatici';
 
 export { manifest } from './manifest';
@@ -203,10 +203,12 @@ function GorevEkrani({
   }, [kokRef, oynatici]);
 
   // --- Tuvalin üzerindeki bilgiler -----------------------------------------------
-  const suankiAdim = oynatici.konum >= 0 ? iz.adimlar[oynatici.konum] : null;
-  const onceki = oynatici.konum > 0 ? iz.adimlar[oynatici.konum - 1].durum : iz.baslangic;
-  const durum = oynatici.durum ?? iz.baslangic;
-  const sayimlar = useMemo(() => sayimlarKadar(iz, oynatici.konum), [iz, oynatici.konum]);
+  // Kod düzenlenince iz yenilenir, oynatıcı yeni izi bir çizim sonra yükler: o arada eski konum yeni izi aşmasın
+  const izKonumu = ekranKonumu(oynatici.iz, iz, oynatici.konum);
+  const suankiAdim = izKonumu >= 0 ? iz.adimlar[izKonumu] : null;
+  const onceki = izKonumu > 0 ? iz.adimlar[izKonumu - 1].durum : iz.baslangic;
+  const durum = (izKonumu >= 0 ? oynatici.durum : null) ?? iz.baslangic;
+  const sayimlar = useMemo(() => sayimlarKadar(iz, izKonumu), [iz, izKonumu]);
   const aktif = suankiAdim ? { yigin: suankiAdim.yigin, hata: !!suankiAdim.hata } : null;
   const kullanir = (e: string) => gorev.aracKutusu.some((s) => s.tur === 'eylem' && s.eylem === e) || [...bloklar(program)].some((b) => b.tur === 'eylem' && b.eylem === e);
   const donanim = { tank: kullanir('sula'), sepet: kullanir('topla'), gubre: kullanir('gubreVer') };

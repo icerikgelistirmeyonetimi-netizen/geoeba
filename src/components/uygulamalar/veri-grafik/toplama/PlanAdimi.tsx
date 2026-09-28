@@ -10,6 +10,7 @@
  * - Tablonun önizlemesi ("# | Meyve"), plan yeni tablo açacaksa uyarı ve yapışkan [Toplamaya başla ›].
  * Bağlı araştırmanın planı değişirken ("Planı değiştir") içinde cevap olan seçenek kaldırılamaz; adı değişirse aynı
  * hücreler de değişir (`onYenidenAdlandir`).
+ * Başlangıç penceresinin "Kendi sorunu yaz" adımı da bu bileşendir: `onKapat` verilirse başlığın sağında × durur.
  */
 import React, { useId, useRef } from 'react';
 import {
@@ -64,6 +65,10 @@ export interface PlanAdimiProps {
   /** Devamda cevabı olan seçeneğin adı değişti: aynı hücreler de değişir */
   onYenidenAdlandir?: (eski: string, yeni: string) => void;
   genislik: number;
+  /** Verilirse başlığın sağında × (başlangıç penceresini kapatır; panelde yok, ‹ ile dönülür) */
+  onKapat?: () => void;
+  /** × düğmesinin erişilebilir adı */
+  kapatEtiketi?: string;
   className?: string;
 }
 
@@ -362,6 +367,8 @@ export function PlanAdimi({
   bagliArastirma,
   onYenidenAdlandir,
   genislik,
+  onKapat,
+  kapatEtiketi = 'Kapat',
   className = '',
 }: PlanAdimiProps) {
   const dar = genislik < 360;
@@ -386,6 +393,17 @@ export function PlanAdimi({
           <SolOkSimgesi className="h-5 w-5" />
         </button>
         <h2 className="min-w-0 flex-1 truncate text-[16px] font-extrabold">{baslik}</h2>
+        {onKapat && (
+          <button
+            type="button"
+            onClick={onKapat}
+            aria-label={kapatEtiketi}
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-[calc(var(--radius)-6px)] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-plan-kapat=""
+          >
+            <KapatSimgesi className="h-5 w-5" />
+          </button>
+        )}
       </header>
       <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto p-3" data-plan-formu="">
         {taslak.hazirId === 'oylama' && (

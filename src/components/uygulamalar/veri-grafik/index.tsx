@@ -6,7 +6,16 @@
  * iki sayısal değişken ister); gösterilen değişken grafiğin üstündeki sekmelerden seçilir. Tablo ile grafikler
  * iki yönlü bağlıdır (seçili satır, sürükleyerek değer değiştirme).
  *
- * Veri toplama: araç çubuğunda "Veri topla" (Örnek veri ile İndir arasında) paneli (toplama/VeriToplaPaneli) açar.
+ * Başlangıç penceresi (BaslangicModali, "Nasıl başlayalım?"): uygulamanın her açılışında ve araç çubuğundaki "Örnek
+ * veri" (galeri adımı) ile "Veri topla" (Ne araştıralım? adımı) düğmelerinde açılır. Üç yol: Örnek
+ * veri (galeri; seçilen örnek yüklenir), Veri topla (hazır soru ya da "Kendi sorunu yaz" formu; plan uygulanır ve panel
+ * Topla görünümünde açılır), Boş tablo (durum.ts: bosTabloAc; Tablom "Etiket | Değer" olur, önceki tablo saklanır, odak
+ * ilk hücreye gider). Escape, × ve örtü pencereyi kapatır; tablo ve grafik olduğu gibi kalır.
+ *
+ * Veri toplama: panel (toplama/VeriToplaPaneli) başlangıç penceresinden açılır ve yalnız Topla görünümünde durur; kendi
+ * "Ne araştıralım?" görünümü kullanılmaz (paneldeki ‹ ve "Yeni araştırma" pencereyi açar; paneliDuzelt eski kaydı
+ * düzeltir). Panel Bitti / × ile kapanır; araç çubuğundaki "Veri topla" (Örnek veri ile İndir arasında) her zaman
+ * pencereyi açar.
  * Panel açıkken gövde iki sütundur: panel | grafik sütunu; tablo grafik sütununun altında katlanabilir bant
  * (varsayılan kapalı, kalıcı). Panel Tablom'a toplamaDurumu.ts işlevleriyle yazar (planiUygula, toplamaVerisiYaz,
  * toplamaKapat …); grafik ve tablo toplama bilgilerini (eksen alanı, boş ipuçları, kategori sırası, yeni satır
@@ -18,13 +27,15 @@
  * silme, rehber eylemi) [Geri al]'lı kısa bildirimle (Tost; tablo alanının altında) duyurulur; örnek yükleme korunmaya
  * değer eski tabloyu "Önceki tabloya dön" için saklar (durum.ts: ornegiYukle / tabloDegistir / oncekiTabloyaDon).
  *
- * Örnekler: "Örnek veri" menüsü sınıf düzeyine göre galeridir (OrnekGalerisi). Yüklenen örnek Tablom'a bağlanır:
+ * Örnekler: örnek galerisi (OrnekGalerisi) başlangıç penceresinin "Örnek veri" adımındadır (sınıf düzeyine göre gruplu).
+ * Yüklenen örnek Tablom'a bağlanır:
  * açılış görünümü (rehber.ts: acilisYamasi), grafik sütununun ipucu yuvasında Keşif şeridi / kartı (KesifKarti:
  * araştırma sorusu, künye, dört adımlı rehber; adımın düğmesi durum.ts: rehberEylemiUygula), örneğin kategori sırası
  * ve çizgide yüzde ayarı. Tablonun başlık satırında örneğin adı ve kartı açıp kapatan "i" düğmesi durur. Sütun
  * eklenir / silinir / türü değişir, yapıştırma tabloyu yeniden kurar ya da Temizle yapılırsa bağ kopar.
  *
- * Grafiklerin bağlanması (kurallar grafikKurallari.ts'te): seçenek şeridinde Ortalama, Ortanca, Ortalama mutlak sapma;
+ * Grafiklerin bağlanması (kurallar grafikKurallari.ts'te): seçenek şeridinde Ortalama, Ortanca, Ortalama mutlak sapma,
+ * Standart sapma (lise ölçüsü; örneklem, veri sayısı − 1; ortalama mutlak sapmanın yanında durur, onun yerini almaz);
  * "Karşılaştır" aynı birimli ikinci sayısal değişkeni (alt alta iki panel, ikincisi mercan; çizgide ikinci seri;
  * İstatistik'te iki sütun) ya da kategorik değişkene göre grupları (her grup bir panel, ortak eksen) getirir. Daire'de
  * sayısal değişken her satır bir dilim, değerlerin sıklığı ya da (örnek "uygun değil" diyorsa) bilgi kutusudur; Sütun
@@ -37,7 +48,7 @@ import { NoktaGrafigi, yiginYuksekligi, type NoktaSecenekleri } from './NoktaGra
 import { SutunGrafigi } from './SutunGrafigi';
 import { CizgiGrafigi, yuzdeAnlamli } from './CizgiGrafigi';
 import { KesifKarti } from './KesifKarti';
-import { OrnekGalerisi } from './OrnekGalerisi';
+import { BaslangicModali, type BaslangicAdimi } from './BaslangicModali';
 import { acilisYamasi } from './rehber';
 import { SacilimGrafigi } from './SacilimGrafigi';
 import { DaireGrafigi } from './DaireGrafigi';
@@ -70,6 +81,7 @@ import {
 } from './toplamaDurumu';
 import { arastirmaBagli, csvAdi, type Arastirma } from './arastirma';
 import { VeriToplaPaneli, VeriToplaSimgesi } from './toplama/VeriToplaPaneli';
+import { kayitliTaslak, panelGorunumu } from './toplama/panelYardimcilari';
 import { aralikSecenekleri, gruplamaVar, seriRengi, varsayilanAralik } from './grafik';
 import { caprazSayim, degiskenSutunlari, kategoriRengi, renkEslemesi, satirRengi, sutunMetinleri } from './kategorik';
 import {
@@ -87,6 +99,7 @@ import {
   SEKMELER,
   bagliOrnek,
   baslangicDurumu,
+  bosTabloAc,
   ornegiYukle,
   rehberEylemiUygula,
   tabloyuTemizle,
@@ -136,9 +149,28 @@ export const DEPO_ANAHTARI = 'geoeba_veri-grafik_v1';
 /** Kayıt bu kadar ms ertelenir (hızlı değişimlerde her tuşta yazılmaz); akış sürerken hiç yazılmaz */
 export const KAYIT_GECIKMESI = 300;
 
-/** İlk durum: kayıt varsa o (yalnız istemcide; sunucu çiziminde ve testlerde varsayılan), eksen ve sekme düzeltilmiş */
+/**
+ * Veri topla paneli açık ama kendi "Ne araştıralım?" görünümünde mi: araştırma Tablom'a bağlı bir toplama adımında
+ * değil ve kayıtlı bir plan taslağı da yok (taslak varsa panel formla açılır). Panelin `panelGorunumu` kuralıyla aynı.
+ */
+export function panelBaslangictaMi(d: Durum): boolean {
+  if (!d.toplamaAcik) return false;
+  const bagli = arastirmaBagli(d.tablo, d.arastirma);
+  return panelGorunumu(d.arastirma, bagli, kayitliTaslak(d.arastirma, bagli) !== null) === 'baslangic';
+}
+
+/**
+ * Veri topla paneli kendi "Ne araştıralım?" görünümünde durmaz: o görünüm başlangıç penceresidir. Panel o görünümde
+ * açılacaksa (eski kayıt, göç, ‹ ile dönülmüş kayıt) kapalı gelir; pencere zaten her açılışta açılır. Değişiklik yoksa
+ * aynı nesne döner.
+ */
+export function paneliDuzelt(d: Durum): Durum {
+  return panelBaslangictaMi(d) ? { ...d, toplamaAcik: false } : d;
+}
+
+/** İlk durum: kayıt varsa o (yalnız istemcide; sunucu çiziminde ve testlerde varsayılan); eksen, sekme ve panel düzeltilmiş */
 function ilkDurum(): Durum {
-  return sekmeDuzelt(eksenDuzelt(durumYukle() ?? baslangicDurumu()));
+  return paneliDuzelt(sekmeDuzelt(eksenDuzelt(durumYukle() ?? baslangicDurumu())));
 }
 
 /**
@@ -168,7 +200,7 @@ const SECENEK_DUGMESI = (aktif: boolean, dar = false) =>
   }`;
 
 /** Seçenek şeridindeki göster / gizle düğmelerinin nokta grafiği seçenekleri */
-type NoktaSecenegi = 'ortalama' | 'ortanca' | 'oms' | 'etiketler';
+type NoktaSecenegi = 'ortalama' | 'ortanca' | 'oms' | 'standartSapma' | 'etiketler';
 
 /** Düğme sınıfının yalnız simgeli (44 × 44) biçimi */
 const simgeDugmesi = (sinif: string) => sinif.replace(' px-3 ', ' w-11 px-0 ');
@@ -282,7 +314,7 @@ export function aracDuzeyiBul(kokGenislik: number, sekmelerGenislik: number): 0 
   return 4;
 }
 
-type SecenekSimgesiAdi = 'ortalama' | 'ortanca' | 'oms' | 'etiketler' | 'sutunlar' | 'degerler' | 'dilimSatir' | 'dilimSiklik';
+type SecenekSimgesiAdi = 'ortalama' | 'ortanca' | 'oms' | 'standartSapma' | 'etiketler' | 'sutunlar' | 'degerler' | 'dilimSatir' | 'dilimSiklik';
 
 /**
  * Seçenek şeridi simgeleri: ortalama çizgisi, ortanca (ortadaki veri), sapma bandı, değer etiketi, sıklık sütunları,
@@ -345,6 +377,15 @@ function SecenekSimgesi({ ad }: { ad: SecenekSimgesiAdi }) {
           <rect x="3.5" y="2.5" width="9" height="11" rx="1.5" fill="currentColor" fillOpacity="0.28" />
           <path d="M3.5 2.5v11M12.5 2.5v11" stroke="currentColor" strokeWidth="1.3" strokeDasharray="2 1.6" strokeLinecap="round" />
           <path d="M8 2.5v11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'standartSapma':
+      // Çan eğrisi ve altında ortalama ± standart sapma bandı (kesikli kenarlar)
+      return (
+        <svg {...ortak}>
+          <rect x="4.5" y="7.5" width="7" height="6" fill="currentColor" fillOpacity="0.28" />
+          <path d="M4.5 7.5v6M11.5 7.5v6" stroke="currentColor" strokeWidth="1.3" strokeDasharray="2 1.6" strokeLinecap="round" />
+          <path d="M1.5 13.5c2.6 0 3.2-10.5 6.5-10.5s3.9 10.5 6.5 10.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       );
     case 'etiketler':
@@ -513,14 +554,14 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const durumRef = useRef(durum);
   durumRef.current = durum;
   const [seciliSatir, setSeciliSatir] = useState<number | null>(null);
-  const ornekMenu = useAcilirMenu();
   const indirMenu = useAcilirMenu();
   const ayarMenu = useAcilirMenu();
-  // Örnek menüsü açılınca yüklü örnek odaklanır (galeride yeri görünür; oklarla komşularına geçilir); yoksa ilk öğe
-  useEffect(() => {
-    if (!ornekMenu.acik) return;
-    ornekMenu.menuRef.current?.querySelector<HTMLElement>('[role="menuitem"][aria-current="true"]')?.focus();
-  }, [ornekMenu.acik, ornekMenu.menuRef]);
+  /**
+   * Başlangıç penceresi ("Nasıl başlayalım?"): açık adımı ya da kapalıyken null. Her açılışta seçim adımıyla açılır
+   * (panel Topla'da açıksa onun üstünde durur; "Bu tabloyla devam et" kapatır); "Örnek veri" galeri adımını, "Veri
+   * topla" "Ne araştıralım?" adımını açar. Yalnız bu oturumda; kaydedilmez.
+   */
+  const [baslangic, setBaslangic] = useState<BaslangicAdimi | null>('secim');
   const [akis, setAkis] = useState(false);
   /** Kısa bildirim (tost); eylemlisi [Geri al] taşır */
   const [tost, setTost] = useState<TostVerisi | null>(null);
@@ -672,6 +713,17 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const toplama = useMemo(() => toplamaGorunumBilgisi(durum), [durum]);
   /** Veri topla paneli açık mı */
   const panelAcik = durum.toplamaAcik;
+  /**
+   * Panel kendi "Ne araştıralım?" görünümüne düşerse (araştırmanın bağı koptu, eski kayıt) o görünüm çizilmez: panel
+   * saklanır ve pencere "Veri topla" adımında açılır (paneldeki ‹ ve "Yeni araştırma" da bu yola gider: onBaslangic).
+   * Yerleşim etkisi: boyamadan önce düzeltilir, panelin eski görünümü bir kare bile görünmez.
+   */
+  const panelBaslangicta = panelBaslangictaMi(durum);
+  useIzomorfikYerlesimEtkisi(() => {
+    if (!panelBaslangicta) return;
+    setDurum((d) => (d.toplamaAcik ? { ...d, toplamaAcik: false } : d));
+    setBaslangic('topla');
+  }, [panelBaslangicta, setDurum]);
   /** Panelin son eklediği satırın kimliği: tabloda 600 ms parlar, nokta grafiğinde halka alır (Anında akışta null) */
   const [yeniSatir, setYeniSatir] = useState<string | null>(null);
   /**
@@ -822,7 +874,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
     // Örnek veri kendi tablonuza yüklenir (ornegiYukle → tabloDegistir): korunmaya değer eski tablo "Önceki tabloya
     // dön" için saklanır; örneğin açılış görünümü uygulanır (sekme, eksen, karşılaştırma, renk anahtarı; ölçüler
     // kapalı: öğrenci önce tahmin eder) ve Keşif kartı rehberin ilk adımıyla açılır
-    ornekMenu.kapat(true);
+    setBaslangic(null);
     const onceki = durum;
     // Veri topla paneli kapanır (bağ kopar, plan silinmez: başlangıçta "Son araştırma" olarak durur)
     const y = ornegiYukle({ ...durum, toplamaAcik: false }, id);
@@ -841,7 +893,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
    */
   const oncekiyeDon = () => {
     const o = durum.oncekiTablo;
-    ornekMenu.kapat(true);
+    setBaslangic(null);
     if (!o) return;
     const onceki = durum;
     const y = oncekiTabloyaDon({ ...durum, toplamaAcik: false });
@@ -919,9 +971,6 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const ipucuAc = (y: Durum): Durum =>
     y.ipucu === 'kapali' && (arastirmaBagli(y.tablo, y.arastirma) || bagliOrnek(y)) ? { ...y, ipucu: 'serit' } : y;
 
-  /** Paneli açar (Tablom ve grafik değişmez) */
-  const toplamaPaneliAc = () => setDurum(toplamaAc);
-
   /**
    * Paneli kapatır (Bitti, ×, araç çubuğundaki basılı "Veri topla"): veri toplandıysa tablo ve soru şeridi kalır;
    * toplanmadıysa önceki tablo görünümüyle geri gelir ("Veri toplanmadı; önceki tablo geri geldi.")
@@ -934,19 +983,24 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
     if (metin) tostGoster(metin);
   };
 
-  /** Hazır soru ya da "Toplamaya başla": yeni tablo [Geri al]'lı tostla; plan sorunu (tablo değişmedi) düz tostla */
-  const planiUygulaVeBildir = (a: Arastirma) => {
+  /**
+   * Hazır soru ya da "Toplamaya başla": yeni tablo [Geri al]'lı tostla; plan sorunu (tablo değişmedi) düz tostla ve false.
+   * `panelAc` (başlangıç penceresinden) planla birlikte Veri topla panelini de açar.
+   */
+  const planiUygulaVeBildir = (a: Arastirma, panelAc = false): boolean => {
     const d0 = durumRef.current;
     const r = planiUygula(d0, a);
     if (r.durum === d0) {
       if (r.tost) tostGoster(r.tost);
-      return;
+      return false;
     }
-    setDurum(r.durum);
+    const y = panelAc ? toplamaAc(r.durum) : r.durum;
+    setDurum(y);
     setSeciliSatir(null);
     setYeniSatir(null);
     // Panelin alt çubuğundaki "Geri al" son cevabı siler; tosttaki eylem yeni tablodan önceki tabloya döner
-    if (r.tost) geriAlTostu(r.tost, r.onceki, etkinTablo(r.durum), r.durum.toplamaAcik ? 'Önceki tabloya dön' : 'Geri al');
+    if (r.tost) geriAlTostu(r.tost, r.onceki, etkinTablo(y), y.toplamaAcik ? 'Önceki tabloya dön' : 'Geri al');
+    return true;
   };
 
   /** "Son deneyi geri al": silmeden önceki durum, hemen ardından gelen bildirimin [Geri al]'ı içindir */
@@ -1069,16 +1123,33 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const indirSimge = aracDuzeyi >= 2;
   const ayarSimge = aracDuzeyi >= 1;
 
-  // Örnek veri menüsü araç çubuğuna göre konumlanır: en çok 860 px, pencereden 8 px içeride; sağ kenarı düğmenin
-  // sağ kenarıyla hizalı, sol kenarı en az 8 px; yüksekliği pencereye sığar
-  const [ornekDugmeSag, setOrnekDugmeSag] = useState<number | null>(null);
-  const ornekMenuAc = () => {
-    const kap = ornekMenu.kapRef.current;
-    if (kap) setOrnekDugmeSag(kap.offsetLeft + kap.offsetWidth);
+  // ── Başlangıç penceresi ("Nasıl başlayalım?") ──
+  /**
+   * "Boş tablo": Tablom boş "Etiket | Değer" tablosu olur (korunmaya değer eski tablo "Önceki tabloya dön" için
+   * saklanır), panel ve pencere kapanır; tablo çizilince odak ilk hücreye gider (aşağıdaki etki). [Geri al] bütün
+   * durumu geri getirir.
+   */
+  const [bosTabloOdagi, setBosTabloOdagi] = useState(0);
+  const bosTabloyuAc = () => {
+    const onceki = durum;
+    const { durum: y } = bosTabloAc(durum);
+    setBaslangic(null);
+    setYeniSatir(null);
+    setDurum(y);
+    setSeciliSatir(null);
+    setBosTabloOdagi((n) => n + 1);
+    const saklandi = y.oncekiTablo !== onceki.oncekiTablo;
+    geriAlTostu(`Boş tablo açıldı.${saklandi ? ' Önceki tablo saklandı.' : ''}`, onceki, y.tablo);
   };
-  const menuGenislik = Math.max(240, Math.min(860, genislik - 16));
-  const menuSol = Math.max(8, Math.min((ornekDugmeSag ?? genislik - 8) - menuGenislik, genislik - 8 - menuGenislik));
-  const menuYukseklik = kokBoyut.yukseklik > 0 ? Math.max(200, kokBoyut.yukseklik - 70) : undefined;
+  /** Pencereden plan (hazır soru, "Kendi sorunu yaz", son araştırma): plan uygulanır, panel Topla'da açılır, pencere kapanır */
+  const baslangictanPlanUygula = (a: Arastirma) => {
+    if (planiUygulaVeBildir(a, true)) setBaslangic(null);
+  };
+  /** Pencereden bağlı araştırmaya dönüş ("Toplamaya dön"): adım Topla, panel açılır, pencere kapanır */
+  const baslangictanDevam = () => {
+    setDurum((d) => toplamaAc(d.arastirma ? arastirmaYaz(d, { ...d.arastirma, adim: 'topla' }) : d));
+    setBaslangic(null);
+  };
 
   const degiskenSecimi = (deger: string | null, alan: 'degisken' | 'ikinciDegisken') => {
     guncelle((d) => {
@@ -1213,6 +1284,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
           ['ortalama', 'Ortalama'],
           ['ortanca', 'Ortanca'],
           ['oms', 'Ortalama mutlak sapma'],
+          ['standartSapma', 'Standart sapma'],
         ] as [NoktaSecenegi, string][])),
     ['etiketler', kategorikSecili ? 'Sayılar' : 'Etiketler'],
     ['sutunModu', 'Sütunlara dönüştür'],
@@ -1301,12 +1373,19 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const cizgiNotuVar = useMemo(() => sekme === 'cizgi' && etkinKume === 'tablom' && cizgiSiraNotuGerekli(tablo), [sekme, etkinKume, tablo]);
   const siraNotuGorunur = cizgiNotuVar && grafikSutun >= 0 && !bos && kapaliSiraNotu !== siraNotuAnahtari && !panelAcik;
 
-  /** Boş durumdaki "Tabloya yaz": tablonun yazmaya hazır boş satırına (grafikteki değişkenin hücresine) odaklanır */
-  const tabloyaYaz = () => {
+  /** Tablonun yazmaya hazır boş satırına odaklanır: `sutun`un hücresine (yoksa ilk hücreye) */
+  const bosSatiraOdaklan = (sutun: number) => {
     const girdiler = Array.from(tabloKapRef.current?.querySelectorAll<HTMLInputElement>('[data-bos-satir] input') ?? []);
-    const hedef = girdiler.find((g) => grafikSutun >= 0 && (g.dataset.hucre ?? '').endsWith(`-${grafikSutun}`)) ?? girdiler[0];
+    const hedef = girdiler.find((g) => sutun >= 0 && (g.dataset.hucre ?? '').endsWith(`-${sutun}`)) ?? girdiler[0];
     hedef?.focus();
   };
+  /** Boş durumdaki "Tabloya yaz": grafikteki değişkenin hücresine */
+  const tabloyaYaz = () => bosSatiraOdaklan(grafikSutun);
+  // Başlangıç penceresinden "Boş tablo": pencere kapanıp tablo çizilince odak ilk hücreye (Etiket) gider
+  useEffect(() => {
+    if (bosTabloOdagi > 0) bosSatiraOdaklan(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bosTabloOdagi]);
   /**
    * Çizgide değişim etiketinin yüzdesi: bağlı örneğin sütun ayarı (ör. °C'de yüzde yok, boyda var); ayarı olmayan
    * seride grafiğin kendi kuralı (`yuzdeAnlamli`). Örneğe bağlı değilken grafik kendisi karar verir.
@@ -1451,7 +1530,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   );
 
   return (
-    <div ref={kokRef} className="flex h-full w-full flex-col bg-background text-foreground" data-uygulama="veri-grafik">
+    <div ref={kokRef} className="relative flex h-full w-full flex-col bg-background text-foreground" data-uygulama="veri-grafik">
       {/* Üst şerit: grafik türü sekmeleri + örnek veri, deney, indirme ve grafik ayarları */}
       <div className="relative flex flex-wrap items-center gap-2 border-b border-border bg-card px-2 py-1.5" data-arac-cubugu>
         <div ref={sekmelerRef} role="tablist" aria-label="Grafik türü" className="flex flex-wrap gap-1 rounded-[calc(var(--radius)-4px)] bg-muted p-1">
@@ -1505,64 +1584,29 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
         {/* Sağdaki dört düğme: yer azaldıkça kademeli olarak yalnız simge (önce Grafik ayarları, sonra İndir, en son Örnek
             veri ve Veri topla); adları aria-label ve title'da (çubuk tek satır kalır) */}
         <div className="ml-auto flex items-center gap-2" data-arac-dugmeleri data-arac-duzeyi={aracDuzeyi}>
-          {/* Örnek veri: menü araç çubuğuna göre konumlanır (sağ kenarı düğmeyle hizalı, pencereden taşmaz) */}
-          <div ref={ornekMenu.kapRef}>
-            <button
-              ref={ornekMenu.dugmeRef}
-              type="button"
-              className={ornekSimge ? simgeDugmesi(DUGME) : DUGME}
-              aria-haspopup="menu"
-              aria-expanded={ornekMenu.acik}
-              aria-label={ornekSimge ? 'Örnek veri' : undefined}
-              title={ornekSimge ? 'Örnek veri' : undefined}
-              onClick={() => {
-                ornekMenuAc();
-                ornekMenu.setAcik((a) => !a);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowDown') ornekMenuAc();
-                ornekMenu.dugmeTusu(e);
-              }}
-            >
-              {ornekSimge ? (
-                <AracSimgesi ad="ornek" className="h-5 w-5" />
-              ) : (
-                <>
-                  Örnek veri
-                  <AracSimgesi ad="asagi" className="h-3.5 w-3.5" />
-                </>
-              )}
-            </button>
-            {ornekMenu.acik && (
-              <div
-                ref={ornekMenu.menuRef}
-                role="menu"
-                aria-label="Örnek veri"
-                onKeyDown={ornekMenu.menuTusu}
-                className="absolute top-full z-30 mt-1 overflow-y-auto overscroll-contain rounded-[calc(var(--radius)-4px)] border border-border bg-popover p-1.5 text-popover-foreground shadow-[0_18px_40px_-18px_rgba(6,40,45,.55)]"
-                style={{ left: menuSol, width: menuGenislik, maxHeight: menuYukseklik }}
-                data-ornek-menusu
-              >
-                {/* Galeri: en üstte kalıcı "Önceki tabloya dön" (örnek yükleme ya da yeni tablo eski tabloyu burada saklar),
-                    altında sınıf düzeyine göre gruplanmış örnekler (küçük grafik, ad, açıklama, sınıf rozeti); genişse iki sütun */}
-                <OrnekGalerisi
-                  yukluOrnekId={durum.ornekId}
-                  onceki={durum.oncekiTablo ? { ad: durum.oncekiTablo.ad, satirSayisi: durum.oncekiTablo.tablo.satirlar.length } : null}
-                  onYukle={ornekYukle}
-                  onOncekiTabloyaDon={oncekiyeDon}
-                  genislik={menuGenislik - 12}
-                />
-              </div>
-            )}
-          </div>
-          {/* Veri topla: basılıyken panel açık; yeniden basmak paneli kapatır (Bitti ile aynı) */}
+          {/* Örnek veri: başlangıç penceresini örnek galerisi adımında açar (galeri: OrnekGalerisi) */}
+          <button
+            type="button"
+            className={ornekSimge ? simgeDugmesi(DUGME) : DUGME}
+            aria-haspopup="dialog"
+            aria-label={ornekSimge ? 'Örnek veri' : undefined}
+            title={ornekSimge ? 'Örnek veri' : 'Örnek veri: sınıf düzeyine göre hazır tablolar'}
+            onClick={() => setBaslangic('hazir')}
+            data-ornek-veri-dugmesi=""
+          >
+            <AracSimgesi ad="ornek" className={ornekSimge ? 'h-5 w-5' : 'h-[18px] w-[18px]'} />
+            {!ornekSimge && 'Örnek veri'}
+          </button>
+          {/* Veri topla: başlangıç penceresini "Ne araştıralım?" adımında açar (panel açıkken de: "Toplamaya dön" kartı
+              oradadır); basılı görünüm panelin açık olduğunu söyler, panel Bitti / × ile kapanır */}
           <button
             type="button"
             className={toplaSimge ? simgeDugmesi(panelAcik ? DUGME_BIRINCIL : DUGME) : panelAcik ? DUGME_BIRINCIL : DUGME}
             aria-pressed={panelAcik}
+            aria-haspopup="dialog"
             aria-label={toplaSimge ? 'Veri topla' : undefined}
             title="Veri topla: anketle, ölçerek ya da deneyle kendi verinizi toplayın"
-            onClick={() => (panelAcik ? toplamaPaneliKapat() : toplamaPaneliAc())}
+            onClick={() => setBaslangic('topla')}
             data-veri-topla-dugmesi=""
           >
             <VeriToplaSimgesi className={toplaSimge ? 'h-5 w-5' : 'h-[18px] w-[18px]'} />
@@ -1776,6 +1820,11 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
               onAkis={setAkis}
               onBildirim={toplamaBildirimi}
               onKapat={toplamaPaneliKapat}
+              onBaslangic={() => {
+                // ‹ "Ne araştıralım?": panel saklanır (tablo ve plan olduğu gibi kalır), pencere Veri topla adımında açılır
+                setDurum((d) => ({ ...d, toplamaAcik: false }));
+                setBaslangic('topla');
+              }}
             />
           </div>
         )}
@@ -1955,13 +2004,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
           {grafikGenislik > 0 && grafikYukseklik > 0 && (
             <div className={`absolute inset-0 ${panelKayar ? 'overflow-y-auto overflow-x-hidden overscroll-contain' : ''}`} data-grafik-katmani>
               {bos && (
-                <BosDurum
-                  onTabloyaYaz={tabloyaYaz}
-                  onOrnekSec={() => {
-                    ornekMenuAc();
-                    ornekMenu.setAcik(true);
-                  }}
-                />
+                <BosDurum onTabloyaYaz={tabloyaYaz} onOrnekSec={() => setBaslangic('hazir')} />
               )}
               {!bos && sekme === 'nokta' && gruplar.length > 1 && (
                 // Gruplara ayırma: her kategori alt alta bir panel (ortak eksen, aynı gruplama); başlık "7-A (15 veri)".
@@ -2339,6 +2382,26 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
       )}
         </main>
       </div>
+      {/* Başlangıç penceresi: uygulama kökünün içinde kipli diyalog (masaüstünün öteki pencereleri kullanılabilir kalır) */}
+      {baslangic !== null && (
+        <BaslangicModali
+          baslangic={baslangic}
+          onKapat={() => setBaslangic(null)}
+          genislik={genislik}
+          simdiki={{ ad: tabloAdiBul(durum), satirSayisi: durum.tablo.satirlar.length }}
+          yukluOrnekId={durum.ornekId}
+          onceki={durum.oncekiTablo ? { ad: durum.oncekiTablo.ad, satirSayisi: durum.oncekiTablo.tablo.satirlar.length } : null}
+          onOrnekYukle={ornekYukle}
+          onOncekiTabloyaDon={oncekiyeDon}
+          arastirma={durum.arastirma}
+          bagli={toplama.bagli}
+          tablo={durum.tablo}
+          onPlaniUygula={baslangictanPlanUygula}
+          onDevam={baslangictanDevam}
+          planUyarisi={(a) => planUyarisi(durumRef.current, a)}
+          onBosTablo={bosTabloyuAc}
+        />
+      )}
     </div>
   );
 }

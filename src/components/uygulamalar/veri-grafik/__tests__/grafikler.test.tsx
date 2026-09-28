@@ -376,6 +376,40 @@ describe('istatistik paneli: ders kitabı düzeni, adımlar ve karşılaştırma
     expect(panel(sabitMac(), 1, { ikinciSutun: 0 })).toContain('data-olcu-kartlari');
   });
 
+  it('standart sapma (lise; örneklem, veri sayısı − 1): kart, karşılaştırma satırı, 6. adım ve gruplar tablosu; ortalama mutlak sapma yerinde', () => {
+    const html = panel(sabitMac(), 1, { adimlariGoster: false });
+    expect(html).toContain('data-istatistik-karti="oms"');
+    expect(html).toContain('data-istatistik-karti="standartSapma"');
+    expect(html.indexOf('data-istatistik-karti="oms"')).toBeLessThan(html.indexOf('data-istatistik-karti="standartSapma"'));
+    expect(html).toContain('kare uzaklıkların toplamı ÷ (veri sayısı − 1), karekökü');
+    expect(metin(html.slice(html.indexOf('data-istatistik-karti="standartSapma"')))).toContain('≈ 9,82');
+    // 6. adım: kare uzaklık tablosu, toplam 386, ÷ 4 = 96,5, karekök ≈ 9,82 (formül simgesi yok)
+    const adimli = panel(sabitMac(), 1);
+    expect(adimli).toContain('data-hesap-adimi="standartSapma"');
+    expect(adimli).toContain('data-kare-tablosu');
+    expect(metin(adimli)).toContain('Kare uzaklıkların toplamı = 1 + 144 + 225 + 0 + 16 = 386');
+    expect(metin(adimli)).toContain('Kare uzaklıkların toplamı ÷ (veri sayısı − 1) = 386 ÷ 4 = 96,5');
+    expect(metin(adimli)).toContain('Standart sapma = √96,5 ≈ 9,82');
+    for (const yasak of ['x̄', 'Σ', 'n =', 'OMS', 'varyans']) expect(adimli, yasak).not.toContain(yasak);
+    // Karşılaştırma tablosu: standart sapma satırı ve iki çubuk
+    const kars = panel(sabitMac(), 1, { ikinciSutun: 2, adimlariGoster: false });
+    expect(kars).toContain('data-standart-sapma-satiri');
+    expect(kars.match(/data-standart-sapma-cubugu/g)).toHaveLength(2);
+    // Tek veride kart "—" ve adımda açıklama
+    const tek = panel(tabloOlustur(['Ad', 'Değer'], [['A', 5]]), 1);
+    expect(tek).toContain('data-standart-sapma-yok');
+    expect(metin(tek.slice(tek.indexOf('data-istatistik-karti="standartSapma"')))).toContain('—');
+    // 30'dan çok veride sıklık biçimi
+    const v = Array.from({ length: 40 }, (_, i) => [30, 60, 90, 120, 120, 150, 180, 240][i % 8]);
+    const cok = panel(tabloOlustur(['Katılımcı', 'Süre'], v.map((x, i) => [`K${i + 1}`, x])), 1);
+    expect(cok).toContain('data-kare-siklik-tablosu');
+    expect(cok).toContain('Sıklık × kare uzaklık');
+    // Gruplara göre tablo: standart sapma sütunu
+    const t = sabitCalisma();
+    const grup = panel(t, 2, { renkEslemi: renkEslemesi(t, 1)!, adimlariGoster: false });
+    expect(grup.slice(grup.indexOf('data-grup-istatistikleri'))).toContain('Standart sapma');
+  });
+
   it('karşılaştırma yorumu: ortalaması büyük olanı ve sapmaları eşit durumu yazar (nötr dil, birim ayracı yok, ≈ başta bir kez)', () => {
     const a = { ad: 'A', ozet: ozetHesapla([10, 20]) };
     const b = { ad: 'B', ozet: ozetHesapla([14, 15]) };

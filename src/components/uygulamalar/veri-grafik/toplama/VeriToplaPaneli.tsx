@@ -13,6 +13,8 @@
  * (toplamaVerisiYaz; hücreler veri rolleri sırasıyla), `onTabloIslemi` (birleştir / yeniden adlandır + tost), `onArastirma`
  * (metin ve plan; tabloya dokunmaz). Kendisine verilen kabı %100 doldurur; kompakt kararlarını `useBoyut` ile verir.
  * Kısayollar yalnız odak paneldeyken çalışır; aria-live duyuruları 250 ms'de bir toplanır.
+ * `onBaslangic` verilirse ‹ ve "Yeni araştırma" panelin kendi "Ne araştıralım?" görünümü yerine onu çağırır (uygulamada
+ * başlangıç penceresi açılır; panelin kendi görünümü yalnız yedektir).
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import {
@@ -86,6 +88,8 @@ export interface VeriToplaPaneliProps {
   onAkis: (akis: boolean) => void;
   onBildirim: (metin: string) => void;
   onKapat: () => void;
+  /** İsteğe bağlı: ‹ "Başlangıca dön" ve "Yeni araştırma" (C: panel saklanır, başlangıç penceresi "Veri topla" adımında açılır) */
+  onBaslangic?: () => void;
   /** İsteğe bağlı: ana grafiğin sekmesi (Yorumla önerilerinde etkin olan vurgulanır) */
   sekme?: Sekme | null;
   /** İsteğe bağlı: plan yeni tablo açacaksa uyarı (C: `a => planUyarisi(durum, a)`); yoksa yedek metin */
@@ -114,6 +118,7 @@ export function VeriToplaPaneli({
   onAkis,
   onBildirim,
   onKapat,
+  onBaslangic,
   sekme = null,
   planUyarisi,
   className = '',
@@ -207,7 +212,8 @@ export function VeriToplaPaneli({
   };
   const baslangicaDon = () => {
     if (arastirma && calisiyor) calistirici.durdur();
-    if (arastirma) onArastirma({ ...arastirma, adim: 'soru' });
+    if (onBaslangic) onBaslangic();
+    else if (arastirma) onArastirma({ ...arastirma, adim: 'soru' });
   };
   const devam = taslak ? taslakDevamMi(taslak, arastirma, bagli) : false;
   const uyari = taslak ? (planUyarisi ? planUyarisi(taslak) : yedekPlanUyarisi(tablo, devam)) : null;

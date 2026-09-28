@@ -27,6 +27,8 @@ export interface AcilisSecenekleri {
   oms: boolean;
   etiketler: boolean;
   ortanca: boolean;
+  /** Standart sapma bandı (lise ölçüsü); yalnız açıkken yazılır */
+  standartSapma?: boolean;
 }
 
 /** Örnek yüklenince uygulanacak görünüm (sütunlar KİMLİKLE; tablo her yüklemede yeni kimlik alır) */
@@ -101,6 +103,7 @@ export function acilisYamasi(ornek: OrnekVeri, tablo: VeriTablosu, ozellikler: R
       oms: s.oms === true,
       etiketler: s.etiketler === true,
       ortanca: ozellikler.has('ortanca') && s.ortanca === true,
+      ...(s.standartSapma === true ? { standartSapma: true } : {}),
     },
     sutunModu: ornek.acilis?.sutunModu === true,
     aralik: ozellikler.has('acilisAralik') && ornek.acilis?.aralik ? ornek.acilis.aralik : null,
@@ -190,7 +193,7 @@ function hucreMetni(deger: string | number): string {
 export function eylemYamasi(
   eylem: RehberEylemi,
   tablo: VeriTablosu,
-  mevcut: { secenekler: { ortalama: boolean; oms: boolean; etiketler: boolean; ortanca?: boolean }; sutunModu: boolean },
+  mevcut: { secenekler: { ortalama: boolean; oms: boolean; etiketler: boolean; ortanca?: boolean; standartSapma?: boolean }; sutunModu: boolean },
 ): EylemYamasi {
   switch (eylem.tur) {
     case 'secenek': {

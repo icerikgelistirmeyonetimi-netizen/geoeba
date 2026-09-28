@@ -18,7 +18,7 @@ const IKINCIL = `${ANA_DUGME} border border-border bg-card text-foreground hover
 export interface BosDurumProps {
   /** hayalet satıra (yeni satır) odaklanır */
   onTabloyaYaz: () => void;
-  /** Örnek veri menüsünü açar */
+  /** Başlangıç penceresini örnek galerisi adımında açar */
   onOrnekSec: () => void;
 }
 

@@ -12,13 +12,18 @@
  *   Karta dokunmak planı varsayılanlarla uygular ve doğrudan Topla görünümüne geçer (3 dokunuş kuralı).
  * - En altta yapışkan tek satır: "Kendi sorunu yaz" (soru + yöntem + plan tek formda).
  * Yalnız kart listesi kayar; başlık ve alt satır hep görünür.
+ * Başlangıç penceresinin "Veri topla" adımı da bu bileşendir: `onGeri` başlıkta simge yerine ‹ çizer, `kapatEtiketi` ×'in
+ * adıdır; 720 px ve üstü genişlikte kartlar üç sütundur (panel hiç bu kadar geniş olmaz).
  */
 import React from 'react';
 import { HAZIR_SORULAR, TOPLAMA_YONTEMLERI, YONTEM_BILGISI, type Arastirma } from '../arastirma';
 import { DUGME_BIRINCIL } from '../ortak';
 import { HazirSoruKarti } from './HazirSoruKarti';
-import { KalemSimgesi, KapatSimgesi, SagOkSimgesi, VeriToplaSimgesi, YontemSimgesi } from './simgeler';
+import { KalemSimgesi, KapatSimgesi, SagOkSimgesi, SolOkSimgesi, VeriToplaSimgesi, YontemSimgesi } from './simgeler';
 import { gorevMetni, hazirPlaniDegismedi } from './panelYardimcilari';
+
+/** Hazır soru kartları bu genişlikten itibaren üç sütun (başlangıç penceresi) */
+export const SORU_UC_SUTUN = 720;
 
 export interface SoruAdimiProps {
   arastirma: Arastirma | null;
@@ -32,6 +37,10 @@ export interface SoruAdimiProps {
   onYenidenBaslat: () => void;
   onKendiSorun: () => void;
   onKapat: () => void;
+  /** Verilirse başlıkta simge yerine ‹ düğmesi (başlangıç penceresinde "Nasıl başlayalım?" adımına döner) */
+  onGeri?: () => void;
+  /** × düğmesinin erişilebilir adı (panelde paneli, başlangıç penceresinde pencereyi kapatır) */
+  kapatEtiketi?: string;
   genislik: number;
   className?: string;
 }
@@ -45,23 +54,38 @@ export function SoruAdimi({
   onYenidenBaslat,
   onKendiSorun,
   onKapat,
+  onGeri,
+  kapatEtiketi = 'Veri toplama panelini kapat',
   genislik,
   className = '',
 }: SoruAdimiProps) {
   const tekSutun = genislik > 0 && genislik < 300;
+  const ucSutun = genislik >= SORU_UC_SUTUN;
   const dar = genislik > 0 && genislik < 380;
   // Bağsız son araştırma değiştirilmemiş bir hazır soruysa: ayrı kart yok, hazır kart "Son" işaretli
   const sonHazir = !bagli && arastirma !== null && arastirma.sutunlar !== null && hazirPlaniDegismedi(arastirma) ? arastirma.hazirId : null;
   const oncekiVar = arastirma !== null && arastirma.yontem !== null && (bagli || arastirma.sutunlar !== null) && sonHazir === null;
   return (
     <div className={`flex h-full min-h-0 flex-col ${className}`} data-adim="soru">
-      <header className="flex min-h-[52px] shrink-0 items-center gap-2 border-b border-border bg-card pl-3 pr-1">
-        <VeriToplaSimgesi className="h-5 w-5 shrink-0 text-primary" />
+      <header className={`flex min-h-[52px] shrink-0 items-center gap-2 border-b border-border bg-card pr-1 ${onGeri ? 'pl-1.5' : 'pl-3'}`}>
+        {onGeri ? (
+          <button
+            type="button"
+            onClick={onGeri}
+            aria-label="Geri: Nasıl başlayalım?"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-[calc(var(--radius)-6px)] text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-baslangic-geri=""
+          >
+            <SolOkSimgesi className="h-5 w-5" />
+          </button>
+        ) : (
+          <VeriToplaSimgesi className="h-5 w-5 shrink-0 text-primary" />
+        )}
         <h2 className="min-w-0 flex-1 truncate text-[16px] font-extrabold">Ne araştıralım?</h2>
         <button
           type="button"
           onClick={onKapat}
-          aria-label="Veri toplama panelini kapat"
+          aria-label={kapatEtiketi}
           className="grid h-11 w-11 shrink-0 place-items-center rounded-[calc(var(--radius)-6px)] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <KapatSimgesi className="h-5 w-5" />
@@ -99,7 +123,7 @@ export function SoruAdimi({
               <span className="text-[12.5px] font-semibold text-muted-foreground">{YONTEM_BILGISI[y].altSatir}</span>
               <span className="ml-auto text-[12px] font-semibold tabular-nums text-muted-foreground">{HAZIR_SORULAR.filter((h) => h.yontem === y).length} soru</span>
             </h3>
-            <div className={`grid gap-1.5 ${tekSutun ? 'grid-cols-1' : 'grid-cols-2'}`}>
+            <div className={`grid gap-1.5 ${tekSutun ? 'grid-cols-1' : ucSutun ? 'grid-cols-3' : 'grid-cols-2'}`}>
               {HAZIR_SORULAR.filter((h) => h.yontem === y).map((h) => (
                 <HazirSoruKarti
                   key={h.id}

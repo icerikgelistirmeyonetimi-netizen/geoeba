@@ -515,7 +515,7 @@ export interface OrnekKaynak {
  * yüklemede yeni kimlik alır). `surukle` ve `yok` düğme değildir: öğrenci kendisi yapar, etiket yol gösterir.
  */
 export type RehberEylemi = (
-  | { tur: 'secenek'; ac: ('ortalama' | 'ortanca' | 'oms' | 'etiketler' | 'sutunModu')[]; etiket: string }
+  | { tur: 'secenek'; ac: ('ortalama' | 'ortanca' | 'oms' | 'standartSapma' | 'etiketler' | 'sutunModu')[]; etiket: string }
   | { tur: 'sekme'; sekme: GrafikTuru; etiket: string }
   | { tur: 'hucre'; satir: string; sutun: string; deger: number; etiket: string }
   | { tur: 'satirEkle'; hucreler: (string | number)[]; etiket: string }
@@ -586,7 +586,7 @@ export interface OrnekVeri {
   /** Açılış görünümü: ölçüler kapalı başlar, öğrenci önce tahmin eder */
   acilis?: {
     sekme?: GrafikTuru;
-    secenekler?: Partial<{ ortalama: boolean; oms: boolean; etiketler: boolean; ortanca: boolean }>;
+    secenekler?: Partial<{ ortalama: boolean; oms: boolean; etiketler: boolean; ortanca: boolean; standartSapma: boolean }>;
     sutunModu?: boolean;
     /** Nokta grafiği grup genişliği; verinin çözünürlüğüne eşitse "Gruplama yok" */
     aralik?: number;

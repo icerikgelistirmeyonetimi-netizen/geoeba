@@ -47,6 +47,26 @@ describe('Veri ve Grafik uygulaması (sunucu tarafı akıllı çizim)', () => {
     expect(sutunlu).toContain('scaleY(');
   });
 
+  it('nokta grafiği: standart sapma bandı (zeytin), etiketi ve kenar değerleri yalnız seçenek açıkken; altın bantla birlikte', () => {
+    const tablo = sabitMac();
+    const ortak = { tablo, seciliSatir: null, onSatirSec: bos, onDegiskenBirak: bos, aralik: 1, sutunModu: false, genislik: 600, yukseklik: 300, azaltilmisHareket: true, surukleniyor: false };
+    const kapali = renderToStaticMarkup(<NoktaGrafigi {...ortak} sutun={1} secenekler={{ ortalama: true, oms: true, etiketler: false }} />);
+    expect(kapali).not.toContain('data-standart-sapma-bandi');
+    expect(kapali).not.toContain('Standart sapma');
+    const acik = renderToStaticMarkup(<NoktaGrafigi {...ortak} sutun={1} secenekler={{ ortalama: true, oms: true, etiketler: false, standartSapma: true }} />);
+    expect(acik).toContain('data-standart-sapma-bandi');
+    expect(acik).toContain('data-oms-bandi');
+    expect(acik).toContain('Standart sapma ≈ 9,82');
+    // Kenar değerleri: 17 ∓ 9,82
+    const kenarlar = acik.slice(acik.indexOf('data-standart-sapma-kenarlari'));
+    expect(kenarlar).toContain('7,18');
+    expect(kenarlar).toContain('26,82');
+    expect(acik).not.toMatch(/NaN|undefined|Infinity/);
+    // Tek veride bant yok (standart sapma tanımsız)
+    const tek = renderToStaticMarkup(<NoktaGrafigi {...ortak} tablo={tabloOlustur(['Ad', 'Değer'], [['A', 5]])} sutun={1} secenekler={{ ortalama: true, oms: false, etiketler: false, standartSapma: true }} />);
+    expect(tek).not.toContain('data-standart-sapma-bandi');
+  });
+
   it('nokta grafiği: değeri olmayan satırlar hayalet nokta yerine köşe notu; yoğun yığında yığın başına sayı', () => {
     const ortak = {
       seciliSatir: null,
