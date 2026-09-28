@@ -72,9 +72,9 @@ import {
 import { TOOL_SHORTCUTS } from './toolShortcuts';
 import { TOOL_GROUPS } from './toolDefinitions';
 import { TREE_TOOL_GROUPS, TreeToolItem } from './treeToolDefinitions';
-import { gruplariSuz, grupAcikliklari } from './sinifDuzeyleri';
-import { SinifAramaBosNotu, SinifSuzgeciSeridi } from './SinifSuzgeci';
-import { useSinifDuzeyi } from '@/hooks/useSinifDuzeyi';
+import { gruplariSuz, grupAcikliklari } from './kademeDuzeyleri';
+import { KademeAramaBosNotu, KademeSuzgeciSeridi } from './KademeSuzgeci';
+import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { MathKeypad } from '@/components/workspace/MathKeypad';
 import { LayoutMode } from './PropertiesPanel';
 
@@ -158,10 +158,10 @@ export function Toolbar({
   } = useWorkspace();
 
   const [toolSearch, setToolSearch] = useState('');
-  // Sınıf düzeyi (menü çubuğundaki "Sınıf" menüsü): panel yalnız o sınıfın kazanımlarındaki araçları gösterir.
-  // Yalnız görünürlük süzülür; yazılı / sesli komutlar ve klavye kısayolları bütün araçlarla çalışır.
-  const [sinifDuzeyi, setSinifDuzeyi] = useSinifDuzeyi();
-  const aracGruplari = useMemo(() => gruplariSuz(TREE_TOOL_GROUPS, sinifDuzeyi), [sinifDuzeyi]);
+  // Kademe (menü çubuğundaki "Kademe" menüsü): panel yalnız o kademenin (ilkokul, ortaokul, lise) programındaki
+  // araçları gösterir. Yalnız görünürlük süzülür; yazılı / sesli komutlar ve klavye kısayolları bütün araçlarla çalışır.
+  const [kademeDuzeyi, setKademeDuzeyi] = useKademeDuzeyi();
+  const aracGruplari = useMemo(() => gruplariSuz(TREE_TOOL_GROUPS, kademeDuzeyi), [kademeDuzeyi]);
   const [objectSearch, setObjectSearch] = useState('');
   const [sidebarTab, setSidebarTab] = useState<'araclar' | 'nesneler' | 'baglamlar' | 'gorunumler' | 'ara'>('araclar');
   const [layoutTooltip, setLayoutTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
@@ -410,10 +410,10 @@ export function Toolbar({
     Object.fromEntries(TREE_TOOL_GROUPS.map((g) => [g.id, g.defaultExpanded ?? true]))
   );
 
-  // Sınıf değişince (ve açılışta) gruplar yeniden açılır/kapanır: az araçlı sınıflarda hepsi açık gelir
+  // Kademe değişince (ve açılışta) gruplar yeniden açılır/kapanır: az araçlı kademede (ilkokul) hepsi açık gelir
   useEffect(() => {
-    setExpandedTreeGroups(grupAcikliklari(TREE_TOOL_GROUPS, sinifDuzeyi));
-  }, [sinifDuzeyi]);
+    setExpandedTreeGroups(grupAcikliklari(TREE_TOOL_GROUPS, kademeDuzeyi));
+  }, [kademeDuzeyi]);
 
   const toggleTreeGroup = (groupId: string) => {
     setExpandedTreeGroups((prev) => ({
@@ -423,7 +423,7 @@ export function Toolbar({
   };
 
   const toggleAllTreeGroups = () => {
-    // Yalnız panelde görünen gruplara bakılır (sınıf süzgecinin boşalttığı gruplar sayılmaz)
+    // Yalnız panelde görünen gruplara bakılır (kademe süzgecinin boşalttığı gruplar sayılmaz)
     const allExpanded = aracGruplari.every((g) => expandedTreeGroups[g.id] !== false);
     const nextState = !allExpanded;
     setExpandedTreeGroups(
@@ -929,11 +929,11 @@ export function Toolbar({
     normalizedSearch === '' ||
     tool.name.toLocaleLowerCase('tr').includes(normalizedSearch) ||
     tool.description.toLocaleLowerCase('tr').includes(normalizedSearch);
-  /** Sınıf süzgecinden geçen ve aramayla eşleşen araç sayısı */
+  /** Kademe süzgecinden geçen ve aramayla eşleşen araç sayısı */
   const gorunenSonucSayisi = aracGruplari.reduce((toplam, g) => toplam + g.tools.filter(aramayaUyar).length, 0);
-  /** Arama yalnız sınıf süzgeci yüzünden mi boş kaldı? (Araç bütün araçlar arasında var.) */
+  /** Arama yalnız kademe süzgeci yüzünden mi boş kaldı? (Araç bütün araçlar arasında var.) */
   const suzgecAramayiGizledi = gorunenSonucSayisi === 0 && TREE_TOOL_GROUPS.some((g) => g.tools.some(aramayaUyar));
-  const tumAraclaraDon = () => setSinifDuzeyi('tum');
+  const tumAraclaraDon = () => setKademeDuzeyi('tum');
 
   return (
     <div className="flex h-full min-h-0 bg-card/95 backdrop-blur-md border-r border-border select-none z-30 shadow-sm shrink-0 relative">
@@ -1680,15 +1680,15 @@ export function Toolbar({
                 </div>
               </div>
 
-              {/* Sınıf süzgeci açıkken: "5. sınıf araçları · Tüm araçlar" */}
-              <SinifSuzgeciSeridi duzey={sinifDuzeyi} onTumAraclar={tumAraclaraDon} />
+              {/* Kademe süzgeci açıkken: "İlkokul araçları · Tüm araçlar" */}
+              <KademeSuzgeciSeridi duzey={kademeDuzeyi} onTumAraclar={tumAraclaraDon} />
 
-              {/* Ağaç Menü Araç Listesi (Alt Alta Tek Tek) — sınıf süzgecinden geçmiş gruplar; sayaçlar süzülmüş sayıdır */}
+              {/* Ağaç Menü Araç Listesi (Alt Alta Tek Tek) — kademe süzgecinden geçmiş gruplar; sayaçlar süzülmüş sayıdır */}
               <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-3.5 scrollbar-thin">
                 {normalizedSearch !== '' && gorunenSonucSayisi === 0 && (
-                  <SinifAramaBosNotu
+                  <KademeAramaBosNotu
                     arama={toolSearch.trim()}
-                    duzey={sinifDuzeyi}
+                    duzey={kademeDuzeyi}
                     suzgecGizledi={suzgecAramayiGizledi}
                     onTumAraclar={tumAraclaraDon}
                   />
@@ -1814,15 +1814,15 @@ export function Toolbar({
                 </div>
               </div>
 
-              {/* Sınıf süzgeci açıkken arama da yalnız o sınıfın araçlarında yapılır */}
-              <SinifSuzgeciSeridi duzey={sinifDuzeyi} onTumAraclar={tumAraclaraDon} />
+              {/* Kademe süzgeci açıkken arama da yalnız o kademenin araçlarında yapılır */}
+              <KademeSuzgeciSeridi duzey={kademeDuzeyi} onTumAraclar={tumAraclaraDon} />
 
               {/* Arama Sonuçları */}
               <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-1 scrollbar-thin">
                 {normalizedSearch !== '' && gorunenSonucSayisi === 0 && (
-                  <SinifAramaBosNotu
+                  <KademeAramaBosNotu
                     arama={toolSearch.trim()}
-                    duzey={sinifDuzeyi}
+                    duzey={kademeDuzeyi}
                     suzgecGizledi={suzgecAramayiGizledi}
                     onTumAraclar={tumAraclaraDon}
                   />

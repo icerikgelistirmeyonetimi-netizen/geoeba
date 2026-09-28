@@ -13,9 +13,9 @@ import { TOOL_GROUPS } from './toolDefinitions';
 import { isAnyModalOpen, registerModalOpen, registerModalClose } from '@/components/ui/modalState';
 import { StylePanel } from './StylePanel';
 import { EsitUzunluklarSimgesi } from './EsitlikSimgeleri';
-import { SinifDuzeyiMenusu } from './SinifDuzeyiMenusu';
-import { aracGorunurMu, sinifEtiketi } from './sinifDuzeyleri';
-import { useSinifDuzeyi } from '@/hooks/useSinifDuzeyi';
+import { KademeDuzeyiMenusu } from './KademeDuzeyiMenusu';
+import { aracGorunurMu, kademeEtiketi } from './kademeDuzeyleri';
+import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import {
   FileText,
   FolderOpen,
@@ -81,7 +81,7 @@ export interface WorkspaceMenuBarProps {
   onResetView?: () => void;
 }
 
-type MenuKey = 'dosya' | 'duzenle' | 'gorunum' | 'araclar' | 'ekle' | 'ayarlar' | 'yardim' | 'sinif' | null;
+type MenuKey = 'dosya' | 'duzenle' | 'gorunum' | 'araclar' | 'ekle' | 'ayarlar' | 'yardim' | 'kademe' | null;
 
 /** Menüdeki araç kısayolu ipucu: harf elle yazılmaz, klavyenin gerçek bağından (TOOL_SHORTCUTS) okunur. */
 function AracKisayolu({ arac }: { arac: ToolMode }) {
@@ -171,9 +171,9 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const hasSelection = studioDimension === '3D' ? !!sceneBridge?.selectedIds.length : selectedObjectIds.length > 0;
   // Silme her iki görünümde de seçili 2B nesneleri ve 3B cisimleri birlikte kapsar (deleteSelection)
   const hasDeletable = !!sceneBridge?.selectedIds.length || selectedObjectIds.length > 0;
-  // Araçlar menüsü de araç paneli gibi seçili sınıfın araçlarını gösterir (Sınıf menüsü)
-  const [sinifDuzeyi] = useSinifDuzeyi();
-  const aracMenudeGorunur = (arac: ToolMode) => aracGorunurMu(sinifDuzeyi, arac);
+  // Araçlar menüsü de araç paneli gibi seçili kademenin araçlarını gösterir (Kademe menüsü)
+  const [kademeDuzeyi] = useKademeDuzeyi();
+  const aracMenudeGorunur = (arac: ToolMode) => aracGorunurMu(kademeDuzeyi, arac);
 
   // Menü dışına tıklanınca kapat
   useEffect(() => {
@@ -751,7 +751,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   <AracKisayolu arac="select" />
                 </button>
 
-                {/* Seçili sınıfın panelinde olmayan araçlar burada da gösterilmez (Seçim her sınıfta var) */}
+                {/* Seçili kademenin panelinde olmayan araçlar burada da gösterilmez (Seçim her kademede var) */}
                 {aracMenudeGorunur('point') && (
                   <button
                     onClick={() => {
@@ -868,9 +868,9 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   </button>
                 )}
 
-                {sinifDuzeyi !== 'tum' && (
+                {kademeDuzeyi !== 'tum' && (
                   <div className="mx-3 mt-1 pt-1.5 border-t border-border/60 text-[11px] leading-snug text-muted-foreground">
-                    {sinifEtiketi(sinifDuzeyi)} araçları gösteriliyor. Değiştirmek için Sınıf menüsü.
+                    {kademeEtiketi(kademeDuzeyi)} araçları gösteriliyor. Değiştirmek için Kademe menüsü.
                   </div>
                 )}
               </div>
@@ -1213,12 +1213,12 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
             )}
           </div>
 
-          {/* 8. SINIF DÜZEYİ MENÜSÜ: araç panelini seçilen sınıfın kazanımlarına göre daraltır. En sonda durur:
+          {/* 8. KADEME MENÜSÜ: araç panelini seçilen kademenin (ilkokul, ortaokul, lise) programına göre daraltır. En sonda durur:
               kısa etiketi ve rozeti dar pencerede diğer menüleri itmez. */}
-          <SinifDuzeyiMenusu
-            acik={activeMenu === 'sinif'}
-            onBaslikTikla={() => handleMenuHeaderClick('sinif')}
-            onBaslikUzerine={() => handleMenuHeaderHover('sinif')}
+          <KademeDuzeyiMenusu
+            acik={activeMenu === 'kademe'}
+            onBaslikTikla={() => handleMenuHeaderClick('kademe')}
+            onBaslikUzerine={() => handleMenuHeaderHover('kademe')}
             onKapat={closeMenu}
           />
           {/* Sağ üstteki hızlı işlem ve tema kapsülleri kullanıcı isteğiyle kaldırıldı: geri al / yinele tuvalin
