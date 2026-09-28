@@ -59,6 +59,13 @@ window.EGITSEL = {
      KALIR: 200+ mevcut parça dontVer(kok, ...) diye çağırıyor.
      tip: "dogru" | "yanlis" */
   dontVer: function (kok, tip, mesaj) {
+    /* Nötr tipler (2026-09-26, geoeba parti raporu 7.4.x): bazı sayfalar
+       yönlendirmeyi dontVer(kok, "uyari", …) diye veriyor; eskiden her
+       bilinmeyen tip «yanlis»a dönüp kırmızı + yanlış sesi basıyordu. */
+    if (tip === "uyari" || tip === "bilgi" || tip === "notr" || tip === "ipucu") {
+      if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj); }
+      return;
+    }
     tip = tip === "dogru" ? "dogru" : "yanlis";
     if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj, tip); }
     else { console.warn("EGITSEL.dontVer: SABLON_TOAST yok"); }
@@ -96,6 +103,194 @@ window.EGITSEL = {
       if ("disabled" in el) { el.disabled = kilitli !== false; }
       el.classList.toggle("locked", kilitli !== false);
     });
+  },
+
+  /* ÇOKTAN SEÇMELİ DEĞERLENDİRME MOTORU (2026-09-26, geoeba uzman raporu:
+     «değerlendirme soruları kendi içinde ileri-geri yapılamıyor», «sonucu
+     gör dediğinde kaç doğru kaç yanlış gösteren ekran çıkmıyor», «baştan
+     başlayınca bazı sorular çözülmüş geliyor», «lisede sorular 5 şıklı
+     olmalı», «en az 2 seçim hakkı verilmeli, yanlışta hemen doğru cevap
+     gelmemeli»). Her değerlendirme sayfası bu mekaniği kendisi yazıyordu ve
+     her biri başka eksik taşıyordu; motor TEK doğruluk kaynağıdır.
+       EGITSEL.degerlendirme(kok, {
+         sorular: [{metin, siklar: [{metin, dogru}], donut}],  // şık sayısı serbest (≤6)
+         hak: 2,                // soru başına deneme hakkı
+         karistir: true,        // şık sırası (soru başına BİR kez karışır)
+         soruDegisti: function (i, soru) {},     // sahneyi soruya eşle
+         cevaplandi: function (i, dogruMu, soru) {},
+         bitti: function (dogru, toplam) {}
+       })
+     Arayüz .kontrol-govde / .kontrol-eylem İÇİNE kurulur (içerikleri
+     değiştirilir); metin ve şıklar LaTeX içerebilir (MathJax dizilir). */
+  degerlendirme: function (kok, ayar) {
+    ayar = ayar || {};
+    var sorular = (ayar.sorular || []).filter(function (s) { return s && s.siklar && s.siklar.length; });
+    var govde = ayar.govde || (kok && kok.querySelector(".kontrol-govde"));
+    var eylem = ayar.eylem || (kok && kok.querySelector(".kontrol-eylem"));
+    if (!govde || !sorular.length) { console.warn("EGITSEL.degerlendirme: govde/soru yok"); return null; }
+    var HAK = Math.max(1, ayar.hak || 2);
+    var HARF = ["A", "B", "C", "D", "E", "F"];
+    var durum, aktif = 0, sonucEkrani = false;
+
+    function karisik(n) {
+      var d = [];
+      for (var i = 0; i < n; i++) { d.push(i); }
+      if (ayar.karistir === false) { return d; }
+      for (var j = d.length - 1; j > 0; j--) {
+        var k = Math.floor(Math.random() * (j + 1)); var t = d[j]; d[j] = d[k]; d[k] = t;
+      }
+      return d;
+    }
+    function sifirla() {
+      durum = sorular.map(function (s) {
+        return { sira: karisik(s.siklar.length), denenen: [], sonuc: "bos" };  // bos|devam|dogru|yanlis
+      });
+      aktif = 0; sonucEkrani = false;
+    }
+    function el(etiket, sinif, metin) {
+      var e = document.createElement(etiket);
+      if (sinif) { e.className = sinif; }
+      if (metin !== undefined) { e.innerHTML = metin; }
+      return e;
+    }
+    function diz(kap) {
+      try {
+        if (window.MathJax && window.MathJax.typesetPromise) { window.MathJax.typesetPromise([kap]); }
+        else if (window.MathJax && window.MathJax.typeset) { window.MathJax.typeset([kap]); }
+      } catch (e) { /* dizgi hatası etkileşimi durdurmaz */ }
+    }
+    function sayim() {
+      var s = { dogru: 0, yanlis: 0, bos: 0 };
+      durum.forEach(function (d) { if (d.sonuc === "dogru") s.dogru++; else if (d.sonuc === "yanlis") s.yanlis++; else s.bos++; });
+      return s;
+    }
+    function noktalar(ust) {
+      var kap = el("div", "deg-noktalar");
+      kap.setAttribute("role", "group");
+      kap.setAttribute("aria-label", "Sorular");
+      sorular.forEach(function (_, i) {
+        var d = durum[i];
+        var b = el("button", "deg-nokta " + d.sonuc + (i === aktif && !sonucEkrani ? " aktif" : ""), String(i + 1));
+        b.type = "button";
+        b.setAttribute("aria-label", (i + 1) + ". soru" + (d.sonuc === "dogru" ? ", doğru" : d.sonuc === "yanlis" ? ", yanlış" : ""));
+        b.addEventListener("click", function () { git(i); });
+        kap.appendChild(b);
+      });
+      ust.appendChild(kap);
+    }
+    function eylemKur(dugmeler) {
+      if (!eylem) { return; }
+      eylem.innerHTML = "";
+      var satir = el("div", "deg-eylem");
+      dugmeler.forEach(function (d) {
+        var b = el("button", "buton" + (d.birincil ? " birincil" : ""), d.metin);
+        b.type = "button";
+        if (d.pasif) { b.disabled = true; }
+        b.addEventListener("click", d.is);
+        satir.appendChild(b);
+      });
+      eylem.appendChild(satir);
+    }
+    function ciz() {
+      sonucEkrani = false;
+      var soru = sorular[aktif], d = durum[aktif];
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Soru " + (aktif + 1) + " / " + sorular.length));
+      noktalar(ust);
+      kap.appendChild(ust);
+      kap.appendChild(el("div", "panel deg-metin", soru.metin || ""));
+      var liste = el("div", "deg-siklar");
+      var bitmis = d.sonuc === "dogru" || d.sonuc === "yanlis";
+      d.sira.forEach(function (asilNo, gorunen) {
+        var sik = soru.siklar[asilNo];
+        var b = el("button", "parca-btn");
+        b.type = "button";
+        b.appendChild(el("span", "kutucuk", HARF[gorunen] || String(gorunen + 1)));
+        b.appendChild(el("span", "", sik.metin));
+        var denendi = d.denenen.indexOf(asilNo) > -1;
+        if (denendi && !sik.dogru) { b.classList.add("yanlis-secim"); b.disabled = true; }
+        if (bitmis) {
+          b.disabled = true;
+          if (sik.dogru) { b.classList.add("dogru-secim"); }
+          else if (!denendi) { b.classList.add("soluk"); }
+        }
+        b.addEventListener("click", function () { sec(asilNo); });
+        liste.appendChild(b);
+      });
+      kap.appendChild(liste);
+      govde.appendChild(kap);
+      diz(govde);
+      var son = aktif === sorular.length - 1;
+      eylemKur([
+        { metin: "Önceki", pasif: aktif === 0, is: function () { git(aktif - 1); } },
+        { metin: son ? "Sonuçları Gör" : "Sonraki", birincil: true,
+          is: function () { if (son) { sonuc(); } else { git(aktif + 1); } } }
+      ]);
+      if (typeof ayar.soruDegisti === "function") {
+        try { ayar.soruDegisti(aktif, soru); } catch (e) { console.error("degerlendirme.soruDegisti", e); }
+      }
+    }
+    function sec(asilNo) {
+      var soru = sorular[aktif], d = durum[aktif];
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis" || d.denenen.indexOf(asilNo) > -1) { return; }
+      d.denenen.push(asilNo);
+      var dogruMu = !!soru.siklar[asilNo].dogru;
+      var kalan = HAK - d.denenen.length;
+      if (dogruMu) {
+        d.sonuc = "dogru";
+        window.EGITSEL.dontVer(kok, "dogru", soru.donut || "Doğru seçim.");
+      } else if (kalan > 0) {
+        d.sonuc = "devam";
+        window.EGITSEL.dontVer(kok, "yanlis", "Bir hakkın daha var, tekrar dene.");
+      } else {
+        d.sonuc = "yanlis";
+        window.EGITSEL.dontVer(kok, "yanlis", soru.donut || "Doğru seçenek işaretlendi.");
+      }
+      ciz();
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis") {
+        if (typeof ayar.cevaplandi === "function") {
+          try { ayar.cevaplandi(aktif, d.sonuc === "dogru", soru); } catch (e) { console.error("degerlendirme.cevaplandi", e); }
+        }
+      }
+    }
+    function git(i) {
+      if (i < 0 || i >= sorular.length) { return; }
+      aktif = i;
+      ciz();
+    }
+    function sonuc() {
+      sonucEkrani = true;
+      var s = sayim(), n = sorular.length;
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Sonuçlar"));
+      noktalar(ust);
+      kap.appendChild(ust);
+      var kutu = el("div", "panel deg-sonuc");
+      kutu.appendChild(el("div", "deg-puan buyuk-sayi", s.dogru + " / " + n));
+      var sayac = el("div", "deg-sayac");
+      sayac.appendChild(el("span", "d", "Doğru: " + s.dogru));
+      sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
+      sayac.appendChild(el("span", "b", "Boş: " + s.bos));
+      kutu.appendChild(sayac);
+      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kap.appendChild(kutu);
+      govde.appendChild(kap);
+      eylemKur([
+        { metin: "Soruları İncele", is: function () { git(0); } },
+        { metin: "Tekrar Çöz", birincil: true, is: function () { sifirla(); ciz(); } }
+      ]);
+      if (typeof ayar.bitti === "function") {
+        try { ayar.bitti(s.dogru, n); } catch (e) { console.error("degerlendirme.bitti", e); }
+      }
+    }
+    sifirla();
+    ciz();
+    return { git: git, sonuc: sonuc, sifirla: function () { sifirla(); ciz(); } };
   },
 
   /* 2B TUVAL YÜKSEK ÇÖZÜNÜRLÜK (2026-08-17 çözünürlük raporu, P0)
@@ -205,7 +400,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
                                              "svg"] } };
 </script>
 <script src="ortak/f5b3f5fac24e774b.js"></script>
-<script src="ortak/b47118f55e978615.js"></script>
+<script src="ortak/27c9562c7880c36e.js"></script>
 <script src="ortak/17f319aeaf055a36.js"></script>
 <script>/* StudyoOrtami.js — yerel gömme */
 /* 2026-09-11 — 8c2a9012 (10 Eylül main yedeği) sürümünden bayt bayt taşındı;
@@ -319,6 +514,50 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   var ESIK = 4;                 // px — bu kadar gezmeden sürükleme başlamaz
                                 // (tıkla-seç yedeği tetiklenmeye devam etsin)
 
+  /* İZLEYİCİNİN SAYFA KAPSAMI (2026-09-26, geoeba uzman raporu: «doğru
+     sürüklemede ‹Daha dikkatli ol› uyarısı çıkıyor / yanlış ses geliyor» —
+     3, 4, 9 ve 10. sınıfta onlarca sayfa). Kök neden tarayıcıda ölçüldü
+     (MAT.3.1.3): 1. sayfanın `pdnd.monitorForElements` izleyicisi sayfa
+     süzgeci olmadan kuruluyor; SAYFA_INIT bir kez koşuyor ve temizleyici hiç
+     çağrılmıyor, yani öğrenci o sayfayı geçtikten sonra da YAŞIYOR. 5.
+     sayfada kart doğru sepete bırakılınca sayfa 5 «dogru» dönütü veriyor,
+     ardından sayfa 1'in izleyicisi aynı bırakmayı kendi sorusu sanıp
+     «Birler basamağını tekrar hesapla.» diye «yanlis» basıyordu (toast'ta
+     son söz onun; ses frenine takılan da doğru ses). Korpusta 578 sayfa
+     izleyici kuruyor — hepsi aynı deliği taşıyordu.
+     Çözüm tek yerde, sayfa kodu değişmeden: izleyici KURULDUĞU ANDAKİ aktif
+     sayfaya bağlanır (INIT ve sıfırla düğmeleri o sayfa ekrandayken koşar)
+     ve yalnız kaynağı o sayfanın içinde olan sürüklemeleri görür. */
+  function sahipSayfa() {
+    try {           // node test koşumunun sahte document'ında querySelector yok
+      return typeof document.querySelector === "function"
+        ? document.querySelector(".sayfa.aktif") : null;
+    } catch (e) { return null; }
+  }
+  function kapsamla(yap) {
+    var sahip = sahipSayfa();
+    if (!yap || !sahip) { return yap; }
+    var asilIzin = yap.canMonitor;
+    var kopya = {};
+    for (var k in yap) { kopya[k] = yap[k]; }
+    kopya.canMonitor = function (args) {
+      var kaynak = args && args.source && args.source.element;
+      // Kaynak bir SAYFANIN içindeyse o sayfa sahip olmalı; hiçbir sayfada
+      // değilse (sayfa kodu kaynağı sürükleme için gövdeye taşımış olabilir)
+      // karar sahibin o an ekranda olmasıdır.
+      var sayfasi = kaynak && kaynak.nodeType === 1 && kaynak.closest
+        ? kaynak.closest(".sayfa") : null;
+      if (sayfasi ? sayfasi !== sahip
+                  : (kaynak && kaynak.nodeType === 1 && sahip.contains
+                     ? !sahip.contains(kaynak) && !sahip.classList.contains("aktif")
+                     : !sahip.classList.contains("aktif"))) {
+        return false;
+      }
+      return typeof asilIzin === "function" ? asilIzin.call(yap, args) : true;
+    };
+    return kopya;
+  }
+
   function svgMi(el) {
     return el && typeof SVGElement !== "undefined" && el instanceof SVGElement;
   }
@@ -425,6 +664,12 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     // Sözleşme zaten istiyor ama unutuluyor: touch-action olmadan tarayıcı
     // hareketi sayfa kaydırması sanıp sürüklemeyi iptal eder.
     el.style.touchAction = "none";
+    // Dokunmatikte hareket kararını KÖK <svg> verir (2026-09-26, geoeba parti
+    // raporu MAT.4.1.3: parmakla sürükleme kaydırma sanılıp iptal ediliyordu).
+    // Sahne sabit 1280×720, kaydırılmaz — kökte kapatmak güvenli.
+    if (el.ownerSVGElement && el.ownerSVGElement.style) {
+      el.ownerSVGElement.style.touchAction = "none";
+    }
 
     var basla = null, aktif = null;
 
@@ -455,13 +700,18 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       var hayalet = null;
       try { hayalet = hayaletKur(el); }
       catch (e) { console.warn("pdnd-svg: hayalet kurulamadı", e); }
-      aktif = { kaynak: kaynak, oncekiler: [], ilk: girdi(ev), hayalet: hayalet };
+      aktif = { kaynak: kaynak, oncekiler: [], ilk: girdi(ev), hayalet: hayalet,
+                izleyiciler: [] };
       var yuk = konum(ev, []);
       cagir(yap, "onGenerateDragPreview", yuk);
       cagir(yap, "onDragStart", yuk);
+      // canMonitor pdnd'de olduğu gibi BİR KEZ, başlangıçta sorulur ve o
+      // sürüklemenin bütün olayları (onDrag/onDrop dahil) yalnız izin veren
+      // izleyicilere gider — eskiden yalnız onDragStart süzülüyordu.
       IZLEYICILER.forEach(function (m) {
         if (typeof m.canMonitor === "function"
             && !m.canMonitor({ initial: yuk.location.initial, source: kaynak })) { return; }
+        aktif.izleyiciler.push(m);
         cagir(m, "onDragStart", yuk);
       });
     }
@@ -514,7 +764,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         cagir(h.__yap, "onDrag", Object.assign({ self: h }, yuk));
       });
       cagir(yap, "onDrag", yuk);
-      IZLEYICILER.forEach(function (m) { cagir(m, "onDrag", yuk); });
+      aktif.izleyiciler.forEach(function (m) { cagir(m, "onDrag", yuk); });
       aktif.oncekiler = hedefler;
     }
 
@@ -534,7 +784,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         cagir(h.__yap, "onDrop", Object.assign({ self: h }, yuk));
       });
       cagir(yap, "onDrop", yuk);
-      IZLEYICILER.forEach(function (m) { cagir(m, "onDrop", yuk); });
+      vardi.izleyiciler.forEach(function (m) { cagir(m, "onDrop", yuk); });
     }
 
     el.addEventListener("pointerdown", pointerdown);
@@ -571,13 +821,14 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   };
 
   window.pdnd.monitorForElements = function (yap) {
-    IZLEYICILER.add(yap);
-    var temizle = gercek.monitorForElements(yap);
+    var kapsamli = kapsamla(yap);        // sayfa kapsamı — bkz. kapsamla()
+    IZLEYICILER.add(kapsamli);
+    var temizle = gercek.monitorForElements(kapsamli);
     var temiz = false;
     return function () {
       if (temiz) { return; }
       temiz = true;
-      IZLEYICILER.delete(yap);
+      IZLEYICILER.delete(kapsamli);
       if (typeof temizle === "function") { temizle(); }
     };
   };
@@ -598,9 +849,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
      yanındaki <ad>-ses/ klasöründe, göreli yolla. Ayar kapalıysa yuva BOŞ kalır
      ve gövde sonundaki anlatım motoru hiç kurulmaz. -->
 
-<link rel="stylesheet" href="ortak/6d1eb72a5a4832a6.css">
+<link rel="stylesheet" href="ortak/a6aa9fad6404f978.css">
 <!-- URETIM BILGISI
-  montaj: 2026-09-18 12:24
+  montaj: 2026-09-27 03:08
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 01:49
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 01:50
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 01:50
@@ -616,7 +867,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 </head>
 <body>
 <section id="ekran-kapak" class="sk-sinif-5" aria-label="Giriş kapağı">
-<link rel="stylesheet" href="ortak/8dfca1d25e9d0969.css">
+<link rel="stylesheet" href="ortak/67579608a4a5656c.css">
 <svg class="sk-fon" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
 <defs>
   <linearGradient id="skg5-su" x1="0" y1="0" x2="0" y2="1">
@@ -699,9 +950,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   <div class="sk-govde">
     <section class="sk-blok sk-cikti" aria-label="Öğrenme Çıktısı">
       <h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#0f7fa8"/><circle cx="12" cy="12" r="6.5" fill="#fff"/><circle cx="12" cy="12" r="3.2" fill="#0f7fa8"/></svg>Öğrenme Çıktısı</h2>
-      <div class="sk-kaydir" tabindex="0"><ul class="sk-liste"><li><span class="sk-kod">MAT.5.1.3</span><span>Gerçek yaşam durumlarına karşılık gelen kesirleri farklı biçimlerde temsil edebilme</span></li></ul></div>
+      <div class="sk-kaydir" tabindex="0"><ul class="sk-liste"><li><span class="sk-kod">MAT.5.1.3</span><span>Gerçek yaşam durumlarına karşılık gelen kesirleri farklı biçimlerde temsil edebilme</span></li></ul></div>
     </section>
-    <section class="sk-blok sk-surec" aria-label="Süreç bileşenleri"><h2><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ff6f4d" d="M4 7h4a2 2 0 1 1 4 0h4v4a2 2 0 1 0 0 4v4h-4a2 2 0 1 0-4 0H4v-4a2 2 0 1 1 0-4z"/></svg>Süreç Bileşenleri</h2><div class="sk-kaydir" tabindex="0"><div class="sk-grup"><ol class="sk-liste"><li><span class="sk-harf">a</span><span>Kesirlerin farklı gösterimlerinin (bileşik, tam sayılı, ondalık, yüzde) gerçek yaşam durumu içerisindeki kullanımını anlar.</span></li><li><span class="sk-harf">b</span><span>Gerçek yaşam durumlarında karşılaşılan kesirlerin farklı gösterimlerini ilişkilendirmek için farklı modelleri (yüzlük kart, somut modeller, sayı doğrusu gibi) seçer.</span></li><li><span class="sk-harf">c</span><span>Seçilen modelleri kullanır.</span></li><li><span class="sk-harf">ç</span><span>Kullanılan modelleri kesirlerin farklı gösterimleri ile yorumlar.</span></li><li><span class="sk-harf">d</span><span>Benzer durumlarda kullanılabilecek farklı modelleri kullanışlılık açısından karşılaştırır.</span></li><li><span class="sk-harf">e</span><span>Karşılaştırdığı modellerin kullanışlılığına ilişkin karar verir.</span></li></ol></div></div></section>
+    <section class="sk-blok sk-surec" aria-label="Süreç bileşenleri"><h2><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ff6f4d" d="M4 7h4a2 2 0 1 1 4 0h4v4a2 2 0 1 0 0 4v4h-4a2 2 0 1 0-4 0H4v-4a2 2 0 1 1 0-4z"/></svg>Süreç Bileşenleri</h2><div class="sk-kaydir" tabindex="0"><div class="sk-grup"><ol class="sk-liste"><li><span class="sk-harf">a</span><span>Kesirlerin farklı gösterimlerinin (bileşik, tam sayılı, ondalık, yüzde) gerçek yaşam durumu içerisindeki kullanımını anlar.</span></li><li><span class="sk-harf">b</span><span>Gerçek yaşam durumlarında karşılaşılan kesirlerin farklı gösterimlerini ilişkilendirmek için farklı modelleri (yüzlük kart, somut modeller, sayı doğrusu gibi) seçer.</span></li><li><span class="sk-harf">c</span><span>Seçilen modelleri kullanır.</span></li><li><span class="sk-harf">ç</span><span>Kullanılan modelleri kesirlerin farklı gösterimleri ile yorumlar.</span></li><li><span class="sk-harf">d</span><span>Benzer durumlarda kullanılabilecek farklı modelleri kullanışlılık açısından karşılaştırır.</span></li><li><span class="sk-harf">e</span><span>Karşılaştırdığı modellerin kullanışlılığına ilişkin karar verir.</span></li></ol></div></div></section>
   </div>
   <div class="sk-alt"><button id="btnBasla" type="button">Başla <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 4.5v15l13-7.5z"/></svg></button></div>
 </div>
@@ -720,10 +971,11 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   <rect x="54" y="156" width="92" height="20" rx="6" fill="#08405c"/>
   <path d="M100 44l6 12 13 2-9.5 9 2.5 13L100 74l-12 6 2.5-13L81 58l13-2z" fill="#fff"/>
 </svg>
-    <h2>Tebrikler!</h2>
-    <p class="st-alt"><b>Sayılar ve Nicelikler (2)</b> içeriğini başarıyla tamamladın.</p>
+    <h2 data-tam="Tebrikler!" data-bos="Henüz etkinlik yapmadın">Tebrikler!</h2>
+    <p class="st-alt" data-tam="&lt;b&gt;Sayılar ve Nicelikler (2)&lt;/b&gt; içeriğini başarıyla tamamladın."
+       data-bos="Etkinlikleri yapmadan sona geldin. Baştan başlayıp etkinlikleri tamamlamak ister misin?"><b>Sayılar ve Nicelikler (2)</b> içeriğini başarıyla tamamladın.</p>
     <div class="st-yildizlar" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg></div>
-    <div class="st-ogrendim"><h3>Bu içerikte şunları öğrendin</h3><ul><li>Gerçek yaşam durumlarına karşılık gelen kesirleri farklı biçimlerde temsil edebilme</li></ul></div>
+    <div class="st-ogrendim"><h3>Bu içerikte şunları öğrendin</h3><ul><li>Gerçek yaşam durumlarına karşılık gelen kesirleri farklı biçimlerde temsil edebilme</li></ul></div>
     <div class="st-dugmeler">
       <button type="button" class="st-birincil st-bastan">Baştan Başla</button>
       <button type="button" class="st-kapat">İçeriğe Dön</button>
@@ -754,9 +1006,29 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       kap.appendChild(p);
     }
   }
+  /* HİÇ ETKİNLİK YAPILMADIYSA TEBRİK YOK (geoeba uzman notu 2026-09-26, 7. sınıf
+     G: «hiç soru çözmeden bölüm sonuna gelindiğinde tebrikler mesajı yerine
+     yeniden denemek ister misin gibi bir mesaj gelebilir»). Ölçüt: öğrencinin
+     aldığı doğru/yanlış dönüt sayısı — dönütün tek boğazı EGITSEL.dontVer'dir. */
+  var donutSayisi = 0;
+  function donutSay() {
+    var E = window.EGITSEL;
+    if (!E || typeof E.dontVer !== "function" || E.dontVer.__tebrikSayaci) return;
+    var asil = E.dontVer;
+    E.dontVer = function () { donutSayisi++; return asil.apply(this, arguments); };
+    E.dontVer.__tebrikSayaci = true;
+  }
+  donutSay();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", donutSay);
   var oncekiOdak = null;
   function ac() {
-    konfetiKur();
+    var bos = donutSayisi === 0;
+    tebrik.classList.toggle("st-bos", bos);
+    var baslik = tebrik.querySelector("h2");
+    var alt = tebrik.querySelector(".st-alt");
+    if (baslik) baslik.textContent = bos ? baslik.getAttribute("data-bos") : baslik.getAttribute("data-tam");
+    if (alt) alt.innerHTML = bos ? alt.getAttribute("data-bos") : alt.getAttribute("data-tam");
+    if (!bos) konfetiKur();
     oncekiOdak = document.activeElement;
     tebrik.classList.add("acik");
     tebrik.removeAttribute("aria-hidden");
@@ -774,9 +1046,14 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     var hedef = e.target && e.target.closest && e.target.closest("#sonraki-buton");
     if (hedef && aktifSayfa >= sayfaSayisi()) ac();
   }, true);
+  /* «Baştan Başla» TAM SIFIRLAR (uzman notu, 7. sınıf E: «bazı sorular çözülmüş
+     hâlde geliyor, bazıları sıfırlanmış»): sayfalar SAYFA_INIT'i bir kez koşar
+     ve durumunu bellekte tutar; 1. sayfaya dönmek hiçbirini sıfırlamıyordu.
+     Belgeyi yeniden yüklemek tek güvenilir sıfırlamadır. */
   tebrik.querySelector(".st-bastan").addEventListener("click", function () {
     kapat();
-    if (window.SABLON_GEC) window.SABLON_GEC(1);
+    try { window.location.reload(); }
+    catch (e) { if (window.SABLON_GEC) window.SABLON_GEC(1); }
   });
   tebrik.querySelector(".st-kapat").addEventListener("click", kapat);
   document.addEventListener("keydown", function (e) {
@@ -6915,7 +7192,7 @@ window.SAYFA_INIT[10] = function (kok) {
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 01:51 -->
 <!-- PALET: zemin #f6f9fa #edf3f5 | baskin #d2e7ea #7ebcc4 #3b8794 #25616c | ikincil #fbeedb #f0be72 #d8923a | notr #ffffff #e4eaeb #93a2a6 | vurgu #4a5bb8 | kontur #1a343b -->
 <!-- SAYFA_BASLIK: Değerlendirme -->
-<!-- YONERGE: Soruları dikkatle oku, doğru seçeneği işaretle ve Yanıtla'ya bas. -->
+<!-- YONERGE: Soruları dikkatle oku ve doğru seçeneği işaretle. -->
 <!-- ETIKET: DEĞERLENDİRME -->
 <!-- SUTUN_ORAN: 7fr 5fr -->
 <section class="bolum sahne s11-sahne-zemini">
@@ -7066,7 +7343,7 @@ window.SAYFA_INIT[10] = function (kok) {
           <rect x="160" y="55" width="380" height="395" rx="20" fill="url(#s11-grad-baskin-acik)" stroke="#1a343b" stroke-width="3.5" />
           <path d="M 175 70 Q 350 60 525 70 L 520 85 Q 350 75 180 85 Z" fill="#ffffff" fill-opacity="0.4" />
           <rect x="230" y="65" width="240" height="26" rx="8" fill="#ffffff" stroke="#1a343b" stroke-width="1.5" />
-          <text x="350" y="83" text-anchor="middle" class="svg-not" fill="#1a343b">10x10 Yüzlük Kart Modeli</text>
+          <text x="350" y="83" text-anchor="middle" class="svg-not" fill="#1a343b">10 × 10 Yüzlük Kart</text>
           <rect x="195" y="105" width="310" height="310" rx="6" fill="#ffffff" stroke="#1a343b" stroke-width="2.5" />
           <!-- 65 kare boyalı: 6 tam sütun (186px) + 7. sütunda 5 kare (155px) -->
           <rect x="195" y="105" width="186" height="310" fill="url(#s11-grad-baskin-koyu)" stroke="#1a343b" stroke-width="1" />
@@ -7092,8 +7369,6 @@ window.SAYFA_INIT[10] = function (kok) {
           <line x1="195" y1="322" x2="505" y2="322" stroke="#1a343b" stroke-width="0.8" stroke-opacity="0.5" />
           <line x1="195" y1="353" x2="505" y2="353" stroke="#1a343b" stroke-width="0.8" stroke-opacity="0.5" />
           <line x1="195" y1="384" x2="505" y2="384" stroke="#1a343b" stroke-width="0.8" stroke-opacity="0.5" />
-          <rect x="235" y="420" width="230" height="24" rx="6" fill="#ffffff" stroke="#1a343b" stroke-width="1.5" />
-          <text x="350" y="437" text-anchor="middle" class="svg-not" fill="#1a343b">Boyalı Alan: 65 / 100 Birim Kare</text>
         </g>
 
         <!-- SORU 4 SAHNESİ: SAYI DOĞRUSU (1 TAM 3/4) -->
@@ -7142,20 +7417,109 @@ window.SAYFA_INIT[10] = function (kok) {
           <path d="M 70 95 Q 195 85 320 95 L 315 105 Q 195 95 75 105 Z" fill="#ffffff" fill-opacity="0.4" />
           <rect x="95" y="95" width="200" height="24" rx="6" fill="#ffffff" stroke="#1a343b" stroke-width="1.5" />
           <text x="195" y="112" text-anchor="middle" class="svg-not" fill="#1a343b">Model 1: Yüzlük Kart</text>
-          <rect x="95" y="135" width="200" height="200" rx="4" fill="#ffffff" stroke="#1a343b" stroke-width="2" />
-          <rect x="95" y="135" width="80" height="200" fill="url(#s11-grad-ikincil-orta)" stroke="#1a343b" stroke-width="1" />
-          <!-- Izgara çizgileri -->
-          <line x1="115" y1="135" x2="115" y2="335" stroke="#1a343b" stroke-width="0.8" stroke-opacity="0.4" />
-          <line x1="135" y1="135" x2="135" y2="335" stroke="#1a343b" stroke-width="0.8" stroke-opacity="0.4" />
-          <line x1="155" y1="135" x2="155" y2="335" stroke="#1a343b" stroke-width="0.8" stroke-opacity="0.4" />
-          <line x1="175" y1="135" x2="175" y2="335" stroke="#1a343b" stroke-width="0.8" stroke-opacity="0.4" />
-          <line x1="195" y1="135" x2="195" y2="335" stroke="#1a343b" stroke-width="0.8" stroke-opacity="0.4" />
-          <line x1="215" y1="135" x2="215" y2="335" stroke="#1a343b" stroke-width="0.8" stroke-opacity="0.4" />
-          <line x1="235" y1="135" x2="235" y2="335" stroke="#1a343b" stroke-width="0.8" stroke-opacity="0.4" />
-          <line x1="255" y1="135" x2="255" y2="335" stroke="#1a343b" stroke-width="0.8" stroke-opacity="0.4" />
-          <line x1="275" y1="135" x2="275" y2="335" stroke="#1a343b" stroke-width="0.8" stroke-opacity="0.4" />
-          <text x="195" y="365" text-anchor="middle" class="svg-metin" fill="#1a343b">%40 İndirim Alanı</text>
-          <text x="195" y="390" text-anchor="middle" class="svg-not" fill="#3b8794">Yüzdelik oran alanla görünür</text>
+          <rect x="95" y="135" width="200" height="200" rx="6" fill="#e4eaeb" stroke="#1a343b" stroke-width="2" />
+          <!-- 10x10 yüzlük kart: önceki sayfalardaki gibi ayrı birim kareler; 40 kare (4 sütun) boyalı = %40 -->
+          <rect x="96.5" y="136.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="96.5" y="156.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="96.5" y="176.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="96.5" y="196.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="96.5" y="216.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="96.5" y="236.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="96.5" y="256.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="96.5" y="276.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="96.5" y="296.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="96.5" y="316.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="116.5" y="136.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="116.5" y="156.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="116.5" y="176.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="116.5" y="196.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="116.5" y="216.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="116.5" y="236.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="116.5" y="256.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="116.5" y="276.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="116.5" y="296.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="116.5" y="316.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="136.5" y="136.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="136.5" y="156.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="136.5" y="176.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="136.5" y="196.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="136.5" y="216.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="136.5" y="236.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="136.5" y="256.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="136.5" y="276.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="136.5" y="296.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="136.5" y="316.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="156.5" y="136.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="156.5" y="156.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="156.5" y="176.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="156.5" y="196.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="156.5" y="216.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="156.5" y="236.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="156.5" y="256.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="156.5" y="276.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="156.5" y="296.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="156.5" y="316.5" width="17" height="17" rx="3" fill="url(#s11-grad-ikincil-koyu)" stroke="#d8923a" stroke-width="1" />
+          <rect x="176.5" y="136.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="176.5" y="156.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="176.5" y="176.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="176.5" y="196.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="176.5" y="216.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="176.5" y="236.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="176.5" y="256.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="176.5" y="276.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="176.5" y="296.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="176.5" y="316.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="196.5" y="136.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="196.5" y="156.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="196.5" y="176.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="196.5" y="196.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="196.5" y="216.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="196.5" y="236.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="196.5" y="256.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="196.5" y="276.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="196.5" y="296.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="196.5" y="316.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="216.5" y="136.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="216.5" y="156.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="216.5" y="176.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="216.5" y="196.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="216.5" y="216.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="216.5" y="236.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="216.5" y="256.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="216.5" y="276.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="216.5" y="296.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="216.5" y="316.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="236.5" y="136.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="236.5" y="156.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="236.5" y="176.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="236.5" y="196.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="236.5" y="216.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="236.5" y="236.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="236.5" y="256.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="236.5" y="276.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="236.5" y="296.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="236.5" y="316.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="256.5" y="136.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="256.5" y="156.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="256.5" y="176.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="256.5" y="196.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="256.5" y="216.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="256.5" y="236.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="256.5" y="256.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="256.5" y="276.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="256.5" y="296.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="256.5" y="316.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="276.5" y="136.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="276.5" y="156.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="276.5" y="176.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="276.5" y="196.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="276.5" y="216.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="276.5" y="236.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="276.5" y="256.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="276.5" y="276.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="276.5" y="296.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <rect x="276.5" y="316.5" width="17" height="17" rx="3" fill="#ffffff" stroke="#93a2a6" stroke-width="1" />
+          <text x="195" y="370" text-anchor="middle" class="svg-metin" fill="#1a343b">%40 İndirim</text>
 
           <!-- Sağ Pano: Sayı Doğrusu (Mesafe Modeli) -->
           <rect x="370" y="80" width="270" height="340" rx="18" fill="url(#s11-grad-baskin-acik)" stroke="#1a343b" stroke-width="3" />
@@ -7172,8 +7536,7 @@ window.SAYFA_INIT[10] = function (kok) {
           <line x1="486" y1="210" x2="486" y2="235" stroke="#4a5bb8" stroke-width="2" />
           <rect x="461" y="185" width="50" height="24" rx="6" fill="#ffffff" stroke="#1a343b" stroke-width="1.5" />
           <text x="486" y="202" text-anchor="middle" class="svg-not" fill="#4a5bb8">%40</text>
-          <text x="505" y="365" text-anchor="middle" class="svg-metin" fill="#1a343b">Doğrusal Mesafe</text>
-          <text x="505" y="390" text-anchor="middle" class="svg-not" fill="#93a2a6">Noktasal konum gösterir</text>
+          <text x="505" y="370" text-anchor="middle" class="svg-metin" fill="#1a343b">%40 İndirim</text>
         </g>
 
         <!-- SONUÇ SAHNESİ: KUPA VE TEBRİK -->
@@ -7204,32 +7567,11 @@ window.SAYFA_INIT[10] = function (kok) {
 <section class="bolum etkilesim">
 <div class="panel-basi">
 <div class="baslik-satiri"><h2>Değerlendirme</h2><span class="etiket">DEĞERLENDİRME</span></div>
-<p class="yonerge">Soruları dikkatle oku, doğru seçeneği işaretle ve Yanıtla'ya bas.</p>
+<p class="yonerge">Soruları dikkatle oku ve doğru seçeneği işaretle.</p>
 </div>
 
-  <div class="kontrol-govde">
-    <div class="panel s11-soru-kutusu" id="s11-soru-paneli">
-      <div class="s11-soru-ust">
-        <span class="s11-soru-sayac" id="s11-soru-sayac">Soru 1 / 5</span>
-      </div>
-      <div class="s11-soru-metin" id="s11-soru-metin" aria-live="polite">
-        1. Bir market reyonundaki etiketlerde tartı ağırlığı 0,75 kg, meyve suyu hacmi 1,5 L ve indirim afişinde %25 yazmaktadır. Bu durumlardan hangisi yüzde gösteriminin doğrudan kullanıldığı bir örnektir?
-      </div>
-      <div class="s11-secenek-liste" id="s11-secenek-liste">
-        <button class="parca-btn s11-secenek" data-deger="0" data-dogru="0"><span class="kutucuk">A</span><span class="s11-secenek-metin">Tartı ağırlığı</span></button>
-        <button class="parca-btn s11-secenek" data-deger="1" data-dogru="1"><span class="kutucuk">B</span><span class="s11-secenek-metin">%25 indirim afişi</span></button>
-        <button class="parca-btn s11-secenek" data-deger="2" data-dogru="0"><span class="kutucuk">C</span><span class="s11-secenek-metin">İçecek hacmi</span></button>
-        <button class="parca-btn s11-secenek" data-deger="3" data-dogru="0"><span class="kutucuk">D</span><span class="s11-secenek-metin">2 kg elma paketi</span></button>
-      </div>
-    </div>
-    <div class="panel s11-sonuc-kutusu s11-gizli" id="s11-sonuc-paneli" aria-live="polite">
-      <div class="s11-sonuc-puan" id="s11-sonuc-puan">5 / 5 Doğru</div>
-      <div class="s11-sonuc-mesaj" id="s11-sonuc-mesaj">Tebrikler! Konuyu başarıyla tamamladın.</div>
-    </div>
-  </div>
-  <div class="kontrol-eylem">
-    <button class="buton birincil s11-eylem-btn" id="s11-eylem-btn" disabled>Yanıtla</button>
-  </div>
+  <div class="kontrol-govde"></div>
+  <div class="kontrol-eylem"></div>
 </section>
 
 <style>
@@ -7237,68 +7579,6 @@ window.SAYFA_INIT[10] = function (kok) {
 
   #sayfa-11 .s11-sahne-zemini {
     background: linear-gradient(180deg, #f6f9fa, #edf3f5);
-  }
-  #sayfa-11 .s11-soru-kutusu {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 14px;
-    background: var(--panel);
-    border: 1px solid var(--cizgi);
-    border-radius: var(--r-kart);
-  }
-  #sayfa-11 .s11-soru-ust {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  #sayfa-11 .s11-soru-sayac {
-    display: inline-block;
-    padding: 4px 10px;
-    background: var(--vurgu-acik);
-    color: var(--vurgu);
-    border-radius: 999px;
-  }
-  #sayfa-11 .s11-soru-metin {
-    line-height: 1.45;
-    color: var(--metin);
-  }
-  #sayfa-11 .s11-secenek-liste {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-  #sayfa-11 .s11-secenek {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    text-align: left;
-    width: 100%;
-    cursor: pointer;
-  }
-  #sayfa-11 .s11-secenek-metin {
-    flex: 1;
-  }
-  #sayfa-11 .s11-eylem-btn {
-    width: 100%;
-  }
-  #sayfa-11 .s11-sonuc-kutusu {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 14px;
-    padding: 24px 16px;
-    background: var(--panel);
-    border: 1px solid var(--cizgi);
-    border-radius: var(--r-kart);
-  }
-  #sayfa-11 .s11-sonuc-puan {
-    color: var(--vurgu);
-  }
-  #sayfa-11 .s11-sonuc-mesaj {
-    color: var(--metin-soluk);
-    line-height: 1.45;
   }
   #sayfa-11 .s11-gizli {
     display: none !important;
@@ -7309,27 +7589,20 @@ window.SAYFA_INIT[10] = function (kok) {
 
 <script>
 window.SAYFA_INIT[11] = function (kok) {
-  var aktifSoruIndeks = 0;
-  var dogruSayisi = 0;
-  var seciliSecenekEl = null;
-  var durum = "cevapla";
-
   var SORULAR = [
     {
-      no: 1,
-      metin: "1. Bir market reyonundaki etiketlerde tartı ağırlığı 0,75 kg, meyve suyu hacmi 1,5 L ve indirim afişinde %25 yazmaktadır. Bu durumlardan hangisi yüzde gösteriminin doğrudan kullanıldığı bir örnektir?",
-      secenekler: [
+      metin: "Bir market reyonundaki etiketlerde tartı ağırlığı 0,75 kg, meyve suyu hacmi 1,5 L ve indirim afişinde %25 yazmaktadır. Bu durumlardan hangisi yüzde gösteriminin doğrudan kullanıldığı bir örnektir?",
+      siklar: [
         { metin: "Tartı ağırlığı", dogru: false },
         { metin: "%25 indirim afişi", dogru: true },
         { metin: "İçecek hacmi", dogru: false },
         { metin: "2 kg elma paketi", dogru: false }
       ],
-      donut: "Yüzde sembolünü incelemelisin."
+      donut: "Yüzde sembolü (%) indirim afişinde kullanılır."
     },
     {
-      no: 2,
-      metin: "2. Bir sporcu parkurda katettiği 1,4 km mesafeyi başlangıçtan bitişe doğru bir bütün üzerinde göstermek istiyor. Bu durumu temsil etmek için en uygun matematiksel model hangisidir?",
-      secenekler: [
+      metin: "Bir sporcu parkurda katettiği 1,4 km mesafeyi başlangıçtan bitişe doğru bir bütün üzerinde göstermek istiyor. Bu durumu temsil etmek için en uygun matematiksel model hangisidir?",
+      siklar: [
         { metin: "Dereceli ölçü kabı", dogru: false },
         { metin: "Yüzlük kart", dogru: false },
         { metin: "Sayı doğrusu", dogru: true },
@@ -7338,20 +7611,18 @@ window.SAYFA_INIT[11] = function (kok) {
       donut: "Mesafeyi sayı doğrusu gösterir."
     },
     {
-      no: 3,
-      metin: "3. 10x10 birim kareden oluşan bir yüzlük kartın 65 karesi boyanmıştır. Bu modelin temsil ettiği değerin ondalık ve yüzde gösterimi aşağıdakilerden hangisidir?",
-      secenekler: [
+      metin: "\\(10 \\times 10\\) birim kareden oluşan bir yüzlük kartın 65 karesi boyanmıştır. Bu modelin temsil ettiği değerin ondalık ve yüzde gösterimi aşağıdakilerden hangisidir?",
+      siklar: [
         { metin: "6,5 ve %65", dogru: false },
         { metin: "0,065 ve %6,5", dogru: false },
         { metin: "0,65 ve %6,5", dogru: false },
         { metin: "0,65 ve %65", dogru: true }
       ],
-      donut: "Boyalı kare sayısına bakmalısın."
+      donut: "100 karenin 65'i boyalı: 0,65 ve %65."
     },
     {
-      no: 4,
-      metin: "4. 0 ile 2 arası dörder eş parçaya bölünmüş bir sayı doğrusunda, 1 tamdan sonraki 3. çentik işaretlenmiştir. Bu noktaya karşılık gelen tam sayılı ve bileşik kesir gösterimi aşağıdakilerden hangisidir?",
-      secenekler: [
+      metin: "0 ile 2 arası dörder eş parçaya bölünmüş bir sayı doğrusunda, 1 tamdan sonraki 3. çentik işaretlenmiştir. Bu noktaya karşılık gelen tam sayılı ve bileşik kesir gösterimi aşağıdakilerden hangisidir?",
+      siklar: [
         { metin: "\\( 1\\frac{3}{4} \\) ve \\( \\frac{7}{4} \\)", dogru: true },
         { metin: "\\( 1\\frac{1}{4} \\) ve \\( \\frac{5}{4} \\)", dogru: false },
         { metin: "\\( 2\\frac{3}{4} \\) ve \\( \\frac{11}{4} \\)", dogru: false },
@@ -7360,9 +7631,8 @@ window.SAYFA_INIT[11] = function (kok) {
       donut: "Çentikleri sırayla saymalısın."
     },
     {
-      no: 5,
-      metin: "5. Bir mağaza vitrinindeki %40 indirim oranını göstermek için yüzlük kart ve sayı doğrusu modelleri karşılaştırılmıştır. Bu durum için yüzlük kartın daha kullanışlı olma gerekçesi aşağıdakilerden hangisidir?",
-      secenekler: [
+      metin: "Bir mağaza vitrinindeki %40 indirim oranını göstermek için yüzlük kart ve sayı doğrusu modelleri karşılaştırılmıştır. Bu durum için yüzlük kartın daha kullanışlı olma gerekçesi aşağıdakilerden hangisidir?",
+      siklar: [
         { metin: "Sıvı seviyesini kademeli göstermesi", dogru: false },
         { metin: "Yüzdelik oranı alanla doğrudan göstermesi", dogru: true },
         { metin: "Doğrusal mesafeyi kesintisiz belirtmesi", dogru: false },
@@ -7372,26 +7642,7 @@ window.SAYFA_INIT[11] = function (kok) {
     }
   ];
 
-  var soruSayacEl = kok.querySelector("#s11-soru-sayac");
-  var soruMetinEl = kok.querySelector("#s11-soru-metin");
-  var secenekListeEl = kok.querySelector("#s11-secenek-liste");
-  var soruPaneliEl = kok.querySelector("#s11-soru-paneli");
-  var sonucPaneliEl = kok.querySelector("#s11-sonuc-paneli");
-  var sonucPuanEl = kok.querySelector("#s11-sonuc-puan");
-  var sonucMesajEl = kok.querySelector("#s11-sonuc-mesaj");
-  var eylemBtnEl = kok.querySelector("#s11-eylem-btn");
   var sahneGruplar = kok.querySelectorAll(".s11-sahne-grup");
-
-  function fisherYates(dizi) {
-    var d = dizi.slice();
-    for (var i = d.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var temp = d[i];
-      d[i] = d[j];
-      d[j] = temp;
-    }
-    return d;
-  }
 
   function sahneGuncelle(indeks) {
     for (var i = 0; i < sahneGruplar.length; i++) {
@@ -7403,104 +7654,15 @@ window.SAYFA_INIT[11] = function (kok) {
     }
   }
 
-  function soruyuKur(indeks) {
-    var soru = SORULAR[indeks];
-    seciliSecenekEl = null;
-    durum = "cevapla";
-    eylemBtnEl.disabled = true;
-    eylemBtnEl.textContent = "Yanıtla";
-
-    soruSayacEl.textContent = "Soru " + (indeks + 1) + " / " + SORULAR.length;
-    soruMetinEl.textContent = soru.metin;
-
-    var karisikSecenekler = fisherYates(soru.secenekler);
-    var harfler = ["A", "B", "C", "D"];
-    secenekListeEl.innerHTML = "";
-
-    for (var i = 0; i < karisikSecenekler.length; i++) {
-      var sec = karisikSecenekler[i];
-      var btn = document.createElement("button");
-      btn.className = "parca-btn s11-secenek";
-      btn.setAttribute("data-deger", String(i));
-      btn.setAttribute("data-dogru", sec.dogru ? "1" : "0");
-      btn.innerHTML = '<span class="kutucuk">' + harfler[i] + '</span><span class="s11-secenek-metin">' + sec.metin + '</span>';
-      secenekListeEl.appendChild(btn);
-    }
-
-    if (window.MathJax && window.MathJax.typesetPromise) {
-      window.MathJax.typesetPromise([soruPaneliEl]);
-    } else if (window.MathJax && window.MathJax.typeset) {
-      window.MathJax.typeset([soruPaneliEl]);
-    }
-
-    sahneGuncelle(indeks);
-  }
-
-  EGITSEL.secimGrubu(kok, ".s11-secenek", function (el) {
-    if (durum !== "cevapla") return;
-    seciliSecenekEl = el;
-    eylemBtnEl.disabled = false;
+  // Değerlendirme mekaniği şablonun ortak motorundadır: anlık dönüt, soru
+  // başına 2 hak (ikinci yanlışta doğru şık gösterilir), soru numaralarıyla
+  // ileri-geri gezinme, sonuç ekranı ve Tekrar Çöz.
+  EGITSEL.degerlendirme(kok, {
+    sorular: SORULAR,
+    hak: 2,
+    soruDegisti: function (i) { sahneGuncelle(i); },
+    bitti: function () { sahneGuncelle("sonuc"); }
   });
-
-  eylemBtnEl.addEventListener("click", function () {
-    if (durum === "cevapla") {
-      if (!seciliSecenekEl) {
-        if (window.SABLON_TOAST) window.SABLON_TOAST("Lütfen bir seçenek belirle.");
-        return;
-      }
-      var soru = SORULAR[aktifSoruIndeks];
-      var dogruMu = seciliSecenekEl.getAttribute("data-dogru") === "1";
-      EGITSEL.kilitle(kok, ".s11-secenek", true);
-
-      if (dogruMu) {
-        dogruSayisi++;
-        seciliSecenekEl.classList.add("dogru-secim");
-        EGITSEL.dontVer(kok, "dogru", "Tebrikler! Doğru cevap.");
-      } else {
-        seciliSecenekEl.classList.add("yanlis-secim");
-        var dogruBtn = secenekListeEl.querySelector('[data-dogru="1"]');
-        if (dogruBtn) {
-          dogruBtn.classList.add("dogru-secim");
-        }
-        EGITSEL.dontVer(kok, "yanlis", soru.donut);
-      }
-
-      if (aktifSoruIndeks < SORULAR.length - 1) {
-        eylemBtnEl.textContent = "Sonraki Soru";
-        durum = "sonraki";
-      } else {
-        eylemBtnEl.textContent = "Sonuçları Gör";
-        durum = "sonraki";
-      }
-      eylemBtnEl.disabled = false;
-    } else if (durum === "sonraki") {
-      aktifSoruIndeks++;
-      if (aktifSoruIndeks < SORULAR.length) {
-        soruyuKur(aktifSoruIndeks);
-      } else {
-        durum = "bitti";
-        soruPaneliEl.classList.add("s11-gizli");
-        sonucPaneliEl.classList.remove("s11-gizli");
-        sonucPuanEl.textContent = dogruSayisi + " / " + SORULAR.length + " Doğru";
-        if (dogruSayisi >= 4) {
-          sonucMesajEl.textContent = "Harika bir başarı! Kesirlerin farklı temsillerini çok iyi kavradın.";
-        } else {
-          sonucMesajEl.textContent = "Güzel bir deneme! İlgili modelleri tekrar inceleyerek bilgilerini pekiştirebilirsin.";
-        }
-        sahneGuncelle("sonuc");
-        eylemBtnEl.textContent = "Yeniden Başla";
-        eylemBtnEl.disabled = false;
-      }
-    } else if (durum === "bitti") {
-      aktifSoruIndeks = 0;
-      dogruSayisi = 0;
-      sonucPaneliEl.classList.add("s11-gizli");
-      soruPaneliEl.classList.remove("s11-gizli");
-      soruyuKur(0);
-    }
-  });
-
-  soruyuKur(0);
 };
 </script>
 
@@ -7526,7 +7688,7 @@ window.SAYFA_INIT[11] = function (kok) {
 
 </div>
 
-<script src="ortak/462c91b0acbbfd32.js"></script>
+<script src="ortak/33b217e5bd6cb142.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 </body>

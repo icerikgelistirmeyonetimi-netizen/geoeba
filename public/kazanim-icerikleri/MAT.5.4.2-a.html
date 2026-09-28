@@ -59,6 +59,13 @@ window.EGITSEL = {
      KALIR: 200+ mevcut parça dontVer(kok, ...) diye çağırıyor.
      tip: "dogru" | "yanlis" */
   dontVer: function (kok, tip, mesaj) {
+    /* Nötr tipler (2026-09-26, geoeba parti raporu 7.4.x): bazı sayfalar
+       yönlendirmeyi dontVer(kok, "uyari", …) diye veriyor; eskiden her
+       bilinmeyen tip «yanlis»a dönüp kırmızı + yanlış sesi basıyordu. */
+    if (tip === "uyari" || tip === "bilgi" || tip === "notr" || tip === "ipucu") {
+      if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj); }
+      return;
+    }
     tip = tip === "dogru" ? "dogru" : "yanlis";
     if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj, tip); }
     else { console.warn("EGITSEL.dontVer: SABLON_TOAST yok"); }
@@ -96,6 +103,194 @@ window.EGITSEL = {
       if ("disabled" in el) { el.disabled = kilitli !== false; }
       el.classList.toggle("locked", kilitli !== false);
     });
+  },
+
+  /* ÇOKTAN SEÇMELİ DEĞERLENDİRME MOTORU (2026-09-26, geoeba uzman raporu:
+     «değerlendirme soruları kendi içinde ileri-geri yapılamıyor», «sonucu
+     gör dediğinde kaç doğru kaç yanlış gösteren ekran çıkmıyor», «baştan
+     başlayınca bazı sorular çözülmüş geliyor», «lisede sorular 5 şıklı
+     olmalı», «en az 2 seçim hakkı verilmeli, yanlışta hemen doğru cevap
+     gelmemeli»). Her değerlendirme sayfası bu mekaniği kendisi yazıyordu ve
+     her biri başka eksik taşıyordu; motor TEK doğruluk kaynağıdır.
+       EGITSEL.degerlendirme(kok, {
+         sorular: [{metin, siklar: [{metin, dogru}], donut}],  // şık sayısı serbest (≤6)
+         hak: 2,                // soru başına deneme hakkı
+         karistir: true,        // şık sırası (soru başına BİR kez karışır)
+         soruDegisti: function (i, soru) {},     // sahneyi soruya eşle
+         cevaplandi: function (i, dogruMu, soru) {},
+         bitti: function (dogru, toplam) {}
+       })
+     Arayüz .kontrol-govde / .kontrol-eylem İÇİNE kurulur (içerikleri
+     değiştirilir); metin ve şıklar LaTeX içerebilir (MathJax dizilir). */
+  degerlendirme: function (kok, ayar) {
+    ayar = ayar || {};
+    var sorular = (ayar.sorular || []).filter(function (s) { return s && s.siklar && s.siklar.length; });
+    var govde = ayar.govde || (kok && kok.querySelector(".kontrol-govde"));
+    var eylem = ayar.eylem || (kok && kok.querySelector(".kontrol-eylem"));
+    if (!govde || !sorular.length) { console.warn("EGITSEL.degerlendirme: govde/soru yok"); return null; }
+    var HAK = Math.max(1, ayar.hak || 2);
+    var HARF = ["A", "B", "C", "D", "E", "F"];
+    var durum, aktif = 0, sonucEkrani = false;
+
+    function karisik(n) {
+      var d = [];
+      for (var i = 0; i < n; i++) { d.push(i); }
+      if (ayar.karistir === false) { return d; }
+      for (var j = d.length - 1; j > 0; j--) {
+        var k = Math.floor(Math.random() * (j + 1)); var t = d[j]; d[j] = d[k]; d[k] = t;
+      }
+      return d;
+    }
+    function sifirla() {
+      durum = sorular.map(function (s) {
+        return { sira: karisik(s.siklar.length), denenen: [], sonuc: "bos" };  // bos|devam|dogru|yanlis
+      });
+      aktif = 0; sonucEkrani = false;
+    }
+    function el(etiket, sinif, metin) {
+      var e = document.createElement(etiket);
+      if (sinif) { e.className = sinif; }
+      if (metin !== undefined) { e.innerHTML = metin; }
+      return e;
+    }
+    function diz(kap) {
+      try {
+        if (window.MathJax && window.MathJax.typesetPromise) { window.MathJax.typesetPromise([kap]); }
+        else if (window.MathJax && window.MathJax.typeset) { window.MathJax.typeset([kap]); }
+      } catch (e) { /* dizgi hatası etkileşimi durdurmaz */ }
+    }
+    function sayim() {
+      var s = { dogru: 0, yanlis: 0, bos: 0 };
+      durum.forEach(function (d) { if (d.sonuc === "dogru") s.dogru++; else if (d.sonuc === "yanlis") s.yanlis++; else s.bos++; });
+      return s;
+    }
+    function noktalar(ust) {
+      var kap = el("div", "deg-noktalar");
+      kap.setAttribute("role", "group");
+      kap.setAttribute("aria-label", "Sorular");
+      sorular.forEach(function (_, i) {
+        var d = durum[i];
+        var b = el("button", "deg-nokta " + d.sonuc + (i === aktif && !sonucEkrani ? " aktif" : ""), String(i + 1));
+        b.type = "button";
+        b.setAttribute("aria-label", (i + 1) + ". soru" + (d.sonuc === "dogru" ? ", doğru" : d.sonuc === "yanlis" ? ", yanlış" : ""));
+        b.addEventListener("click", function () { git(i); });
+        kap.appendChild(b);
+      });
+      ust.appendChild(kap);
+    }
+    function eylemKur(dugmeler) {
+      if (!eylem) { return; }
+      eylem.innerHTML = "";
+      var satir = el("div", "deg-eylem");
+      dugmeler.forEach(function (d) {
+        var b = el("button", "buton" + (d.birincil ? " birincil" : ""), d.metin);
+        b.type = "button";
+        if (d.pasif) { b.disabled = true; }
+        b.addEventListener("click", d.is);
+        satir.appendChild(b);
+      });
+      eylem.appendChild(satir);
+    }
+    function ciz() {
+      sonucEkrani = false;
+      var soru = sorular[aktif], d = durum[aktif];
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Soru " + (aktif + 1) + " / " + sorular.length));
+      noktalar(ust);
+      kap.appendChild(ust);
+      kap.appendChild(el("div", "panel deg-metin", soru.metin || ""));
+      var liste = el("div", "deg-siklar");
+      var bitmis = d.sonuc === "dogru" || d.sonuc === "yanlis";
+      d.sira.forEach(function (asilNo, gorunen) {
+        var sik = soru.siklar[asilNo];
+        var b = el("button", "parca-btn");
+        b.type = "button";
+        b.appendChild(el("span", "kutucuk", HARF[gorunen] || String(gorunen + 1)));
+        b.appendChild(el("span", "", sik.metin));
+        var denendi = d.denenen.indexOf(asilNo) > -1;
+        if (denendi && !sik.dogru) { b.classList.add("yanlis-secim"); b.disabled = true; }
+        if (bitmis) {
+          b.disabled = true;
+          if (sik.dogru) { b.classList.add("dogru-secim"); }
+          else if (!denendi) { b.classList.add("soluk"); }
+        }
+        b.addEventListener("click", function () { sec(asilNo); });
+        liste.appendChild(b);
+      });
+      kap.appendChild(liste);
+      govde.appendChild(kap);
+      diz(govde);
+      var son = aktif === sorular.length - 1;
+      eylemKur([
+        { metin: "Önceki", pasif: aktif === 0, is: function () { git(aktif - 1); } },
+        { metin: son ? "Sonuçları Gör" : "Sonraki", birincil: true,
+          is: function () { if (son) { sonuc(); } else { git(aktif + 1); } } }
+      ]);
+      if (typeof ayar.soruDegisti === "function") {
+        try { ayar.soruDegisti(aktif, soru); } catch (e) { console.error("degerlendirme.soruDegisti", e); }
+      }
+    }
+    function sec(asilNo) {
+      var soru = sorular[aktif], d = durum[aktif];
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis" || d.denenen.indexOf(asilNo) > -1) { return; }
+      d.denenen.push(asilNo);
+      var dogruMu = !!soru.siklar[asilNo].dogru;
+      var kalan = HAK - d.denenen.length;
+      if (dogruMu) {
+        d.sonuc = "dogru";
+        window.EGITSEL.dontVer(kok, "dogru", soru.donut || "Doğru seçim.");
+      } else if (kalan > 0) {
+        d.sonuc = "devam";
+        window.EGITSEL.dontVer(kok, "yanlis", "Bir hakkın daha var, tekrar dene.");
+      } else {
+        d.sonuc = "yanlis";
+        window.EGITSEL.dontVer(kok, "yanlis", soru.donut || "Doğru seçenek işaretlendi.");
+      }
+      ciz();
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis") {
+        if (typeof ayar.cevaplandi === "function") {
+          try { ayar.cevaplandi(aktif, d.sonuc === "dogru", soru); } catch (e) { console.error("degerlendirme.cevaplandi", e); }
+        }
+      }
+    }
+    function git(i) {
+      if (i < 0 || i >= sorular.length) { return; }
+      aktif = i;
+      ciz();
+    }
+    function sonuc() {
+      sonucEkrani = true;
+      var s = sayim(), n = sorular.length;
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Sonuçlar"));
+      noktalar(ust);
+      kap.appendChild(ust);
+      var kutu = el("div", "panel deg-sonuc");
+      kutu.appendChild(el("div", "deg-puan buyuk-sayi", s.dogru + " / " + n));
+      var sayac = el("div", "deg-sayac");
+      sayac.appendChild(el("span", "d", "Doğru: " + s.dogru));
+      sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
+      sayac.appendChild(el("span", "b", "Boş: " + s.bos));
+      kutu.appendChild(sayac);
+      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kap.appendChild(kutu);
+      govde.appendChild(kap);
+      eylemKur([
+        { metin: "Soruları İncele", is: function () { git(0); } },
+        { metin: "Tekrar Çöz", birincil: true, is: function () { sifirla(); ciz(); } }
+      ]);
+      if (typeof ayar.bitti === "function") {
+        try { ayar.bitti(s.dogru, n); } catch (e) { console.error("degerlendirme.bitti", e); }
+      }
+    }
+    sifirla();
+    ciz();
+    return { git: git, sonuc: sonuc, sifirla: function () { sifirla(); ciz(); } };
   },
 
   /* 2B TUVAL YÜKSEK ÇÖZÜNÜRLÜK (2026-08-17 çözünürlük raporu, P0)
@@ -205,7 +400,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
                                              "svg"] } };
 </script>
 <script src="ortak/f5b3f5fac24e774b.js"></script>
-<script src="ortak/b47118f55e978615.js"></script>
+<script src="ortak/27c9562c7880c36e.js"></script>
 <script src="ortak/17f319aeaf055a36.js"></script>
 <script>/* RoundedBoxGeometry.js — yerel gömme */
 /* three.js r155 örnek portu — RoundedBoxGeometry (examples/jsm/geometries/RoundedBoxGeometry.js)
@@ -482,6 +677,50 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   var ESIK = 4;                 // px — bu kadar gezmeden sürükleme başlamaz
                                 // (tıkla-seç yedeği tetiklenmeye devam etsin)
 
+  /* İZLEYİCİNİN SAYFA KAPSAMI (2026-09-26, geoeba uzman raporu: «doğru
+     sürüklemede ‹Daha dikkatli ol› uyarısı çıkıyor / yanlış ses geliyor» —
+     3, 4, 9 ve 10. sınıfta onlarca sayfa). Kök neden tarayıcıda ölçüldü
+     (MAT.3.1.3): 1. sayfanın `pdnd.monitorForElements` izleyicisi sayfa
+     süzgeci olmadan kuruluyor; SAYFA_INIT bir kez koşuyor ve temizleyici hiç
+     çağrılmıyor, yani öğrenci o sayfayı geçtikten sonra da YAŞIYOR. 5.
+     sayfada kart doğru sepete bırakılınca sayfa 5 «dogru» dönütü veriyor,
+     ardından sayfa 1'in izleyicisi aynı bırakmayı kendi sorusu sanıp
+     «Birler basamağını tekrar hesapla.» diye «yanlis» basıyordu (toast'ta
+     son söz onun; ses frenine takılan da doğru ses). Korpusta 578 sayfa
+     izleyici kuruyor — hepsi aynı deliği taşıyordu.
+     Çözüm tek yerde, sayfa kodu değişmeden: izleyici KURULDUĞU ANDAKİ aktif
+     sayfaya bağlanır (INIT ve sıfırla düğmeleri o sayfa ekrandayken koşar)
+     ve yalnız kaynağı o sayfanın içinde olan sürüklemeleri görür. */
+  function sahipSayfa() {
+    try {           // node test koşumunun sahte document'ında querySelector yok
+      return typeof document.querySelector === "function"
+        ? document.querySelector(".sayfa.aktif") : null;
+    } catch (e) { return null; }
+  }
+  function kapsamla(yap) {
+    var sahip = sahipSayfa();
+    if (!yap || !sahip) { return yap; }
+    var asilIzin = yap.canMonitor;
+    var kopya = {};
+    for (var k in yap) { kopya[k] = yap[k]; }
+    kopya.canMonitor = function (args) {
+      var kaynak = args && args.source && args.source.element;
+      // Kaynak bir SAYFANIN içindeyse o sayfa sahip olmalı; hiçbir sayfada
+      // değilse (sayfa kodu kaynağı sürükleme için gövdeye taşımış olabilir)
+      // karar sahibin o an ekranda olmasıdır.
+      var sayfasi = kaynak && kaynak.nodeType === 1 && kaynak.closest
+        ? kaynak.closest(".sayfa") : null;
+      if (sayfasi ? sayfasi !== sahip
+                  : (kaynak && kaynak.nodeType === 1 && sahip.contains
+                     ? !sahip.contains(kaynak) && !sahip.classList.contains("aktif")
+                     : !sahip.classList.contains("aktif"))) {
+        return false;
+      }
+      return typeof asilIzin === "function" ? asilIzin.call(yap, args) : true;
+    };
+    return kopya;
+  }
+
   function svgMi(el) {
     return el && typeof SVGElement !== "undefined" && el instanceof SVGElement;
   }
@@ -588,6 +827,12 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     // Sözleşme zaten istiyor ama unutuluyor: touch-action olmadan tarayıcı
     // hareketi sayfa kaydırması sanıp sürüklemeyi iptal eder.
     el.style.touchAction = "none";
+    // Dokunmatikte hareket kararını KÖK <svg> verir (2026-09-26, geoeba parti
+    // raporu MAT.4.1.3: parmakla sürükleme kaydırma sanılıp iptal ediliyordu).
+    // Sahne sabit 1280×720, kaydırılmaz — kökte kapatmak güvenli.
+    if (el.ownerSVGElement && el.ownerSVGElement.style) {
+      el.ownerSVGElement.style.touchAction = "none";
+    }
 
     var basla = null, aktif = null;
 
@@ -618,13 +863,18 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       var hayalet = null;
       try { hayalet = hayaletKur(el); }
       catch (e) { console.warn("pdnd-svg: hayalet kurulamadı", e); }
-      aktif = { kaynak: kaynak, oncekiler: [], ilk: girdi(ev), hayalet: hayalet };
+      aktif = { kaynak: kaynak, oncekiler: [], ilk: girdi(ev), hayalet: hayalet,
+                izleyiciler: [] };
       var yuk = konum(ev, []);
       cagir(yap, "onGenerateDragPreview", yuk);
       cagir(yap, "onDragStart", yuk);
+      // canMonitor pdnd'de olduğu gibi BİR KEZ, başlangıçta sorulur ve o
+      // sürüklemenin bütün olayları (onDrag/onDrop dahil) yalnız izin veren
+      // izleyicilere gider — eskiden yalnız onDragStart süzülüyordu.
       IZLEYICILER.forEach(function (m) {
         if (typeof m.canMonitor === "function"
             && !m.canMonitor({ initial: yuk.location.initial, source: kaynak })) { return; }
+        aktif.izleyiciler.push(m);
         cagir(m, "onDragStart", yuk);
       });
     }
@@ -677,7 +927,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         cagir(h.__yap, "onDrag", Object.assign({ self: h }, yuk));
       });
       cagir(yap, "onDrag", yuk);
-      IZLEYICILER.forEach(function (m) { cagir(m, "onDrag", yuk); });
+      aktif.izleyiciler.forEach(function (m) { cagir(m, "onDrag", yuk); });
       aktif.oncekiler = hedefler;
     }
 
@@ -697,7 +947,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         cagir(h.__yap, "onDrop", Object.assign({ self: h }, yuk));
       });
       cagir(yap, "onDrop", yuk);
-      IZLEYICILER.forEach(function (m) { cagir(m, "onDrop", yuk); });
+      vardi.izleyiciler.forEach(function (m) { cagir(m, "onDrop", yuk); });
     }
 
     el.addEventListener("pointerdown", pointerdown);
@@ -734,13 +984,14 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   };
 
   window.pdnd.monitorForElements = function (yap) {
-    IZLEYICILER.add(yap);
-    var temizle = gercek.monitorForElements(yap);
+    var kapsamli = kapsamla(yap);        // sayfa kapsamı — bkz. kapsamla()
+    IZLEYICILER.add(kapsamli);
+    var temizle = gercek.monitorForElements(kapsamli);
     var temiz = false;
     return function () {
       if (temiz) { return; }
       temiz = true;
-      IZLEYICILER.delete(yap);
+      IZLEYICILER.delete(kapsamli);
       if (typeof temizle === "function") { temizle(); }
     };
   };
@@ -761,9 +1012,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
      yanındaki <ad>-ses/ klasöründe, göreli yolla. Ayar kapalıysa yuva BOŞ kalır
      ve gövde sonundaki anlatım motoru hiç kurulmaz. -->
 
-<link rel="stylesheet" href="ortak/6d1eb72a5a4832a6.css">
+<link rel="stylesheet" href="ortak/a6aa9fad6404f978.css">
 <!-- URETIM BILGISI
-  montaj: 2026-09-18 12:24
+  montaj: 2026-09-27 03:08
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 04:39
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-17 04:35
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-17 04:35
@@ -776,7 +1027,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 </head>
 <body>
 <section id="ekran-kapak" class="sk-sinif-5" aria-label="Giriş kapağı">
-<link rel="stylesheet" href="ortak/8dfca1d25e9d0969.css">
+<link rel="stylesheet" href="ortak/67579608a4a5656c.css">
 <svg class="sk-fon" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
 <defs>
   <linearGradient id="skg5-su" x1="0" y1="0" x2="0" y2="1">
@@ -835,7 +1086,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     <circle cx="76" cy="-9" r="7" fill="#fff"/><circle cx="78" cy="-9" r="3.5" fill="#1b2a3a"/></g>
 </g>
 <circle class="sk-kabarcik sk-g1" cx="210" cy="700" r="9" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g2" cx="250" cy="720" r="6" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g3" cx="1120" cy="700" r="11" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g4" cx="1076" cy="720" r="7" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g5" cx="620" cy="720" r="8" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g1" cx="880" cy="716" r="5" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".75"/>
-<g class="sk-semboller"><g class="sk-sembol sk-g1" style="animation-duration:4.0s"><circle cx="50" cy="210" r="38" fill="#ff5a7a" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="37" cy="195" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="50" y="223" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">×</text></g><g class="sk-sembol sk-g2" style="animation-duration:4.6s"><circle cx="54" cy="400" r="38" fill="#ffb627" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="41" cy="385" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="54" y="413" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">¾</text></g><g class="sk-sembol sk-g3" style="animation-duration:5.2s"><circle cx="48" cy="590" r="38" fill="#46c46b" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="35" cy="575" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="48" y="603" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">÷</text></g><g class="sk-sembol sk-g4" style="animation-duration:5.8s"><circle cx="1230" cy="230" r="38" fill="#3aa0ff" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1217" cy="215" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1230" y="243" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">%</text></g><g class="sk-sembol sk-g5" style="animation-duration:6.4s"><circle cx="1226" cy="420" r="38" fill="#9b6bff" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1213" cy="405" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1226" y="433" font-size="30" font-weight="700" text-anchor="middle" fill="#ffffff">0,5</text></g><g class="sk-sembol sk-g1" style="animation-duration:7.0s"><circle cx="1232" cy="600" r="38" fill="#ff8a5b" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1219" cy="585" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1232" y="613" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">△</text></g></g></svg>
+<g class="sk-semboller"><g class="sk-sembol sk-g1" style="animation-duration:4.0s"><circle cx="50" cy="210" r="38" fill="#ff5a7a" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="37" cy="195" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="50" y="223" font-size="30" font-weight="700" text-anchor="middle" fill="#ffffff">cm</text></g><g class="sk-sembol sk-g2" style="animation-duration:4.6s"><circle cx="54" cy="400" r="38" fill="#ffb627" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="41" cy="385" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="54" y="413" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">m</text></g><g class="sk-sembol sk-g3" style="animation-duration:5.2s"><circle cx="48" cy="590" r="38" fill="#46c46b" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="35" cy="575" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="48" y="603" font-size="30" font-weight="700" text-anchor="middle" fill="#ffffff">br²</text></g><g class="sk-sembol sk-g4" style="animation-duration:5.8s"><circle cx="1230" cy="230" r="38" fill="#3aa0ff" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1217" cy="215" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1230" y="243" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">□</text></g><g class="sk-sembol sk-g5" style="animation-duration:6.4s"><circle cx="1226" cy="420" r="38" fill="#9b6bff" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1213" cy="405" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1226" y="433" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">⊥</text></g><g class="sk-sembol sk-g1" style="animation-duration:7.0s"><circle cx="1232" cy="600" r="38" fill="#ff8a5b" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1219" cy="585" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1232" y="613" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">○</text></g></g></svg>
 <div class="sk-kart">
   <div class="sk-bas">
     <div class="sk-bas-sol">
@@ -849,17 +1100,15 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       <h1 class="sk-baslik"><span>Geometrik Nicelikler</span></h1>
     </div>
     <svg class="sk-vinyet" viewBox="0 0 300 150" role="img" aria-label="Matematik çizimi">
-  <rect class="sk-v-gir" style="animation-delay:0.00s" x="16" y="30" width="25" height="25" rx="3" fill="#0f7fa8"/><rect class="sk-v-gir" style="animation-delay:0.22s" x="43" y="30" width="25" height="25" rx="3" fill="#0f7fa8"/><rect class="sk-v-gir" style="animation-delay:0.44s" x="70" y="30" width="25" height="25" rx="3" fill="#0f7fa8"/><rect class="sk-v-gir" style="animation-delay:0.66s" x="16" y="57" width="25" height="25" rx="3" fill="#0f7fa8"/><rect class="sk-v-gir" style="animation-delay:0.88s" x="43" y="57" width="25" height="25" rx="3" fill="#0f7fa8"/><rect class="sk-v-gir" style="animation-delay:1.10s" x="70" y="57" width="25" height="25" rx="3" fill="#0f7fa8"/>
+  <rect class="sk-v-gir" style="animation-delay:0.00s" x="16" y="30" width="25" height="25" rx="0" fill="#0f7fa8"/><rect class="sk-v-gir" style="animation-delay:0.22s" x="43" y="30" width="25" height="25" rx="0" fill="#0f7fa8"/><rect class="sk-v-gir" style="animation-delay:0.44s" x="70" y="30" width="25" height="25" rx="0" fill="#0f7fa8"/><rect class="sk-v-gir" style="animation-delay:0.66s" x="16" y="57" width="25" height="25" rx="0" fill="#0f7fa8"/><rect class="sk-v-gir" style="animation-delay:0.88s" x="43" y="57" width="25" height="25" rx="0" fill="#0f7fa8"/><rect class="sk-v-gir" style="animation-delay:1.10s" x="70" y="57" width="25" height="25" rx="0" fill="#0f7fa8"/>
   <rect x="14" y="28" width="83" height="56" fill="none" stroke="#08405c" stroke-width="3.5"/>
-  <text x="56" y="106" font-size="17" font-weight="700" text-anchor="middle" fill="#08405c">A = 3 · 2</text>
+  <text x="56" y="106" font-size="17" font-weight="700" text-anchor="middle" fill="#08405c">3 · 2</text>
   <g class="sk-v-sonuc"><text x="56" y="132" font-size="21" font-weight="700" text-anchor="middle" fill="#ff6f4d">6 br²</text></g>
-  <g transform="translate(190 40)">
-    <path d="M0 26 L52 0 L108 20 L56 48 Z" fill="#0f7fa8" opacity=".55"/>
-    <path d="M0 26 V74 L56 96 V48 Z" fill="#0f7fa8"/>
-    <path d="M56 48 L108 20 V66 L56 96 Z" fill="#08405c" opacity=".65"/>
-    <path d="M0 26 L52 0 L108 20 L56 48 Z M0 26 V74 L56 96 V48 M56 96 L108 66 V20" fill="none" stroke="#08405c" stroke-width="3" stroke-linejoin="round"/>
-    <text x="54" y="118" font-size="17" font-weight="700" text-anchor="middle" fill="#08405c">V = a · b · c</text>
-  </g></svg>
+  <rect x="150" y="30" width="100" height="70" rx="0" fill="#ff6f4d" fill-opacity=".14" stroke="#08405c" stroke-width="3"/>
+  <rect class="sk-v-ciz" x="150" y="30" width="100" height="70" fill="none" stroke="#ff6f4d" stroke-width="5"/>
+  <text x="200" y="22" font-size="15" font-weight="700" text-anchor="middle" fill="#08405c">4 br</text>
+  <text x="274" y="70" font-size="15" font-weight="700" text-anchor="middle" fill="#08405c">3 br</text>
+  <g class="sk-v-sonuc sk-g2"><text x="200" y="128" font-size="19" font-weight="700" text-anchor="middle" fill="#ff6f4d">Çevre: 14 br</text></g></svg>
   </div>
   <div class="sk-govde">
     <section class="sk-blok sk-cikti" aria-label="Öğrenme Çıktısı">
@@ -885,8 +1134,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   <rect x="54" y="156" width="92" height="20" rx="6" fill="#08405c"/>
   <path d="M100 44l6 12 13 2-9.5 9 2.5 13L100 74l-12 6 2.5-13L81 58l13-2z" fill="#fff"/>
 </svg>
-    <h2>Tebrikler!</h2>
-    <p class="st-alt"><b>Geometrik Nicelikler</b> içeriğini başarıyla tamamladın.</p>
+    <h2 data-tam="Tebrikler!" data-bos="Henüz etkinlik yapmadın">Tebrikler!</h2>
+    <p class="st-alt" data-tam="&lt;b&gt;Geometrik Nicelikler&lt;/b&gt; içeriğini başarıyla tamamladın."
+       data-bos="Etkinlikleri yapmadan sona geldin. Baştan başlayıp etkinlikleri tamamlamak ister misin?"><b>Geometrik Nicelikler</b> içeriğini başarıyla tamamladın.</p>
     <div class="st-yildizlar" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg></div>
     <div class="st-ogrendim"><h3>Bu içerikte şunları öğrendin</h3><ul><li>Birim karelerden yola çıkarak dikdörtgenin alanını değerlendirebilme</li></ul></div>
     <div class="st-dugmeler">
@@ -919,9 +1169,29 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       kap.appendChild(p);
     }
   }
+  /* HİÇ ETKİNLİK YAPILMADIYSA TEBRİK YOK (geoeba uzman notu 2026-09-26, 7. sınıf
+     G: «hiç soru çözmeden bölüm sonuna gelindiğinde tebrikler mesajı yerine
+     yeniden denemek ister misin gibi bir mesaj gelebilir»). Ölçüt: öğrencinin
+     aldığı doğru/yanlış dönüt sayısı — dönütün tek boğazı EGITSEL.dontVer'dir. */
+  var donutSayisi = 0;
+  function donutSay() {
+    var E = window.EGITSEL;
+    if (!E || typeof E.dontVer !== "function" || E.dontVer.__tebrikSayaci) return;
+    var asil = E.dontVer;
+    E.dontVer = function () { donutSayisi++; return asil.apply(this, arguments); };
+    E.dontVer.__tebrikSayaci = true;
+  }
+  donutSay();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", donutSay);
   var oncekiOdak = null;
   function ac() {
-    konfetiKur();
+    var bos = donutSayisi === 0;
+    tebrik.classList.toggle("st-bos", bos);
+    var baslik = tebrik.querySelector("h2");
+    var alt = tebrik.querySelector(".st-alt");
+    if (baslik) baslik.textContent = bos ? baslik.getAttribute("data-bos") : baslik.getAttribute("data-tam");
+    if (alt) alt.innerHTML = bos ? alt.getAttribute("data-bos") : alt.getAttribute("data-tam");
+    if (!bos) konfetiKur();
     oncekiOdak = document.activeElement;
     tebrik.classList.add("acik");
     tebrik.removeAttribute("aria-hidden");
@@ -939,9 +1209,14 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     var hedef = e.target && e.target.closest && e.target.closest("#sonraki-buton");
     if (hedef && aktifSayfa >= sayfaSayisi()) ac();
   }, true);
+  /* «Baştan Başla» TAM SIFIRLAR (uzman notu, 7. sınıf E: «bazı sorular çözülmüş
+     hâlde geliyor, bazıları sıfırlanmış»): sayfalar SAYFA_INIT'i bir kez koşar
+     ve durumunu bellekte tutar; 1. sayfaya dönmek hiçbirini sıfırlamıyordu.
+     Belgeyi yeniden yüklemek tek güvenilir sıfırlamadır. */
   tebrik.querySelector(".st-bastan").addEventListener("click", function () {
     kapat();
-    if (window.SABLON_GEC) window.SABLON_GEC(1);
+    try { window.location.reload(); }
+    catch (e) { if (window.SABLON_GEC) window.SABLON_GEC(1); }
   });
   tebrik.querySelector(".st-kapat").addEventListener("click", kapat);
   document.addEventListener("keydown", function (e) {
@@ -2445,46 +2720,46 @@ window.SAYFA_INIT[2] = function (kok) {
         <circle cx="608" cy="418" r="4" fill="#d1cec7" />
         <circle cx="607" cy="417" r="1.5" fill="#ffffff" />
         <rect x="147" y="97" width="466" height="326" rx="14" fill="#ede5d8" fill-opacity="0.5" stroke="#d1cec7" stroke-width="1" />
-        <rect x="153" y="107" width="454" height="306" rx="12" fill="#fcfaf7" stroke="#ede5d8" stroke-width="1" />
+        <rect x="153" y="107" width="454" height="306" fill="#fcfaf7" stroke="#ede5d8" stroke-width="1" />
       </g>
       <g id="sayfa3-katman-orta">
         <!-- 14 Önceden Kaplanmış Birim Kare -->
         <!-- Satır 0 (5 dolu) -->
         <g class="s3-dolu-hucre">
-          <rect x="161" y="117" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="161" y="115" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="161" y="117" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="161" y="115" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="165" y="119" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="179" cy="159" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="195" cy="165" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="211" cy="159" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g class="s3-dolu-hucre">
-          <rect x="235" y="117" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="235" y="115" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="235" y="117" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="235" y="115" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="239" y="119" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="253" cy="159" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="269" cy="165" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="285" cy="159" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g class="s3-dolu-hucre">
-          <rect x="309" y="117" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="309" y="115" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="309" y="117" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="309" y="115" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="313" y="119" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="327" cy="159" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="343" cy="165" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="359" cy="159" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g class="s3-dolu-hucre">
-          <rect x="383" y="117" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="383" y="115" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="383" y="117" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="383" y="115" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="387" y="119" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="401" cy="159" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="417" cy="165" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="433" cy="159" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g class="s3-dolu-hucre">
-          <rect x="457" y="117" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="457" y="115" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="457" y="117" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="457" y="115" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="461" y="119" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="475" cy="159" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="491" cy="165" r="1.5" fill="#5e8c6f" opacity="0.3" />
@@ -2493,32 +2768,32 @@ window.SAYFA_INIT[2] = function (kok) {
 
         <!-- Satır 1 (4 dolu) -->
         <g class="s3-dolu-hucre">
-          <rect x="161" y="191" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="161" y="189" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="161" y="191" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="161" y="189" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="165" y="193" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="179" cy="233" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="195" cy="239" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="211" cy="233" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g class="s3-dolu-hucre">
-          <rect x="235" y="191" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="235" y="189" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="235" y="191" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="235" y="189" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="239" y="193" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="253" cy="233" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="269" cy="239" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="285" cy="233" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g class="s3-dolu-hucre">
-          <rect x="309" y="191" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="309" y="189" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="309" y="191" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="309" y="189" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="313" y="193" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="327" cy="233" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="343" cy="239" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="359" cy="233" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g class="s3-dolu-hucre">
-          <rect x="383" y="191" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="383" y="189" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="383" y="191" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="383" y="189" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="387" y="193" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="401" cy="233" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="417" cy="239" r="1.5" fill="#5e8c6f" opacity="0.3" />
@@ -2527,24 +2802,24 @@ window.SAYFA_INIT[2] = function (kok) {
 
         <!-- Satır 2 (3 dolu) -->
         <g class="s3-dolu-hucre">
-          <rect x="161" y="265" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="161" y="263" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="161" y="265" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="161" y="263" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="165" y="267" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="179" cy="307" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="195" cy="313" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="211" cy="307" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g class="s3-dolu-hucre">
-          <rect x="235" y="265" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="235" y="263" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="235" y="265" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="235" y="263" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="239" y="267" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="253" cy="307" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="269" cy="313" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="285" cy="307" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g class="s3-dolu-hucre">
-          <rect x="309" y="265" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="309" y="263" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="309" y="265" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="309" y="263" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="313" y="267" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="327" cy="307" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="343" cy="313" r="1.5" fill="#5e8c6f" opacity="0.3" />
@@ -2553,16 +2828,16 @@ window.SAYFA_INIT[2] = function (kok) {
 
         <!-- Satır 3 (2 dolu) -->
         <g class="s3-dolu-hucre">
-          <rect x="161" y="339" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="161" y="337" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="161" y="339" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="161" y="337" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="165" y="341" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="179" cy="381" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="195" cy="387" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="211" cy="381" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g class="s3-dolu-hucre">
-          <rect x="235" y="339" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="235" y="337" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="235" y="339" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="235" y="337" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="239" y="341" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="253" cy="381" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="269" cy="387" r="1.5" fill="#5e8c6f" opacity="0.3" />
@@ -2572,87 +2847,87 @@ window.SAYFA_INIT[2] = function (kok) {
         <!-- 10 Boş Yuva (Kesikli açık gri kenarlık) -->
         <!-- k=0 (Satır 0, Sütun 5) -->
         <g class="s3-bos-hucre-alani">
-          <rect x="531" y="115" width="68" height="68" rx="8" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
+          <rect x="531" y="115" width="68" height="68" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
           <circle cx="565" cy="149" r="3.5" fill="#d1cec7" opacity="0.8" />
           <path d="M565 141 V157 M557 149 H573" stroke="#d1cec7" stroke-width="1.5" stroke-linecap="round" opacity="0.5" />
-          <rect class="s3-yuva-isima" id="s3-isima-0" x="529" y="113" width="72" height="72" rx="10" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
-          <rect class="s3-birakma-hedefi" data-bos-index="0" x="531" y="115" width="68" height="68" rx="8" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 1" />
+          <rect class="s3-yuva-isima" id="s3-isima-0" x="529" y="113" width="72" height="72" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
+          <rect class="s3-birakma-hedefi" data-bos-index="0" x="531" y="115" width="68" height="68" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 1" />
         </g>
         <!-- k=1 (Satır 1, Sütun 4) -->
         <g class="s3-bos-hucre-alani">
-          <rect x="457" y="189" width="68" height="68" rx="8" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
+          <rect x="457" y="189" width="68" height="68" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
           <circle cx="491" cy="223" r="3.5" fill="#d1cec7" opacity="0.8" />
           <path d="M491 215 V231 M483 223 H499" stroke="#d1cec7" stroke-width="1.5" stroke-linecap="round" opacity="0.5" />
-          <rect class="s3-yuva-isima" id="s3-isima-1" x="455" y="187" width="72" height="72" rx="10" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
-          <rect class="s3-birakma-hedefi" data-bos-index="1" x="457" y="189" width="68" height="68" rx="8" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 2" />
+          <rect class="s3-yuva-isima" id="s3-isima-1" x="455" y="187" width="72" height="72" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
+          <rect class="s3-birakma-hedefi" data-bos-index="1" x="457" y="189" width="68" height="68" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 2" />
         </g>
         <!-- k=2 (Satır 1, Sütun 5) -->
         <g class="s3-bos-hucre-alani">
-          <rect x="531" y="189" width="68" height="68" rx="8" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
+          <rect x="531" y="189" width="68" height="68" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
           <circle cx="565" cy="223" r="3.5" fill="#d1cec7" opacity="0.8" />
           <path d="M565 215 V231 M557 223 H573" stroke="#d1cec7" stroke-width="1.5" stroke-linecap="round" opacity="0.5" />
-          <rect class="s3-yuva-isima" id="s3-isima-2" x="529" y="187" width="72" height="72" rx="10" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
-          <rect class="s3-birakma-hedefi" data-bos-index="2" x="531" y="189" width="68" height="68" rx="8" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 3" />
+          <rect class="s3-yuva-isima" id="s3-isima-2" x="529" y="187" width="72" height="72" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
+          <rect class="s3-birakma-hedefi" data-bos-index="2" x="531" y="189" width="68" height="68" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 3" />
         </g>
         <!-- k=3 (Satır 2, Sütun 3) -->
         <g class="s3-bos-hucre-alani">
-          <rect x="383" y="263" width="68" height="68" rx="8" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
+          <rect x="383" y="263" width="68" height="68" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
           <circle cx="417" cy="297" r="3.5" fill="#d1cec7" opacity="0.8" />
           <path d="M417 289 V305 M409 297 H425" stroke="#d1cec7" stroke-width="1.5" stroke-linecap="round" opacity="0.5" />
-          <rect class="s3-yuva-isima" id="s3-isima-3" x="381" y="261" width="72" height="72" rx="10" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
-          <rect class="s3-birakma-hedefi" data-bos-index="3" x="383" y="263" width="68" height="68" rx="8" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 4" />
+          <rect class="s3-yuva-isima" id="s3-isima-3" x="381" y="261" width="72" height="72" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
+          <rect class="s3-birakma-hedefi" data-bos-index="3" x="383" y="263" width="68" height="68" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 4" />
         </g>
         <!-- k=4 (Satır 2, Sütun 4) -->
         <g class="s3-bos-hucre-alani">
-          <rect x="457" y="263" width="68" height="68" rx="8" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
+          <rect x="457" y="263" width="68" height="68" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
           <circle cx="491" cy="297" r="3.5" fill="#d1cec7" opacity="0.8" />
           <path d="M491 289 V305 M483 297 H499" stroke="#d1cec7" stroke-width="1.5" stroke-linecap="round" opacity="0.5" />
-          <rect class="s3-yuva-isima" id="s3-isima-4" x="455" y="261" width="72" height="72" rx="10" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
-          <rect class="s3-birakma-hedefi" data-bos-index="4" x="457" y="263" width="68" height="68" rx="8" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 5" />
+          <rect class="s3-yuva-isima" id="s3-isima-4" x="455" y="261" width="72" height="72" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
+          <rect class="s3-birakma-hedefi" data-bos-index="4" x="457" y="263" width="68" height="68" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 5" />
         </g>
         <!-- k=5 (Satır 2, Sütun 5) -->
         <g class="s3-bos-hucre-alani">
-          <rect x="531" y="263" width="68" height="68" rx="8" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
+          <rect x="531" y="263" width="68" height="68" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
           <circle cx="565" cy="297" r="3.5" fill="#d1cec7" opacity="0.8" />
           <path d="M565 289 V305 M557 297 H573" stroke="#d1cec7" stroke-width="1.5" stroke-linecap="round" opacity="0.5" />
-          <rect class="s3-yuva-isima" id="s3-isima-5" x="529" y="261" width="72" height="72" rx="10" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
-          <rect class="s3-birakma-hedefi" data-bos-index="5" x="531" y="263" width="68" height="68" rx="8" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 6" />
+          <rect class="s3-yuva-isima" id="s3-isima-5" x="529" y="261" width="72" height="72" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
+          <rect class="s3-birakma-hedefi" data-bos-index="5" x="531" y="263" width="68" height="68" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 6" />
         </g>
         <!-- k=6 (Satır 3, Sütun 2) -->
         <g class="s3-bos-hucre-alani">
-          <rect x="309" y="337" width="68" height="68" rx="8" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
+          <rect x="309" y="337" width="68" height="68" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
           <circle cx="343" cy="371" r="3.5" fill="#d1cec7" opacity="0.8" />
           <path d="M343 363 V379 M335 371 H351" stroke="#d1cec7" stroke-width="1.5" stroke-linecap="round" opacity="0.5" />
-          <rect class="s3-yuva-isima" id="s3-isima-6" x="307" y="335" width="72" height="72" rx="10" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
-          <rect class="s3-birakma-hedefi" data-bos-index="6" x="309" y="337" width="68" height="68" rx="8" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 7" />
+          <rect class="s3-yuva-isima" id="s3-isima-6" x="307" y="335" width="72" height="72" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
+          <rect class="s3-birakma-hedefi" data-bos-index="6" x="309" y="337" width="68" height="68" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 7" />
         </g>
         <!-- k=7 (Satır 3, Sütun 3) -->
         <g class="s3-bos-hucre-alani">
-          <rect x="383" y="337" width="68" height="68" rx="8" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
+          <rect x="383" y="337" width="68" height="68" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
           <circle cx="417" cy="371" r="3.5" fill="#d1cec7" opacity="0.8" />
           <path d="M417 363 V379 M409 371 H425" stroke="#d1cec7" stroke-width="1.5" stroke-linecap="round" opacity="0.5" />
-          <rect class="s3-yuva-isima" id="s3-isima-7" x="381" y="335" width="72" height="72" rx="10" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
-          <rect class="s3-birakma-hedefi" data-bos-index="7" x="383" y="337" width="68" height="68" rx="8" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 8" />
+          <rect class="s3-yuva-isima" id="s3-isima-7" x="381" y="335" width="72" height="72" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
+          <rect class="s3-birakma-hedefi" data-bos-index="7" x="383" y="337" width="68" height="68" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 8" />
         </g>
         <!-- k=8 (Satır 3, Sütun 4) -->
         <g class="s3-bos-hucre-alani">
-          <rect x="457" y="337" width="68" height="68" rx="8" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
+          <rect x="457" y="337" width="68" height="68" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
           <circle cx="491" cy="371" r="3.5" fill="#d1cec7" opacity="0.8" />
           <path d="M491 363 V379 M483 371 H499" stroke="#d1cec7" stroke-width="1.5" stroke-linecap="round" opacity="0.5" />
-          <rect class="s3-yuva-isima" id="s3-isima-8" x="455" y="335" width="72" height="72" rx="10" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
-          <rect class="s3-birakma-hedefi" data-bos-index="8" x="457" y="337" width="68" height="68" rx="8" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 9" />
+          <rect class="s3-yuva-isima" id="s3-isima-8" x="455" y="335" width="72" height="72" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
+          <rect class="s3-birakma-hedefi" data-bos-index="8" x="457" y="337" width="68" height="68" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 9" />
         </g>
         <!-- k=9 (Satır 3, Sütun 5) -->
         <g class="s3-bos-hucre-alani">
-          <rect x="531" y="337" width="68" height="68" rx="8" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
+          <rect x="531" y="337" width="68" height="68" fill="#fcfaf7" stroke="#d1cec7" stroke-width="2" stroke-dasharray="6 4" />
           <circle cx="565" cy="371" r="3.5" fill="#d1cec7" opacity="0.8" />
           <path d="M565 363 V379 M557 371 H573" stroke="#d1cec7" stroke-width="1.5" stroke-linecap="round" opacity="0.5" />
-          <rect class="s3-yuva-isima" id="s3-isima-9" x="529" y="335" width="72" height="72" rx="10" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
-          <rect class="s3-birakma-hedefi" data-bos-index="9" x="531" y="337" width="68" height="68" rx="8" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 10" />
+          <rect class="s3-yuva-isima" id="s3-isima-9" x="529" y="335" width="72" height="72" fill="#e07a5f" fill-opacity="0.18" stroke="#e07a5f" stroke-width="3" opacity="0" pointer-events="none" />
+          <rect class="s3-birakma-hedefi" data-bos-index="9" x="531" y="337" width="68" height="68" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Boş hücre 10" />
         </g>
 
         <!-- Izgara dış çerçevesi ve köşe kılavuzları -->
-        <rect id="s3-izgara-cerceve" x="157" y="111" width="446" height="298" rx="12" fill="none" stroke="#8a8780" stroke-width="2" opacity="0.5" />
+        <rect id="s3-izgara-cerceve" x="157" y="111" width="446" height="298" fill="none" stroke="#8a8780" stroke-width="2" opacity="0.5" />
         <path d="M153 125 V117 A6 6 0 0 1 159 111 H171" fill="none" stroke="#5e8c6f" stroke-width="2" stroke-linecap="round" />
         <path d="M589 111 H601 A6 6 0 0 1 607 117 V125" fill="none" stroke="#5e8c6f" stroke-width="2" stroke-linecap="round" />
         <path d="M153 395 V403 A6 6 0 0 0 159 409 H171" fill="none" stroke="#5e8c6f" stroke-width="2" stroke-linecap="round" />
@@ -2661,80 +2936,80 @@ window.SAYFA_INIT[2] = function (kok) {
       <g id="sayfa3-katman-on">
         <!-- Yerleşen 10 Birim Kare (Varsayılan gizli) -->
         <g id="s3-yerlesen-0" class="s3-yerlesen-kare" style="display:none;">
-          <rect x="531" y="117" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="531" y="115" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="531" y="117" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="531" y="115" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="535" y="119" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="549" cy="159" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="565" cy="165" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="581" cy="159" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g id="s3-yerlesen-1" class="s3-yerlesen-kare" style="display:none;">
-          <rect x="457" y="191" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="457" y="189" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="457" y="191" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="457" y="189" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="461" y="193" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="475" cy="233" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="491" cy="239" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="507" cy="233" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g id="s3-yerlesen-2" class="s3-yerlesen-kare" style="display:none;">
-          <rect x="531" y="191" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="531" y="189" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="531" y="191" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="531" y="189" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="535" y="193" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="549" cy="233" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="565" cy="239" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="581" cy="233" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g id="s3-yerlesen-3" class="s3-yerlesen-kare" style="display:none;">
-          <rect x="383" y="265" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="383" y="263" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="383" y="265" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="383" y="263" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="387" y="267" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="401" cy="307" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="417" cy="313" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="433" cy="307" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g id="s3-yerlesen-4" class="s3-yerlesen-kare" style="display:none;">
-          <rect x="457" y="265" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="457" y="263" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="457" y="265" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="457" y="263" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="461" y="267" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="475" cy="307" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="491" cy="313" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="507" cy="307" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g id="s3-yerlesen-5" class="s3-yerlesen-kare" style="display:none;">
-          <rect x="531" y="265" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="531" y="263" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="531" y="265" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="531" y="263" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="535" y="267" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="549" cy="307" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="565" cy="313" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="581" cy="307" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g id="s3-yerlesen-6" class="s3-yerlesen-kare" style="display:none;">
-          <rect x="309" y="339" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="309" y="337" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="309" y="339" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="309" y="337" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="313" y="341" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="327" cy="381" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="343" cy="387" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="359" cy="381" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g id="s3-yerlesen-7" class="s3-yerlesen-kare" style="display:none;">
-          <rect x="383" y="339" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="383" y="337" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="383" y="339" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="383" y="337" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="387" y="341" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="401" cy="381" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="417" cy="387" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="433" cy="381" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g id="s3-yerlesen-8" class="s3-yerlesen-kare" style="display:none;">
-          <rect x="457" y="339" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="457" y="337" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="457" y="339" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="457" y="337" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="461" y="341" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="475" cy="381" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="491" cy="387" r="1.5" fill="#5e8c6f" opacity="0.3" />
           <circle cx="507" cy="381" r="2" fill="#5e8c6f" opacity="0.35" />
         </g>
         <g id="s3-yerlesen-9" class="s3-yerlesen-kare" style="display:none;">
-          <rect x="531" y="339" width="68" height="68" rx="8" fill="#5e8c6f" opacity="0.3" />
-          <rect x="531" y="337" width="68" height="68" rx="8" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="round" />
+          <rect x="531" y="339" width="68" height="68" fill="#5e8c6f" opacity="0.3" />
+          <rect x="531" y="337" width="68" height="68" fill="url(#s3-grad-kare)" stroke="#5e8c6f" stroke-width="2.5" stroke-linejoin="miter" />
           <rect x="535" y="341" width="60" height="20" rx="5" fill="#ffffff" opacity="0.32" />
           <circle cx="549" cy="381" r="2" fill="#5e8c6f" opacity="0.35" />
           <circle cx="565" cy="387" r="1.5" fill="#5e8c6f" opacity="0.3" />
@@ -2742,7 +3017,7 @@ window.SAYFA_INIT[2] = function (kok) {
         </g>
 
         <!-- Izgara Aydınlanma Yeşili Bütünsel Kontur -->
-        <rect id="s3-izgara-isik" x="155" y="109" width="450" height="302" rx="14" fill="none" stroke="#5e8c6f" stroke-width="4" opacity="0" pointer-events="none" />
+        <rect id="s3-izgara-isik" x="155" y="109" width="450" height="302" fill="none" stroke="#5e8c6f" stroke-width="4" opacity="0" pointer-events="none" />
       </g>
     </svg>
   </div>
@@ -2812,7 +3087,7 @@ window.SAYFA_INIT[2] = function (kok) {
 #sayfa-3 .s3-kare-kaynak {
   width: 68px;
   height: 68px;
-  border-radius: 8px;
+  border-radius: 0;
   background: linear-gradient(135deg, #dcebe1, #8eb89d);
   border: 2.5px solid #5e8c6f;
   display: flex;
@@ -3267,37 +3542,37 @@ window.SAYFA_INIT[3] = function (kok) {
         <!-- Satır 0 -->
         <g class="s4-satir-grup" id="s4-satir-0" data-satir="0">
           <g class="s4-kare" data-satir="0" data-sutun="0">
-            <rect x="240" y="200" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="240" y="200" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 243 203 L 265 203 Q 243 218 243 235 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="286" cy="246" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="240" y="200" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="0" data-sutun="1">
-            <rect x="294" y="200" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="294" y="200" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 297 203 L 319 203 Q 297 218 297 235 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="340" cy="246" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="294" y="200" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="0" data-sutun="2">
-            <rect x="348" y="200" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="348" y="200" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 351 203 L 373 203 Q 351 218 351 235 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="394" cy="246" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="348" y="200" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="0" data-sutun="3">
-            <rect x="402" y="200" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="402" y="200" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 405 203 L 427 203 Q 405 218 405 235 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="448" cy="246" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="402" y="200" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="0" data-sutun="4">
-            <rect x="456" y="200" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="456" y="200" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 459 203 L 481 203 Q 459 218 459 235 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="502" cy="246" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="456" y="200" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="0" data-sutun="5">
-            <rect x="510" y="200" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="510" y="200" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 513 203 L 535 203 Q 513 218 513 235 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="556" cy="246" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="510" y="200" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
@@ -3307,37 +3582,37 @@ window.SAYFA_INIT[3] = function (kok) {
         <!-- Satır 1 -->
         <g class="s4-satir-grup" id="s4-satir-1" data-satir="1">
           <g class="s4-kare" data-satir="1" data-sutun="0">
-            <rect x="240" y="254" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="240" y="254" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 243 257 L 265 257 Q 243 272 243 289 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="286" cy="300" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="240" y="254" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="1" data-sutun="1">
-            <rect x="294" y="254" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="294" y="254" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 297 257 L 319 257 Q 297 272 297 289 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="340" cy="300" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="294" y="254" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="1" data-sutun="2">
-            <rect x="348" y="254" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="348" y="254" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 351 257 L 373 257 Q 351 272 351 289 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="394" cy="300" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="348" y="254" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="1" data-sutun="3">
-            <rect x="402" y="254" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="402" y="254" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 405 257 L 427 257 Q 405 272 405 289 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="448" cy="300" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="402" y="254" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="1" data-sutun="4">
-            <rect x="456" y="254" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="456" y="254" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 459 257 L 481 257 Q 459 272 459 289 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="502" cy="300" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="456" y="254" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="1" data-sutun="5">
-            <rect x="510" y="254" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="510" y="254" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 513 257 L 535 257 Q 513 272 513 289 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="556" cy="300" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="510" y="254" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
@@ -3347,37 +3622,37 @@ window.SAYFA_INIT[3] = function (kok) {
         <!-- Satır 2 -->
         <g class="s4-satir-grup" id="s4-satir-2" data-satir="2">
           <g class="s4-kare" data-satir="2" data-sutun="0">
-            <rect x="240" y="308" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="240" y="308" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 243 311 L 265 311 Q 243 326 243 343 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="286" cy="354" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="240" y="308" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="2" data-sutun="1">
-            <rect x="294" y="308" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="294" y="308" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 297 311 L 319 311 Q 297 326 297 343 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="340" cy="354" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="294" y="308" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="2" data-sutun="2">
-            <rect x="348" y="308" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="348" y="308" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 351 311 L 373 311 Q 351 326 351 343 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="394" cy="354" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="348" y="308" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="2" data-sutun="3">
-            <rect x="402" y="308" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="402" y="308" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 405 311 L 427 311 Q 405 326 405 343 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="448" cy="354" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="402" y="308" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="2" data-sutun="4">
-            <rect x="456" y="308" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="456" y="308" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 459 311 L 481 311 Q 459 326 459 343 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="502" cy="354" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="456" y="308" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="2" data-sutun="5">
-            <rect x="510" y="308" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="510" y="308" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 513 311 L 535 311 Q 513 326 513 343 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="556" cy="354" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="510" y="308" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
@@ -3387,37 +3662,37 @@ window.SAYFA_INIT[3] = function (kok) {
         <!-- Satır 3 -->
         <g class="s4-satir-grup" id="s4-satir-3" data-satir="3">
           <g class="s4-kare" data-satir="3" data-sutun="0">
-            <rect x="240" y="362" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="240" y="362" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 243 365 L 265 365 Q 243 380 243 397 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="286" cy="408" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="240" y="362" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="3" data-sutun="1">
-            <rect x="294" y="362" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="294" y="362" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 297 365 L 319 365 Q 297 380 297 397 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="340" cy="408" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="294" y="362" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="3" data-sutun="2">
-            <rect x="348" y="362" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="348" y="362" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 351 365 L 373 365 Q 351 380 351 397 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="394" cy="408" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="348" y="362" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="3" data-sutun="3">
-            <rect x="402" y="362" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="402" y="362" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 405 365 L 427 365 Q 405 380 405 397 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="448" cy="408" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="402" y="362" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="3" data-sutun="4">
-            <rect x="456" y="362" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="456" y="362" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 459 365 L 481 365 Q 459 380 459 397 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="502" cy="408" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="456" y="362" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
           </g>
           <g class="s4-kare" data-satir="3" data-sutun="5">
-            <rect x="510" y="362" width="54" height="54" rx="6" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
+            <rect x="510" y="362" width="54" height="54" fill="url(#s4-grad-kare)" stroke="#38423b" stroke-width="1.8" />
             <path d="M 513 365 L 535 365 Q 513 380 513 397 Z" fill="#ffffff" opacity="0.32" class="s4-parlak" />
             <circle cx="556" cy="408" r="2.5" fill="#e2ebe2" opacity="0.8" />
             <rect x="510" y="362" width="54" height="54" fill-opacity="0.001" cursor="pointer" />
@@ -3446,18 +3721,18 @@ window.SAYFA_INIT[3] = function (kok) {
     <div class="panel s4-panel-kart">
       <div class="s4-bilgi-satir">
         <span class="s4-bilgi-baslik" id="s4-lbl-birim">Satırdaki Kare Sayısı</span>
-        <span class="buyuk-sayi s4-vurgu-sayi" id="s4-val-birim">6</span>
+        <span class="buyuk-sayi s4-vurgu-sayi" id="s4-val-birim">?</span>
       </div>
       <div class="s4-bilgi-satir">
         <span class="s4-bilgi-baslik" id="s4-lbl-adet">Satır Sayısı</span>
-        <span class="buyuk-sayi s4-vurgu-sayi" id="s4-val-adet">4</span>
+        <span class="buyuk-sayi s4-vurgu-sayi" id="s4-val-adet">?</span>
       </div>
       <div class="s4-bilgi-satir s4-toplam-satir">
         <span class="s4-bilgi-baslik">Toplam Birim Kare</span>
-        <span class="buyuk-sayi s4-sonuc" id="s4-val-toplam">24 birimkare</span>
+        <span class="buyuk-sayi s4-sonuc" id="s4-val-toplam">?</span>
       </div>
       <div class="s4-formul-kutu" id="s4-formul-alani">
-        \( 4 \times 6 = 24 \)
+        ? × ? = ?
       </div>
     </div>
   </div>
@@ -3603,12 +3878,13 @@ window.SAYFA_INIT[4] = function (kok) {
     });
   }
 
-  function panelFormulGuncelle(birimTxt, birimVal, adetTxt, adetVal, formulStr) {
+  // Uzman notu: sonuç kutuları öğrenci bir şerit seçmeden cevabı göstermez.
+  function panelFormulGuncelle(birimTxt, birimVal, adetTxt, adetVal, formulStr, toplamVal) {
     lblBirim.textContent = birimTxt;
     valBirim.textContent = birimVal;
     lblAdet.textContent = adetTxt;
     valAdet.textContent = adetVal;
-    valToplam.textContent = "24 birimkare";
+    valToplam.textContent = toplamVal || "?";
     formulAlani.innerHTML = formulStr;
     if (window.MathJax && window.MathJax.typeset) {
       window.MathJax.typeset([formulAlani]);
@@ -3632,7 +3908,7 @@ window.SAYFA_INIT[4] = function (kok) {
     });
 
     temizleVurgular();
-    panelFormulGuncelle("Satırdaki Kare Sayısı", "6", "Satır Sayısı", "4", "\\( 4 \\times 6 = 24 \\)");
+    panelFormulGuncelle("Satırdaki Kare Sayısı", "?", "Satır Sayısı", "?", "? × ? = ?");
   }
 
   function satirlariAyirUygula() {
@@ -3652,7 +3928,7 @@ window.SAYFA_INIT[4] = function (kok) {
     });
 
     temizleVurgular();
-    panelFormulGuncelle("Satırdaki Kare Sayısı", "6", "Satır Sayısı", "4", "\\( 4 \\times 6 = 24 \\)");
+    panelFormulGuncelle("Satırdaki Kare Sayısı", "?", "Satır Sayısı", "?", "? × ? = ?");
   }
 
   function sutunlariAyirUygula() {
@@ -3673,7 +3949,7 @@ window.SAYFA_INIT[4] = function (kok) {
     });
 
     temizleVurgular();
-    panelFormulGuncelle("Sütundaki Kare Sayısı", "4", "Sütun Sayısı", "6", "\\( 6 \\times 4 = 24 \\)");
+    panelFormulGuncelle("Sütundaki Kare Sayısı", "?", "Sütun Sayısı", "?", "? × ? = ?");
   }
 
   function parildatSatir(satirIdx) {
@@ -3720,7 +3996,7 @@ window.SAYFA_INIT[4] = function (kok) {
     });
 
     parildatSatir(satirIdx);
-    panelFormulGuncelle("Satırdaki Kare Sayısı", "6", "Satır Sayısı", "4", "\\( 4 \\times 6 = 24 \\)");
+    panelFormulGuncelle("Satırdaki Kare Sayısı", "6", "Satır Sayısı", "4", "\\( 4 \\times 6 = 24 \\)", "24 birimkare");
     EGITSEL.dontVer(kok, "dogru", "Her satırda altı kare.");
   }
 
@@ -3744,7 +4020,7 @@ window.SAYFA_INIT[4] = function (kok) {
     });
 
     parildatSutun(sutunIdx);
-    panelFormulGuncelle("Sütundaki Kare Sayısı", "4", "Sütun Sayısı", "6", "\\( 6 \\times 4 = 24 \\)");
+    panelFormulGuncelle("Sütundaki Kare Sayısı", "4", "Sütun Sayısı", "6", "\\( 6 \\times 4 = 24 \\)", "24 birimkare");
     EGITSEL.dontVer(kok, "dogru", "Her sütunda dört kare.");
   }
 
@@ -3829,7 +4105,7 @@ window.SAYFA_INIT[4] = function (kok) {
         <ellipse id="s5-zemin-golgesi-genis" cx="332" cy="248" rx="164" ry="22" fill="#2b3846" fill-opacity="0.09" />
         <ellipse id="s5-zemin-golgesi" cx="332" cy="245" rx="140" ry="16" fill="#2b3846" fill-opacity="0.18" />
         <!-- 6x6 Izgara Kılavuz Tabanı ve Teknik Köşebentler -->
-        <rect x="220" y="80" width="422" height="422" rx="10" fill="#faf6ed" fill-opacity="0.75" stroke="#dfd3be" stroke-width="2" stroke-dasharray="6 6" />
+        <rect x="220" y="80" width="422" height="422" fill="#faf6ed" fill-opacity="0.75" stroke="#dfd3be" stroke-width="2" stroke-dasharray="6 6" />
         <path d="M 226 92 L 226 86 L 232 86" fill="none" stroke="#8a949e" stroke-width="2" stroke-linecap="round" />
         <path d="M 636 92 L 636 86 L 630 86" fill="none" stroke="#8a949e" stroke-width="2" stroke-linecap="round" />
         <path d="M 226 490 L 226 496 L 232 496" fill="none" stroke="#8a949e" stroke-width="2" stroke-linecap="round" />
@@ -3837,47 +4113,47 @@ window.SAYFA_INIT[4] = function (kok) {
         <!-- Kılavuz Yuvalar (36 adet) -->
         <g id="s5-kilavuz-yuvalar">
           <!-- Satır 0 -->
-          <rect x="230" y="90" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="298" y="90" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="366" y="90" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="434" y="90" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="502" y="90" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="570" y="90" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="230" y="90" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="298" y="90" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="366" y="90" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="434" y="90" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="502" y="90" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="570" y="90" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
           <!-- Satır 1 -->
-          <rect x="230" y="158" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="298" y="158" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="366" y="158" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="434" y="158" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="502" y="158" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="570" y="158" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="230" y="158" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="298" y="158" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="366" y="158" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="434" y="158" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="502" y="158" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="570" y="158" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
           <!-- Satır 2 -->
-          <rect x="230" y="226" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="298" y="226" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="366" y="226" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="434" y="226" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="502" y="226" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="570" y="226" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="230" y="226" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="298" y="226" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="366" y="226" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="434" y="226" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="502" y="226" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="570" y="226" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
           <!-- Satır 3 -->
-          <rect x="230" y="294" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="298" y="294" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="366" y="294" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="434" y="294" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="502" y="294" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="570" y="294" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="230" y="294" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="298" y="294" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="366" y="294" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="434" y="294" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="502" y="294" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="570" y="294" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
           <!-- Satır 4 -->
-          <rect x="230" y="362" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="298" y="362" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="366" y="362" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="434" y="362" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="502" y="362" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="570" y="362" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="230" y="362" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="298" y="362" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="366" y="362" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="434" y="362" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="502" y="362" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="570" y="362" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
           <!-- Satır 5 -->
-          <rect x="230" y="430" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="298" y="430" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="366" y="430" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="434" y="430" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="502" y="430" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
-          <rect x="570" y="430" width="62" height="62" rx="8" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="230" y="430" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="298" y="430" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="366" y="430" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="434" y="430" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="502" y="430" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
+          <rect x="570" y="430" width="62" height="62" fill="#faf6ed" stroke="#dfd3be" stroke-width="1.5" />
         </g>
       </g>
 
@@ -3885,228 +4161,228 @@ window.SAYFA_INIT[4] = function (kok) {
       <g id="sayfa5-katman-orta">
         <!-- Satır 0 -->
         <g class="s5-kare" id="s5-kare-0-0" data-r="0" data-c="0" transform="translate(230, 90)">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">1</text>
         </g>
         <g class="s5-kare" id="s5-kare-0-1" data-r="0" data-c="1" transform="translate(298, 90)">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">2</text>
         </g>
         <g class="s5-kare" id="s5-kare-0-2" data-r="0" data-c="2" transform="translate(366, 90)">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">3</text>
         </g>
         <g class="s5-kare" id="s5-kare-0-3" data-r="0" data-c="3" transform="translate(434, 90)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">4</text>
         </g>
         <g class="s5-kare" id="s5-kare-0-4" data-r="0" data-c="4" transform="translate(502, 90)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">5</text>
         </g>
         <g class="s5-kare" id="s5-kare-0-5" data-r="0" data-c="5" transform="translate(570, 90)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">6</text>
         </g>
 
         <!-- Satır 1 -->
         <g class="s5-kare" id="s5-kare-1-0" data-r="1" data-c="0" transform="translate(230, 158)">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">4</text>
         </g>
         <g class="s5-kare" id="s5-kare-1-1" data-r="1" data-c="1" transform="translate(298, 158)">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">5</text>
         </g>
         <g class="s5-kare" id="s5-kare-1-2" data-r="1" data-c="2" transform="translate(366, 158)">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">6</text>
         </g>
         <g class="s5-kare" id="s5-kare-1-3" data-r="1" data-c="3" transform="translate(434, 158)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">7</text>
         </g>
         <g class="s5-kare" id="s5-kare-1-4" data-r="1" data-c="4" transform="translate(502, 158)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">8</text>
         </g>
         <g class="s5-kare" id="s5-kare-1-5" data-r="1" data-c="5" transform="translate(570, 158)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">9</text>
         </g>
 
         <!-- Satır 2 -->
         <g class="s5-kare" id="s5-kare-2-0" data-r="2" data-c="0" transform="translate(230, 226)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">7</text>
         </g>
         <g class="s5-kare" id="s5-kare-2-1" data-r="2" data-c="1" transform="translate(298, 226)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">8</text>
         </g>
         <g class="s5-kare" id="s5-kare-2-2" data-r="2" data-c="2" transform="translate(366, 226)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">9</text>
         </g>
         <g class="s5-kare" id="s5-kare-2-3" data-r="2" data-c="3" transform="translate(434, 226)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">10</text>
         </g>
         <g class="s5-kare" id="s5-kare-2-4" data-r="2" data-c="4" transform="translate(502, 226)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">11</text>
         </g>
         <g class="s5-kare" id="s5-kare-2-5" data-r="2" data-c="5" transform="translate(570, 226)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">12</text>
         </g>
 
         <!-- Satır 3 -->
         <g class="s5-kare" id="s5-kare-3-0" data-r="3" data-c="0" transform="translate(230, 294)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">13</text>
         </g>
         <g class="s5-kare" id="s5-kare-3-1" data-r="3" data-c="1" transform="translate(298, 294)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">14</text>
         </g>
         <g class="s5-kare" id="s5-kare-3-2" data-r="3" data-c="2" transform="translate(366, 294)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">15</text>
         </g>
         <g class="s5-kare" id="s5-kare-3-3" data-r="3" data-c="3" transform="translate(434, 294)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">16</text>
         </g>
         <g class="s5-kare" id="s5-kare-3-4" data-r="3" data-c="4" transform="translate(502, 294)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">17</text>
         </g>
         <g class="s5-kare" id="s5-kare-3-5" data-r="3" data-c="5" transform="translate(570, 294)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">18</text>
         </g>
 
         <!-- Satır 4 -->
         <g class="s5-kare" id="s5-kare-4-0" data-r="4" data-c="0" transform="translate(230, 362)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">19</text>
         </g>
         <g class="s5-kare" id="s5-kare-4-1" data-r="4" data-c="1" transform="translate(298, 362)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">20</text>
         </g>
         <g class="s5-kare" id="s5-kare-4-2" data-r="4" data-c="2" transform="translate(366, 362)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">21</text>
         </g>
         <g class="s5-kare" id="s5-kare-4-3" data-r="4" data-c="3" transform="translate(434, 362)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">22</text>
         </g>
         <g class="s5-kare" id="s5-kare-4-4" data-r="4" data-c="4" transform="translate(502, 362)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">23</text>
         </g>
         <g class="s5-kare" id="s5-kare-4-5" data-r="4" data-c="5" transform="translate(570, 362)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">24</text>
         </g>
 
         <!-- Satır 5 -->
         <g class="s5-kare" id="s5-kare-5-0" data-r="5" data-c="0" transform="translate(230, 430)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">25</text>
         </g>
         <g class="s5-kare" id="s5-kare-5-1" data-r="5" data-c="1" transform="translate(298, 430)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">26</text>
         </g>
         <g class="s5-kare" id="s5-kare-5-2" data-r="5" data-c="2" transform="translate(366, 430)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">27</text>
         </g>
         <g class="s5-kare" id="s5-kare-5-3" data-r="5" data-c="3" transform="translate(434, 430)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">28</text>
         </g>
         <g class="s5-kare" id="s5-kare-5-4" data-r="5" data-c="4" transform="translate(502, 430)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">29</text>
         </g>
         <g class="s5-kare" id="s5-kare-5-5" data-r="5" data-c="5" transform="translate(570, 430)" style="display:none;">
-          <rect class="s5-kare-govde" width="62" height="62" rx="8" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
-          <path d="M 6 14 Q 6 6 14 6 L 36 6 Q 16 14 10 34 Z" fill="#faf6ed" fill-opacity="0.35" />
+          <rect class="s5-kare-govde" width="62" height="62" fill="url(#s5-grad-kobalt)" stroke="#416788" stroke-width="2.5" />
+          <path d="M 4 4 L 36 4 Q 16 14 4 34 Z" fill="#faf6ed" fill-opacity="0.35" />
           <circle cx="50" cy="50" r="2.5" fill="#416788" fill-opacity="0.45" />
           <text class="svg-not s5-kare-sayi" x="31" y="32" text-anchor="middle" dominant-baseline="central" fill="#2b3846">30</text>
         </g>
@@ -4573,9 +4849,9 @@ window.SAYFA_INIT[5] = function (kok) {
       <g id="sayfa6-katman-orta">
         <!-- 1. DİKDÖRTGEN (4x3 = 12 birim kare) -->
         <g id="s6-model-1">
-          <rect x="96" y="116" width="118" height="148" rx="10" fill="url(#s6-grad-panel)" stroke="#557793" stroke-width="3" stroke-linejoin="round" filter="url(#s6-golge)" />
-          <path d="M 100 248 L 100 126 Q 100 120 106 120 L 204 120" stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.6" stroke-linecap="round" />
-          <path d="M 106 260 L 204 260 Q 210 260 210 254 L 210 132" stroke="#557793" stroke-width="1.5" fill="none" opacity="0.35" stroke-linecap="round" />
+          <rect x="96" y="116" width="118" height="148" fill="url(#s6-grad-panel)" stroke="#557793" stroke-width="3" stroke-linejoin="miter" filter="url(#s6-golge)" />
+          <path d="M 100 248 L 100 120 L 204 120" stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.6" stroke-linecap="round" />
+          <path d="M 106 260 L 210 260 L 210 132" stroke="#557793" stroke-width="1.5" fill="none" opacity="0.35" stroke-linecap="round" />
           <path d="M 104 124 Q 155 120 190 125" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.35" />
           <circle cx="103" cy="123" r="2" fill="#557793" opacity="0.6" />
           <circle cx="207" cy="123" r="2" fill="#557793" opacity="0.6" />
@@ -4584,41 +4860,29 @@ window.SAYFA_INIT[5] = function (kok) {
 
           <!-- Izgara Hücreleri (3 sütun, 4 satır) -->
           <g id="s6-izgara-1">
-            <rect class="s6-hucre s6-hucre-1" data-r="0" data-c="0" x="110" y="130" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-1" data-r="0" data-c="1" x="140" y="130" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-1" data-r="0" data-c="2" x="170" y="130" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-1" data-r="1" data-c="0" x="110" y="160" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-1" data-r="1" data-c="1" x="140" y="160" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-1" data-r="1" data-c="2" x="170" y="160" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-1" data-r="2" data-c="0" x="110" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-1" data-r="2" data-c="1" x="140" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-1" data-r="2" data-c="2" x="170" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-1" data-r="3" data-c="0" x="110" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-1" data-r="3" data-c="1" x="140" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-1" data-r="3" data-c="2" x="170" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-1" data-r="0" data-c="0" x="110" y="130" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-1" data-r="0" data-c="1" x="140" y="130" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-1" data-r="0" data-c="2" x="170" y="130" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-1" data-r="1" data-c="0" x="110" y="160" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-1" data-r="1" data-c="1" x="140" y="160" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-1" data-r="1" data-c="2" x="170" y="160" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-1" data-r="2" data-c="0" x="110" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-1" data-r="2" data-c="1" x="140" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-1" data-r="2" data-c="2" x="170" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-1" data-r="3" data-c="0" x="110" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-1" data-r="3" data-c="1" x="140" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-1" data-r="3" data-c="2" x="170" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
           </g>
 
           <text class="svg-baslik" x="155" y="55" text-anchor="middle" fill="#2b343b">1. Dikdörtgen</text>
-
-          <!-- Üst Boyut Çizgisi: 3 birim -->
-          <path d="M 110 106 L 110 98 M 110 102 L 198 102 M 198 106 L 198 98" stroke="#88af94" stroke-width="2" fill="none" stroke-linecap="round" />
-          <line x1="140" y1="99" x2="140" y2="105" stroke="#88af94" stroke-width="1.5" />
-          <line x1="170" y1="99" x2="170" y2="105" stroke="#88af94" stroke-width="1.5" />
-          <text class="svg-metin" x="155" y="88" text-anchor="middle" fill="#2b343b">3 birim</text>
-
-          <!-- Sol Boyut Çizgisi: 4 birim -->
-          <path d="M 86 130 L 78 130 M 82 130 L 82 248 M 86 248 L 78 248" stroke="#88af94" stroke-width="2" fill="none" stroke-linecap="round" />
-          <line x1="79" y1="160" x2="85" y2="160" stroke="#88af94" stroke-width="1.5" />
-          <line x1="79" y1="190" x2="85" y2="190" stroke="#88af94" stroke-width="1.5" />
-          <line x1="79" y1="220" x2="85" y2="220" stroke="#88af94" stroke-width="1.5" />
-          <text class="svg-metin" x="70" y="195" text-anchor="end" fill="#2b343b">4 birim</text>
+          <!-- Uzman notu: kenar uzunluğu (birim) etiketleri kaldırıldı; öğrenci satır ve sütunlardaki birim kareleri sayar. -->
         </g>
 
         <!-- 2. DİKDÖRTGEN (2x5 = 10 birim kare) -->
         <g id="s6-model-2">
-          <rect x="331" y="176" width="178" height="88" rx="10" fill="url(#s6-grad-panel)" stroke="#557793" stroke-width="3" stroke-linejoin="round" filter="url(#s6-golge)" />
-          <path d="M 335 248 L 335 186 Q 335 180 341 180 L 499 180" stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.6" stroke-linecap="round" />
-          <path d="M 341 260 L 499 260 Q 505 260 505 254 L 505 192" stroke="#557793" stroke-width="1.5" fill="none" opacity="0.35" stroke-linecap="round" />
+          <rect x="331" y="176" width="178" height="88" fill="url(#s6-grad-panel)" stroke="#557793" stroke-width="3" stroke-linejoin="miter" filter="url(#s6-golge)" />
+          <path d="M 335 248 L 335 180 L 499 180" stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.6" stroke-linecap="round" />
+          <path d="M 341 260 L 505 260 L 505 192" stroke="#557793" stroke-width="1.5" fill="none" opacity="0.35" stroke-linecap="round" />
           <path d="M 340 184 Q 420 180 500 184" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.35" />
           <circle cx="338" cy="183" r="2" fill="#557793" opacity="0.6" />
           <circle cx="502" cy="183" r="2" fill="#557793" opacity="0.6" />
@@ -4627,39 +4891,26 @@ window.SAYFA_INIT[5] = function (kok) {
 
           <!-- Izgara Hücreleri (5 sütun, 2 satır) -->
           <g id="s6-izgara-2">
-            <rect class="s6-hucre s6-hucre-2" data-r="0" data-c="0" x="345" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-2" data-r="0" data-c="1" x="375" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-2" data-r="0" data-c="2" x="405" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-2" data-r="0" data-c="3" x="435" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-2" data-r="0" data-c="4" x="465" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-2" data-r="1" data-c="0" x="345" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-2" data-r="1" data-c="1" x="375" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-2" data-r="1" data-c="2" x="405" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-2" data-r="1" data-c="3" x="435" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-2" data-r="1" data-c="4" x="465" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-2" data-r="0" data-c="0" x="345" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-2" data-r="0" data-c="1" x="375" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-2" data-r="0" data-c="2" x="405" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-2" data-r="0" data-c="3" x="435" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-2" data-r="0" data-c="4" x="465" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-2" data-r="1" data-c="0" x="345" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-2" data-r="1" data-c="1" x="375" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-2" data-r="1" data-c="2" x="405" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-2" data-r="1" data-c="3" x="435" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-2" data-r="1" data-c="4" x="465" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
           </g>
 
           <text class="svg-baslik" x="420" y="55" text-anchor="middle" fill="#2b343b">2. Dikdörtgen</text>
-
-          <!-- Üst Boyut Çizgisi: 5 birim -->
-          <path d="M 345 166 L 345 158 M 345 162 L 493 162 M 493 166 L 493 158" stroke="#88af94" stroke-width="2" fill="none" stroke-linecap="round" />
-          <line x1="375" y1="159" x2="375" y2="165" stroke="#88af94" stroke-width="1.5" />
-          <line x1="405" y1="159" x2="405" y2="165" stroke="#88af94" stroke-width="1.5" />
-          <line x1="435" y1="159" x2="435" y2="165" stroke="#88af94" stroke-width="1.5" />
-          <line x1="465" y1="159" x2="465" y2="165" stroke="#88af94" stroke-width="1.5" />
-          <text class="svg-metin" x="420" y="148" text-anchor="middle" fill="#2b343b">5 birim</text>
-
-          <!-- Sol Boyut Çizgisi: 2 birim -->
-          <path d="M 321 190 L 313 190 M 317 190 L 317 248 M 321 248 L 313 248" stroke="#88af94" stroke-width="2" fill="none" stroke-linecap="round" />
-          <line x1="314" y1="220" x2="320" y2="220" stroke="#88af94" stroke-width="1.5" />
-          <text class="svg-metin" x="305" y="225" text-anchor="end" fill="#2b343b">2 birim</text>
         </g>
 
         <!-- 3. DİKDÖRTGEN (3x6 = 18 birim kare) -->
         <g id="s6-model-3">
-          <rect x="581" y="146" width="208" height="118" rx="10" fill="url(#s6-grad-panel)" stroke="#557793" stroke-width="3" stroke-linejoin="round" filter="url(#s6-golge)" />
-          <path d="M 585 248 L 585 156 Q 585 150 591 150 L 779 150" stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.6" stroke-linecap="round" />
-          <path d="M 591 260 L 779 260 Q 785 260 785 254 L 785 162" stroke="#557793" stroke-width="1.5" fill="none" opacity="0.35" stroke-linecap="round" />
+          <rect x="581" y="146" width="208" height="118" fill="url(#s6-grad-panel)" stroke="#557793" stroke-width="3" stroke-linejoin="miter" filter="url(#s6-golge)" />
+          <path d="M 585 248 L 585 150 L 779 150" stroke="#ffffff" stroke-width="1.8" fill="none" opacity="0.6" stroke-linecap="round" />
+          <path d="M 591 260 L 785 260 L 785 162" stroke="#557793" stroke-width="1.5" fill="none" opacity="0.35" stroke-linecap="round" />
           <path d="M 590 154 Q 685 150 780 154" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" fill="none" opacity="0.35" />
           <circle cx="588" cy="153" r="2" fill="#557793" opacity="0.6" />
           <circle cx="782" cy="153" r="2" fill="#557793" opacity="0.6" />
@@ -4668,42 +4919,27 @@ window.SAYFA_INIT[5] = function (kok) {
 
           <!-- Izgara Hücreleri (6 sütun, 3 satır) -->
           <g id="s6-izgara-3">
-            <rect class="s6-hucre s6-hucre-3" data-r="0" data-c="0" x="595" y="160" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="0" data-c="1" x="625" y="160" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="0" data-c="2" x="655" y="160" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="0" data-c="3" x="685" y="160" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="0" data-c="4" x="715" y="160" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="0" data-c="5" x="745" y="160" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="1" data-c="0" x="595" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="1" data-c="1" x="625" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="1" data-c="2" x="655" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="1" data-c="3" x="685" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="1" data-c="4" x="715" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="1" data-c="5" x="745" y="190" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="2" data-c="0" x="595" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="2" data-c="1" x="625" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="2" data-c="2" x="655" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="2" data-c="3" x="685" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="2" data-c="4" x="715" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
-            <rect class="s6-hucre s6-hucre-3" data-r="2" data-c="5" x="745" y="220" width="28" height="28" rx="3" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="0" data-c="0" x="595" y="160" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="0" data-c="1" x="625" y="160" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="0" data-c="2" x="655" y="160" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="0" data-c="3" x="685" y="160" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="0" data-c="4" x="715" y="160" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="0" data-c="5" x="745" y="160" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="1" data-c="0" x="595" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="1" data-c="1" x="625" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="1" data-c="2" x="655" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="1" data-c="3" x="685" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="1" data-c="4" x="715" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="1" data-c="5" x="745" y="190" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="2" data-c="0" x="595" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="2" data-c="1" x="625" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="2" data-c="2" x="655" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="2" data-c="3" x="685" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="2" data-c="4" x="715" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
+            <rect class="s6-hucre s6-hucre-3" data-r="2" data-c="5" x="745" y="220" width="28" height="28" fill="url(#s6-grad-hucre)" stroke="#9cb3c5" stroke-width="1.5" />
           </g>
 
           <text class="svg-baslik" x="685" y="55" text-anchor="middle" fill="#2b343b">3. Dikdörtgen</text>
-
-          <!-- Üst Boyut Çizgisi: 6 birim -->
-          <path d="M 595 136 L 595 128 M 595 132 L 773 132 M 773 136 L 773 128" stroke="#88af94" stroke-width="2" fill="none" stroke-linecap="round" />
-          <line x1="625" y1="129" x2="625" y2="135" stroke="#88af94" stroke-width="1.5" />
-          <line x1="655" y1="129" x2="655" y2="135" stroke="#88af94" stroke-width="1.5" />
-          <line x1="685" y1="129" x2="685" y2="135" stroke="#88af94" stroke-width="1.5" />
-          <line x1="715" y1="129" x2="715" y2="135" stroke="#88af94" stroke-width="1.5" />
-          <line x1="745" y1="129" x2="745" y2="135" stroke="#88af94" stroke-width="1.5" />
-          <text class="svg-metin" x="685" y="118" text-anchor="middle" fill="#2b343b">6 birim</text>
-
-          <!-- Sol Boyut Çizgisi: 3 birim -->
-          <path d="M 571 160 L 563 160 M 567 160 L 567 248 M 571 248 L 563 248" stroke="#88af94" stroke-width="2" fill="none" stroke-linecap="round" />
-          <line x1="564" y1="190" x2="570" y2="190" stroke="#88af94" stroke-width="1.5" />
-          <line x1="564" y1="220" x2="570" y2="220" stroke="#88af94" stroke-width="1.5" />
-          <text class="svg-metin" x="555" y="210" text-anchor="end" fill="#2b343b">3 birim</text>
         </g>
 
         <!-- HEDEF YUVALAR -->
@@ -4789,7 +5025,7 @@ window.SAYFA_INIT[5] = function (kok) {
     </div>
     <div class="s6-panel-kutu s6-ozet-kutu" id="s6-ozet-panel" style="display: none;" aria-live="polite">
       <h4>Alan Bağıntısı</h4>
-      <p class="s6-ozet-metin">Dikdörtgenin Alanı = Kısa Kenar × Uzun Kenar</p>
+      <p class="s6-ozet-metin">Dikdörtgenin alanı = ardışık iki kenar uzunluğunun çarpımı</p>
     </div>
   </div>
   <div class="kontrol-eylem">
@@ -4982,7 +5218,7 @@ window.SAYFA_INIT[6] = function (kok) {
       }, 500);
       aktifKart = null;
 
-      EGITSEL.dontVer(kok, "yanlis", "Kenar uzunluklarını tekrar çarp.");
+      EGITSEL.dontVer(kok, "yanlis", "Satır ve sütundaki kareleri yeniden say.");
     }
   }
 
@@ -5195,9 +5431,9 @@ window.SAYFA_INIT[6] = function (kok) {
       <g id="sayfa7-katman-orta">
         <ellipse id="s7-plan-derin-golge" cx="380" cy="363" rx="170" ry="12" fill="#aba89f" opacity="0.15"/>
         <ellipse id="s7-plan-golge" cx="380" cy="360" rx="154" ry="10" fill="#aba89f" opacity="0.25"/>
-        <rect id="s7-plan-dikdortgen" x="236" y="170" width="288" height="180" rx="8" fill="url(#s7-grad-dikdortgen)" stroke="#2c3531" stroke-width="3"/>
+        <rect id="s7-plan-dikdortgen" x="236" y="170" width="288" height="180" fill="url(#s7-grad-dikdortgen)" stroke="#2c3531" stroke-width="3"/>
         <path id="s7-plan-parlama" d="M 240 174 L 516 174 C 480 186 280 196 240 240 Z" fill="#ffffff" opacity="0.35" pointer-events="none"/>
-        <rect id="s7-plan-isilti" x="236" y="170" width="288" height="180" rx="8" fill="url(#s7-grad-isilti)" stroke="#e5a93c" stroke-width="2.5" opacity="0" pointer-events="none"/>
+        <rect id="s7-plan-isilti" x="236" y="170" width="288" height="180" fill="url(#s7-grad-isilti)" stroke="#e5a93c" stroke-width="2.5" opacity="0" pointer-events="none"/>
 
         <g id="s7-plan-aks-grubu">
           <line id="s7-aks-yatay" x1="356" y1="260" x2="404" y2="260" stroke="#8ea896" stroke-width="1" stroke-dasharray="4 3" opacity="0.6"/>
@@ -5671,23 +5907,23 @@ window.SAYFA_INIT[7] = function (kok) {
           <rect x="175" y="145" width="180" height="38" rx="8" fill="#d8ebd9" stroke="#1e3323" stroke-width="2" />
           <text x="265" y="170" class="svg-metin" fill="#1e3323" text-anchor="middle">Birim Kareler</text>
           <g>
-            <rect x="180" y="270" width="50" height="50" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="180" y="270" width="50" height="50" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="195" cy="282" rx="10" ry="4" fill="#ffffff" opacity="0.35" />
-            <rect x="235" y="270" width="50" height="50" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="235" y="270" width="50" height="50" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="250" cy="282" rx="10" ry="4" fill="#ffffff" opacity="0.35" />
-            <rect x="290" y="270" width="50" height="50" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="290" y="270" width="50" height="50" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="305" cy="282" rx="10" ry="4" fill="#ffffff" opacity="0.35" />
-            <rect x="180" y="325" width="50" height="50" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="180" y="325" width="50" height="50" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="195" cy="337" rx="10" ry="4" fill="#ffffff" opacity="0.35" />
-            <rect x="235" y="325" width="50" height="50" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="235" y="325" width="50" height="50" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="250" cy="337" rx="10" ry="4" fill="#ffffff" opacity="0.35" />
-            <rect x="290" y="325" width="50" height="50" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="290" y="325" width="50" height="50" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="305" cy="337" rx="10" ry="4" fill="#ffffff" opacity="0.35" />
-            <rect x="180" y="380" width="50" height="50" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="180" y="380" width="50" height="50" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="195" cy="392" rx="10" ry="4" fill="#ffffff" opacity="0.35" />
-            <rect x="235" y="380" width="50" height="50" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="235" y="380" width="50" height="50" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="250" cy="392" rx="10" ry="4" fill="#ffffff" opacity="0.35" />
-            <rect x="290" y="380" width="50" height="50" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="290" y="380" width="50" height="50" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="305" cy="392" rx="10" ry="4" fill="#ffffff" opacity="0.35" />
           </g>
 
@@ -5724,8 +5960,8 @@ window.SAYFA_INIT[7] = function (kok) {
         <!-- 2. Soru Sahnesi (4x6 Pano, 9 Yerleşmiş, Kalan Boş Kareler) -->
         <g id="s8-sahne-1" class="s8-sahne-adim" style="display:none">
           <ellipse cx="400" cy="525" rx="270" ry="25" fill="#6b7268" opacity="0.25" />
-          <rect x="150" y="130" width="500" height="360" rx="16" fill="url(#s8-grad-ikincil-koyu)" stroke="#1e3323" stroke-width="3.5" />
-          <rect x="165" y="145" width="470" height="330" rx="10" fill="#fbfcf8" stroke="#1e3323" stroke-width="2" />
+          <rect x="150" y="130" width="500" height="360" fill="url(#s8-grad-ikincil-koyu)" stroke="#1e3323" stroke-width="3.5" />
+          <rect x="165" y="145" width="470" height="330" fill="#fbfcf8" stroke="#1e3323" stroke-width="2" />
           <!-- Çerçeve Köşe Perçin Vidaları -->
           <circle cx="158" cy="138" r="3" fill="#1e3323" />
           <circle cx="642" cy="138" r="3" fill="#1e3323" />
@@ -5734,42 +5970,42 @@ window.SAYFA_INIT[7] = function (kok) {
           <!-- 6 sütun x 4 satır Izgara -->
           <g>
             <!-- 1. Satır: 6 dolu kare -->
-            <rect x="190" y="165" width="64" height="64" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="190" y="165" width="64" height="64" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="205" cy="177" rx="12" ry="5" fill="#ffffff" opacity="0.35" />
-            <rect x="260" y="165" width="64" height="64" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="260" y="165" width="64" height="64" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="275" cy="177" rx="12" ry="5" fill="#ffffff" opacity="0.35" />
-            <rect x="330" y="165" width="64" height="64" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="330" y="165" width="64" height="64" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="345" cy="177" rx="12" ry="5" fill="#ffffff" opacity="0.35" />
-            <rect x="400" y="165" width="64" height="64" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="400" y="165" width="64" height="64" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="415" cy="177" rx="12" ry="5" fill="#ffffff" opacity="0.35" />
-            <rect x="470" y="165" width="64" height="64" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="470" y="165" width="64" height="64" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="485" cy="177" rx="12" ry="5" fill="#ffffff" opacity="0.35" />
-            <rect x="540" y="165" width="64" height="64" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="540" y="165" width="64" height="64" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="555" cy="177" rx="12" ry="5" fill="#ffffff" opacity="0.35" />
             <!-- 2. Satır: 3 dolu, 3 boş -->
-            <rect x="190" y="235" width="64" height="64" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="190" y="235" width="64" height="64" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="205" cy="247" rx="12" ry="5" fill="#ffffff" opacity="0.35" />
-            <rect x="260" y="235" width="64" height="64" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="260" y="235" width="64" height="64" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="275" cy="247" rx="12" ry="5" fill="#ffffff" opacity="0.35" />
-            <rect x="330" y="235" width="64" height="64" rx="6" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
+            <rect x="330" y="235" width="64" height="64" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2" />
             <ellipse cx="345" cy="247" rx="12" ry="5" fill="#ffffff" opacity="0.35" />
-            <rect x="400" y="235" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
-            <rect x="470" y="235" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
-            <rect x="540" y="235" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="400" y="235" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="470" y="235" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="540" y="235" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
             <!-- 3. Satır: 6 boş -->
-            <rect x="190" y="305" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
-            <rect x="260" y="305" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
-            <rect x="330" y="305" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
-            <rect x="400" y="305" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
-            <rect x="470" y="305" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
-            <rect x="540" y="305" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="190" y="305" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="260" y="305" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="330" y="305" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="400" y="305" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="470" y="305" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="540" y="305" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
             <!-- 4. Satır: 6 boş -->
-            <rect x="190" y="375" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
-            <rect x="260" y="375" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
-            <rect x="330" y="375" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
-            <rect x="400" y="375" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
-            <rect x="470" y="375" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
-            <rect x="540" y="375" width="64" height="64" rx="6" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="190" y="375" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="260" y="375" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="330" y="375" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="400" y="375" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="470" y="375" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
+            <rect x="540" y="375" width="64" height="64" fill="#eef0eb" stroke="#6b7268" stroke-dasharray="4,4" stroke-width="1.8" />
           </g>
           <!-- Kenar Ölçü Kılavuzları ve Sınır Çentikleri -->
           <line x1="125" y1="165" x2="125" y2="440" stroke="#1e3323" stroke-width="2.5" />
@@ -5790,50 +6026,50 @@ window.SAYFA_INIT[7] = function (kok) {
         <!-- 3. Soru Sahnesi (5 Satır, 7 Sütun Izgara) -->
         <g id="s8-sahne-2" class="s8-sahne-adim" style="display:none">
           <ellipse cx="400" cy="520" rx="280" ry="25" fill="#6b7268" opacity="0.25" />
-          <rect x="145" y="125" width="510" height="380" rx="14" fill="#fbfcf8" stroke="#1e3323" stroke-width="3" />
+          <rect x="145" y="125" width="510" height="380" fill="#fbfcf8" stroke="#1e3323" stroke-width="3" />
           <path d="M155,135 L645,135 L635,145 L165,145 Z" fill="#ffffff" opacity="0.4" />
           <!-- 5 satır x 7 sütun = 35 kare -->
           <g>
             <!-- 1. Satır -->
-            <rect x="175" y="155" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="237" y="155" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="299" y="155" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="361" y="155" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="423" y="155" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="485" y="155" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="547" y="155" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="175" y="155" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="237" y="155" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="299" y="155" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="361" y="155" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="423" y="155" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="485" y="155" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="547" y="155" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
             <!-- 2. Satır -->
-            <rect x="175" y="217" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="237" y="217" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="299" y="217" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="361" y="217" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="423" y="217" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="485" y="217" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="547" y="217" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="175" y="217" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="237" y="217" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="299" y="217" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="361" y="217" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="423" y="217" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="485" y="217" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="547" y="217" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
             <!-- 3. Satır -->
-            <rect x="175" y="279" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="237" y="279" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="299" y="279" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="361" y="279" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="423" y="279" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="485" y="279" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="547" y="279" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="175" y="279" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="237" y="279" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="299" y="279" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="361" y="279" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="423" y="279" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="485" y="279" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="547" y="279" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
             <!-- 4. Satır -->
-            <rect x="175" y="341" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="237" y="341" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="299" y="341" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="361" y="341" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="423" y="341" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="485" y="341" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="547" y="341" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="175" y="341" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="237" y="341" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="299" y="341" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="361" y="341" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="423" y="341" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="485" y="341" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="547" y="341" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
             <!-- 5. Satır -->
-            <rect x="175" y="403" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="237" y="403" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="299" y="403" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="361" y="403" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="423" y="403" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="485" y="403" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
-            <rect x="547" y="403" width="56" height="56" rx="5" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="175" y="403" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="237" y="403" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="299" y="403" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="361" y="403" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="423" y="403" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="485" y="403" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
+            <rect x="547" y="403" width="56" height="56" fill="url(#s8-grad-baskin-acik)" stroke="#1e3323" stroke-width="1.5" />
           </g>
           <!-- Sol Kenar Ölçüsü ve Çentikler -->
           <line x1="120" y1="155" x2="120" y2="459" stroke="#1e3323" stroke-width="2.5" />
@@ -5841,22 +6077,20 @@ window.SAYFA_INIT[7] = function (kok) {
           <line x1="113" y1="459" x2="127" y2="459" stroke="#1e3323" stroke-width="2" />
           <polygon points="120,150 115,160 125,160" fill="#1e3323" />
           <polygon points="120,464 115,454 125,454" fill="#1e3323" />
-          <text x="85" y="300" class="svg-baslik" fill="#1e3323" text-anchor="middle">5 Satır</text>
-          <text x="85" y="325" class="svg-not" fill="#2d6338" text-anchor="middle">(5 birim)</text>
+          <text x="85" y="310" class="svg-baslik" fill="#1e3323" text-anchor="middle">5 Satır</text>
           <!-- Üst Kenar Ölçüsü ve Çentikler -->
           <line x1="175" y1="95" x2="603" y2="95" stroke="#1e3323" stroke-width="2.5" />
           <line x1="175" y1="88" x2="175" y2="102" stroke="#1e3323" stroke-width="2" />
           <line x1="603" y1="88" x2="603" y2="102" stroke="#1e3323" stroke-width="2" />
           <polygon points="170,95 180,90 180,100" fill="#1e3323" />
           <polygon points="608,95 598,90 598,100" fill="#1e3323" />
-          <text x="390" y="80" class="svg-baslik" fill="#1e3323" text-anchor="middle">Her Satırda 7 Kare (7 Sütun)</text>
-          <text x="390" y="112" class="svg-not" fill="#2d6338" text-anchor="middle">(7 birim)</text>
+          <text x="390" y="80" class="svg-baslik" fill="#1e3323" text-anchor="middle">Her Satırda 7 Kare</text>
 
         </g>
         <!-- 4. Soru Sahnesi (Çizgisiz Dikdörtgen Bahçe, 8 br x 6 br) -->
         <g id="s8-sahne-3" class="s8-sahne-adim" style="display:none">
           <ellipse cx="400" cy="510" rx="280" ry="30" fill="#6b7268" opacity="0.25" />
-          <rect x="150" y="140" width="500" height="340" rx="16" fill="url(#s8-grad-ikincil)" stroke="#1e3323" stroke-width="3.5" />
+          <rect x="150" y="140" width="500" height="340" fill="url(#s8-grad-ikincil)" stroke="#1e3323" stroke-width="3.5" />
           <!-- Ahşap Çit Dikey Derz Çizgileri -->
           <line x1="220" y1="140" x2="220" y2="155" stroke="#b88624" stroke-width="2" />
           <line x1="300" y1="140" x2="300" y2="155" stroke="#b88624" stroke-width="2" />
@@ -5864,7 +6098,7 @@ window.SAYFA_INIT[7] = function (kok) {
           <line x1="500" y1="140" x2="500" y2="155" stroke="#b88624" stroke-width="2" />
           <line x1="580" y1="140" x2="580" y2="155" stroke="#b88624" stroke-width="2" />
           <!-- Çizgisiz Bahçe Çim Zemini -->
-          <rect x="165" y="155" width="470" height="310" rx="10" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2.5" />
+          <rect x="165" y="155" width="470" height="310" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="2.5" />
           <!-- Doğal Çim Dalga Katmanı (Çizgi Değil Organik Yüzey) -->
           <path d="M165,390 Q400,340 635,390 L635,465 L165,465 Z" fill="#468e54" opacity="0.25" />
           <ellipse cx="400" cy="180" rx="200" ry="15" fill="#ffffff" opacity="0.25" />
@@ -5897,38 +6131,38 @@ window.SAYFA_INIT[7] = function (kok) {
         <g id="s8-sahne-4" class="s8-sahne-adim" style="display:none">
           <!-- 1. Dikdörtgen: 3 x 8 -->
           <ellipse cx="230" cy="365" rx="145" ry="20" fill="#6b7268" opacity="0.22" />
-          <rect x="90" y="210" width="280" height="135" rx="12" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="3" />
+          <rect x="90" y="210" width="280" height="135" fill="url(#s8-grad-baskin)" stroke="#1e3323" stroke-width="3" />
           <path d="M100,222 L360,222 L350,235 L110,235 Z" fill="#ffffff" opacity="0.35" />
           <line x1="90" y1="175" x2="370" y2="175" stroke="#1e3323" stroke-width="2.5" />
           <line x1="90" y1="168" x2="90" y2="182" stroke="#1e3323" stroke-width="2" />
           <line x1="370" y1="168" x2="370" y2="182" stroke="#1e3323" stroke-width="2" />
           <polygon points="85,175 95,170 95,180" fill="#1e3323" />
           <polygon points="375,175 365,170 365,180" fill="#1e3323" />
-          <text x="230" y="165" class="svg-baslik" fill="#1e3323" text-anchor="middle">8 birim</text>
+          <text x="230" y="165" class="svg-baslik" fill="#1e3323" text-anchor="middle">8 br</text>
           <line x1="55" y1="210" x2="55" y2="345" stroke="#1e3323" stroke-width="2.5" />
           <line x1="48" y1="210" x2="62" y2="210" stroke="#1e3323" stroke-width="2" />
           <line x1="48" y1="345" x2="62" y2="345" stroke="#1e3323" stroke-width="2" />
           <polygon points="55,205 50,215 60,215" fill="#1e3323" />
           <polygon points="55,350 50,340 60,340" fill="#1e3323" />
           <text x="35" y="282" class="svg-baslik" fill="#1e3323" text-anchor="middle">3 br</text>
-          <text x="230" y="405" class="svg-metin" fill="#2d6338" text-anchor="middle">1. Dikdörtgen (3 × 8)</text>
+          <text x="230" y="405" class="svg-metin" fill="#2d6338" text-anchor="middle">1. Dikdörtgen</text>
           <!-- 2. Dikdörtgen: 4 x 6 -->
           <ellipse cx="570" cy="380" rx="125" ry="22" fill="#6b7268" opacity="0.22" />
-          <rect x="460" y="185" width="220" height="180" rx="12" fill="url(#s8-grad-ikincil)" stroke="#1e3323" stroke-width="3" />
+          <rect x="460" y="185" width="220" height="180" fill="url(#s8-grad-ikincil)" stroke="#1e3323" stroke-width="3" />
           <path d="M470,197 L670,197 L660,210 L480,210 Z" fill="#ffffff" opacity="0.35" />
           <line x1="460" y1="150" x2="680" y2="150" stroke="#1e3323" stroke-width="2.5" />
           <line x1="460" y1="143" x2="460" y2="157" stroke="#1e3323" stroke-width="2" />
           <line x1="680" y1="143" x2="680" y2="157" stroke="#1e3323" stroke-width="2" />
           <polygon points="455,150 465,145 465,155" fill="#1e3323" />
           <polygon points="685,150 675,145 675,155" fill="#1e3323" />
-          <text x="570" y="140" class="svg-baslik" fill="#1e3323" text-anchor="middle">6 birim</text>
+          <text x="570" y="140" class="svg-baslik" fill="#1e3323" text-anchor="middle">6 br</text>
           <line x1="425" y1="185" x2="425" y2="365" stroke="#1e3323" stroke-width="2.5" />
           <line x1="418" y1="185" x2="432" y2="185" stroke="#1e3323" stroke-width="2" />
           <line x1="418" y1="365" x2="432" y2="365" stroke="#1e3323" stroke-width="2" />
           <polygon points="425,180 420,190 430,190" fill="#1e3323" />
           <polygon points="425,370 420,360 430,360" fill="#1e3323" />
           <text x="405" y="280" class="svg-baslik" fill="#1e3323" text-anchor="middle">4 br</text>
-          <text x="570" y="405" class="svg-metin" fill="#b88624" text-anchor="middle">2. Dikdörtgen (4 × 6)</text>
+          <text x="570" y="405" class="svg-metin" fill="#b88624" text-anchor="middle">2. Dikdörtgen</text>
           <text x="400" y="540" class="svg-not" fill="#1e3323" text-anchor="middle">Farklı Kenarlar, Alan Bağıntıları Karşılaştırması</text>
         </g>
       </g>
@@ -6216,7 +6450,7 @@ window.SAYFA_INIT[8] = function (kok) {
 
 </div>
 
-<script src="ortak/1bc67de94160b102.js"></script>
+<script src="ortak/6f7cf695c04baec6.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 </body>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MAT.10.1.1 — Bir doğal sayı ile asal çarpanları ve bölenleri arasındaki ilişkilere …</title>
+<title>MAT.10.3.1 — Bir doğal sayı ile asal çarpanları ve bölenleri arasındaki ilişkilere …</title>
 <script>
 /* Sayfa modülü kayıt defterleri — parça script'lerinden ÖNCE tanımlı olmalı */
 window.SAYFA_INIT = {}; window.SAYFA_TAMAM = {};
@@ -59,6 +59,13 @@ window.EGITSEL = {
      KALIR: 200+ mevcut parça dontVer(kok, ...) diye çağırıyor.
      tip: "dogru" | "yanlis" */
   dontVer: function (kok, tip, mesaj) {
+    /* Nötr tipler (2026-09-26, geoeba parti raporu 7.4.x): bazı sayfalar
+       yönlendirmeyi dontVer(kok, "uyari", …) diye veriyor; eskiden her
+       bilinmeyen tip «yanlis»a dönüp kırmızı + yanlış sesi basıyordu. */
+    if (tip === "uyari" || tip === "bilgi" || tip === "notr" || tip === "ipucu") {
+      if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj); }
+      return;
+    }
     tip = tip === "dogru" ? "dogru" : "yanlis";
     if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj, tip); }
     else { console.warn("EGITSEL.dontVer: SABLON_TOAST yok"); }
@@ -96,6 +103,194 @@ window.EGITSEL = {
       if ("disabled" in el) { el.disabled = kilitli !== false; }
       el.classList.toggle("locked", kilitli !== false);
     });
+  },
+
+  /* ÇOKTAN SEÇMELİ DEĞERLENDİRME MOTORU (2026-09-26, geoeba uzman raporu:
+     «değerlendirme soruları kendi içinde ileri-geri yapılamıyor», «sonucu
+     gör dediğinde kaç doğru kaç yanlış gösteren ekran çıkmıyor», «baştan
+     başlayınca bazı sorular çözülmüş geliyor», «lisede sorular 5 şıklı
+     olmalı», «en az 2 seçim hakkı verilmeli, yanlışta hemen doğru cevap
+     gelmemeli»). Her değerlendirme sayfası bu mekaniği kendisi yazıyordu ve
+     her biri başka eksik taşıyordu; motor TEK doğruluk kaynağıdır.
+       EGITSEL.degerlendirme(kok, {
+         sorular: [{metin, siklar: [{metin, dogru}], donut}],  // şık sayısı serbest (≤6)
+         hak: 2,                // soru başına deneme hakkı
+         karistir: true,        // şık sırası (soru başına BİR kez karışır)
+         soruDegisti: function (i, soru) {},     // sahneyi soruya eşle
+         cevaplandi: function (i, dogruMu, soru) {},
+         bitti: function (dogru, toplam) {}
+       })
+     Arayüz .kontrol-govde / .kontrol-eylem İÇİNE kurulur (içerikleri
+     değiştirilir); metin ve şıklar LaTeX içerebilir (MathJax dizilir). */
+  degerlendirme: function (kok, ayar) {
+    ayar = ayar || {};
+    var sorular = (ayar.sorular || []).filter(function (s) { return s && s.siklar && s.siklar.length; });
+    var govde = ayar.govde || (kok && kok.querySelector(".kontrol-govde"));
+    var eylem = ayar.eylem || (kok && kok.querySelector(".kontrol-eylem"));
+    if (!govde || !sorular.length) { console.warn("EGITSEL.degerlendirme: govde/soru yok"); return null; }
+    var HAK = Math.max(1, ayar.hak || 2);
+    var HARF = ["A", "B", "C", "D", "E", "F"];
+    var durum, aktif = 0, sonucEkrani = false;
+
+    function karisik(n) {
+      var d = [];
+      for (var i = 0; i < n; i++) { d.push(i); }
+      if (ayar.karistir === false) { return d; }
+      for (var j = d.length - 1; j > 0; j--) {
+        var k = Math.floor(Math.random() * (j + 1)); var t = d[j]; d[j] = d[k]; d[k] = t;
+      }
+      return d;
+    }
+    function sifirla() {
+      durum = sorular.map(function (s) {
+        return { sira: karisik(s.siklar.length), denenen: [], sonuc: "bos" };  // bos|devam|dogru|yanlis
+      });
+      aktif = 0; sonucEkrani = false;
+    }
+    function el(etiket, sinif, metin) {
+      var e = document.createElement(etiket);
+      if (sinif) { e.className = sinif; }
+      if (metin !== undefined) { e.innerHTML = metin; }
+      return e;
+    }
+    function diz(kap) {
+      try {
+        if (window.MathJax && window.MathJax.typesetPromise) { window.MathJax.typesetPromise([kap]); }
+        else if (window.MathJax && window.MathJax.typeset) { window.MathJax.typeset([kap]); }
+      } catch (e) { /* dizgi hatası etkileşimi durdurmaz */ }
+    }
+    function sayim() {
+      var s = { dogru: 0, yanlis: 0, bos: 0 };
+      durum.forEach(function (d) { if (d.sonuc === "dogru") s.dogru++; else if (d.sonuc === "yanlis") s.yanlis++; else s.bos++; });
+      return s;
+    }
+    function noktalar(ust) {
+      var kap = el("div", "deg-noktalar");
+      kap.setAttribute("role", "group");
+      kap.setAttribute("aria-label", "Sorular");
+      sorular.forEach(function (_, i) {
+        var d = durum[i];
+        var b = el("button", "deg-nokta " + d.sonuc + (i === aktif && !sonucEkrani ? " aktif" : ""), String(i + 1));
+        b.type = "button";
+        b.setAttribute("aria-label", (i + 1) + ". soru" + (d.sonuc === "dogru" ? ", doğru" : d.sonuc === "yanlis" ? ", yanlış" : ""));
+        b.addEventListener("click", function () { git(i); });
+        kap.appendChild(b);
+      });
+      ust.appendChild(kap);
+    }
+    function eylemKur(dugmeler) {
+      if (!eylem) { return; }
+      eylem.innerHTML = "";
+      var satir = el("div", "deg-eylem");
+      dugmeler.forEach(function (d) {
+        var b = el("button", "buton" + (d.birincil ? " birincil" : ""), d.metin);
+        b.type = "button";
+        if (d.pasif) { b.disabled = true; }
+        b.addEventListener("click", d.is);
+        satir.appendChild(b);
+      });
+      eylem.appendChild(satir);
+    }
+    function ciz() {
+      sonucEkrani = false;
+      var soru = sorular[aktif], d = durum[aktif];
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Soru " + (aktif + 1) + " / " + sorular.length));
+      noktalar(ust);
+      kap.appendChild(ust);
+      kap.appendChild(el("div", "panel deg-metin", soru.metin || ""));
+      var liste = el("div", "deg-siklar");
+      var bitmis = d.sonuc === "dogru" || d.sonuc === "yanlis";
+      d.sira.forEach(function (asilNo, gorunen) {
+        var sik = soru.siklar[asilNo];
+        var b = el("button", "parca-btn");
+        b.type = "button";
+        b.appendChild(el("span", "kutucuk", HARF[gorunen] || String(gorunen + 1)));
+        b.appendChild(el("span", "", sik.metin));
+        var denendi = d.denenen.indexOf(asilNo) > -1;
+        if (denendi && !sik.dogru) { b.classList.add("yanlis-secim"); b.disabled = true; }
+        if (bitmis) {
+          b.disabled = true;
+          if (sik.dogru) { b.classList.add("dogru-secim"); }
+          else if (!denendi) { b.classList.add("soluk"); }
+        }
+        b.addEventListener("click", function () { sec(asilNo); });
+        liste.appendChild(b);
+      });
+      kap.appendChild(liste);
+      govde.appendChild(kap);
+      diz(govde);
+      var son = aktif === sorular.length - 1;
+      eylemKur([
+        { metin: "Önceki", pasif: aktif === 0, is: function () { git(aktif - 1); } },
+        { metin: son ? "Sonuçları Gör" : "Sonraki", birincil: true,
+          is: function () { if (son) { sonuc(); } else { git(aktif + 1); } } }
+      ]);
+      if (typeof ayar.soruDegisti === "function") {
+        try { ayar.soruDegisti(aktif, soru); } catch (e) { console.error("degerlendirme.soruDegisti", e); }
+      }
+    }
+    function sec(asilNo) {
+      var soru = sorular[aktif], d = durum[aktif];
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis" || d.denenen.indexOf(asilNo) > -1) { return; }
+      d.denenen.push(asilNo);
+      var dogruMu = !!soru.siklar[asilNo].dogru;
+      var kalan = HAK - d.denenen.length;
+      if (dogruMu) {
+        d.sonuc = "dogru";
+        window.EGITSEL.dontVer(kok, "dogru", soru.donut || "Doğru seçim.");
+      } else if (kalan > 0) {
+        d.sonuc = "devam";
+        window.EGITSEL.dontVer(kok, "yanlis", "Bir hakkın daha var, tekrar dene.");
+      } else {
+        d.sonuc = "yanlis";
+        window.EGITSEL.dontVer(kok, "yanlis", soru.donut || "Doğru seçenek işaretlendi.");
+      }
+      ciz();
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis") {
+        if (typeof ayar.cevaplandi === "function") {
+          try { ayar.cevaplandi(aktif, d.sonuc === "dogru", soru); } catch (e) { console.error("degerlendirme.cevaplandi", e); }
+        }
+      }
+    }
+    function git(i) {
+      if (i < 0 || i >= sorular.length) { return; }
+      aktif = i;
+      ciz();
+    }
+    function sonuc() {
+      sonucEkrani = true;
+      var s = sayim(), n = sorular.length;
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Sonuçlar"));
+      noktalar(ust);
+      kap.appendChild(ust);
+      var kutu = el("div", "panel deg-sonuc");
+      kutu.appendChild(el("div", "deg-puan buyuk-sayi", s.dogru + " / " + n));
+      var sayac = el("div", "deg-sayac");
+      sayac.appendChild(el("span", "d", "Doğru: " + s.dogru));
+      sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
+      sayac.appendChild(el("span", "b", "Boş: " + s.bos));
+      kutu.appendChild(sayac);
+      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kap.appendChild(kutu);
+      govde.appendChild(kap);
+      eylemKur([
+        { metin: "Soruları İncele", is: function () { git(0); } },
+        { metin: "Tekrar Çöz", birincil: true, is: function () { sifirla(); ciz(); } }
+      ]);
+      if (typeof ayar.bitti === "function") {
+        try { ayar.bitti(s.dogru, n); } catch (e) { console.error("degerlendirme.bitti", e); }
+      }
+    }
+    sifirla();
+    ciz();
+    return { git: git, sonuc: sonuc, sifirla: function () { sifirla(); ciz(); } };
   },
 
   /* 2B TUVAL YÜKSEK ÇÖZÜNÜRLÜK (2026-08-17 çözünürlük raporu, P0)
@@ -197,7 +392,7 @@ window.EGITSEL = {
    kalıyordu. İlkokul (1-4) matematikte \frac = \dfrac (rakamlar gövde boyunda). */
 window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
                           displayMath: [["\\[", "\\]"], ["$$", "$$"]],
-                          macros: /^MAT\.[1-4]\./.test("MAT.10.1.1")
+                          macros: /^MAT\.[1-4]\./.test("MAT.10.3.1")
                                   ? { frac: ["\\dfrac{#1}{#2}", 2] } : {} },
                    options: { skipHtmlTags: ["script", "noscript", "style",
                                              "textarea", "pre", "code",
@@ -205,7 +400,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
                                              "svg"] } };
 </script>
 <script src="ortak/f5b3f5fac24e774b.js"></script>
-<script src="ortak/b47118f55e978615.js"></script>
+<script src="ortak/27c9562c7880c36e.js"></script>
 <script src="ortak/17f319aeaf055a36.js"></script>
 <script>/* RoundedBoxGeometry.js — yerel gömme */
 /* three.js r155 örnek portu — RoundedBoxGeometry (examples/jsm/geometries/RoundedBoxGeometry.js)
@@ -482,6 +677,50 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   var ESIK = 4;                 // px — bu kadar gezmeden sürükleme başlamaz
                                 // (tıkla-seç yedeği tetiklenmeye devam etsin)
 
+  /* İZLEYİCİNİN SAYFA KAPSAMI (2026-09-26, geoeba uzman raporu: «doğru
+     sürüklemede ‹Daha dikkatli ol› uyarısı çıkıyor / yanlış ses geliyor» —
+     3, 4, 9 ve 10. sınıfta onlarca sayfa). Kök neden tarayıcıda ölçüldü
+     (MAT.3.1.3): 1. sayfanın `pdnd.monitorForElements` izleyicisi sayfa
+     süzgeci olmadan kuruluyor; SAYFA_INIT bir kez koşuyor ve temizleyici hiç
+     çağrılmıyor, yani öğrenci o sayfayı geçtikten sonra da YAŞIYOR. 5.
+     sayfada kart doğru sepete bırakılınca sayfa 5 «dogru» dönütü veriyor,
+     ardından sayfa 1'in izleyicisi aynı bırakmayı kendi sorusu sanıp
+     «Birler basamağını tekrar hesapla.» diye «yanlis» basıyordu (toast'ta
+     son söz onun; ses frenine takılan da doğru ses). Korpusta 578 sayfa
+     izleyici kuruyor — hepsi aynı deliği taşıyordu.
+     Çözüm tek yerde, sayfa kodu değişmeden: izleyici KURULDUĞU ANDAKİ aktif
+     sayfaya bağlanır (INIT ve sıfırla düğmeleri o sayfa ekrandayken koşar)
+     ve yalnız kaynağı o sayfanın içinde olan sürüklemeleri görür. */
+  function sahipSayfa() {
+    try {           // node test koşumunun sahte document'ında querySelector yok
+      return typeof document.querySelector === "function"
+        ? document.querySelector(".sayfa.aktif") : null;
+    } catch (e) { return null; }
+  }
+  function kapsamla(yap) {
+    var sahip = sahipSayfa();
+    if (!yap || !sahip) { return yap; }
+    var asilIzin = yap.canMonitor;
+    var kopya = {};
+    for (var k in yap) { kopya[k] = yap[k]; }
+    kopya.canMonitor = function (args) {
+      var kaynak = args && args.source && args.source.element;
+      // Kaynak bir SAYFANIN içindeyse o sayfa sahip olmalı; hiçbir sayfada
+      // değilse (sayfa kodu kaynağı sürükleme için gövdeye taşımış olabilir)
+      // karar sahibin o an ekranda olmasıdır.
+      var sayfasi = kaynak && kaynak.nodeType === 1 && kaynak.closest
+        ? kaynak.closest(".sayfa") : null;
+      if (sayfasi ? sayfasi !== sahip
+                  : (kaynak && kaynak.nodeType === 1 && sahip.contains
+                     ? !sahip.contains(kaynak) && !sahip.classList.contains("aktif")
+                     : !sahip.classList.contains("aktif"))) {
+        return false;
+      }
+      return typeof asilIzin === "function" ? asilIzin.call(yap, args) : true;
+    };
+    return kopya;
+  }
+
   function svgMi(el) {
     return el && typeof SVGElement !== "undefined" && el instanceof SVGElement;
   }
@@ -588,6 +827,12 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     // Sözleşme zaten istiyor ama unutuluyor: touch-action olmadan tarayıcı
     // hareketi sayfa kaydırması sanıp sürüklemeyi iptal eder.
     el.style.touchAction = "none";
+    // Dokunmatikte hareket kararını KÖK <svg> verir (2026-09-26, geoeba parti
+    // raporu MAT.4.1.3: parmakla sürükleme kaydırma sanılıp iptal ediliyordu).
+    // Sahne sabit 1280×720, kaydırılmaz — kökte kapatmak güvenli.
+    if (el.ownerSVGElement && el.ownerSVGElement.style) {
+      el.ownerSVGElement.style.touchAction = "none";
+    }
 
     var basla = null, aktif = null;
 
@@ -618,13 +863,18 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       var hayalet = null;
       try { hayalet = hayaletKur(el); }
       catch (e) { console.warn("pdnd-svg: hayalet kurulamadı", e); }
-      aktif = { kaynak: kaynak, oncekiler: [], ilk: girdi(ev), hayalet: hayalet };
+      aktif = { kaynak: kaynak, oncekiler: [], ilk: girdi(ev), hayalet: hayalet,
+                izleyiciler: [] };
       var yuk = konum(ev, []);
       cagir(yap, "onGenerateDragPreview", yuk);
       cagir(yap, "onDragStart", yuk);
+      // canMonitor pdnd'de olduğu gibi BİR KEZ, başlangıçta sorulur ve o
+      // sürüklemenin bütün olayları (onDrag/onDrop dahil) yalnız izin veren
+      // izleyicilere gider — eskiden yalnız onDragStart süzülüyordu.
       IZLEYICILER.forEach(function (m) {
         if (typeof m.canMonitor === "function"
             && !m.canMonitor({ initial: yuk.location.initial, source: kaynak })) { return; }
+        aktif.izleyiciler.push(m);
         cagir(m, "onDragStart", yuk);
       });
     }
@@ -677,7 +927,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         cagir(h.__yap, "onDrag", Object.assign({ self: h }, yuk));
       });
       cagir(yap, "onDrag", yuk);
-      IZLEYICILER.forEach(function (m) { cagir(m, "onDrag", yuk); });
+      aktif.izleyiciler.forEach(function (m) { cagir(m, "onDrag", yuk); });
       aktif.oncekiler = hedefler;
     }
 
@@ -697,7 +947,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         cagir(h.__yap, "onDrop", Object.assign({ self: h }, yuk));
       });
       cagir(yap, "onDrop", yuk);
-      IZLEYICILER.forEach(function (m) { cagir(m, "onDrop", yuk); });
+      vardi.izleyiciler.forEach(function (m) { cagir(m, "onDrop", yuk); });
     }
 
     el.addEventListener("pointerdown", pointerdown);
@@ -734,13 +984,14 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   };
 
   window.pdnd.monitorForElements = function (yap) {
-    IZLEYICILER.add(yap);
-    var temizle = gercek.monitorForElements(yap);
+    var kapsamli = kapsamla(yap);        // sayfa kapsamı — bkz. kapsamla()
+    IZLEYICILER.add(kapsamli);
+    var temizle = gercek.monitorForElements(kapsamli);
     var temiz = false;
     return function () {
       if (temiz) { return; }
       temiz = true;
-      IZLEYICILER.delete(yap);
+      IZLEYICILER.delete(kapsamli);
       if (typeof temizle === "function") { temizle(); }
     };
   };
@@ -749,7 +1000,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 })();
 
 </script>
-<script src="ortak/b9f956931d9a218c.js"></script>
+<script src="ortak/4d6cc6546768808d.js"></script>
 <script src="ortak/d85e518ebf6759fa.js"></script>
 <script src="ortak/25bc6bc279de577f.js"></script>
 <!-- 🔊 Dönüt sesleri: montaj `window.SABLON_SES = {dogru:…, yanlis:…}` basar
@@ -762,9 +1013,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
      yanındaki <ad>-ses/ klasöründe, göreli yolla. Ayar kapalıysa yuva BOŞ kalır
      ve gövde sonundaki anlatım motoru hiç kurulmaz. -->
 
-<link rel="stylesheet" href="ortak/6d1eb72a5a4832a6.css">
+<link rel="stylesheet" href="ortak/a6aa9fad6404f978.css">
 <!-- URETIM BILGISI
-  montaj: 2026-09-18 12:21
+  montaj: 2026-09-27 03:09
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:03
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=yerlesim | zaman=2026-09-18 04:05
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:03
@@ -772,14 +1023,13 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   sayfa 5: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:04
   sayfa 6: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:03
   sayfa 7: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:04
-  sayfa 8: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:12
-  sayfa 9: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:04
-  sayfa 10: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 04:04
+  sayfa 8: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:04
+  sayfa 9: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 04:04
 -->
 </head>
 <body>
 <section id="ekran-kapak" class="sk-sinif-10" aria-label="Giriş kapağı">
-<link rel="stylesheet" href="ortak/4195fd026e1321d3.css">
+<link rel="stylesheet" href="ortak/e26cbe37dd900866.css">
 <svg class="sk-fon" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
 <defs>
   <linearGradient id="skg10-su" x1="0" y1="0" x2="0" y2="1">
@@ -837,7 +1087,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         <div class="sk-sinif" aria-label="10. sınıf"><div><b>10.</b><small>SINIF</small></div></div>
         <div class="sk-etiketler">
           <span class="sk-ders">Matematik</span>
-          <span class="sk-unite-no">1. Tema</span>
+          <span class="sk-unite-no">3. Tema</span>
         </div>
       </div>
       <h1 class="sk-baslik"><span>Sayılar</span></h1>
@@ -858,7 +1108,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   <div class="sk-govde">
     <section class="sk-blok sk-cikti" aria-label="Öğrenme Çıktısı">
       <h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#0a6fa8"/><circle cx="12" cy="12" r="6.5" fill="#fff"/><circle cx="12" cy="12" r="3.2" fill="#0a6fa8"/></svg>Öğrenme Çıktısı</h2>
-      <div class="sk-kaydir" tabindex="0"><ul class="sk-liste"><li><span class="sk-kod">MAT.10.1.1</span><span>Bir doğal sayı ile asal çarpanları ve bölenleri arasındaki ilişkilere dair çıkarım yapabilme</span></li></ul></div>
+      <div class="sk-kaydir" tabindex="0"><ul class="sk-liste"><li><span class="sk-kod">MAT.10.3.1</span><span>Bir doğal sayı ile asal çarpanları ve bölenleri arasındaki ilişkilere dair çıkarım yapabilme</span></li></ul></div>
     </section>
     <section class="sk-blok sk-surec" aria-label="Süreç bileşenleri"><h2><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#e2662c" d="M4 7h4a2 2 0 1 1 4 0h4v4a2 2 0 1 0 0 4v4h-4a2 2 0 1 0-4 0H4v-4a2 2 0 1 1 0-4z"/></svg>Süreç Bileşenleri</h2><div class="sk-kaydir" tabindex="0"><div class="sk-grup"><ol class="sk-liste"><li><span class="sk-harf">a</span><span>Bir doğal sayının asal çarpanları ve bölenleri hakkında varsayımlarda bulunur.</span></li><li><span class="sk-harf">b</span><span>Farklı örneklerden elde ettiği örüntüleri listeleyerek bir doğal sayının asal çarpanları ve bölenleri hakkındaki varsayımlarına yönelik örüntüleri geneller.</span></li><li><span class="sk-harf">c</span><span>Oluşturduğu genellemelerin varsayımlarını karşılayıp karşılamadığını örneklerle sınar.</span></li><li><span class="sk-harf">ç</span><span>Bir doğal sayının asal çarpanları ve bölenleri ile ilgili ulaştığı sonuçlara yönelik matematiksel önermeler sunar.</span></li><li><span class="sk-harf">d</span><span>Elde ettiği önermelerin gerçek yaşam durumları içeren problemlerdeki kullanışlılığını değerlendirir.</span></li></ol></div></div></section>
   </div>
@@ -879,8 +1129,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   <rect x="54" y="156" width="92" height="20" rx="6" fill="#062f4d"/>
   <path d="M100 44l6 12 13 2-9.5 9 2.5 13L100 74l-12 6 2.5-13L81 58l13-2z" fill="#fff"/>
 </svg>
-    <h2>Tebrikler!</h2>
-    <p class="st-alt"><b>Sayılar</b> içeriğini başarıyla tamamladın.</p>
+    <h2 data-tam="Tebrikler!" data-bos="Henüz etkinlik yapmadın">Tebrikler!</h2>
+    <p class="st-alt" data-tam="&lt;b&gt;Sayılar&lt;/b&gt; içeriğini başarıyla tamamladın."
+       data-bos="Etkinlikleri yapmadan sona geldin. Baştan başlayıp etkinlikleri tamamlamak ister misin?"><b>Sayılar</b> içeriğini başarıyla tamamladın.</p>
     <div class="st-yildizlar" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg></div>
     <div class="st-ogrendim"><h3>Bu içerikte şunları öğrendin</h3><ul><li>Bir doğal sayı ile asal çarpanları ve bölenleri arasındaki ilişkilere dair çıkarım yapabilme</li></ul></div>
     <div class="st-dugmeler">
@@ -913,9 +1164,29 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       kap.appendChild(p);
     }
   }
+  /* HİÇ ETKİNLİK YAPILMADIYSA TEBRİK YOK (geoeba uzman notu 2026-09-26, 7. sınıf
+     G: «hiç soru çözmeden bölüm sonuna gelindiğinde tebrikler mesajı yerine
+     yeniden denemek ister misin gibi bir mesaj gelebilir»). Ölçüt: öğrencinin
+     aldığı doğru/yanlış dönüt sayısı — dönütün tek boğazı EGITSEL.dontVer'dir. */
+  var donutSayisi = 0;
+  function donutSay() {
+    var E = window.EGITSEL;
+    if (!E || typeof E.dontVer !== "function" || E.dontVer.__tebrikSayaci) return;
+    var asil = E.dontVer;
+    E.dontVer = function () { donutSayisi++; return asil.apply(this, arguments); };
+    E.dontVer.__tebrikSayaci = true;
+  }
+  donutSay();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", donutSay);
   var oncekiOdak = null;
   function ac() {
-    konfetiKur();
+    var bos = donutSayisi === 0;
+    tebrik.classList.toggle("st-bos", bos);
+    var baslik = tebrik.querySelector("h2");
+    var alt = tebrik.querySelector(".st-alt");
+    if (baslik) baslik.textContent = bos ? baslik.getAttribute("data-bos") : baslik.getAttribute("data-tam");
+    if (alt) alt.innerHTML = bos ? alt.getAttribute("data-bos") : alt.getAttribute("data-tam");
+    if (!bos) konfetiKur();
     oncekiOdak = document.activeElement;
     tebrik.classList.add("acik");
     tebrik.removeAttribute("aria-hidden");
@@ -933,9 +1204,14 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     var hedef = e.target && e.target.closest && e.target.closest("#sonraki-buton");
     if (hedef && aktifSayfa >= sayfaSayisi()) ac();
   }, true);
+  /* «Baştan Başla» TAM SIFIRLAR (uzman notu, 7. sınıf E: «bazı sorular çözülmüş
+     hâlde geliyor, bazıları sıfırlanmış»): sayfalar SAYFA_INIT'i bir kez koşar
+     ve durumunu bellekte tutar; 1. sayfaya dönmek hiçbirini sıfırlamıyordu.
+     Belgeyi yeniden yüklemek tek güvenilir sıfırlamadır. */
   tebrik.querySelector(".st-bastan").addEventListener("click", function () {
     kapat();
-    if (window.SABLON_GEC) window.SABLON_GEC(1);
+    try { window.location.reload(); }
+    catch (e) { if (window.SABLON_GEC) window.SABLON_GEC(1); }
   });
   tebrik.querySelector(".st-kapat").addEventListener("click", kapat);
   document.addEventListener("keydown", function (e) {
@@ -2789,7 +3065,7 @@ window.SAYFA_INIT[3] = function (kok) {
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 04:02 -->
 <!-- PALET: zemin #eaf0eb #dfe8e1 | baskin #3d664e #548268 #78a38b #a8ccba | ikincil #24385a #3f5882 #6b84ac | notr #dbe4dc #b8c4b9 | vurgu #e08a26 | kontur #18263e -->
 <!-- SAYFA_BASLIK: Bölenlerin Tekliği Çiftliği -->
-<!-- YONERGE: Sayı kartlarını bölen sayılarına göre uygun sepete sürükle veya sepete tıklayarak yerleştir. -->
+<!-- YONERGE: Sayı kartlarını POZİTİF bölen sayılarına göre uygun sepete sürükle. -->
 <!-- ETIKET: KEŞİF -->
 <!-- SUTUN_ORAN: 8fr 4fr -->
 <section class="bolum sahne s4-sahne-zemini">
@@ -3071,7 +3347,7 @@ window.SAYFA_INIT[3] = function (kok) {
 <section class="bolum etkilesim">
 <div class="panel-basi">
 <div class="baslik-satiri"><h2>Bölenlerin Tekliği Çiftliği</h2><span class="etiket">KEŞİF</span></div>
-<p class="yonerge">Sayı kartlarını bölen sayılarına göre uygun sepete sürükle veya sepete tıklayarak yerleştir.</p>
+<p class="yonerge">Sayı kartlarını POZİTİF bölen sayılarına göre uygun sepete sürükle.</p>
 </div>
 
   <div class="kontrol-govde">
@@ -3094,6 +3370,11 @@ window.SAYFA_INIT[3] = function (kok) {
 <style>
 @layer sayfa {
 
+  /* Uzman notu: kartlar sepete bırakılamıyordu — ön katmandaki boş yer tutucu kutular
+     sepetlerin vuruş alanını örtüyordu. Ön katman yalnız görseldir. */
+  #sayfa-4 #sayfa4-katman-on {
+    pointer-events: none;
+  }
   #sayfa-4 .s4-sahne-zemini {
     background: linear-gradient(180deg, #eaf0eb, #dfe8e1);
   }
@@ -3502,13 +3783,14 @@ window.SAYFA_INIT[4] = function (kok) {
         <ellipse cx="450" cy="130" rx="60" ry="8" fill="#edf4fa" opacity="0.45" />
 
         <!-- Formül Sonucu Kutusu -->
-        <rect x="398" y="145" width="138" height="106" rx="14" fill="#edf4fa" stroke="#3f7fd9" stroke-width="2" />
-        <rect x="400" y="147" width="134" height="24" rx="10" fill="#3f7fd9" />
-        <text x="467" y="163" text-anchor="middle" class="svg-not" fill="#edf4fa">Formül Sonucu</text>
-        <text id="s5-svg-formul-deger" x="467" y="210" text-anchor="middle" dominant-baseline="central" class="svg-baslik" fill="#245cb5">?</text>
-        <text id="s5-svg-formul-islem" x="467" y="238" text-anchor="middle" class="svg-not" fill="#6e7d95">—</text>
+        <rect x="398" y="145" width="314" height="106" rx="14" fill="#edf4fa" stroke="#3f7fd9" stroke-width="2" />
+        <rect x="400" y="147" width="310" height="24" rx="10" fill="#3f7fd9" />
+        <text x="555" y="163" text-anchor="middle" class="svg-not" fill="#edf4fa">Formül Sonucu</text>
+        <text id="s5-svg-formul-deger" x="555" y="210" text-anchor="middle" dominant-baseline="central" class="svg-baslik" fill="#245cb5">?</text>
+        <text id="s5-svg-formul-islem" x="555" y="238" text-anchor="middle" class="svg-not" fill="#6e7d95">—</text>
 
-        <!-- Liste Sayımı Kutusu -->
+        <!-- Uzman notu: «Liste Sayımı» kutusu kaldırıldı (JS başvuruları bozulmasın diye gizli). -->
+        <g display="none">
         <rect x="574" y="145" width="138" height="106" rx="14" fill="#edf4fa" stroke="#f09b24" stroke-width="2" />
         <rect x="576" y="147" width="134" height="24" rx="10" fill="#f09b24" />
         <text x="643" y="163" text-anchor="middle" class="svg-not" fill="#edf4fa">Liste Sayımı</text>
@@ -3519,6 +3801,7 @@ window.SAYFA_INIT[4] = function (kok) {
         <line id="s5-svg-bag" x1="536" y1="198" x2="574" y2="198" stroke="#c2ccd9" stroke-width="3.5" stroke-linecap="round" />
         <circle id="s5-svg-esitlik-cember" cx="555" cy="198" r="14" fill="#edf4fa" stroke="#c2ccd9" stroke-width="2" />
         <text id="s5-svg-esitlik-isaret" x="555" y="199" text-anchor="middle" dominant-baseline="central" class="svg-metin" fill="#6e7d95">=</text>
+        </g>
 
         <!-- Kural Bilgi Alanı -->
         <rect x="398" y="268" width="314" height="84" rx="12" fill="#dce8f3" stroke="#6e7d95" stroke-width="1.5" />
@@ -5179,914 +5462,7 @@ window.SAYFA_INIT[7] = function (kok) {
 </div>
 </div>
 </section>
-<section class="sayfa" id="sayfa-8" tabindex="-1" data-baslik="Dolap Kilidi Problemi">
-<div class="sayfa-icerik">
-<div class="sayfa-duzen">
-<!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:12 -->
-<!-- SAYFA_BASLIK: Dolap Kilidi Problemi -->
-<!-- YONERGE: Açık Dolapları İşaretle: 50 geçiş sonunda açık kalacak kapakları seç ve Seçimi Onayla'ya bas. -->
-<!-- PALET: zemin #dbe4eb #c8d5e0 | baskin #7a9cb8 #587e9e #3d6485 #284a6b | ikincil #e8eef3 #a8bccc #405364 | notr #8c9ea8 #556873 | vurgu #e59b22 | kontur #1a3045 -->
-
-<section class="bolum sahne s8-sahne-zemini">
-  <div class="sahne-kap">
-    <svg viewBox="0 0 860 560" preserveAspectRatio="xMidYMid meet" role="img">
-      <title>Dolap Kilidi Problemi - Okul Koridoru ve 50 Kilitli Dolap</title>
-      <defs>
-        <linearGradient id="s8-grad-zemin" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stop-color="#dbe4eb"/>
-          <stop offset="100%" stop-color="#c8d5e0"/>
-        </linearGradient>
-        <linearGradient id="s8-grad-kapak" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#7a9cb8"/>
-          <stop offset="50%" stop-color="#587e9e"/>
-          <stop offset="100%" stop-color="#3d6485"/>
-        </linearGradient>
-      </defs>
-
-      <!-- Koridor Arka Planı -->
-      <g id="sayfa8-katman-arka">
-        <rect x="0" y="0" width="860" height="560" fill="url(#s8-grad-zemin)"/>
-        <line x1="0" y1="18" x2="860" y2="18" stroke="#a8bccc" stroke-width="1.5" stroke-opacity="0.4"/>
-        <ellipse cx="430" cy="18" rx="320" ry="14" fill="#ffffff" fill-opacity="0.22"/>
-        <rect x="0" y="525" width="860" height="35" fill="#405364" fill-opacity="0.15"/>
-        <line x1="0" y1="525" x2="860" y2="525" stroke="#a8bccc" stroke-width="1.5" stroke-opacity="0.5"/>
-        <line x1="120" y1="525" x2="60" y2="560" stroke="#a8bccc" stroke-width="1" stroke-opacity="0.4"/>
-        <line x1="740" y1="525" x2="800" y2="560" stroke="#a8bccc" stroke-width="1" stroke-opacity="0.4"/>
-        <!-- Zemin Oturma Gölgesi -->
-        <ellipse cx="430" cy="524" rx="405" ry="10" fill="#405364" fill-opacity="0.28"/>
-      </g>
-
-      <!-- Dolaplar Matrisi (5 satır x 10 sütun = 50 dolap) - Sadeleştirilmiş Canlı Gradyan Tasarım -->
-      <g id="sayfa8-katman-orta">
-        <!-- Satır 1: Dolap 1 - 10 (y=42) -->
-        <g class="s8-dolap" id="s8-dolap-1" data-no="1" role="button" tabindex="0" aria-label="Dolap 1">
-          <rect class="s8-secim-halka" id="s8-secim-1" x="35" y="40" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="37" y="42" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="40" y="45" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="40" y1="84" x2="100" y2="84" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-1">
-            <rect class="s8-kapak-govde" x="39" y="44" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 42 47 L 85 47 Q 42 67 42 90 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="91" cy="94" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="56" y="74" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="70" y="83" text-anchor="middle" dominant-baseline="central" fill="#1a3045">1</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-2" data-no="2" role="button" tabindex="0" aria-label="Dolap 2">
-          <rect class="s8-secim-halka" id="s8-secim-2" x="115" y="40" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="117" y="42" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="120" y="45" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="120" y1="84" x2="180" y2="84" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-2">
-            <rect class="s8-kapak-govde" x="119" y="44" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 122 47 L 165 47 Q 122 67 122 90 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="171" cy="94" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="136" y="74" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="150" y="83" text-anchor="middle" dominant-baseline="central" fill="#1a3045">2</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-3" data-no="3" role="button" tabindex="0" aria-label="Dolap 3">
-          <rect class="s8-secim-halka" id="s8-secim-3" x="195" y="40" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="197" y="42" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="200" y="45" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="200" y1="84" x2="260" y2="84" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-3">
-            <rect class="s8-kapak-govde" x="199" y="44" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 202 47 L 245 47 Q 202 67 202 90 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="251" cy="94" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="216" y="74" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="230" y="83" text-anchor="middle" dominant-baseline="central" fill="#1a3045">3</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-4" data-no="4" role="button" tabindex="0" aria-label="Dolap 4">
-          <rect class="s8-secim-halka" id="s8-secim-4" x="275" y="40" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="277" y="42" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="280" y="45" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="280" y1="84" x2="340" y2="84" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-4">
-            <rect class="s8-kapak-govde" x="279" y="44" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 282 47 L 325 47 Q 282 67 282 90 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="331" cy="94" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="296" y="74" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="310" y="83" text-anchor="middle" dominant-baseline="central" fill="#1a3045">4</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-5" data-no="5" role="button" tabindex="0" aria-label="Dolap 5">
-          <rect class="s8-secim-halka" id="s8-secim-5" x="355" y="40" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="357" y="42" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="360" y="45" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="360" y1="84" x2="420" y2="84" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-5">
-            <rect class="s8-kapak-govde" x="359" y="44" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 362 47 L 405 47 Q 362 67 362 90 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="411" cy="94" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="376" y="74" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="390" y="83" text-anchor="middle" dominant-baseline="central" fill="#1a3045">5</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-6" data-no="6" role="button" tabindex="0" aria-label="Dolap 6">
-          <rect class="s8-secim-halka" id="s8-secim-6" x="435" y="40" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="437" y="42" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="440" y="45" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="440" y1="84" x2="500" y2="84" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-6">
-            <rect class="s8-kapak-govde" x="439" y="44" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 442 47 L 485 47 Q 442 67 442 90 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="491" cy="94" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="456" y="74" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="470" y="83" text-anchor="middle" dominant-baseline="central" fill="#1a3045">6</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-7" data-no="7" role="button" tabindex="0" aria-label="Dolap 7">
-          <rect class="s8-secim-halka" id="s8-secim-7" x="515" y="40" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="517" y="42" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="520" y="45" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="520" y1="84" x2="580" y2="84" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-7">
-            <rect class="s8-kapak-govde" x="519" y="44" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 522 47 L 565 47 Q 522 67 522 90 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="571" cy="94" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="536" y="74" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="550" y="83" text-anchor="middle" dominant-baseline="central" fill="#1a3045">7</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-8" data-no="8" role="button" tabindex="0" aria-label="Dolap 8">
-          <rect class="s8-secim-halka" id="s8-secim-8" x="595" y="40" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="597" y="42" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="600" y="45" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="600" y1="84" x2="660" y2="84" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-8">
-            <rect class="s8-kapak-govde" x="599" y="44" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 602 47 L 645 47 Q 602 67 602 90 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="651" cy="94" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="616" y="74" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="630" y="83" text-anchor="middle" dominant-baseline="central" fill="#1a3045">8</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-9" data-no="9" role="button" tabindex="0" aria-label="Dolap 9">
-          <rect class="s8-secim-halka" id="s8-secim-9" x="675" y="40" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="677" y="42" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="680" y="45" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="680" y1="84" x2="740" y2="84" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-9">
-            <rect class="s8-kapak-govde" x="679" y="44" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 682 47 L 725 47 Q 682 67 682 90 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="731" cy="94" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="696" y="74" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="710" y="83" text-anchor="middle" dominant-baseline="central" fill="#1a3045">9</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-10" data-no="10" role="button" tabindex="0" aria-label="Dolap 10">
-          <rect class="s8-secim-halka" id="s8-secim-10" x="755" y="40" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="757" y="42" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="760" y="45" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="760" y1="84" x2="820" y2="84" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-10">
-            <rect class="s8-kapak-govde" x="759" y="44" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 762 47 L 805 47 Q 762 67 762 90 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="811" cy="94" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="776" y="74" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="790" y="83" text-anchor="middle" dominant-baseline="central" fill="#1a3045">10</text>
-        </g>
-
-        <!-- Satır 2: Dolap 11 - 20 (y=140) -->
-        <g class="s8-dolap" id="s8-dolap-11" data-no="11" role="button" tabindex="0" aria-label="Dolap 11">
-          <rect class="s8-secim-halka" id="s8-secim-11" x="35" y="138" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="37" y="140" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="40" y="143" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="40" y1="182" x2="100" y2="182" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-11">
-            <rect class="s8-kapak-govde" x="39" y="142" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 42 145 L 85 145 Q 42 165 42 188 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="91" cy="192" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="56" y="172" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="70" y="181" text-anchor="middle" dominant-baseline="central" fill="#1a3045">11</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-12" data-no="12" role="button" tabindex="0" aria-label="Dolap 12">
-          <rect class="s8-secim-halka" id="s8-secim-12" x="115" y="138" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="117" y="140" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="120" y="143" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="120" y1="182" x2="180" y2="182" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-12">
-            <rect class="s8-kapak-govde" x="119" y="142" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 122 145 L 165 145 Q 122 165 122 188 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="171" cy="192" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="136" y="172" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="150" y="181" text-anchor="middle" dominant-baseline="central" fill="#1a3045">12</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-13" data-no="13" role="button" tabindex="0" aria-label="Dolap 13">
-          <rect class="s8-secim-halka" id="s8-secim-13" x="195" y="138" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="197" y="140" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="200" y="143" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="200" y1="182" x2="260" y2="182" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-13">
-            <rect class="s8-kapak-govde" x="199" y="142" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 202 145 L 245 145 Q 202 165 202 188 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="251" cy="192" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="216" y="172" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="230" y="181" text-anchor="middle" dominant-baseline="central" fill="#1a3045">13</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-14" data-no="14" role="button" tabindex="0" aria-label="Dolap 14">
-          <rect class="s8-secim-halka" id="s8-secim-14" x="275" y="138" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="277" y="140" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="280" y="143" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="280" y1="182" x2="340" y2="182" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-14">
-            <rect class="s8-kapak-govde" x="279" y="142" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 282 145 L 325 145 Q 282 165 282 188 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="331" cy="192" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="296" y="172" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="310" y="181" text-anchor="middle" dominant-baseline="central" fill="#1a3045">14</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-15" data-no="15" role="button" tabindex="0" aria-label="Dolap 15">
-          <rect class="s8-secim-halka" id="s8-secim-15" x="355" y="138" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="357" y="140" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="360" y="143" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="360" y1="182" x2="420" y2="182" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-15">
-            <rect class="s8-kapak-govde" x="359" y="142" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 362 145 L 405 145 Q 362 165 362 188 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="411" cy="192" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="376" y="172" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="390" y="181" text-anchor="middle" dominant-baseline="central" fill="#1a3045">15</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-16" data-no="16" role="button" tabindex="0" aria-label="Dolap 16">
-          <rect class="s8-secim-halka" id="s8-secim-16" x="435" y="138" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="437" y="140" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="440" y="143" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="440" y1="182" x2="500" y2="182" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-16">
-            <rect class="s8-kapak-govde" x="439" y="142" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 442 145 L 485 145 Q 442 165 442 188 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="491" cy="192" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="456" y="172" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="470" y="181" text-anchor="middle" dominant-baseline="central" fill="#1a3045">16</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-17" data-no="17" role="button" tabindex="0" aria-label="Dolap 17">
-          <rect class="s8-secim-halka" id="s8-secim-17" x="515" y="138" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="517" y="140" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="520" y="143" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="520" y1="182" x2="580" y2="182" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-17">
-            <rect class="s8-kapak-govde" x="519" y="142" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 522 145 L 565 145 Q 522 165 522 188 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="571" cy="192" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="536" y="172" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="550" y="181" text-anchor="middle" dominant-baseline="central" fill="#1a3045">17</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-18" data-no="18" role="button" tabindex="0" aria-label="Dolap 18">
-          <rect class="s8-secim-halka" id="s8-secim-18" x="595" y="138" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="597" y="140" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="600" y="143" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="600" y1="182" x2="660" y2="182" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-18">
-            <rect class="s8-kapak-govde" x="599" y="142" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 602 145 L 645 145 Q 602 165 602 188 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="651" cy="192" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="616" y="172" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="630" y="181" text-anchor="middle" dominant-baseline="central" fill="#1a3045">18</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-19" data-no="19" role="button" tabindex="0" aria-label="Dolap 19">
-          <rect class="s8-secim-halka" id="s8-secim-19" x="675" y="138" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="677" y="140" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="680" y="143" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="680" y1="182" x2="740" y2="182" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-19">
-            <rect class="s8-kapak-govde" x="679" y="142" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 682 145 L 725 145 Q 682 165 682 188 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="731" cy="192" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="696" y="172" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="710" y="181" text-anchor="middle" dominant-baseline="central" fill="#1a3045">19</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-20" data-no="20" role="button" tabindex="0" aria-label="Dolap 20">
-          <rect class="s8-secim-halka" id="s8-secim-20" x="755" y="138" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="757" y="140" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="760" y="143" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="760" y1="182" x2="820" y2="182" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-20">
-            <rect class="s8-kapak-govde" x="759" y="142" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 762 145 L 805 145 Q 762 165 762 188 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="811" cy="192" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="776" y="172" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="790" y="181" text-anchor="middle" dominant-baseline="central" fill="#1a3045">20</text>
-        </g>
-
-        <!-- Satır 3: Dolap 21 - 30 (y=238) -->
-        <g class="s8-dolap" id="s8-dolap-21" data-no="21" role="button" tabindex="0" aria-label="Dolap 21">
-          <rect class="s8-secim-halka" id="s8-secim-21" x="35" y="236" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="37" y="238" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="40" y="241" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="40" y1="280" x2="100" y2="280" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-21">
-            <rect class="s8-kapak-govde" x="39" y="240" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 42 243 L 85 243 Q 42 263 42 286 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="91" cy="290" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="56" y="270" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="70" y="279" text-anchor="middle" dominant-baseline="central" fill="#1a3045">21</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-22" data-no="22" role="button" tabindex="0" aria-label="Dolap 22">
-          <rect class="s8-secim-halka" id="s8-secim-22" x="115" y="236" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="117" y="238" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="120" y="241" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="120" y1="280" x2="180" y2="280" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-22">
-            <rect class="s8-kapak-govde" x="119" y="240" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 122 243 L 165 243 Q 122 263 122 286 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="171" cy="290" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="136" y="270" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="150" y="279" text-anchor="middle" dominant-baseline="central" fill="#1a3045">22</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-23" data-no="23" role="button" tabindex="0" aria-label="Dolap 23">
-          <rect class="s8-secim-halka" id="s8-secim-23" x="195" y="236" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="197" y="238" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="200" y="241" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="200" y1="280" x2="260" y2="280" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-23">
-            <rect class="s8-kapak-govde" x="199" y="240" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 202 243 L 245 243 Q 202 263 202 286 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="251" cy="290" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="216" y="270" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="230" y="279" text-anchor="middle" dominant-baseline="central" fill="#1a3045">23</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-24" data-no="24" role="button" tabindex="0" aria-label="Dolap 24">
-          <rect class="s8-secim-halka" id="s8-secim-24" x="275" y="236" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="277" y="238" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="280" y="241" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="280" y1="280" x2="340" y2="280" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-24">
-            <rect class="s8-kapak-govde" x="279" y="240" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 282 243 L 325 243 Q 282 263 282 286 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="331" cy="290" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="296" y="270" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="310" y="279" text-anchor="middle" dominant-baseline="central" fill="#1a3045">24</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-25" data-no="25" role="button" tabindex="0" aria-label="Dolap 25">
-          <rect class="s8-secim-halka" id="s8-secim-25" x="355" y="236" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="357" y="238" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="360" y="241" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="360" y1="280" x2="420" y2="280" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-25">
-            <rect class="s8-kapak-govde" x="359" y="240" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 362 243 L 405 243 Q 362 263 362 286 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="411" cy="290" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="376" y="270" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="390" y="279" text-anchor="middle" dominant-baseline="central" fill="#1a3045">25</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-26" data-no="26" role="button" tabindex="0" aria-label="Dolap 26">
-          <rect class="s8-secim-halka" id="s8-secim-26" x="435" y="236" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="437" y="238" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="440" y="241" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="440" y1="280" x2="500" y2="280" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-26">
-            <rect class="s8-kapak-govde" x="439" y="240" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 442 243 L 485 243 Q 442 263 442 286 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="491" cy="290" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="456" y="270" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="470" y="279" text-anchor="middle" dominant-baseline="central" fill="#1a3045">26</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-27" data-no="27" role="button" tabindex="0" aria-label="Dolap 27">
-          <rect class="s8-secim-halka" id="s8-secim-27" x="515" y="236" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="517" y="238" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="520" y="241" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="520" y1="280" x2="580" y2="280" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-27">
-            <rect class="s8-kapak-govde" x="519" y="240" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 522 243 L 565 243 Q 522 263 522 286 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="571" cy="290" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="536" y="270" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="550" y="279" text-anchor="middle" dominant-baseline="central" fill="#1a3045">27</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-28" data-no="28" role="button" tabindex="0" aria-label="Dolap 28">
-          <rect class="s8-secim-halka" id="s8-secim-28" x="595" y="236" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="597" y="238" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="600" y="241" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="600" y1="280" x2="660" y2="280" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-28">
-            <rect class="s8-kapak-govde" x="599" y="240" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 602 243 L 645 243 Q 602 263 602 286 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="651" cy="290" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="616" y="270" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="630" y="279" text-anchor="middle" dominant-baseline="central" fill="#1a3045">28</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-29" data-no="29" role="button" tabindex="0" aria-label="Dolap 29">
-          <rect class="s8-secim-halka" id="s8-secim-29" x="675" y="236" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="677" y="238" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="680" y="241" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="680" y1="280" x2="740" y2="280" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-29">
-            <rect class="s8-kapak-govde" x="679" y="240" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 682 243 L 725 243 Q 682 263 682 286 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="731" cy="290" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="696" y="270" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="710" y="279" text-anchor="middle" dominant-baseline="central" fill="#1a3045">29</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-30" data-no="30" role="button" tabindex="0" aria-label="Dolap 30">
-          <rect class="s8-secim-halka" id="s8-secim-30" x="755" y="236" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="757" y="238" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="760" y="241" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="760" y1="280" x2="820" y2="280" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-30">
-            <rect class="s8-kapak-govde" x="759" y="240" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 762 243 L 805 243 Q 762 263 762 286 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="811" cy="290" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="776" y="270" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="790" y="279" text-anchor="middle" dominant-baseline="central" fill="#1a3045">30</text>
-        </g>
-
-        <!-- Satır 4: Dolap 31 - 40 (y=336) -->
-        <g class="s8-dolap" id="s8-dolap-31" data-no="31" role="button" tabindex="0" aria-label="Dolap 31">
-          <rect class="s8-secim-halka" id="s8-secim-31" x="35" y="334" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="37" y="336" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="40" y="339" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="40" y1="378" x2="100" y2="378" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-31">
-            <rect class="s8-kapak-govde" x="39" y="338" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 42 341 L 85 341 Q 42 361 42 384 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="91" cy="388" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="56" y="368" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="70" y="377" text-anchor="middle" dominant-baseline="central" fill="#1a3045">31</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-32" data-no="32" role="button" tabindex="0" aria-label="Dolap 32">
-          <rect class="s8-secim-halka" id="s8-secim-32" x="115" y="334" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="117" y="336" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="120" y="339" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="120" y1="378" x2="180" y2="378" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-32">
-            <rect class="s8-kapak-govde" x="119" y="338" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 122 341 L 165 341 Q 122 361 122 384 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="171" cy="388" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="136" y="368" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="150" y="377" text-anchor="middle" dominant-baseline="central" fill="#1a3045">32</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-33" data-no="33" role="button" tabindex="0" aria-label="Dolap 33">
-          <rect class="s8-secim-halka" id="s8-secim-33" x="195" y="334" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="197" y="336" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="200" y="339" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="200" y1="378" x2="260" y2="378" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-33">
-            <rect class="s8-kapak-govde" x="199" y="338" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 202 341 L 245 341 Q 202 361 202 384 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="251" cy="388" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="216" y="368" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="230" y="377" text-anchor="middle" dominant-baseline="central" fill="#1a3045">33</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-34" data-no="34" role="button" tabindex="0" aria-label="Dolap 34">
-          <rect class="s8-secim-halka" id="s8-secim-34" x="275" y="334" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="277" y="336" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="280" y="339" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="280" y1="378" x2="340" y2="378" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-34">
-            <rect class="s8-kapak-govde" x="279" y="338" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 282 341 L 325 341 Q 282 361 282 384 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="331" cy="388" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="296" y="368" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="310" y="377" text-anchor="middle" dominant-baseline="central" fill="#1a3045">34</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-35" data-no="35" role="button" tabindex="0" aria-label="Dolap 35">
-          <rect class="s8-secim-halka" id="s8-secim-35" x="355" y="334" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="357" y="336" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="360" y="339" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="360" y1="378" x2="420" y2="378" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-35">
-            <rect class="s8-kapak-govde" x="359" y="338" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 362 341 L 405 341 Q 362 361 362 384 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="411" cy="388" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="376" y="368" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="390" y="377" text-anchor="middle" dominant-baseline="central" fill="#1a3045">35</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-36" data-no="36" role="button" tabindex="0" aria-label="Dolap 36">
-          <rect class="s8-secim-halka" id="s8-secim-36" x="435" y="334" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="437" y="336" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="440" y="339" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="440" y1="378" x2="500" y2="378" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-36">
-            <rect class="s8-kapak-govde" x="439" y="338" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 442 341 L 485 341 Q 442 361 442 384 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="491" cy="388" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="456" y="368" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="470" y="377" text-anchor="middle" dominant-baseline="central" fill="#1a3045">36</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-37" data-no="37" role="button" tabindex="0" aria-label="Dolap 37">
-          <rect class="s8-secim-halka" id="s8-secim-37" x="515" y="334" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="517" y="336" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="520" y="339" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="520" y1="378" x2="580" y2="378" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-37">
-            <rect class="s8-kapak-govde" x="519" y="338" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 522 341 L 565 341 Q 522 361 522 384 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="571" cy="388" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="536" y="368" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="550" y="377" text-anchor="middle" dominant-baseline="central" fill="#1a3045">37</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-38" data-no="38" role="button" tabindex="0" aria-label="Dolap 38">
-          <rect class="s8-secim-halka" id="s8-secim-38" x="595" y="334" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="597" y="336" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="600" y="339" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="600" y1="378" x2="660" y2="378" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-38">
-            <rect class="s8-kapak-govde" x="599" y="338" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 602 341 L 645 341 Q 602 361 602 384 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="651" cy="388" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="616" y="368" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="630" y="377" text-anchor="middle" dominant-baseline="central" fill="#1a3045">38</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-39" data-no="39" role="button" tabindex="0" aria-label="Dolap 39">
-          <rect class="s8-secim-halka" id="s8-secim-39" x="675" y="334" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="677" y="336" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="680" y="339" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="680" y1="378" x2="740" y2="378" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-39">
-            <rect class="s8-kapak-govde" x="679" y="338" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 682 341 L 725 341 Q 682 361 682 384 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="731" cy="388" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="696" y="368" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="710" y="377" text-anchor="middle" dominant-baseline="central" fill="#1a3045">39</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-40" data-no="40" role="button" tabindex="0" aria-label="Dolap 40">
-          <rect class="s8-secim-halka" id="s8-secim-40" x="755" y="334" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="757" y="336" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="760" y="339" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="760" y1="378" x2="820" y2="378" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-40">
-            <rect class="s8-kapak-govde" x="759" y="338" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 762 341 L 805 341 Q 762 361 762 384 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="811" cy="388" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="776" y="368" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="790" y="377" text-anchor="middle" dominant-baseline="central" fill="#1a3045">40</text>
-        </g>
-
-        <!-- Satır 5: Dolap 41 - 50 (y=434) -->
-        <g class="s8-dolap" id="s8-dolap-41" data-no="41" role="button" tabindex="0" aria-label="Dolap 41">
-          <rect class="s8-secim-halka" id="s8-secim-41" x="35" y="432" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="37" y="434" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="40" y="437" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="40" y1="476" x2="100" y2="476" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-41">
-            <rect class="s8-kapak-govde" x="39" y="436" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 42 439 L 85 439 Q 42 459 42 482 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="91" cy="486" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="56" y="466" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="70" y="475" text-anchor="middle" dominant-baseline="central" fill="#1a3045">41</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-42" data-no="42" role="button" tabindex="0" aria-label="Dolap 42">
-          <rect class="s8-secim-halka" id="s8-secim-42" x="115" y="432" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="117" y="434" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="120" y="437" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="120" y1="476" x2="180" y2="476" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-42">
-            <rect class="s8-kapak-govde" x="119" y="436" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 122 439 L 165 439 Q 122 459 122 482 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="171" cy="486" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="136" y="466" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="150" y="475" text-anchor="middle" dominant-baseline="central" fill="#1a3045">42</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-43" data-no="43" role="button" tabindex="0" aria-label="Dolap 43">
-          <rect class="s8-secim-halka" id="s8-secim-43" x="195" y="432" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="197" y="434" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="200" y="437" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="200" y1="476" x2="260" y2="476" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-43">
-            <rect class="s8-kapak-govde" x="199" y="436" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 202 439 L 245 439 Q 202 459 202 482 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="251" cy="486" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="216" y="466" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="230" y="475" text-anchor="middle" dominant-baseline="central" fill="#1a3045">43</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-44" data-no="44" role="button" tabindex="0" aria-label="Dolap 44">
-          <rect class="s8-secim-halka" id="s8-secim-44" x="275" y="432" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="277" y="434" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="280" y="437" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="280" y1="476" x2="340" y2="476" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-44">
-            <rect class="s8-kapak-govde" x="279" y="436" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 282 439 L 325 439 Q 282 459 282 482 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="331" cy="486" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="296" y="466" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="310" y="475" text-anchor="middle" dominant-baseline="central" fill="#1a3045">44</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-45" data-no="45" role="button" tabindex="0" aria-label="Dolap 45">
-          <rect class="s8-secim-halka" id="s8-secim-45" x="355" y="432" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="357" y="434" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="360" y="437" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="360" y1="476" x2="420" y2="476" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-45">
-            <rect class="s8-kapak-govde" x="359" y="436" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 362 439 L 405 439 Q 362 459 362 482 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="411" cy="486" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="376" y="466" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="390" y="475" text-anchor="middle" dominant-baseline="central" fill="#1a3045">45</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-46" data-no="46" role="button" tabindex="0" aria-label="Dolap 46">
-          <rect class="s8-secim-halka" id="s8-secim-46" x="435" y="432" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="437" y="434" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="440" y="437" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="440" y1="476" x2="500" y2="476" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-46">
-            <rect class="s8-kapak-govde" x="439" y="436" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 442 439 L 485 439 Q 442 459 442 482 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="491" cy="486" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="456" y="466" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="470" y="475" text-anchor="middle" dominant-baseline="central" fill="#1a3045">46</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-47" data-no="47" role="button" tabindex="0" aria-label="Dolap 47">
-          <rect class="s8-secim-halka" id="s8-secim-47" x="515" y="432" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="517" y="434" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="520" y="437" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="520" y1="476" x2="580" y2="476" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-47">
-            <rect class="s8-kapak-govde" x="519" y="436" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 522 439 L 565 439 Q 522 459 522 482 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="571" cy="486" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="536" y="466" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="550" y="475" text-anchor="middle" dominant-baseline="central" fill="#1a3045">47</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-48" data-no="48" role="button" tabindex="0" aria-label="Dolap 48">
-          <rect class="s8-secim-halka" id="s8-secim-48" x="595" y="432" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="597" y="434" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="600" y="437" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="600" y1="476" x2="660" y2="476" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-48">
-            <rect class="s8-kapak-govde" x="599" y="436" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 602 439 L 645 439 Q 602 459 602 482 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="651" cy="486" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="616" y="466" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="630" y="475" text-anchor="middle" dominant-baseline="central" fill="#1a3045">48</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-49" data-no="49" role="button" tabindex="0" aria-label="Dolap 49">
-          <rect class="s8-secim-halka" id="s8-secim-49" x="675" y="432" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="677" y="434" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="680" y="437" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="680" y1="476" x2="740" y2="476" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-49">
-            <rect class="s8-kapak-govde" x="679" y="436" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 682 439 L 725 439 Q 682 459 682 482 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="731" cy="486" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="696" y="466" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="710" y="475" text-anchor="middle" dominant-baseline="central" fill="#1a3045">49</text>
-        </g>
-        <g class="s8-dolap" id="s8-dolap-50" data-no="50" role="button" tabindex="0" aria-label="Dolap 50">
-          <rect class="s8-secim-halka" id="s8-secim-50" x="755" y="432" width="70" height="88" rx="5" fill="none" stroke="#e59b22" stroke-width="2.5" stroke-dasharray="6 3" opacity="0"/>
-          <rect class="s8-kasa" x="757" y="434" width="66" height="84" rx="4" fill="#405364" stroke="#1a3045" stroke-width="1.5"/>
-          <rect class="s8-ic-bosluk" x="760" y="437" width="60" height="78" rx="3" fill="#284a6b"/>
-          <line class="s8-raf" x1="760" y1="476" x2="820" y2="476" stroke="#405364" stroke-width="2"/>
-          <g class="s8-kapak" id="s8-kapak-50">
-            <rect class="s8-kapak-govde" x="759" y="436" width="62" height="80" rx="3" fill="url(#s8-grad-kapak)" stroke="#1a3045" stroke-width="1.5"/>
-            <path class="s8-parlama" d="M 762 439 L 805 439 Q 762 459 762 482 Z" fill="#ffffff" fill-opacity="0.3"/>
-            <circle class="s8-kilit" cx="811" cy="486" r="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          </g>
-          <rect class="s8-plaka" x="776" y="466" width="28" height="18" rx="3" fill="#e8eef3" stroke="#1a3045" stroke-width="1"/>
-          <text class="svg-kod s8-numara" x="790" y="475" text-anchor="middle" dominant-baseline="central" fill="#1a3045">50</text>
-        </g>
-      </g>
-    </svg>
-  </div>
-</section>
-
-<section class="bolum etkilesim">
-<div class="panel-basi">
-<div class="baslik-satiri"><h2>Dolap Kilidi Problemi</h2></div>
-<p class="yonerge">Açık Dolapları İşaretle: 50 geçiş sonunda açık kalacak kapakları seç ve Seçimi Onayla'ya bas.</p>
-</div>
-
-  <div class="kontrol-govde">
-    <div class="panel s8-bilgi-panel">
-      <span class="etiket">Açık Dolapları İşaretle</span>
-      <div class="s8-durum-satiri">
-        <span>Seçilen Dolap Sayısı:</span>
-        <span class="buyuk-sayi" id="s8-sayac">0</span>
-      </div>
-      <div class="s8-buton-satir">
-        <button type="button" class="buton" id="s8-temizle">Temizle</button>
-      </div>
-    </div>
-  </div>
-  <div class="kontrol-eylem">
-    <button type="button" class="buton birincil" id="s8-onayla">Seçimi Onayla</button>
-  </div>
-</section>
-
-<style>
-@layer sayfa {
-
-  #sayfa-8 .s8-sahne-zemini {
-    background: linear-gradient(180deg, #dbe4eb, #c8d5e0);
-  }
-  #sayfa-8 .s8-bilgi-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    padding: 16px;
-  }
-  #sayfa-8 .s8-durum-satiri {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  #sayfa-8 .s8-buton-satir {
-    display: flex;
-    justify-content: flex-start;
-  }
-  #sayfa-8 .s8-dolap {
-    cursor: pointer;
-    outline: none;
-  }
-  #sayfa-8 .s8-numara {
-    pointer-events: none;
-    user-select: none;
-  }
-  #sayfa-8 .s8-dolap:focus-visible .s8-kasa {
-    stroke: var(--vurgu);
-    stroke-width: 2.5px;
-  }
-  #sayfa-8 .s8-kapak {
-    transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.24s ease;
-    transform-box: fill-box;
-    transform-origin: left center;
-  }
-  #sayfa-8 .s8-dolap.s8-durum-secili .s8-secim-halka {
-    opacity: 1;
-  }
-  #sayfa-8 .s8-dolap.s8-durum-secili .s8-kapak {
-    transform: scaleX(0.78) skewY(-3deg);
-  }
-  #sayfa-8 .s8-dolap.s8-durum-acik .s8-secim-halka {
-    opacity: 0;
-  }
-  #sayfa-8 .s8-dolap.s8-durum-acik .s8-kapak {
-    transform: scaleX(0.12) skewY(-8deg);
-    opacity: 0.82;
-  }
-  #sayfa-8 .s8-dolap.s8-durum-hata {
-    animation: s8-titreme-anim 0.45s ease-in-out;
-  }
-  #sayfa-8 .s8-dolap.s8-durum-hata .s8-secim-halka {
-    opacity: 1;
-    stroke: var(--hata);
-    stroke-dasharray: 4 2;
-  }
-  @keyframes s8-titreme-anim {
-    0%, 100% { transform: translateX(0); }
-    20%, 60% { transform: translateX(-3.5px); }
-    40%, 80% { transform: translateX(3.5px); }
-  }
-
-}
-</style>
-
-<script>
-window.SAYFA_INIT[8] = function (kok) {
-  var TAM_KARELER = [1, 4, 9, 16, 25, 36, 49];
-  var seciliDolaplar = new Set();
-  var kilitli = false;
-
-  var sayacEl = kok.querySelector("#s8-sayac");
-  var onaylaBtn = kok.querySelector("#s8-onayla");
-  var temizleBtn = kok.querySelector("#s8-temizle");
-  var dolaplar = kok.querySelectorAll(".s8-dolap");
-
-  function sayaciGuncelle() {
-    if (sayacEl) {
-      sayacEl.textContent = seciliDolaplar.size;
-    }
-  }
-
-  function dolapTikla(dolapEl) {
-    if (kilitli) { return; }
-    var no = parseInt(dolapEl.getAttribute("data-no"), 10);
-    if (seciliDolaplar.has(no)) {
-      seciliDolaplar.delete(no);
-      dolapEl.classList.remove("s8-durum-secili");
-    } else {
-      seciliDolaplar.add(no);
-      dolapEl.classList.add("s8-durum-secili");
-    }
-    sayaciGuncelle();
-  }
-
-  dolaplar.forEach(function (el) {
-    el.addEventListener("click", function () {
-      dolapTikla(el);
-    });
-    el.addEventListener("keydown", function (e) {
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        dolapTikla(el);
-      }
-    });
-  });
-
-  if (temizleBtn) {
-    temizleBtn.addEventListener("click", function () {
-      if (kilitli) { return; }
-      seciliDolaplar.clear();
-      dolaplar.forEach(function (el) {
-        el.classList.remove("s8-durum-secili", "s8-durum-hata", "s8-durum-acik");
-      });
-      sayaciGuncelle();
-    });
-  }
-
-  if (onaylaBtn) {
-    onaylaBtn.addEventListener("click", function () {
-      if (kilitli) { return; }
-      if (seciliDolaplar.size === 0) {
-        window.SABLON_TOAST("Lütfen açık kalacağını düşündüğün dolapları işaretle.");
-        return;
-      }
-
-      var secimDizisi = Array.from(seciliDolaplar).sort(function (a, b) { return a - b; });
-      var dogruMu = (secimDizisi.length === TAM_KARELER.length) &&
-        secimDizisi.every(function (val, idx) { return val === TAM_KARELER[idx]; });
-
-      if (dogruMu) {
-        kilitli = true;
-        TAM_KARELER.forEach(function (no) {
-          var hedef = kok.querySelector("#s8-dolap-" + no);
-          if (hedef) {
-            hedef.classList.remove("s8-durum-secili");
-            hedef.classList.add("s8-durum-acik");
-          }
-        });
-        EGITSEL.dontVer(kok, "dogru", "Tam kareler açık kalır.");
-        EGITSEL.kilitle(kok, "#s8-onayla", true);
-        EGITSEL.kilitle(kok, "#s8-temizle", true);
-      } else {
-        // Hatalı veya eksik seçimleri tespit et ve titret
-        dolaplar.forEach(function (el) {
-          var no = parseInt(el.getAttribute("data-no"), 10);
-          var secilmis = seciliDolaplar.has(no);
-          var tamKare = TAM_KARELER.indexOf(no) !== -1;
-
-          if (secilmis && !tamKare) {
-            // Yanlış seçilen dolap
-            el.classList.add("s8-durum-hata");
-          }
-        });
-
-        EGITSEL.dontVer(kok, "yanlis", "Bölen sayısı tek olmalı.");
-
-        // Titremeden sonra hatalı kapaklar başlangıçtaki kapalı konumuna döner
-        setTimeout(function () {
-          dolaplar.forEach(function (el) {
-            el.classList.remove("s8-durum-hata");
-            var no = parseInt(el.getAttribute("data-no"), 10);
-            if (seciliDolaplar.has(no) && TAM_KARELER.indexOf(no) === -1) {
-              seciliDolaplar.delete(no);
-              el.classList.remove("s8-durum-secili");
-            }
-          });
-          sayaciGuncelle();
-        }, 800);
-      }
-    });
-  }
-};
-</script>
-
-</div>
-</div>
-</section>
-<section class="sayfa" id="sayfa-9" tabindex="-1" data-baslik="Kargo Paketleme Tasarımı">
+<section class="sayfa" id="sayfa-8" tabindex="-1" data-baslik="Kargo Paketleme Tasarımı">
 <div class="sayfa-icerik">
 <div class="sayfa-duzen" style="--sutun-sol:7fr;--sutun-sag:5fr">
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:04 -->
@@ -6096,7 +5472,7 @@ window.SAYFA_INIT[8] = function (kok) {
 <!-- SUTUN_ORAN: 7fr 5fr -->
 <section class="bolum sahne">
   <div class="sahne-kap" aria-label="3B Kargo Konteyneri Sahnesi">
-    <canvas id="s9-tuval"></canvas>
+    <canvas id="s8-tuval"></canvas>
   </div>
 </section>
 <section class="bolum etkilesim">
@@ -6106,79 +5482,79 @@ window.SAYFA_INIT[8] = function (kok) {
 </div>
 
   <div class="kontrol-govde">
-    <div class="panel s9-hedef-kart">
+    <div class="panel s8-hedef-kart">
       <h4>Hedef: Kargo Konteyneri (6×4×3)</h4>
-      <div class="s9-ayrit-bilgi">Hacim: 72 birimküp (\( V = 72 = 2^3 \times 3^2 \))</div>
-      <div class="s9-sayac-kutusu">
-        <div class="s9-sayac-oge">
+      <div class="s8-ayrit-bilgi">Hacim: 72 birimküp (\( V = 72 = 2^3 \times 3^2 \))</div>
+      <div class="s8-sayac-kutusu">
+        <div class="s8-sayac-oge">
           <span class="kucuk-not">Yerleşen Koli</span>
-          <strong class="buyuk-sayi" id="s9-yerlesen">-</strong>
+          <strong class="buyuk-sayi" id="s8-yerlesen">-</strong>
         </div>
-        <div class="s9-sayac-oge">
+        <div class="s8-sayac-oge">
           <span class="kucuk-not">Boşluk Miktarı</span>
-          <strong class="buyuk-sayi" id="s9-bosluk">72 birimküp</strong>
+          <strong class="buyuk-sayi" id="s8-bosluk">72 birimküp</strong>
         </div>
-        <div class="s9-sayac-oge">
+        <div class="s8-sayac-oge">
           <span class="kucuk-not">Doluluk Oranı</span>
-          <strong class="buyuk-sayi" id="s9-doluluk">%0</strong>
+          <strong class="buyuk-sayi" id="s8-doluluk">%0</strong>
         </div>
       </div>
     </div>
-    <div class="panel s9-koli-kart-alani">
+    <div class="panel s8-koli-kart-alani">
       <h4>Modüler Koliler</h4>
-      <div class="s9-koli-izgara">
-        <div class="kavram-kart s9-koli-kart" role="button" tabindex="0" data-koli="A" aria-label="Koli A">
-          <svg class="s9-koli-svg" viewBox="0 0 36 24" aria-hidden="true">
+      <div class="s8-koli-izgara">
+        <div class="kavram-kart s8-koli-kart" role="button" tabindex="0" data-koli="A" aria-label="Koli A">
+          <svg class="s8-koli-svg" viewBox="0 0 36 24" aria-hidden="true">
             <path d="M18 3 L32 10 L18 17 L4 10 Z" fill="#d8b597" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
             <path d="M11 6.5 L25 13.5" stroke="#a7672f" stroke-width="1.6" stroke-linecap="round"/>
             <path d="M4 10 L18 17 L18 22 L4 15 Z" fill="#cb8b52" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
             <path d="M18 17 L32 10 L32 15 L18 22 Z" fill="#a7672f" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
           </svg>
-          <div class="s9-koli-metin">
+          <div class="s8-koli-metin">
             <strong>Koli A: 3×2×1</strong>
           </div>
         </div>
-        <div class="kavram-kart s9-koli-kart" role="button" tabindex="0" data-koli="B" aria-label="Koli B">
-          <svg class="s9-koli-svg" viewBox="0 0 36 24" aria-hidden="true">
+        <div class="kavram-kart s8-koli-kart" role="button" tabindex="0" data-koli="B" aria-label="Koli B">
+          <svg class="s8-koli-svg" viewBox="0 0 36 24" aria-hidden="true">
             <path d="M18 4 L30 10 L18 16 L6 10 Z" fill="#d8b597" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
             <path d="M12 7 L24 13" stroke="#a7672f" stroke-width="1.6" stroke-linecap="round"/>
             <path d="M6 10 L18 16 L18 21 L6 15 Z" fill="#cb8b52" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
             <path d="M18 16 L30 10 L30 15 L18 21 Z" fill="#a7672f" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
           </svg>
-          <div class="s9-koli-metin">
+          <div class="s8-koli-metin">
             <strong>Koli B: 2×2×1</strong>
           </div>
         </div>
-        <div class="kavram-kart s9-koli-kart" role="button" tabindex="0" data-koli="C" aria-label="Koli C">
-          <svg class="s9-koli-svg" viewBox="0 0 36 24" aria-hidden="true">
+        <div class="kavram-kart s8-koli-kart" role="button" tabindex="0" data-koli="C" aria-label="Koli C">
+          <svg class="s8-koli-svg" viewBox="0 0 36 24" aria-hidden="true">
             <path d="M18 2 L32 8 L18 14 L4 8 Z" fill="#d8b597" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
             <path d="M11 5 L25 11" stroke="#a7672f" stroke-width="1.6" stroke-linecap="round"/>
             <path d="M4 8 L18 14 L18 22 L4 16 Z" fill="#cb8b52" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
             <path d="M18 14 L32 8 L32 16 L18 22 Z" fill="#a7672f" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
           </svg>
-          <div class="s9-koli-metin">
+          <div class="s8-koli-metin">
             <strong>Koli C: 3×2×3</strong>
           </div>
         </div>
-        <div class="kavram-kart s9-koli-kart" role="button" tabindex="0" data-koli="D" aria-label="Koli D">
-          <svg class="s9-koli-svg" viewBox="0 0 36 24" aria-hidden="true">
+        <div class="kavram-kart s8-koli-kart" role="button" tabindex="0" data-koli="D" aria-label="Koli D">
+          <svg class="s8-koli-svg" viewBox="0 0 36 24" aria-hidden="true">
             <path d="M18 5 L33 10 L18 15 L3 10 Z" fill="#ebe0d5" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
             <path d="M10.5 7.5 L25.5 12.5" stroke="#cb8b52" stroke-width="1.6" stroke-linecap="round"/>
             <path d="M3 10 L18 15 L18 20 L3 15 Z" fill="#d8b597" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
             <path d="M18 15 L33 10 L33 15 L18 20 Z" fill="#cb8b52" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
           </svg>
-          <div class="s9-koli-metin">
+          <div class="s8-koli-metin">
             <strong>Koli D: 5×2×1</strong>
           </div>
         </div>
-        <div class="kavram-kart s9-koli-kart" role="button" tabindex="0" data-koli="E" aria-label="Koli E">
-          <svg class="s9-koli-svg" viewBox="0 0 36 24" aria-hidden="true">
+        <div class="kavram-kart s8-koli-kart" role="button" tabindex="0" data-koli="E" aria-label="Koli E">
+          <svg class="s8-koli-svg" viewBox="0 0 36 24" aria-hidden="true">
             <path d="M18 3 L31 9 L18 15 L5 9 Z" fill="#ebe0d5" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
             <path d="M11.5 6 L24.5 12" stroke="#cb8b52" stroke-width="1.6" stroke-linecap="round"/>
             <path d="M5 9 L18 15 L18 22 L5 16 Z" fill="#d8b597" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
             <path d="M18 15 L31 9 L31 16 L18 22 Z" fill="#cb8b52" stroke="#1b1c3a" stroke-width="1.2" stroke-linejoin="round"/>
           </svg>
-          <div class="s9-koli-metin">
+          <div class="s8-koli-metin">
             <strong>Koli E: 4×3×2</strong>
           </div>
         </div>
@@ -6186,34 +5562,34 @@ window.SAYFA_INIT[8] = function (kok) {
     </div>
   </div>
   <div class="kontrol-eylem">
-    <button class="buton" id="s9-sifirla">Tasarımı Sıfırla</button>
+    <button class="buton" id="s8-sifirla">Tasarımı Sıfırla</button>
   </div>
 </section>
 <style>
 @layer sayfa {
 
-  #sayfa-9 .s9-hedef-kart {
+  #sayfa-8 .s8-hedef-kart {
     display: flex;
     flex-direction: column;
     gap: 8px;
     padding: 12px;
   }
-  #sayfa-9 .s9-ad-vurgu {
+  #sayfa-8 .s8-ad-vurgu {
     font-weight: 700;
     color: var(--vurgu);
     margin: 0;
   }
-  #sayfa-9 .s9-ayrit-bilgi {
+  #sayfa-8 .s8-ayrit-bilgi {
     color: var(--metin-soluk);
     line-height: 1.4;
   }
-  #sayfa-9 .s9-sayac-kutusu {
+  #sayfa-8 .s8-sayac-kutusu {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
     margin-top: 4px;
   }
-  #sayfa-9 .s9-sayac-oge {
+  #sayfa-8 .s8-sayac-oge {
     background: var(--panel-acik);
     border: 1px solid var(--cizgi);
     border-radius: var(--r-secenek);
@@ -6224,21 +5600,21 @@ window.SAYFA_INIT[8] = function (kok) {
     text-align: center;
     gap: 4px;
   }
-  #sayfa-9 .s9-koli-kart-alani {
+  #sayfa-8 .s8-koli-kart-alani {
     display: flex;
     flex-direction: column;
     gap: 10px;
     padding: 12px;
   }
-  #sayfa-9 .s9-koli-izgara {
+  #sayfa-8 .s8-koli-izgara {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: 6px;
   }
-  #sayfa-9 .s9-koli-kart[data-koli="E"] {
+  #sayfa-8 .s8-koli-kart[data-koli="E"] {
     grid-column: 1 / -1;
   }
-  #sayfa-9 .s9-koli-kart {
+  #sayfa-8 .s8-koli-kart {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -6251,31 +5627,31 @@ window.SAYFA_INIT[8] = function (kok) {
     transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
     user-select: none;
   }
-  #sayfa-9 .s9-koli-kart:hover {
+  #sayfa-8 .s8-koli-kart:hover {
     transform: translateY(-2px) scale(1.02);
     border-color: #3bbab6;
     box-shadow: 0 4px 12px rgba(59, 186, 182, 0.2);
   }
-  #sayfa-9 .s9-koli-kart.secili {
+  #sayfa-8 .s8-koli-kart.secili {
     border-color: #3bbab6;
     background: var(--vurgu-acik);
     box-shadow: 0 0 0 2px #3bbab6;
   }
-  #sayfa-9 .s9-koli-kart.surukleniyor {
+  #sayfa-8 .s8-koli-kart.surukleniyor {
     opacity: 0.6;
     cursor: grabbing;
   }
-  #sayfa-9 .s9-koli-svg {
+  #sayfa-8 .s8-koli-svg {
     width: 36px;
     height: 24px;
     flex-shrink: 0;
   }
-  #sayfa-9 .s9-koli-metin {
+  #sayfa-8 .s8-koli-metin {
     display: flex;
     flex-direction: column;
     gap: 2px;
   }
-  @keyframes s9-yay-anim {
+  @keyframes s8-yay-anim {
     0% { transform: translateX(0); }
     20% { transform: translateX(-8px); }
     40% { transform: translateX(8px); }
@@ -6283,25 +5659,25 @@ window.SAYFA_INIT[8] = function (kok) {
     80% { transform: translateX(5px); }
     100% { transform: translateX(0); }
   }
-  #sayfa-9 .s9-kart-titre {
-    animation: s9-yay-anim 0.45s ease;
+  #sayfa-8 .s8-kart-titre {
+    animation: s8-yay-anim 0.45s ease;
     border-color: var(--yanlis) !important;
   }
-  #sayfa-9 #s9-sifirla {
+  #sayfa-8 #s8-sifirla {
     width: 100%;
   }
 
 }
 </style>
 <script>
-window.SAYFA_INIT[9] = function (kok) {
+window.SAYFA_INIT[8] = function (kok) {
   var kutu = kok.querySelector('.sahne-kap');
-  var tuval = kok.querySelector('#s9-tuval');
-  var yerlesenEl = kok.querySelector('#s9-yerlesen');
-  var boslukEl = kok.querySelector('#s9-bosluk');
-  var dolulukEl = kok.querySelector('#s9-doluluk');
-  var sifirlaBtn = kok.querySelector('#s9-sifirla');
-  var kartlar = kok.querySelectorAll('.s9-koli-kart');
+  var tuval = kok.querySelector('#s8-tuval');
+  var yerlesenEl = kok.querySelector('#s8-yerlesen');
+  var boslukEl = kok.querySelector('#s8-bosluk');
+  var dolulukEl = kok.querySelector('#s8-doluluk');
+  var sifirlaBtn = kok.querySelector('#s8-sifirla');
+  var kartlar = kok.querySelectorAll('.s8-koli-kart');
 
   var sahne = new THREE.Scene();
   sahne.background = new THREE.Color('#dbd6d1');
@@ -6676,7 +6052,7 @@ window.SAYFA_INIT[9] = function (kok) {
   }
 
   function koliDene(koliId) {
-    var kart = kok.querySelector('.s9-koli-kart[data-koli="' + koliId + '"]');
+    var kart = kok.querySelector('.s8-koli-kart[data-koli="' + koliId + '"]');
     if (koliId === 'A') {
       koliYerlestir('A');
       iskeletBasariParla();
@@ -6704,20 +6080,20 @@ window.SAYFA_INIT[9] = function (kok) {
     } else if (koliId === 'D') {
       iskeletHataTitre();
       if (kart) {
-        kart.classList.remove('s9-kart-titre');
+        kart.classList.remove('s8-kart-titre');
         void kart.offsetWidth;
-        kart.classList.add('s9-kart-titre');
-        setTimeout(function () { kart.classList.remove('s9-kart-titre'); }, 500);
+        kart.classList.add('s8-kart-titre');
+        setTimeout(function () { kart.classList.remove('s8-kart-titre'); }, 500);
       }
       EGITSEL.dontVer(kok, 'yanlis', 'Asal çarpan hacmi bölmüyor.');
       return false;
     } else if (koliId === 'E') {
       iskeletHataTitre();
       if (kart) {
-        kart.classList.remove('s9-kart-titre');
+        kart.classList.remove('s8-kart-titre');
         void kart.offsetWidth;
-        kart.classList.add('s9-kart-titre');
-        setTimeout(function () { kart.classList.remove('s9-kart-titre'); }, 500);
+        kart.classList.add('s8-kart-titre');
+        setTimeout(function () { kart.classList.remove('s8-kart-titre'); }, 500);
       }
       EGITSEL.dontVer(kok, 'yanlis', 'Koli boyutu ayrıtı aşıyor.');
       return false;
@@ -6884,7 +6260,7 @@ window.SAYFA_INIT[9] = function (kok) {
   }
   dongu();
 
-  window.SAYFA_DURAKLAT[9] = function () {
+  window.SAYFA_DURAKLAT[8] = function () {
     calisiyor = false;
     if (animId) {
       cancelAnimationFrame(animId);
@@ -6892,7 +6268,7 @@ window.SAYFA_INIT[9] = function (kok) {
     }
   };
 
-  window.SAYFA_DEVAM[9] = function () {
+  window.SAYFA_DEVAM[8] = function () {
     if (!calisiyor) {
       calisiyor = true;
       dongu();
@@ -6904,7 +6280,7 @@ window.SAYFA_INIT[9] = function (kok) {
 </div>
 </div>
 </section>
-<section class="sayfa" id="sayfa-10" tabindex="-1" data-baslik="Asal Çarpanlar ve Bölenler D">
+<section class="sayfa" id="sayfa-9" tabindex="-1" data-baslik="Asal Çarpanlar ve Bölenler D">
 <div class="sayfa-icerik">
 <div class="sayfa-duzen" style="--sutun-sol:7fr;--sutun-sag:5fr">
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 04:04 -->
@@ -6913,9 +6289,9 @@ window.SAYFA_INIT[9] = function (kok) {
 <!-- ETIKET: DEĞERLENDİRME -->
 <!-- SUTUN_ORAN: 7fr 5fr -->
 
-<section class="bolum sahne s10-sahne-zemini">
+<section class="bolum sahne s9-sahne-zemini">
   <div class="sahne-kap">
-    <canvas id="s10-canvas" aria-label="Asal çarpanlar ve bölenler 3B etkileşimli model sahnesi"></canvas>
+    <canvas id="s9-canvas" aria-label="Asal çarpanlar ve bölenler 3B etkileşimli model sahnesi"></canvas>
   </div>
 </section>
 
@@ -6925,89 +6301,30 @@ window.SAYFA_INIT[9] = function (kok) {
 <p class="yonerge">Soruları yanıtlayarak asal çarpan ve bölen ilişkilerine dair çıkarımlarını değerlendir.</p>
 </div>
 
-  <div class="kontrol-govde">
-    <div class="s10-soru-kapsayici">
-      <div class="s10-soru-bilgi">
-        <span class="s10-soru-sayac">Soru 1 / 5</span>
-      </div>
-      <div class="s10-soru-metin" id="s10-soru-metin"></div>
-    </div>
-    <div class="s10-secenekler" id="s10-secenekler" role="group" aria-label="Seçenekler"></div>
-  </div>
-  <div class="kontrol-eylem">
-    <button class="buton birincil" id="s10-eylem-btn">Kontrol Et</button>
-  </div>
+  <div class="kontrol-govde"></div>
+  <div class="kontrol-eylem"></div>
 </section>
 
 <style>
 @layer sayfa {
 
-#sayfa-10 .s10-sahne-zemini {
+#sayfa-9 .s9-sahne-zemini {
   background: linear-gradient(180deg, #ded0c4, #c9b6a6);
 }
-#sayfa-10 canvas {
+#sayfa-9 canvas {
   width: 100%;
   height: 100%;
   display: block;
   touch-action: none;
-}
-#sayfa-10 .s10-soru-kapsayici {
-  background: var(--panel);
-  border: 1px solid var(--cizgi);
-  border-radius: var(--r-secenek);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-#sayfa-10 .s10-soru-bilgi {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-#sayfa-10 .s10-soru-sayac {
-  color: var(--metin-soluk);
-  font-weight: 600;
-}
-#sayfa-10 .s10-soru-metin {
-  color: var(--metin);
-  line-height: 1.45;
-}
-#sayfa-10 .s10-secenekler {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-#sayfa-10 .s10-secenek-metin {
-  flex: 1;
-  text-align: left;
-}
-#sayfa-10 .s10-sonuc-kapsayici {
-  background: var(--panel);
-  border: 1px solid var(--cizgi);
-  border-radius: var(--r-secenek);
-  padding: 16px;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-#sayfa-10 .s10-sonuc-baslik {
-  font-weight: 700;
-  color: var(--metin);
-}
-#sayfa-10 .s10-sonuc-metin {
-  color: var(--metin);
-  line-height: 1.5;
 }
 
 }
 </style>
 
 <script>
-window.SAYFA_INIT[10] = function (kok) {
+window.SAYFA_INIT[9] = function (kok) {
   var kap = kok.querySelector(".sahne-kap");
-  var canvas = kok.querySelector("#s10-canvas");
+  var canvas = kok.querySelector("#s9-canvas");
   var w = kap.clientWidth || 600;
   var h = kap.clientHeight || 560;
 
@@ -7574,221 +6891,152 @@ window.SAYFA_INIT[10] = function (kok) {
   }
   animasyon();
 
-  window.SAYFA_DURAKLAT[10] = function () {
+  window.SAYFA_DURAKLAT[9] = function () {
     if (animId) {
       cancelAnimationFrame(animId);
       animId = null;
     }
   };
-  window.SAYFA_DEVAM[10] = function () {
+  window.SAYFA_DEVAM[9] = function () {
     if (!animId) {
       animasyon();
     }
   };
 
   /* Sorular ve Değerlendirme Mantığı */
-  var sorular = [
+  // Lise: her soruda 5 şık (uzman notu); «Başlangıçta kilitli olan…» (dolap) sorusu çıkarıldı.
+  // Mekanik şablonun ortak motorundadır: soru numaralarıyla ileri-geri, 2 hak, sonuç ekranı, Tekrar Çöz.
+  var SORULAR = [
     {
-      metin: "\\( 60 \\) birim küple oluşturulan bir prizmanın ayrıt uzunlukları belirlenirken sayının asal çarpan ayrışımı \\( 60 = 2^2 \\times 3 \\times 5 \\) olarak modellenmiştir. Bu asal çarpanlar ve üsleri kullanılarak oluşturulan aşağıdaki ifadelerden hangisi 60 sayısının bir böleni olamaz?",
-      secenekler: [
-        { metin: "\\( 2 \\times 3 \\)" },
-        { metin: "\\( 2^2 \\times 5 \\)" },
-        { metin: "\\( 3 \\times 5 \\)" },
-        { metin: "\\( 2 \\times 3^2 \\)" }
+      "metin": "\\( 60 \\) birim küple oluşturulan bir prizmanın ayrıt uzunlukları belirlenirken sayının asal çarpan ayrışımı \\( 60 = 2^2 \\times 3 \\times 5 \\) olarak modellenmiştir. Bu asal çarpanlar ve üsleri kullanılarak oluşturulan aşağıdaki ifadelerden hangisi 60 sayısının bir böleni olamaz?",
+      "siklar": [
+        {
+          "metin": "\\( 2 \\times 3 \\)",
+          "dogru": false
+        },
+        {
+          "metin": "\\( 2^2 \\times 5 \\)",
+          "dogru": false
+        },
+        {
+          "metin": "\\( 3 \\times 5 \\)",
+          "dogru": false
+        },
+        {
+          "metin": "\\( 2 \\times 3^2 \\)",
+          "dogru": true
+        },
+        {
+          "metin": "\\( 2^2 \\times 3 \\)",
+          "dogru": false
+        }
       ],
-      dogruMetin: "\\( 2 \\times 3^2 \\)",
-      donut: "Çarpanın üssü sınırı aşamaz."
+      "donut": "Çarpanın üssü sınırı aşamaz."
     },
     {
-      metin: "Asal çarpanlarına ayrılmış bir doğal sayının pozitif bölen sayısı, asal çarpanlarının üslerinin birer fazlasının çarpımı ile hesaplanmaktadır. Asal çarpanlarına ayrılmış biçimi \\( n = 2^a \\times 3^b \\) olan bir doğal sayının pozitif bölen sayısı tek sayı olduğuna göre, \\( a \\) ve \\( b \\) üsleri için aşağıdakilerden hangisi daima doğrudur?",
-      secenekler: [
-        { metin: "\\( a \\) ve \\( b \\) tek sayıdır." },
-        { metin: "\\( a \\) ve \\( b \\) çift sayıdır." },
-        { metin: "\\( a + b \\) toplamı tek sayıdır." },
-        { metin: "\\( a \\) tek, \\( b \\) çift sayıdır." }
+      "metin": "Asal çarpanlarına ayrılmış bir doğal sayının pozitif bölen sayısı, asal çarpanlarının üslerinin birer fazlasının çarpımı ile hesaplanmaktadır. Asal çarpanlarına ayrılmış biçimi \\( n = 2^a \\times 3^b \\) olan bir doğal sayının pozitif bölen sayısı tek sayı olduğuna göre, \\( a \\) ve \\( b \\) üsleri için aşağıdakilerden hangisi daima doğrudur?",
+      "siklar": [
+        {
+          "metin": "\\( a \\) ve \\( b \\) tek sayıdır.",
+          "dogru": false
+        },
+        {
+          "metin": "\\( a \\) ve \\( b \\) çift sayıdır.",
+          "dogru": true
+        },
+        {
+          "metin": "\\( a + b \\) toplamı tek sayıdır.",
+          "dogru": false
+        },
+        {
+          "metin": "\\( a \\) tek, \\( b \\) çift sayıdır.",
+          "dogru": false
+        },
+        {
+          "metin": "\\( a \\) çift, \\( b \\) tek sayıdır.",
+          "dogru": false
+        }
       ],
-      dogruMetin: "\\( a \\) ve \\( b \\) çift sayıdır.",
-      donut: "Tam karelerde üsler çifttir."
+      "donut": "Tam karelerde üsler çifttir."
     },
     {
-      metin: "Bir öğrenci \\( 180 = 2^2 \\times 3^2 \\times 5^1 \\) sayısının pozitif bölen sayısını, asal çarpan üslerinin eksenleri oluşturduğu 3B kafes prizmasındaki nokta sayısı ile cebirsel formülü karşılaştırarak sınamaktadır. Buna göre kafes prizmasının ayrıtlarındaki nokta sayıları ve toplam pozitif bölen sayısı aşağıdakilerin hangisinde doğru verilmiştir?",
-      secenekler: [
-        { metin: "Ayrıtlar: 2, 2, 1 — Toplam bölen: 4" },
-        { metin: "Ayrıtlar: 3, 3, 2 — Toplam bölen: 12" },
-        { metin: "Ayrıtlar: 3, 3, 2 — Toplam bölen: 18" },
-        { metin: "Ayrıtlar: 2, 2, 1 — Toplam bölen: 18" }
+      "metin": "Bir öğrenci \\( 180 = 2^2 \\times 3^2 \\times 5^1 \\) sayısının pozitif bölen sayısını, asal çarpan üslerinin eksenleri oluşturduğu 3B kafes prizmasındaki nokta sayısı ile cebirsel formülü karşılaştırarak sınamaktadır. Buna göre kafes prizmasının ayrıtlarındaki nokta sayıları ve toplam pozitif bölen sayısı aşağıdakilerin hangisinde doğru verilmiştir?",
+      "siklar": [
+        {
+          "metin": "Ayrıtlar: 2, 2, 1 — Toplam bölen: 4",
+          "dogru": false
+        },
+        {
+          "metin": "Ayrıtlar: 3, 3, 2 — Toplam bölen: 12",
+          "dogru": false
+        },
+        {
+          "metin": "Ayrıtlar: 3, 3, 2 — Toplam bölen: 18",
+          "dogru": true
+        },
+        {
+          "metin": "Ayrıtlar: 2, 2, 1 — Toplam bölen: 18",
+          "dogru": false
+        },
+        {
+          "metin": "Ayrıtlar: 2, 2, 1 — Toplam bölen: 12",
+          "dogru": false
+        }
       ],
-      dogruMetin: "Ayrıtlar: 3, 3, 2 — Toplam bölen: 18",
-      donut: "Noktalar üssün bir fazlasıdır."
+      "donut": "Noktalar üssün bir fazlasıdır."
     },
     {
-      metin: "Bir \\( n \\) doğal sayısının asal çarpanları ve bölen özellikleri üzerine kurulan aşağıdaki matematiksel önermelerden hangisi daima doğrudur?",
-      secenekler: [
-        { metin: "\\( n \\) sayısının pozitif bölen sayısı tektir \\(\\Leftrightarrow\\) \\( n \\) bir tam karedir." },
-        { metin: "\\( n \\) sayısının pozitif bölen sayısı çifttir \\(\\Leftrightarrow\\) \\( n \\) bir asal sayıdır." },
-        { metin: "\\( n \\) sayısının asal çarpan sayısı 2'dir \\(\\Leftrightarrow\\) Pozitif bölen sayısı 4'tür." },
-        { metin: "\\( n \\) bir tam kare sayıdır \\(\\Leftrightarrow\\) \\( n \\) sayısının asal çarpanları tektir." }
+      "metin": "Bir \\( n \\) doğal sayısının asal çarpanları ve bölen özellikleri üzerine kurulan aşağıdaki matematiksel önermelerden hangisi daima doğrudur?",
+      "siklar": [
+        {
+          "metin": "\\( n \\) sayısının pozitif bölen sayısı tektir \\(\\Leftrightarrow\\) \\( n \\) bir tam karedir.",
+          "dogru": true
+        },
+        {
+          "metin": "\\( n \\) sayısının pozitif bölen sayısı çifttir \\(\\Leftrightarrow\\) \\( n \\) bir asal sayıdır.",
+          "dogru": false
+        },
+        {
+          "metin": "\\( n \\) sayısının asal çarpan sayısı 2'dir \\(\\Leftrightarrow\\) Pozitif bölen sayısı 4'tür.",
+          "dogru": false
+        },
+        {
+          "metin": "\\( n \\) bir tam kare sayıdır \\(\\Leftrightarrow\\) \\( n \\) sayısının asal çarpanları tektir.",
+          "dogru": false
+        },
+        {
+          "metin": "\\( n \\) sayısının pozitif bölen sayısı 2'dir \\(\\Leftrightarrow\\) \\( n \\) bir tam karedir.",
+          "dogru": false
+        }
       ],
-      dogruMetin: "\\( n \\) sayısının pozitif bölen sayısı tektir \\(\\Leftrightarrow\\) \\( n \\) bir tam karedir.",
-      donut: "Yalnızca tam kareler sağlar."
-    },
-    {
-      metin: "Başlangıçta kilitli olan 1'den 50'ye kadar numaralandırılmış 50 okul dolabının kilitleri, 50 öğrenci tarafından sırayla çarpan kurallarına göre açılıp kapatılmaktadır. Bir öğrenci adım adım denemek yerine bölen sayısı önermesini kullanarak açık kalacak dolapları doğrudan tespit etmek istemektedir. Buna göre işlem tamamlandığında kaç dolap açık kalır?",
-      secenekler: [
-        { metin: "5" },
-        { metin: "7" },
-        { metin: "10" },
-        { metin: "25" }
-      ],
-      dogruMetin: "7",
-      donut: "Tam kare dolaplar açıktır."
+      "donut": "Yalnızca tam kareler sağlar."
     }
   ];
-
-  function karistir(dizi) {
-    var d = dizi.slice();
-    for (var i = d.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var temp = d[i];
-      d[i] = d[j];
-      d[j] = temp;
-    }
-    return d;
-  }
-
-  var aktifSoruIndex = 0;
-  var dogruSayisi = 0;
-  var secilenDeger = null;
-  var eylemModu = "kontrol";
-
-  var eylemBtn = kok.querySelector("#s10-eylem-btn");
-
-  function soruYukle(index) {
-    aktifSoruIndex = index;
-    secilenDeger = null;
-
-    var sayac = kok.querySelector(".s10-soru-sayac");
-    if (sayac) sayac.textContent = "Soru " + (index + 1) + " / " + sorular.length;
-
-    var soruMetinAlani = kok.querySelector("#s10-soru-metin");
-    if (soruMetinAlani) soruMetinAlani.innerHTML = sorular[index].metin;
-
-    var seceneklerKap = kok.querySelector("#s10-secenekler");
-    if (seceneklerKap) {
-      seceneklerKap.innerHTML = "";
-      var karisik = karistir(sorular[index].secenekler);
-      var harfler = ["A", "B", "C", "D"];
-      karisik.forEach(function (opt, idx) {
-        var btn = document.createElement("button");
-        btn.className = "parca-btn";
-        btn.dataset.deger = opt.metin;
-        btn.innerHTML = '<span class="kutucuk">' + harfler[idx] + '</span><span class="s10-secenek-metin">' + opt.metin + '</span>';
-        seceneklerKap.appendChild(btn);
-      });
-    }
-
-    if (window.MathJax && window.MathJax.typesetPromise) {
-      window.MathJax.typesetPromise([kok.querySelector(".s10-soru-kapsayici"), seceneklerKap]).catch(function () {});
-    } else if (window.MathJax && window.MathJax.typeset) {
-      window.MathJax.typeset([kok.querySelector(".s10-soru-kapsayici"), seceneklerKap]);
-    }
-
-    grupQ1.visible = (index === 0);
-    grupQ2.visible = (index === 1);
-    grupQ3.visible = (index === 2);
-    grupQ4.visible = (index === 3);
-    grupQ5.visible = (index === 4);
-
-    for (var k in dolapKapaklari) {
-      dolapKapaklari[k].pivot.rotation.y = 0;
-      dolapKapaklari[k].mesh.material = kapakMatKapali;
-    }
+  var cevaplananlar = {};
+  function sahneGuncelle(i) {
+    grupQ1.visible = (i === 0);
+    grupQ2.visible = (i === 1);
+    grupQ3.visible = (i === 2);
+    grupQ4.visible = (i === 3);
+    grupQ5.visible = false;
+    var yak = !!cevaplananlar[2];
     q3Noktalar.forEach(function (k) {
-      k.material.emissive = new THREE.Color(0x000000);
-      k.material.emissiveIntensity = 0;
+      k.material.emissive = new THREE.Color(yak ? 0x386661 : 0x000000);
+      k.material.emissiveIntensity = yak ? 0.6 : 0;
     });
-
-    EGITSEL.secimGrubu(kok, ".parca-btn", function (el, deger) {
-      secilenDeger = deger;
-    });
-
-    eylemBtn.textContent = "Kontrol Et";
-    eylemModu = "kontrol";
   }
-
-  eylemBtn.addEventListener("click", function () {
-    if (eylemModu === "kontrol") {
-      if (!secilenDeger) {
-        window.SABLON_TOAST("Lütfen bir seçenek işaretleyin.");
-        return;
-      }
-      var aktifSoru = sorular[aktifSoruIndex];
-      var dogruMu = (secilenDeger === aktifSoru.dogruMetin);
-      EGITSEL.kilitle(kok, ".parca-btn", true);
-
-      var butonlar = kok.querySelectorAll(".parca-btn");
-      butonlar.forEach(function (b) {
-        if (b.dataset.deger === aktifSoru.dogruMetin) {
-          b.classList.add("dogru-secim");
-        }
-        if (!dogruMu && b.dataset.deger === secilenDeger) {
-          b.classList.add("yanlis-secim");
-        }
-      });
-
-      if (dogruMu) {
-        dogruSayisi++;
-        EGITSEL.dontVer(kok, "dogru", "Doğru! " + aktifSoru.donut);
-      } else {
-        EGITSEL.dontVer(kok, "yanlis", "Yanlış. " + aktifSoru.donut);
-      }
-
-      if (aktifSoruIndex === 4) {
-        tamKareler.forEach(function (num) {
-          if (dolapKapaklari[num]) {
-            dolapKapaklari[num].pivot.rotation.y = -Math.PI * 0.45;
-            dolapKapaklari[num].mesh.material = kapakMatAcik;
-          }
-        });
-      } else if (aktifSoruIndex === 2) {
-        q3Noktalar.forEach(function (k) {
-          k.material.emissive = new THREE.Color(0x386661);
-          k.material.emissiveIntensity = 0.6;
-        });
-      }
-
-      if (aktifSoruIndex < sorular.length - 1) {
-        eylemBtn.textContent = "Sonraki Soru";
-        eylemModu = "sonraki";
-      } else {
-        eylemBtn.textContent = "Testi Bitir";
-        eylemModu = "bitir";
-      }
-    } else if (eylemModu === "sonraki") {
-      soruYukle(aktifSoruIndex + 1);
-    } else if (eylemModu === "bitir") {
-      var govde = kok.querySelector(".kontrol-govde");
-      govde.innerHTML = '<div class="s10-sonuc-kapsayici">' +
-        '<div class="s10-sonuc-baslik">Değerlendirme Tamamlandı</div>' +
-        '<div class="s10-sonuc-metin">5 sorudan <strong>' + dogruSayisi + '</strong> tanesini doğru yanıtladın.</div>' +
-        '</div>';
-      eylemBtn.textContent = "Tekrar Dene";
-      eylemModu = "tekrar";
-    } else if (eylemModu === "tekrar") {
-      var govde = kok.querySelector(".kontrol-govde");
-      govde.innerHTML = '<div class="s10-soru-kapsayici">' +
-        '<div class="s10-soru-bilgi">' +
-          '<span class="s10-soru-sayac">Soru 1 / 5</span>' +
-        '</div>' +
-        '<div class="s10-soru-metin" id="s10-soru-metin"></div>' +
-      '</div>' +
-      '<div class="s10-secenekler" id="s10-secenekler" role="group" aria-label="Seçenekler"></div>';
-      dogruSayisi = 0;
-      soruYukle(0);
+  EGITSEL.degerlendirme(kok, {
+    sorular: SORULAR,
+    hak: 2,
+    soruDegisti: function (i) {
+      if (i === 0 && !kok.querySelector(".deg-nokta.dogru, .deg-nokta.yanlis")) { cevaplananlar = {}; }
+      sahneGuncelle(i);
+    },
+    cevaplandi: function (i) {
+      cevaplananlar[i] = true;
+      sahneGuncelle(i);
     }
   });
-
-  soruYukle(0);
 };
 </script>
 
@@ -7802,7 +7050,7 @@ window.SAYFA_INIT[10] = function (kok) {
            stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
       Önceki
     </button>
-    <span id="sayfa-durum" aria-live="polite" aria-atomic="true">1 / 10</span>
+    <span id="sayfa-durum" aria-live="polite" aria-atomic="true">1 / 9</span>
     <button class="gezinme-buton birincil" id="sonraki-buton">
       Sonraki
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
@@ -7814,7 +7062,7 @@ window.SAYFA_INIT[10] = function (kok) {
 
 </div>
 
-<script src="ortak/c9a98bad9e96b8ce.js"></script>
+<script src="ortak/71fd31a63aca8df8.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 </body>

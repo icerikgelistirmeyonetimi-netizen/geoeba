@@ -59,6 +59,13 @@ window.EGITSEL = {
      KALIR: 200+ mevcut parça dontVer(kok, ...) diye çağırıyor.
      tip: "dogru" | "yanlis" */
   dontVer: function (kok, tip, mesaj) {
+    /* Nötr tipler (2026-09-26, geoeba parti raporu 7.4.x): bazı sayfalar
+       yönlendirmeyi dontVer(kok, "uyari", …) diye veriyor; eskiden her
+       bilinmeyen tip «yanlis»a dönüp kırmızı + yanlış sesi basıyordu. */
+    if (tip === "uyari" || tip === "bilgi" || tip === "notr" || tip === "ipucu") {
+      if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj); }
+      return;
+    }
     tip = tip === "dogru" ? "dogru" : "yanlis";
     if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj, tip); }
     else { console.warn("EGITSEL.dontVer: SABLON_TOAST yok"); }
@@ -96,6 +103,194 @@ window.EGITSEL = {
       if ("disabled" in el) { el.disabled = kilitli !== false; }
       el.classList.toggle("locked", kilitli !== false);
     });
+  },
+
+  /* ÇOKTAN SEÇMELİ DEĞERLENDİRME MOTORU (2026-09-26, geoeba uzman raporu:
+     «değerlendirme soruları kendi içinde ileri-geri yapılamıyor», «sonucu
+     gör dediğinde kaç doğru kaç yanlış gösteren ekran çıkmıyor», «baştan
+     başlayınca bazı sorular çözülmüş geliyor», «lisede sorular 5 şıklı
+     olmalı», «en az 2 seçim hakkı verilmeli, yanlışta hemen doğru cevap
+     gelmemeli»). Her değerlendirme sayfası bu mekaniği kendisi yazıyordu ve
+     her biri başka eksik taşıyordu; motor TEK doğruluk kaynağıdır.
+       EGITSEL.degerlendirme(kok, {
+         sorular: [{metin, siklar: [{metin, dogru}], donut}],  // şık sayısı serbest (≤6)
+         hak: 2,                // soru başına deneme hakkı
+         karistir: true,        // şık sırası (soru başına BİR kez karışır)
+         soruDegisti: function (i, soru) {},     // sahneyi soruya eşle
+         cevaplandi: function (i, dogruMu, soru) {},
+         bitti: function (dogru, toplam) {}
+       })
+     Arayüz .kontrol-govde / .kontrol-eylem İÇİNE kurulur (içerikleri
+     değiştirilir); metin ve şıklar LaTeX içerebilir (MathJax dizilir). */
+  degerlendirme: function (kok, ayar) {
+    ayar = ayar || {};
+    var sorular = (ayar.sorular || []).filter(function (s) { return s && s.siklar && s.siklar.length; });
+    var govde = ayar.govde || (kok && kok.querySelector(".kontrol-govde"));
+    var eylem = ayar.eylem || (kok && kok.querySelector(".kontrol-eylem"));
+    if (!govde || !sorular.length) { console.warn("EGITSEL.degerlendirme: govde/soru yok"); return null; }
+    var HAK = Math.max(1, ayar.hak || 2);
+    var HARF = ["A", "B", "C", "D", "E", "F"];
+    var durum, aktif = 0, sonucEkrani = false;
+
+    function karisik(n) {
+      var d = [];
+      for (var i = 0; i < n; i++) { d.push(i); }
+      if (ayar.karistir === false) { return d; }
+      for (var j = d.length - 1; j > 0; j--) {
+        var k = Math.floor(Math.random() * (j + 1)); var t = d[j]; d[j] = d[k]; d[k] = t;
+      }
+      return d;
+    }
+    function sifirla() {
+      durum = sorular.map(function (s) {
+        return { sira: karisik(s.siklar.length), denenen: [], sonuc: "bos" };  // bos|devam|dogru|yanlis
+      });
+      aktif = 0; sonucEkrani = false;
+    }
+    function el(etiket, sinif, metin) {
+      var e = document.createElement(etiket);
+      if (sinif) { e.className = sinif; }
+      if (metin !== undefined) { e.innerHTML = metin; }
+      return e;
+    }
+    function diz(kap) {
+      try {
+        if (window.MathJax && window.MathJax.typesetPromise) { window.MathJax.typesetPromise([kap]); }
+        else if (window.MathJax && window.MathJax.typeset) { window.MathJax.typeset([kap]); }
+      } catch (e) { /* dizgi hatası etkileşimi durdurmaz */ }
+    }
+    function sayim() {
+      var s = { dogru: 0, yanlis: 0, bos: 0 };
+      durum.forEach(function (d) { if (d.sonuc === "dogru") s.dogru++; else if (d.sonuc === "yanlis") s.yanlis++; else s.bos++; });
+      return s;
+    }
+    function noktalar(ust) {
+      var kap = el("div", "deg-noktalar");
+      kap.setAttribute("role", "group");
+      kap.setAttribute("aria-label", "Sorular");
+      sorular.forEach(function (_, i) {
+        var d = durum[i];
+        var b = el("button", "deg-nokta " + d.sonuc + (i === aktif && !sonucEkrani ? " aktif" : ""), String(i + 1));
+        b.type = "button";
+        b.setAttribute("aria-label", (i + 1) + ". soru" + (d.sonuc === "dogru" ? ", doğru" : d.sonuc === "yanlis" ? ", yanlış" : ""));
+        b.addEventListener("click", function () { git(i); });
+        kap.appendChild(b);
+      });
+      ust.appendChild(kap);
+    }
+    function eylemKur(dugmeler) {
+      if (!eylem) { return; }
+      eylem.innerHTML = "";
+      var satir = el("div", "deg-eylem");
+      dugmeler.forEach(function (d) {
+        var b = el("button", "buton" + (d.birincil ? " birincil" : ""), d.metin);
+        b.type = "button";
+        if (d.pasif) { b.disabled = true; }
+        b.addEventListener("click", d.is);
+        satir.appendChild(b);
+      });
+      eylem.appendChild(satir);
+    }
+    function ciz() {
+      sonucEkrani = false;
+      var soru = sorular[aktif], d = durum[aktif];
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Soru " + (aktif + 1) + " / " + sorular.length));
+      noktalar(ust);
+      kap.appendChild(ust);
+      kap.appendChild(el("div", "panel deg-metin", soru.metin || ""));
+      var liste = el("div", "deg-siklar");
+      var bitmis = d.sonuc === "dogru" || d.sonuc === "yanlis";
+      d.sira.forEach(function (asilNo, gorunen) {
+        var sik = soru.siklar[asilNo];
+        var b = el("button", "parca-btn");
+        b.type = "button";
+        b.appendChild(el("span", "kutucuk", HARF[gorunen] || String(gorunen + 1)));
+        b.appendChild(el("span", "", sik.metin));
+        var denendi = d.denenen.indexOf(asilNo) > -1;
+        if (denendi && !sik.dogru) { b.classList.add("yanlis-secim"); b.disabled = true; }
+        if (bitmis) {
+          b.disabled = true;
+          if (sik.dogru) { b.classList.add("dogru-secim"); }
+          else if (!denendi) { b.classList.add("soluk"); }
+        }
+        b.addEventListener("click", function () { sec(asilNo); });
+        liste.appendChild(b);
+      });
+      kap.appendChild(liste);
+      govde.appendChild(kap);
+      diz(govde);
+      var son = aktif === sorular.length - 1;
+      eylemKur([
+        { metin: "Önceki", pasif: aktif === 0, is: function () { git(aktif - 1); } },
+        { metin: son ? "Sonuçları Gör" : "Sonraki", birincil: true,
+          is: function () { if (son) { sonuc(); } else { git(aktif + 1); } } }
+      ]);
+      if (typeof ayar.soruDegisti === "function") {
+        try { ayar.soruDegisti(aktif, soru); } catch (e) { console.error("degerlendirme.soruDegisti", e); }
+      }
+    }
+    function sec(asilNo) {
+      var soru = sorular[aktif], d = durum[aktif];
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis" || d.denenen.indexOf(asilNo) > -1) { return; }
+      d.denenen.push(asilNo);
+      var dogruMu = !!soru.siklar[asilNo].dogru;
+      var kalan = HAK - d.denenen.length;
+      if (dogruMu) {
+        d.sonuc = "dogru";
+        window.EGITSEL.dontVer(kok, "dogru", soru.donut || "Doğru seçim.");
+      } else if (kalan > 0) {
+        d.sonuc = "devam";
+        window.EGITSEL.dontVer(kok, "yanlis", "Bir hakkın daha var, tekrar dene.");
+      } else {
+        d.sonuc = "yanlis";
+        window.EGITSEL.dontVer(kok, "yanlis", soru.donut || "Doğru seçenek işaretlendi.");
+      }
+      ciz();
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis") {
+        if (typeof ayar.cevaplandi === "function") {
+          try { ayar.cevaplandi(aktif, d.sonuc === "dogru", soru); } catch (e) { console.error("degerlendirme.cevaplandi", e); }
+        }
+      }
+    }
+    function git(i) {
+      if (i < 0 || i >= sorular.length) { return; }
+      aktif = i;
+      ciz();
+    }
+    function sonuc() {
+      sonucEkrani = true;
+      var s = sayim(), n = sorular.length;
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Sonuçlar"));
+      noktalar(ust);
+      kap.appendChild(ust);
+      var kutu = el("div", "panel deg-sonuc");
+      kutu.appendChild(el("div", "deg-puan buyuk-sayi", s.dogru + " / " + n));
+      var sayac = el("div", "deg-sayac");
+      sayac.appendChild(el("span", "d", "Doğru: " + s.dogru));
+      sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
+      sayac.appendChild(el("span", "b", "Boş: " + s.bos));
+      kutu.appendChild(sayac);
+      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kap.appendChild(kutu);
+      govde.appendChild(kap);
+      eylemKur([
+        { metin: "Soruları İncele", is: function () { git(0); } },
+        { metin: "Tekrar Çöz", birincil: true, is: function () { sifirla(); ciz(); } }
+      ]);
+      if (typeof ayar.bitti === "function") {
+        try { ayar.bitti(s.dogru, n); } catch (e) { console.error("degerlendirme.bitti", e); }
+      }
+    }
+    sifirla();
+    ciz();
+    return { git: git, sonuc: sonuc, sifirla: function () { sifirla(); ciz(); } };
   },
 
   /* 2B TUVAL YÜKSEK ÇÖZÜNÜRLÜK (2026-08-17 çözünürlük raporu, P0)
@@ -205,7 +400,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
                                              "svg"] } };
 </script>
 <script src="ortak/f5b3f5fac24e774b.js"></script>
-<script src="ortak/b47118f55e978615.js"></script>
+<script src="ortak/27c9562c7880c36e.js"></script>
 <script src="ortak/17f319aeaf055a36.js"></script>
 <script>/* RoundedBoxGeometry.js — yerel gömme */
 /* three.js r155 örnek portu — RoundedBoxGeometry (examples/jsm/geometries/RoundedBoxGeometry.js)
@@ -482,6 +677,50 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   var ESIK = 4;                 // px — bu kadar gezmeden sürükleme başlamaz
                                 // (tıkla-seç yedeği tetiklenmeye devam etsin)
 
+  /* İZLEYİCİNİN SAYFA KAPSAMI (2026-09-26, geoeba uzman raporu: «doğru
+     sürüklemede ‹Daha dikkatli ol› uyarısı çıkıyor / yanlış ses geliyor» —
+     3, 4, 9 ve 10. sınıfta onlarca sayfa). Kök neden tarayıcıda ölçüldü
+     (MAT.3.1.3): 1. sayfanın `pdnd.monitorForElements` izleyicisi sayfa
+     süzgeci olmadan kuruluyor; SAYFA_INIT bir kez koşuyor ve temizleyici hiç
+     çağrılmıyor, yani öğrenci o sayfayı geçtikten sonra da YAŞIYOR. 5.
+     sayfada kart doğru sepete bırakılınca sayfa 5 «dogru» dönütü veriyor,
+     ardından sayfa 1'in izleyicisi aynı bırakmayı kendi sorusu sanıp
+     «Birler basamağını tekrar hesapla.» diye «yanlis» basıyordu (toast'ta
+     son söz onun; ses frenine takılan da doğru ses). Korpusta 578 sayfa
+     izleyici kuruyor — hepsi aynı deliği taşıyordu.
+     Çözüm tek yerde, sayfa kodu değişmeden: izleyici KURULDUĞU ANDAKİ aktif
+     sayfaya bağlanır (INIT ve sıfırla düğmeleri o sayfa ekrandayken koşar)
+     ve yalnız kaynağı o sayfanın içinde olan sürüklemeleri görür. */
+  function sahipSayfa() {
+    try {           // node test koşumunun sahte document'ında querySelector yok
+      return typeof document.querySelector === "function"
+        ? document.querySelector(".sayfa.aktif") : null;
+    } catch (e) { return null; }
+  }
+  function kapsamla(yap) {
+    var sahip = sahipSayfa();
+    if (!yap || !sahip) { return yap; }
+    var asilIzin = yap.canMonitor;
+    var kopya = {};
+    for (var k in yap) { kopya[k] = yap[k]; }
+    kopya.canMonitor = function (args) {
+      var kaynak = args && args.source && args.source.element;
+      // Kaynak bir SAYFANIN içindeyse o sayfa sahip olmalı; hiçbir sayfada
+      // değilse (sayfa kodu kaynağı sürükleme için gövdeye taşımış olabilir)
+      // karar sahibin o an ekranda olmasıdır.
+      var sayfasi = kaynak && kaynak.nodeType === 1 && kaynak.closest
+        ? kaynak.closest(".sayfa") : null;
+      if (sayfasi ? sayfasi !== sahip
+                  : (kaynak && kaynak.nodeType === 1 && sahip.contains
+                     ? !sahip.contains(kaynak) && !sahip.classList.contains("aktif")
+                     : !sahip.classList.contains("aktif"))) {
+        return false;
+      }
+      return typeof asilIzin === "function" ? asilIzin.call(yap, args) : true;
+    };
+    return kopya;
+  }
+
   function svgMi(el) {
     return el && typeof SVGElement !== "undefined" && el instanceof SVGElement;
   }
@@ -588,6 +827,12 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     // Sözleşme zaten istiyor ama unutuluyor: touch-action olmadan tarayıcı
     // hareketi sayfa kaydırması sanıp sürüklemeyi iptal eder.
     el.style.touchAction = "none";
+    // Dokunmatikte hareket kararını KÖK <svg> verir (2026-09-26, geoeba parti
+    // raporu MAT.4.1.3: parmakla sürükleme kaydırma sanılıp iptal ediliyordu).
+    // Sahne sabit 1280×720, kaydırılmaz — kökte kapatmak güvenli.
+    if (el.ownerSVGElement && el.ownerSVGElement.style) {
+      el.ownerSVGElement.style.touchAction = "none";
+    }
 
     var basla = null, aktif = null;
 
@@ -618,13 +863,18 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       var hayalet = null;
       try { hayalet = hayaletKur(el); }
       catch (e) { console.warn("pdnd-svg: hayalet kurulamadı", e); }
-      aktif = { kaynak: kaynak, oncekiler: [], ilk: girdi(ev), hayalet: hayalet };
+      aktif = { kaynak: kaynak, oncekiler: [], ilk: girdi(ev), hayalet: hayalet,
+                izleyiciler: [] };
       var yuk = konum(ev, []);
       cagir(yap, "onGenerateDragPreview", yuk);
       cagir(yap, "onDragStart", yuk);
+      // canMonitor pdnd'de olduğu gibi BİR KEZ, başlangıçta sorulur ve o
+      // sürüklemenin bütün olayları (onDrag/onDrop dahil) yalnız izin veren
+      // izleyicilere gider — eskiden yalnız onDragStart süzülüyordu.
       IZLEYICILER.forEach(function (m) {
         if (typeof m.canMonitor === "function"
             && !m.canMonitor({ initial: yuk.location.initial, source: kaynak })) { return; }
+        aktif.izleyiciler.push(m);
         cagir(m, "onDragStart", yuk);
       });
     }
@@ -677,7 +927,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         cagir(h.__yap, "onDrag", Object.assign({ self: h }, yuk));
       });
       cagir(yap, "onDrag", yuk);
-      IZLEYICILER.forEach(function (m) { cagir(m, "onDrag", yuk); });
+      aktif.izleyiciler.forEach(function (m) { cagir(m, "onDrag", yuk); });
       aktif.oncekiler = hedefler;
     }
 
@@ -697,7 +947,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         cagir(h.__yap, "onDrop", Object.assign({ self: h }, yuk));
       });
       cagir(yap, "onDrop", yuk);
-      IZLEYICILER.forEach(function (m) { cagir(m, "onDrop", yuk); });
+      vardi.izleyiciler.forEach(function (m) { cagir(m, "onDrop", yuk); });
     }
 
     el.addEventListener("pointerdown", pointerdown);
@@ -734,13 +984,14 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   };
 
   window.pdnd.monitorForElements = function (yap) {
-    IZLEYICILER.add(yap);
-    var temizle = gercek.monitorForElements(yap);
+    var kapsamli = kapsamla(yap);        // sayfa kapsamı — bkz. kapsamla()
+    IZLEYICILER.add(kapsamli);
+    var temizle = gercek.monitorForElements(kapsamli);
     var temiz = false;
     return function () {
       if (temiz) { return; }
       temiz = true;
-      IZLEYICILER.delete(yap);
+      IZLEYICILER.delete(kapsamli);
       if (typeof temizle === "function") { temizle(); }
     };
   };
@@ -749,7 +1000,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 })();
 
 </script>
-<script src="ortak/b9f956931d9a218c.js"></script>
+<script src="ortak/4d6cc6546768808d.js"></script>
 <script src="ortak/25bc6bc279de577f.js"></script>
 <!-- 🔊 Dönüt sesleri: montaj `window.SABLON_SES = {dogru:…, yanlis:…}` basar
      (base64 data URI). Gövde sonundaki toast() bunu hazır bulmalı, o yüzden
@@ -761,9 +1012,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
      yanındaki <ad>-ses/ klasöründe, göreli yolla. Ayar kapalıysa yuva BOŞ kalır
      ve gövde sonundaki anlatım motoru hiç kurulmaz. -->
 
-<link rel="stylesheet" href="ortak/6d1eb72a5a4832a6.css">
+<link rel="stylesheet" href="ortak/a6aa9fad6404f978.css">
 <!-- URETIM BILGISI
-  montaj: 2026-09-18 12:24
+  montaj: 2026-09-27 03:08
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 03:30
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 03:28
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 03:29
@@ -776,7 +1027,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 </head>
 <body>
 <section id="ekran-kapak" class="sk-sinif-5" aria-label="Giriş kapağı">
-<link rel="stylesheet" href="ortak/8dfca1d25e9d0969.css">
+<link rel="stylesheet" href="ortak/67579608a4a5656c.css">
 <svg class="sk-fon" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
 <defs>
   <linearGradient id="skg5-su" x1="0" y1="0" x2="0" y2="1">
@@ -835,7 +1086,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     <circle cx="76" cy="-9" r="7" fill="#fff"/><circle cx="78" cy="-9" r="3.5" fill="#1b2a3a"/></g>
 </g>
 <circle class="sk-kabarcik sk-g1" cx="210" cy="700" r="9" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g2" cx="250" cy="720" r="6" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g3" cx="1120" cy="700" r="11" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g4" cx="1076" cy="720" r="7" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g5" cx="620" cy="720" r="8" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g1" cx="880" cy="716" r="5" fill="none" stroke="#ffffff" stroke-width="2.5" opacity=".75"/>
-<g class="sk-semboller"><g class="sk-sembol sk-g1" style="animation-duration:4.0s"><circle cx="50" cy="210" r="38" fill="#ff5a7a" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="37" cy="195" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="50" y="223" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">×</text></g><g class="sk-sembol sk-g2" style="animation-duration:4.6s"><circle cx="54" cy="400" r="38" fill="#ffb627" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="41" cy="385" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="54" y="413" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">¾</text></g><g class="sk-sembol sk-g3" style="animation-duration:5.2s"><circle cx="48" cy="590" r="38" fill="#46c46b" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="35" cy="575" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="48" y="603" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">÷</text></g><g class="sk-sembol sk-g4" style="animation-duration:5.8s"><circle cx="1230" cy="230" r="38" fill="#3aa0ff" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1217" cy="215" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1230" y="243" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">%</text></g><g class="sk-sembol sk-g5" style="animation-duration:6.4s"><circle cx="1226" cy="420" r="38" fill="#9b6bff" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1213" cy="405" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1226" y="433" font-size="30" font-weight="700" text-anchor="middle" fill="#ffffff">0,5</text></g><g class="sk-sembol sk-g1" style="animation-duration:7.0s"><circle cx="1232" cy="600" r="38" fill="#ff8a5b" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1219" cy="585" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1232" y="613" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">△</text></g></g></svg>
+<g class="sk-semboller"><g class="sk-sembol sk-g1" style="animation-duration:4.0s"><circle cx="50" cy="210" r="38" fill="#ff5a7a" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="37" cy="195" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="50" y="223" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">∠</text></g><g class="sk-sembol sk-g2" style="animation-duration:4.6s"><circle cx="54" cy="400" r="38" fill="#ffb627" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="41" cy="385" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="54" y="413" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">°</text></g><g class="sk-sembol sk-g3" style="animation-duration:5.2s"><circle cx="48" cy="590" r="38" fill="#46c46b" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="35" cy="575" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="48" y="603" font-size="30" font-weight="700" text-anchor="middle" fill="#ffffff">90°</text></g><g class="sk-sembol sk-g4" style="animation-duration:5.8s"><circle cx="1230" cy="230" r="38" fill="#3aa0ff" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1217" cy="215" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1230" y="243" font-size="30" font-weight="700" text-anchor="middle" fill="#ffffff">180°</text></g><g class="sk-sembol sk-g5" style="animation-duration:6.4s"><circle cx="1226" cy="420" r="38" fill="#9b6bff" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1213" cy="405" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1226" y="433" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">⊥</text></g><g class="sk-sembol sk-g1" style="animation-duration:7.0s"><circle cx="1232" cy="600" r="38" fill="#ff8a5b" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1219" cy="585" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1232" y="613" font-size="30" font-weight="700" text-anchor="middle" fill="#ffffff">360°</text></g></g></svg>
 <div class="sk-kart">
   <div class="sk-bas">
     <div class="sk-bas-sol">
@@ -849,20 +1100,15 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       <h1 class="sk-baslik"><span>Geometrik Şekiller</span></h1>
     </div>
     <svg class="sk-vinyet" viewBox="0 0 300 150" role="img" aria-label="Matematik çizimi">
-  <path d="M10 46H176M10 104H176" stroke="#08405c" stroke-width="4" stroke-linecap="round"/>
-  <path d="M34 126L152 24" stroke="#0f7fa8" stroke-width="4" stroke-linecap="round"/>
-  <path class="sk-v-aci" d="M128 46a22 22 0 0 1-15 21" fill="none" stroke="#ff6f4d" stroke-width="4"/>
-  <path class="sk-v-aci sk-g2" d="M70 104a22 22 0 0 0 15-21" fill="none" stroke="#ff6f4d" stroke-width="4"/>
-  <text x="100" y="38" font-size="17" font-weight="700" fill="#08405c">a</text>
-  <text x="56" y="122" font-size="17" font-weight="700" fill="#08405c">b</text>
-  <text x="12" y="140" font-size="15" font-weight="700" fill="#08405c">paralel doğrular · yöndeş açı</text>
-  <g transform="translate(236 66)">
-    <path d="M-48 40 L0 -42 L48 40 Z" fill="#0f7fa822" stroke="#08405c" stroke-width="3.5" stroke-linejoin="round"/>
-    <path class="sk-v-aci sk-g3" d="M-30 40a20 20 0 0 1 9-17" fill="none" stroke="#ff6f4d" stroke-width="3.5"/>
-    <path class="sk-v-aci sk-g1" d="M30 40a20 20 0 0 0-9-17" fill="none" stroke="#ff6f4d" stroke-width="3.5"/>
-    <path class="sk-v-aci sk-g4" d="M-11 -22a20 20 0 0 1 22 0" fill="none" stroke="#ff6f4d" stroke-width="3.5"/>
-    <text x="0" y="66" font-size="17" font-weight="700" text-anchor="middle" fill="#08405c">180°</text>
-  </g></svg>
+  <path d="M46 124 H280" stroke="#08405c" stroke-width="4" stroke-linecap="round"/>
+  <path d="M272 116 l10 8 -10 8" fill="none" stroke="#08405c" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M146 124 A100 100 0 0 0 46 24" fill="none" stroke="#0f7fa8" stroke-width="2" opacity=".35"/>
+  <g class="sk-v-isin" style="transform-origin:46px 124px">
+    <path d="M46 124 L168 124" stroke="#ff6f4d" stroke-width="4" stroke-linecap="round"/>
+    <path d="M160 116 l10 8 -10 8" fill="none" stroke="#ff6f4d" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <circle cx="46" cy="124" r="6" fill="#08405c"/>
+  <path class="sk-v-aci" d="M86 124 A40 40 0 0 0 74 96" fill="none" stroke="#0f7fa8" stroke-width="4"/></svg>
   </div>
   <div class="sk-govde">
     <section class="sk-blok sk-cikti" aria-label="Öğrenme Çıktısı">
@@ -888,8 +1134,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   <rect x="54" y="156" width="92" height="20" rx="6" fill="#08405c"/>
   <path d="M100 44l6 12 13 2-9.5 9 2.5 13L100 74l-12 6 2.5-13L81 58l13-2z" fill="#fff"/>
 </svg>
-    <h2>Tebrikler!</h2>
-    <p class="st-alt"><b>Geometrik Şekiller</b> içeriğini başarıyla tamamladın.</p>
+    <h2 data-tam="Tebrikler!" data-bos="Henüz etkinlik yapmadın">Tebrikler!</h2>
+    <p class="st-alt" data-tam="&lt;b&gt;Geometrik Şekiller&lt;/b&gt; içeriğini başarıyla tamamladın."
+       data-bos="Etkinlikleri yapmadan sona geldin. Baştan başlayıp etkinlikleri tamamlamak ister misin?"><b>Geometrik Şekiller</b> içeriğini başarıyla tamamladın.</p>
     <div class="st-yildizlar" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg></div>
     <div class="st-ogrendim"><h3>Bu içerikte şunları öğrendin</h3><ul><li>Açıları ölçmek için matematiksel araç ve teknolojiden yararlanabilme</li></ul></div>
     <div class="st-dugmeler">
@@ -922,9 +1169,29 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       kap.appendChild(p);
     }
   }
+  /* HİÇ ETKİNLİK YAPILMADIYSA TEBRİK YOK (geoeba uzman notu 2026-09-26, 7. sınıf
+     G: «hiç soru çözmeden bölüm sonuna gelindiğinde tebrikler mesajı yerine
+     yeniden denemek ister misin gibi bir mesaj gelebilir»). Ölçüt: öğrencinin
+     aldığı doğru/yanlış dönüt sayısı — dönütün tek boğazı EGITSEL.dontVer'dir. */
+  var donutSayisi = 0;
+  function donutSay() {
+    var E = window.EGITSEL;
+    if (!E || typeof E.dontVer !== "function" || E.dontVer.__tebrikSayaci) return;
+    var asil = E.dontVer;
+    E.dontVer = function () { donutSayisi++; return asil.apply(this, arguments); };
+    E.dontVer.__tebrikSayaci = true;
+  }
+  donutSay();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", donutSay);
   var oncekiOdak = null;
   function ac() {
-    konfetiKur();
+    var bos = donutSayisi === 0;
+    tebrik.classList.toggle("st-bos", bos);
+    var baslik = tebrik.querySelector("h2");
+    var alt = tebrik.querySelector(".st-alt");
+    if (baslik) baslik.textContent = bos ? baslik.getAttribute("data-bos") : baslik.getAttribute("data-tam");
+    if (alt) alt.innerHTML = bos ? alt.getAttribute("data-bos") : alt.getAttribute("data-tam");
+    if (!bos) konfetiKur();
     oncekiOdak = document.activeElement;
     tebrik.classList.add("acik");
     tebrik.removeAttribute("aria-hidden");
@@ -942,9 +1209,14 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     var hedef = e.target && e.target.closest && e.target.closest("#sonraki-buton");
     if (hedef && aktifSayfa >= sayfaSayisi()) ac();
   }, true);
+  /* «Baştan Başla» TAM SIFIRLAR (uzman notu, 7. sınıf E: «bazı sorular çözülmüş
+     hâlde geliyor, bazıları sıfırlanmış»): sayfalar SAYFA_INIT'i bir kez koşar
+     ve durumunu bellekte tutar; 1. sayfaya dönmek hiçbirini sıfırlamıyordu.
+     Belgeyi yeniden yüklemek tek güvenilir sıfırlamadır. */
   tebrik.querySelector(".st-bastan").addEventListener("click", function () {
     kapat();
-    if (window.SABLON_GEC) window.SABLON_GEC(1);
+    try { window.location.reload(); }
+    catch (e) { if (window.SABLON_GEC) window.SABLON_GEC(1); }
   });
   tebrik.querySelector(".st-kapat").addEventListener("click", kapat);
   document.addEventListener("keydown", function (e) {
@@ -955,12 +1227,12 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 <div id="cerceve" class="bannersiz">
 
 
-  <main id="sayfalar"><section class="sayfa" id="sayfa-1" tabindex="-1" data-baslik="İletki Parçaları">
+  <main id="sayfalar"><section class="sayfa" id="sayfa-1" tabindex="-1" data-baslik="Açıölçeri Tanıma">
 <div class="sayfa-icerik">
 <div class="sayfa-duzen" style="--sutun-sol:7fr;--sutun-sag:5fr">
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 03:30 -->
-<!-- SAYFA_BASLIK: İletki Parçaları -->
-<!-- YONERGE: İletki parçalarını gösteren kartları sahnedeki doğru yuvalara yerleştir. -->
+<!-- SAYFA_BASLIK: Açıölçeri Tanıma -->
+<!-- YONERGE: Açıölçerin parçalarını gösteren kartları sahnedeki doğru yuvalara yerleştir. -->
 <!-- ETIKET: KEŞİF -->
 <!-- SUTUN_ORAN: 7fr 5fr -->
 <!-- PALET: zemin #fbf9f3 #f5efe4 | baskin #e9f4f7 #cde8f1 #a1d5e6 #6db5ce | ikincil #2563a6 #1b4b82 #3e8ecb | notr #dfdcda #6f757d #373f47 | vurgu #2fa89b | kontur #242c35 -->
@@ -968,7 +1240,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 <section class="bolum sahne s1-sahne-zemini">
   <div class="sahne-kap">
     <svg viewBox="0 0 760 520" preserveAspectRatio="xMidYMid meet" role="img">
-      <title>İletki Parçaları</title>
+      <title>Açıölçerin Parçaları</title>
       <defs>
         <!-- Gövde Degradesi -->
         <linearGradient id="s1-grad-govde" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -1111,13 +1383,11 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       <!-- ÖN KATMAN: Geniş ve Birbirinden Tamamen Ayrık Hedef Yuvalar -->
       <g id="sayfa1-katman-on">
         <!-- YUVA 1: Ölçek Yuvası (Kavisli Üst Yay Bölgesi) -->
-        <g class="s1-yuva" data-hedef="olcek" role="button" tabindex="0" aria-label="Ölçek Yuvası">
+        <g class="s1-yuva" data-hedef="olcek" role="button" tabindex="0" aria-label="Yuva 1">
           <!-- Hedef Çerçevesi -->
           <path d="M 95 284 A 295 295 0 0 1 665 284 L 631 293 A 260 260 0 0 0 129 293 Z"
                 fill="#e9f4f7" fill-opacity="0.5" stroke="#2563a6" stroke-width="2.5" stroke-dasharray="8 5"
                 class="s1-yuva-cerceve" />
-          <!-- Taslak Metin -->
-          <text x="380" y="86" text-anchor="middle" class="svg-not s1-taslak-metin" fill="#1b4b82">Ölçek Yuvası</text>
           <!-- Kilitli Başarı Metni -->
           <text x="380" y="86" text-anchor="middle" class="svg-baslik s1-kilitli-metin" fill="#2fa89b" display="none">Derece Ölçek Yayı</text>
           <!-- Vuruş Alanı -->
@@ -1126,13 +1396,11 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         </g>
 
         <!-- YUVA 2: Merkez Yuvası (Alt Orta Kesişim Noktası) -->
-        <g class="s1-yuva" data-hedef="merkez" role="button" tabindex="0" aria-label="Merkez Yuvası">
+        <g class="s1-yuva" data-hedef="merkez" role="button" tabindex="0" aria-label="Yuva 2">
           <!-- Hedef Çerçevesi -->
           <circle cx="380" cy="360" r="32"
                   fill="#e9f4f7" fill-opacity="0.5" stroke="#2563a6" stroke-width="2.5" stroke-dasharray="6 4"
                   class="s1-yuva-cerceve" />
-          <!-- Taslak Metin -->
-          <text x="380" y="318" text-anchor="middle" class="svg-not s1-taslak-metin" fill="#1b4b82">Merkez Yuvası</text>
           <!-- Kilitli Başarı Metni -->
           <text x="380" y="318" text-anchor="middle" class="svg-baslik s1-kilitli-metin" fill="#2fa89b" display="none">Merkez Noktası</text>
           <!-- Vuruş Alanı -->
@@ -1140,13 +1408,11 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         </g>
 
         <!-- YUVA 3: Taban Yuvası (En Alt Kenar Dikdörtgeni) -->
-        <g class="s1-yuva" data-hedef="taban" role="button" tabindex="0" aria-label="Taban Yuvası">
+        <g class="s1-yuva" data-hedef="taban" role="button" tabindex="0" aria-label="Yuva 3">
           <!-- Hedef Çerçevesi -->
           <rect x="170" y="420" width="420" height="42" rx="10"
                 fill="#e9f4f7" fill-opacity="0.5" stroke="#2563a6" stroke-width="2.5" stroke-dasharray="8 5"
                 class="s1-yuva-cerceve" />
-          <!-- Taslak Metin -->
-          <text x="380" y="446" text-anchor="middle" class="svg-not s1-taslak-metin" fill="#1b4b82">Taban Yuvası</text>
           <!-- Kilitli Başarı Metni -->
           <text x="380" y="446" text-anchor="middle" class="svg-baslik s1-kilitli-metin" fill="#2fa89b" display="none">Taban Çizgisi</text>
           <!-- Vuruş Alanı -->
@@ -1160,8 +1426,8 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <section class="bolum etkilesim">
 <div class="panel-basi">
-<div class="baslik-satiri"><h2>İletki Parçaları</h2><span class="etiket">KEŞİF</span></div>
-<p class="yonerge">İletki parçalarını gösteren kartları sahnedeki doğru yuvalara yerleştir.</p>
+<div class="baslik-satiri"><h2>Açıölçeri Tanıma</h2><span class="etiket">KEŞİF</span></div>
+<p class="yonerge">Açıölçerin parçalarını gösteren kartları sahnedeki doğru yuvalara yerleştir.</p>
 </div>
 
   <div class="kontrol-govde">
@@ -1721,7 +1987,7 @@ window.SAYFA_INIT[1] = function (kok) {
   <div class="kontrol-govde">
     <div class="s2-kart-izgara">
       <!-- 1: İletki -->
-      <div class="kavram-kart s2-arac-karti" role="button" tabindex="0" data-id="iletki" data-tur="dogru" aria-label="İletki">
+      <div class="kavram-kart s2-arac-karti" role="button" tabindex="0" data-id="iletki" data-tur="dogru" aria-label="Açıölçer">
         <div class="s2-kart-ikon" aria-hidden="true">
           <svg viewBox="0 0 44 44" width="36" height="36" aria-hidden="true">
             <path d="M 6 30 A 16 16 0 0 1 38 30 Z" fill="#d7ede1" stroke="#16324f" stroke-width="2"/>
@@ -1729,7 +1995,7 @@ window.SAYFA_INIT[1] = function (kok) {
             <line x1="22" y1="14" x2="22" y2="30" stroke="#16324f" stroke-width="1.5"/>
           </svg>
         </div>
-        <span>İletki</span>
+        <span>Açıölçer</span>
       </div>
 
       <!-- 2: Dijital Açıölçer -->
@@ -2036,12 +2302,12 @@ window.SAYFA_INIT[2] = function (kok) {
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 03:29 -->
 <!-- PALET: zemin #fcfbf7 #f4efe6 | baskin #e3ecf5 #9ec0de #4878a4 #2d557a | ikincil #e8e4dc #c5beaf #7d786d | notr #eef2f5 #a8b4be #52606d | vurgu #2bb8c4 | kontur #1c3144 -->
 <!-- SAYFA_BASLIK: Doğru Aracı Seç -->
-<!-- YONERGE: Ölçüm durumu kartlarını uygun açı ölçme araçlarıyla eşleştirin. -->
+<!-- YONERGE: Her durum kartını, açının ölçüsünü belirlemek için uygun araçla eşleştir. -->
 <!-- ETIKET: UYGULAMA -->
 <section class="bolum sahne s3-sahne-zemini">
   <div class="sahne-kap">
-    <svg viewBox="0 0 760 560" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Açı Ölçme Araçları">
-      <title>Doğru Aracı Seç - Açı Ölçme Araçları</title>
+    <svg viewBox="0 0 515 560" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Açı Ölçme Araçları">
+      <title>Açı ölçme araçları: açıölçer ve matematik yazılımı</title>
       <defs>
         <linearGradient id="s3-grad-kutu" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#fcfbf7" />
@@ -2076,8 +2342,8 @@ window.SAYFA_INIT[2] = function (kok) {
       </defs>
 
       <g id="sayfa3-katman-arka">
-        <!-- 1. Hedef Alanı: İletki Paneli -->
-        <rect id="s3-cerceve-iletki" class="s3-kutu-cerceve" x="25" y="30" width="220" height="500" rx="16" fill="url(#s3-grad-kutu)" stroke="#a8b4be" stroke-width="2.5" stroke-dasharray="6 6" />
+        <!-- 1. Hedef Alanı: Açıölçer Paneli -->
+        <rect id="s3-cerceve-aciolcer" class="s3-kutu-cerceve" x="25" y="30" width="220" height="500" rx="16" fill="url(#s3-grad-kutu)" stroke="#a8b4be" stroke-width="2.5" stroke-dasharray="6 6" />
         <!-- Defter Sayfası Zemin Çizimi -->
         <rect x="45" y="115" width="180" height="235" rx="8" fill="#fcfbf7" stroke="#c5beaf" stroke-width="1.5" />
         <line x1="68" y1="115" x2="68" y2="350" stroke="#9ec0de" stroke-width="1.5" />
@@ -2108,59 +2374,49 @@ window.SAYFA_INIT[2] = function (kok) {
         <polygon points="190,132 182,136 196,141" fill="#e8e4dc" stroke="#1c3144" stroke-width="1" />
         <polygon points="182,136 179,137 185,140" fill="#1c3144" />
 
-        <!-- 2. Hedef Alanı: Dijital Açıölçer Paneli -->
-        <rect id="s3-cerceve-dijital" class="s3-kutu-cerceve" x="270" y="30" width="220" height="500" rx="16" fill="url(#s3-grad-kutu)" stroke="#a8b4be" stroke-width="2.5" stroke-dasharray="6 6" />
-        <!-- Çatı Eğimi Ahşap Kiriş Çizimi -->
-        <path d="M 285 330 L 475 225 L 475 265 L 285 370 Z" fill="url(#s3-grad-ahsap)" stroke="#7d786d" stroke-width="2" />
-        <ellipse cx="286" cy="350" rx="4" ry="18" fill="#c5beaf" stroke="#7d786d" stroke-width="1.5" />
-        <ellipse cx="400" cy="270" rx="14" ry="3" fill="none" stroke="#7d786d" stroke-width="1" opacity="0.45" />
-        <line x1="295" y1="340" x2="465" y2="245" stroke="#7d786d" stroke-width="1" opacity="0.6" />
-        <line x1="305" y1="355" x2="455" y2="270" stroke="#7d786d" stroke-width="1" opacity="0.6" />
-        <line x1="285" y1="370" x2="475" y2="370" stroke="#a8b4be" stroke-width="1.5" stroke-dasharray="4 4" />
-        <path d="M 335 370 A 50 50 0 0 0 327 347" fill="none" stroke="#2bb8c4" stroke-width="2" />
-        <text class="svg-not" x="350" y="362" fill="#2d557a">34.5°</text>
-
-        <!-- 3. Hedef Alanı: Dinamik Geometri Paneli -->
-        <rect id="s3-cerceve-geometri" class="s3-kutu-cerceve" x="515" y="30" width="220" height="500" rx="16" fill="url(#s3-grad-kutu)" stroke="#a8b4be" stroke-width="2.5" stroke-dasharray="6 6" />
-        <!-- Yazılım Penceresi Gövdesi -->
-        <rect x="535" y="115" width="180" height="235" rx="10" fill="url(#s3-grad-yazilim-tuval)" stroke="#1c3144" stroke-width="2" />
-        <path d="M 535 125 A 10 10 0 0 1 545 115 L 705 115 A 10 10 0 0 1 715 125 L 715 142 L 535 142 Z" fill="url(#s3-grad-yazilim-baslik)" />
-        <circle cx="548" cy="128" r="4" fill="#2bb8c4" />
-        <circle cx="560" cy="128" r="4" fill="#9ec0de" />
-        <circle cx="572" cy="128" r="4" fill="#e3ecf5" />
-        <text class="svg-not" x="635" y="132" text-anchor="middle" fill="#ffffff" opacity="0.9">Geometri 5.0</text>
-        <!-- Yazılım Araç Çubuğu -->
-        <rect x="535" y="142" width="180" height="18" fill="#eef2f5" stroke="#1c3144" stroke-width="1" />
-        <path d="M 544 146 L 549 152 L 546 153 L 548 157 L 546 158 L 544 154 L 542 156 Z" fill="#1c3144" />
-        <circle cx="560" cy="151" r="2.5" fill="#2bb8c4" stroke="#1c3144" stroke-width="1" />
-        <line x1="571" y1="155" x2="580" y2="147" stroke="#2d557a" stroke-width="1.5" />
-        <path d="M 592 155 L 597 147 L 602 155" fill="none" stroke="#2bb8c4" stroke-width="1.2" />
-        <!-- Yazılım Koordinat Izgarası -->
-        <line x1="535" y1="180" x2="715" y2="180" stroke="#e3ecf5" stroke-width="1" />
-        <line x1="535" y1="205" x2="715" y2="205" stroke="#e3ecf5" stroke-width="1" />
-        <line x1="535" y1="230" x2="715" y2="230" stroke="#e3ecf5" stroke-width="1" />
-        <line x1="535" y1="255" x2="715" y2="255" stroke="#e3ecf5" stroke-width="1" />
-        <line x1="535" y1="280" x2="715" y2="280" stroke="#e3ecf5" stroke-width="1" />
-        <line x1="535" y1="305" x2="715" y2="305" stroke="#e3ecf5" stroke-width="1" />
-        <line x1="535" y1="330" x2="715" y2="330" stroke="#e3ecf5" stroke-width="1" />
-        <line x1="565" y1="160" x2="565" y2="350" stroke="#e3ecf5" stroke-width="1" />
-        <line x1="595" y1="160" x2="595" y2="350" stroke="#e3ecf5" stroke-width="1" />
-        <line x1="625" y1="160" x2="625" y2="350" stroke="#e3ecf5" stroke-width="1" />
-        <line x1="655" y1="160" x2="655" y2="350" stroke="#e3ecf5" stroke-width="1" />
-        <line x1="685" y1="160" x2="685" y2="350" stroke="#e3ecf5" stroke-width="1" />
-        <!-- C Noktası Taban İzdüşüm Çizgisi -->
-        <line x1="645" y1="185" x2="645" y2="305" stroke="#9ec0de" stroke-width="1" stroke-dasharray="3 3" />
+        <g transform="translate(-245 0)">
+          <!-- 2. Hedef Alanı: Matematik Yazılımı Paneli -->
+          <rect id="s3-cerceve-yazilim" class="s3-kutu-cerceve" x="515" y="30" width="220" height="500" rx="16" fill="url(#s3-grad-kutu)" stroke="#a8b4be" stroke-width="2.5" stroke-dasharray="6 6" />
+          <!-- Yazılım Penceresi Gövdesi -->
+          <rect x="535" y="115" width="180" height="235" rx="10" fill="url(#s3-grad-yazilim-tuval)" stroke="#1c3144" stroke-width="2" />
+          <path d="M 535 125 A 10 10 0 0 1 545 115 L 705 115 A 10 10 0 0 1 715 125 L 715 142 L 535 142 Z" fill="url(#s3-grad-yazilim-baslik)" />
+          <circle cx="548" cy="128" r="4" fill="#2bb8c4" />
+          <circle cx="560" cy="128" r="4" fill="#9ec0de" />
+          <circle cx="572" cy="128" r="4" fill="#e3ecf5" />
+          <text class="svg-not" x="635" y="132" text-anchor="middle" fill="#ffffff" opacity="0.9">Yazılım</text>
+          <!-- Yazılım Araç Çubuğu -->
+          <rect x="535" y="142" width="180" height="18" fill="#eef2f5" stroke="#1c3144" stroke-width="1" />
+          <path d="M 544 146 L 549 152 L 546 153 L 548 157 L 546 158 L 544 154 L 542 156 Z" fill="#1c3144" />
+          <circle cx="560" cy="151" r="2.5" fill="#2bb8c4" stroke="#1c3144" stroke-width="1" />
+          <line x1="571" y1="155" x2="580" y2="147" stroke="#2d557a" stroke-width="1.5" />
+          <path d="M 592 155 L 597 147 L 602 155" fill="none" stroke="#2bb8c4" stroke-width="1.2" />
+          <!-- Yazılım Koordinat Izgarası -->
+          <line x1="535" y1="180" x2="715" y2="180" stroke="#e3ecf5" stroke-width="1" />
+          <line x1="535" y1="205" x2="715" y2="205" stroke="#e3ecf5" stroke-width="1" />
+          <line x1="535" y1="230" x2="715" y2="230" stroke="#e3ecf5" stroke-width="1" />
+          <line x1="535" y1="255" x2="715" y2="255" stroke="#e3ecf5" stroke-width="1" />
+          <line x1="535" y1="280" x2="715" y2="280" stroke="#e3ecf5" stroke-width="1" />
+          <line x1="535" y1="305" x2="715" y2="305" stroke="#e3ecf5" stroke-width="1" />
+          <line x1="535" y1="330" x2="715" y2="330" stroke="#e3ecf5" stroke-width="1" />
+          <line x1="565" y1="160" x2="565" y2="350" stroke="#e3ecf5" stroke-width="1" />
+          <line x1="595" y1="160" x2="595" y2="350" stroke="#e3ecf5" stroke-width="1" />
+          <line x1="625" y1="160" x2="625" y2="350" stroke="#e3ecf5" stroke-width="1" />
+          <line x1="655" y1="160" x2="655" y2="350" stroke="#e3ecf5" stroke-width="1" />
+          <line x1="685" y1="160" x2="685" y2="350" stroke="#e3ecf5" stroke-width="1" />
+          <!-- C Noktası Taban İzdüşüm Çizgisi -->
+          <line x1="645" y1="185" x2="645" y2="305" stroke="#9ec0de" stroke-width="1" stroke-dasharray="3 3" />
+        </g>
       </g>
 
       <g id="sayfa3-katman-orta">
-        <!-- 1. İletki İllüstrasyonu -->
+        <!-- 1. Açıölçer İllüstrasyonu -->
         <ellipse cx="135" cy="275" rx="76" ry="8" fill="#7d786d" opacity="0.25" />
         <!-- Deftere Çizilen Açı -->
         <line x1="135" y1="260" x2="208" y2="260" stroke="#2d557a" stroke-width="2.5" stroke-linecap="round" />
         <line x1="135" y1="260" x2="177" y2="199" stroke="#2d557a" stroke-width="2.5" stroke-linecap="round" />
         <path d="M 165 260 A 30 30 0 0 0 152 235" fill="none" stroke="#4878a4" stroke-width="2" />
         <text class="svg-not" x="175" y="240" fill="#2d557a">55°</text>
-        <!-- İletki Gövdesi -->
+        <!-- Açıölçer Gövdesi -->
         <path d="M 63 260 A 72 72 0 0 1 207 260 L 171 260 A 36 36 0 0 0 99 260 Z" fill="url(#s3-grad-iletki)" fill-opacity="0.88" stroke="#1c3144" stroke-width="2.5" stroke-linejoin="round" />
         <!-- Parlama Yayı -->
         <path d="M 68 256 A 66 66 0 0 1 180 205" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" opacity="0.4" />
@@ -2196,115 +2452,77 @@ window.SAYFA_INIT[2] = function (kok) {
         <line x1="125" y1="260" x2="145" y2="260" stroke="#1c3144" stroke-width="1" />
         <line x1="135" y1="250" x2="135" y2="270" stroke="#1c3144" stroke-width="1" />
 
-        <!-- 2. Dijital Açıölçer İllüstrasyonu -->
-        <ellipse cx="380" cy="275" rx="76" ry="8" fill="#52606d" opacity="0.3" />
-        <!-- Açılan Hareketli Cetvel Kolu -->
-        <path d="M 332 257 L 438 190 L 444 200 L 332 257 Z" fill="url(#s3-grad-metal)" stroke="#1c3144" stroke-width="2" stroke-linejoin="round" />
-        <line x1="365" y1="237" x2="368" y2="242" stroke="#1c3144" stroke-width="1.2" />
-        <line x1="390" y1="221" x2="393" y2="226" stroke="#1c3144" stroke-width="1.2" />
-        <line x1="415" y1="205" x2="418" y2="210" stroke="#1c3144" stroke-width="1.2" />
-        <!-- Dijital Gövde -->
-        <rect x="315" y="235" width="130" height="44" rx="8" fill="url(#s3-grad-metal)" stroke="#1c3144" stroke-width="2.5" />
-        <rect x="318" y="237" width="124" height="5" rx="2.5" fill="#ffffff" opacity="0.35" />
-        <!-- Döner Mafsal / Tırtıklı Kilit Vidası -->
-        <circle cx="332" cy="257" r="13" fill="#7d786d" stroke="#1c3144" stroke-width="2" />
-        <line x1="332" y1="245" x2="332" y2="248" stroke="#eef2f5" stroke-width="1.2" />
-        <line x1="332" y1="266" x2="332" y2="269" stroke="#eef2f5" stroke-width="1.2" />
-        <line x1="320" y1="257" x2="323" y2="257" stroke="#eef2f5" stroke-width="1.2" />
-        <line x1="341" y1="257" x2="344" y2="257" stroke="#eef2f5" stroke-width="1.2" />
-        <circle cx="332" cy="257" r="6" fill="#a8b4be" stroke="#1c3144" stroke-width="1.5" />
-        <!-- LCD Ekran -->
-        <rect x="352" y="243" width="56" height="26" rx="4" fill="#1c3144" stroke="#52606d" stroke-width="1.5" />
-        <path d="M 353 244 L 372 244 L 359 268 L 353 268 Z" fill="#ffffff" opacity="0.12" />
-        <rect x="356" y="247" width="6" height="3" rx="1" fill="#2bb8c4" />
-        <text class="svg-not" x="380" y="261" text-anchor="middle" fill="#2bb8c4">34.5°</text>
-        <!-- Su Terazisi Tüpü -->
-        <rect x="416" y="247" width="22" height="18" rx="4" fill="#eef2f5" stroke="#1c3144" stroke-width="1.5" />
-        <rect x="418" y="249" width="18" height="14" rx="2" fill="#2bb8c4" opacity="0.65" />
-        <circle cx="427" cy="256" r="3.5" fill="#ffffff" opacity="0.9" />
-        <line x1="424" y1="248" x2="424" y2="264" stroke="#1c3144" stroke-width="1" opacity="0.5" />
-        <line x1="430" y1="248" x2="430" y2="264" stroke="#1c3144" stroke-width="1" opacity="0.5" />
-
-        <!-- 3. Dinamik Geometri İllüstrasyonu -->
-        <ellipse cx="625" cy="345" rx="80" ry="8" fill="#52606d" opacity="0.25" />
-        <!-- Dinamik Çokgen -->
-        <polygon points="565,305 685,305 645,185" fill="url(#s3-grad-iletki)" fill-opacity="0.45" stroke="#2d557a" stroke-width="2.5" stroke-linejoin="round" />
-        <path d="M 585 305 A 20 20 0 0 0 579 288" fill="none" stroke="#2bb8c4" stroke-width="2" />
-        <path d="M 588 305 A 24 24 0 0 0 581 285" fill="none" stroke="#2bb8c4" stroke-width="1" opacity="0.6" />
-        <text class="svg-not" x="592" y="295" fill="#2d557a">58°</text>
-        <path d="M 638 205 A 20 20 0 0 0 650 203" fill="none" stroke="#2bb8c4" stroke-width="2" />
-        <path d="M 636 208 A 24 24 0 0 0 652 206" fill="none" stroke="#2bb8c4" stroke-width="1" opacity="0.6" />
-        <text class="svg-not" x="640" y="222" fill="#2d557a">64°</text>
-        <!-- Tutamaç Hareket Vurgusu -->
-        <path d="M 639 179 L 642 175 M 646 177 L 649 173" stroke="#2bb8c4" stroke-width="1.5" stroke-linecap="round" />
-        <!-- Dinamik Nokta Tutamaçları -->
-        <circle cx="565" cy="305" r="6" fill="#2bb8c4" stroke="#1c3144" stroke-width="2" />
-        <circle cx="685" cy="305" r="6" fill="#2bb8c4" stroke="#1c3144" stroke-width="2" />
-        <circle cx="645" cy="185" r="7" fill="#ffffff" stroke="#2bb8c4" stroke-width="3" />
-        <!-- Vektör İmleç İkonu -->
-        <path d="M 650 188 L 664 200 L 658 202 L 664 214 L 660 216 L 654 204 L 648 209 Z" fill="#1c3144" stroke="#ffffff" stroke-width="1.2" />
-        <!-- Pencere Cam Parlaması -->
-        <path d="M 536 143 L 635 143 L 536 242 Z" fill="#ffffff" opacity="0.1" />
+        <g transform="translate(-245 0)">
+          <!-- 2. Matematik Yazılımı İllüstrasyonu -->
+          <ellipse cx="625" cy="345" rx="80" ry="8" fill="#52606d" opacity="0.25" />
+          <!-- Yazılımda çizilmiş çokgen -->
+          <polygon points="565,305 685,305 645,185" fill="url(#s3-grad-iletki)" fill-opacity="0.45" stroke="#2d557a" stroke-width="2.5" stroke-linejoin="round" />
+          <path d="M 585 305 A 20 20 0 0 0 579 288" fill="none" stroke="#2bb8c4" stroke-width="2" />
+          <path d="M 588 305 A 24 24 0 0 0 581 285" fill="none" stroke="#2bb8c4" stroke-width="1" opacity="0.6" />
+          <text class="svg-not" x="592" y="295" fill="#2d557a">58°</text>
+          <path d="M 638 205 A 20 20 0 0 0 650 203" fill="none" stroke="#2bb8c4" stroke-width="2" />
+          <path d="M 636 208 A 24 24 0 0 0 652 206" fill="none" stroke="#2bb8c4" stroke-width="1" opacity="0.6" />
+          <text class="svg-not" x="640" y="222" fill="#2d557a">64°</text>
+          <!-- Tutamaç Hareket Vurgusu -->
+          <path d="M 639 179 L 642 175 M 646 177 L 649 173" stroke="#2bb8c4" stroke-width="1.5" stroke-linecap="round" />
+          <!-- Dinamik Nokta Tutamaçları -->
+          <circle cx="565" cy="305" r="6" fill="#2bb8c4" stroke="#1c3144" stroke-width="2" />
+          <circle cx="685" cy="305" r="6" fill="#2bb8c4" stroke="#1c3144" stroke-width="2" />
+          <circle cx="645" cy="185" r="7" fill="#ffffff" stroke="#2bb8c4" stroke-width="3" />
+          <!-- Vektör İmleç İkonu -->
+          <path d="M 650 188 L 664 200 L 658 202 L 664 214 L 660 216 L 654 204 L 648 209 Z" fill="#1c3144" stroke="#ffffff" stroke-width="1.2" />
+          <!-- Pencere Cam Parlaması -->
+          <path d="M 536 143 L 635 143 L 536 242 Z" fill="#ffffff" opacity="0.1" />
+        </g>
       </g>
 
       <g id="sayfa3-katman-on">
-        <!-- Başlık Rozetleri -->
-        <text class="svg-baslik" x="135" y="72" text-anchor="middle" fill="#1c3144">İletki</text>
-        <text class="svg-not" x="135" y="93" text-anchor="middle" fill="#52606d">Klasik Açıölçer</text>
+        <!-- Araç adları -->
+        <text class="svg-metin" x="135" y="82" text-anchor="middle" fill="#1c3144" font-weight="bold">Açıölçer</text>
+        <text class="svg-metin" x="380" y="70" text-anchor="middle" fill="#1c3144" font-weight="bold">Matematik Yazılımında</text>
+        <text class="svg-metin" x="380" y="94" text-anchor="middle" fill="#1c3144" font-weight="bold">Açı Ölçme Aracı</text>
 
-        <text class="svg-baslik" x="380" y="72" text-anchor="middle" fill="#1c3144">Dijital Açıölçer</text>
-        <text class="svg-not" x="380" y="93" text-anchor="middle" fill="#52606d">Elektronik Eğimölçer</text>
-
-        <text class="svg-baslik" x="625" y="72" text-anchor="middle" fill="#1c3144">Dinamik Geometri</text>
-        <text class="svg-not" x="625" y="93" text-anchor="middle" fill="#52606d">Yazılım Simülasyonu</text>
-
-        <!-- Bırakma Yuvaları -->
-        <!-- 1. İletki Yuvası -->
-        <g id="s3-yuva-bos-iletki">
-          <rect x="45" y="385" width="180" height="105" rx="12" fill="url(#s3-grad-yuva)" stroke="#c5beaf" stroke-width="1.5" stroke-dasharray="4 4" />
-          <path d="M 135 415 L 135 435 M 127 427 L 135 435 L 143 427" stroke="#7d786d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-          <text class="svg-not" x="135" y="460" text-anchor="middle" fill="#52606d">Durum Kartı Yuvası</text>
+        <!-- Bırakma Yuvaları (her araca iki durum) -->
+        <g id="s3-yuva-aciolcer-0" class="s3-yuva">
+          <rect class="s3-yuva-kutu" x="40" y="372" width="190" height="66" rx="12" fill="url(#s3-grad-yuva)" stroke="#c5beaf" stroke-width="1.5" stroke-dasharray="4 4" />
+          <path class="s3-yuva-ok" d="M 135 390 L 135 408 M 127 400 L 135 408 L 143 400" stroke="#7d786d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+          <g class="s3-yuva-dolu" style="display: none;">
+            <circle cx="65" cy="405" r="12" fill="#4878a4" />
+            <path d="M 60 405 L 64 409 L 71 401" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+            <text class="svg-metin s3-yuva-yazi" x="155" y="411" text-anchor="middle" fill="#1c3144"></text>
+          </g>
         </g>
-        <g id="s3-yuva-dolu-iletki" style="display: none;">
-          <rect x="45" y="385" width="180" height="105" rx="12" fill="#e3ecf5" stroke="#2d557a" stroke-width="2.5" />
-          <circle cx="135" cy="418" r="14" fill="#4878a4" />
-          <path d="M 129 418 L 133 422 L 142 414" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-          <text class="svg-metin" x="135" y="450" text-anchor="middle" fill="#1c3144">Defter Çizimi</text>
-          <text class="svg-not" x="135" y="472" text-anchor="middle" fill="#2d557a">Kâğıt üzerinde iletki</text>
+        <g id="s3-yuva-aciolcer-1" class="s3-yuva">
+          <rect class="s3-yuva-kutu" x="40" y="452" width="190" height="66" rx="12" fill="url(#s3-grad-yuva)" stroke="#c5beaf" stroke-width="1.5" stroke-dasharray="4 4" />
+          <path class="s3-yuva-ok" d="M 135 470 L 135 488 M 127 480 L 135 488 L 143 480" stroke="#7d786d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+          <g class="s3-yuva-dolu" style="display: none;">
+            <circle cx="65" cy="485" r="12" fill="#4878a4" />
+            <path d="M 60 485 L 64 489 L 71 481" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+            <text class="svg-metin s3-yuva-yazi" x="155" y="491" text-anchor="middle" fill="#1c3144"></text>
+          </g>
         </g>
-
-        <!-- 2. Dijital Açıölçer Yuvası -->
-        <g id="s3-yuva-bos-dijital">
-          <rect x="290" y="385" width="180" height="105" rx="12" fill="url(#s3-grad-yuva)" stroke="#c5beaf" stroke-width="1.5" stroke-dasharray="4 4" />
-          <path d="M 380 415 L 380 435 M 372 427 L 380 435 L 388 427" stroke="#7d786d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-          <text class="svg-not" x="380" y="460" text-anchor="middle" fill="#52606d">Durum Kartı Yuvası</text>
+        <g id="s3-yuva-yazilim-0" class="s3-yuva">
+          <rect class="s3-yuva-kutu" x="285" y="372" width="190" height="66" rx="12" fill="url(#s3-grad-yuva)" stroke="#c5beaf" stroke-width="1.5" stroke-dasharray="4 4" />
+          <path class="s3-yuva-ok" d="M 380 390 L 380 408 M 372 400 L 380 408 L 388 400" stroke="#7d786d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+          <g class="s3-yuva-dolu" style="display: none;">
+            <circle cx="310" cy="405" r="12" fill="#4878a4" />
+            <path d="M 305 405 L 309 409 L 316 401" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+            <text class="svg-metin s3-yuva-yazi" x="400" y="411" text-anchor="middle" fill="#1c3144"></text>
+          </g>
         </g>
-        <g id="s3-yuva-dolu-dijital" style="display: none;">
-          <rect x="290" y="385" width="180" height="105" rx="12" fill="#e3ecf5" stroke="#2d557a" stroke-width="2.5" />
-          <circle cx="380" cy="418" r="14" fill="#4878a4" />
-          <path d="M 374 418 L 378 422 L 387 414" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-          <text class="svg-metin" x="380" y="450" text-anchor="middle" fill="#1c3144">Çatı Eğimi</text>
-          <text class="svg-not" x="380" y="472" text-anchor="middle" fill="#2d557a">Fiziksel yüzeyde dijital</text>
-        </g>
-
-        <!-- 3. Dinamik Geometri Yuvası -->
-        <g id="s3-yuva-bos-geometri">
-          <rect x="535" y="385" width="180" height="105" rx="12" fill="url(#s3-grad-yuva)" stroke="#c5beaf" stroke-width="1.5" stroke-dasharray="4 4" />
-          <path d="M 625 415 L 625 435 M 617 427 L 625 435 L 633 427" stroke="#7d786d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-          <text class="svg-not" x="625" y="460" text-anchor="middle" fill="#52606d">Durum Kartı Yuvası</text>
-        </g>
-        <g id="s3-yuva-dolu-geometri" style="display: none;">
-          <rect x="535" y="385" width="180" height="105" rx="12" fill="#e3ecf5" stroke="#2d557a" stroke-width="2.5" />
-          <circle cx="625" cy="418" r="14" fill="#4878a4" />
-          <path d="M 619 418 L 623 422 L 632 414" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-          <text class="svg-metin" x="625" y="450" text-anchor="middle" fill="#1c3144">Dinamik Çokgen</text>
-          <text class="svg-not" x="625" y="472" text-anchor="middle" fill="#2d557a">Yazılımda geometri</text>
+        <g id="s3-yuva-yazilim-1" class="s3-yuva">
+          <rect class="s3-yuva-kutu" x="285" y="452" width="190" height="66" rx="12" fill="url(#s3-grad-yuva)" stroke="#c5beaf" stroke-width="1.5" stroke-dasharray="4 4" />
+          <path class="s3-yuva-ok" d="M 380 470 L 380 488 M 372 480 L 380 488 L 388 480" stroke="#7d786d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+          <g class="s3-yuva-dolu" style="display: none;">
+            <circle cx="310" cy="485" r="12" fill="#4878a4" />
+            <path d="M 305 485 L 309 489 L 316 481" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+            <text class="svg-metin s3-yuva-yazi" x="400" y="491" text-anchor="middle" fill="#1c3144"></text>
+          </g>
         </g>
 
         <!-- Görünmez Etkileşim Vuruş Alanları (Drop Targets) -->
-        <rect class="s3-birakma-hedefi" data-hedef="iletki" x="25" y="30" width="220" height="500" rx="16" fill="#000000" fill-opacity="0.001" pointer-events="all" cursor="pointer" />
-        <rect class="s3-birakma-hedefi" data-hedef="dijital" x="270" y="30" width="220" height="500" rx="16" fill="#000000" fill-opacity="0.001" pointer-events="all" cursor="pointer" />
-        <rect class="s3-birakma-hedefi" data-hedef="geometri" x="515" y="30" width="220" height="500" rx="16" fill="#000000" fill-opacity="0.001" pointer-events="all" cursor="pointer" />
+        <rect class="s3-birakma-hedefi" data-hedef="aciolcer" x="25" y="30" width="220" height="500" rx="16" fill="#000000" fill-opacity="0.001" pointer-events="all" cursor="pointer" />
+        <rect class="s3-birakma-hedefi" data-hedef="yazilim" x="270" y="30" width="220" height="500" rx="16" fill="#000000" fill-opacity="0.001" pointer-events="all" cursor="pointer" />
       </g>
     </svg>
   </div>
@@ -2313,45 +2531,45 @@ window.SAYFA_INIT[2] = function (kok) {
 <section class="bolum etkilesim">
 <div class="panel-basi">
 <div class="baslik-satiri"><h2>Doğru Aracı Seç</h2><span class="etiket">UYGULAMA</span></div>
-<p class="yonerge">Ölçüm durumu kartlarını uygun açı ölçme araçlarıyla eşleştirin.</p>
+<p class="yonerge">Her durum kartını, açının ölçüsünü belirlemek için uygun araçla eşleştir.</p>
 </div>
 
   <div class="kontrol-govde">
     <div class="s3-bilgi-paneli">
-      <p class="s3-panel-metin">Ölçüm ortamının şartlarını inceleyerek her durumu en uygun araçla eşleştirin.</p>
+      <p class="s3-panel-metin">Açı kâğıtta mı, ekranda mı? Ona göre aracı seç.</p>
     </div>
 
     <div class="s3-kart-havuzu" aria-label="Ölçüm Durumu Kartları">
-      <div class="kavram-kart s3-kart" data-kart="defter" role="button" tabindex="0" aria-label="Defter Çizimi kartı">
+      <div class="kavram-kart s3-kart" data-kart="defter" role="button" tabindex="0" aria-label="Defterdeki açı kartı">
         <span class="s3-rozet">1</span>
         <div class="s3-kart-metinler">
-          <span class="s3-kart-baslik">Defter Çizimi</span>
-          <span class="s3-kart-ipucu">Kâğıt üzerinde 2B açı çizimi</span>
+          <span class="s3-kart-baslik">Defterdeki açı</span>
+          <span class="s3-kart-ipucu">Kâğıda çizilmiş bir açı</span>
         </div>
       </div>
-
-      <div class="kavram-kart s3-kart" data-kart="cati" role="button" tabindex="0" aria-label="Çatı Eğimi kartı">
+      <div class="kavram-kart s3-kart" data-kart="kitap" role="button" tabindex="0" aria-label="Kitaptaki üçgen kartı">
         <span class="s3-rozet">2</span>
         <div class="s3-kart-metinler">
-          <span class="s3-kart-baslik">Çatı Eğimi</span>
-          <span class="s3-kart-ipucu">Fiziksel yüzeyde eğim ölçümü</span>
+          <span class="s3-kart-baslik">Kitaptaki üçgen</span>
+          <span class="s3-kart-ipucu">Sayfadaki üçgenin bir açısı</span>
         </div>
       </div>
-
-      <div class="kavram-kart s3-kart" data-kart="yazilim" role="button" tabindex="0" aria-label="Dinamik Çokgen kartı">
+      <div class="kavram-kart s3-kart" data-kart="ekran" role="button" tabindex="0" aria-label="Ekrandaki çokgen kartı">
         <span class="s3-rozet">3</span>
         <div class="s3-kart-metinler">
-          <span class="s3-kart-baslik">Dinamik Çokgen</span>
-          <span class="s3-kart-ipucu">Dijital ortamda değişken açı</span>
+          <span class="s3-kart-baslik">Ekrandaki çokgen</span>
+          <span class="s3-kart-ipucu">Yazılımda çizilmiş bir çokgen</span>
+        </div>
+      </div>
+      <div class="kavram-kart s3-kart" data-kart="tablet" role="button" tabindex="0" aria-label="Tabletteki açı kartı">
+        <span class="s3-rozet">4</span>
+        <div class="s3-kart-metinler">
+          <span class="s3-kart-baslik">Tabletteki açı</span>
+          <span class="s3-kart-ipucu">Uygulamada oluşturulan bir açı</span>
         </div>
       </div>
     </div>
-
-    <div class="s3-ipucu-kutusu">
-      <p class="s3-ipucu-yazi">Kartı sürükleyip hedef araca bırakın ya da karta tıklayıp aracı seçin.</p>
-    </div>
   </div>
-
   <div class="kontrol-eylem">
     <button class="buton birincil s3-btn-sifirla" id="s3-yeniden-btn" style="display: none;">Yeniden Başlat</button>
   </div>
@@ -2377,6 +2595,13 @@ window.SAYFA_INIT[2] = function (kok) {
     stroke: var(--dogru) !important;
     stroke-width: 3px !important;
     stroke-dasharray: none !important;
+  }
+
+  #sayfa-3 .s3-yuva-kutu.s3-yuva-tamam {
+    fill: #e3ecf5;
+    stroke: #2d557a;
+    stroke-width: 2.5px;
+    stroke-dasharray: none;
   }
 
   #sayfa-3 .s3-bilgi-paneli {
@@ -2493,16 +2718,20 @@ window.SAYFA_INIT[2] = function (kok) {
 window.SAYFA_INIT[3] = function (kok) {
   var pdndTemizleyiciler = [];
   var dogruEslesmeler = {
-    defter: "iletki",
-    cati: "dijital",
-    yazilim: "geometri"
+    defter: "aciolcer",
+    kitap: "aciolcer",
+    ekran: "yazilim",
+    tablet: "yazilim"
   };
   var dogruMesajlar = {
-    defter: "Kâğıt üzerinde iletki kullanılır.",
-    cati: "Fiziksel yüzeyde dijital ölçülür.",
-    yazilim: "Bilgisayarda geometri yazılımı kullanılır."
+    defter: "Kâğıttaki açı açıölçerle ölçülür.",
+    kitap: "Kâğıttaki açı açıölçerle ölçülür.",
+    ekran: "Ekrandaki açı yazılımın açı ölçme aracıyla ölçülür.",
+    tablet: "Ekrandaki açı yazılımın açı ölçme aracıyla ölçülür."
   };
-  var yanlisMesaj = "Ölçüm ortamının şartlarını incele.";
+  var kartAdlari = { defter: "Defterdeki açı", kitap: "Kitaptaki üçgen", ekran: "Ekrandaki çokgen", tablet: "Tabletteki açı" };
+  var yanlisMesaj = "Açının kâğıtta mı ekranda mı olduğuna bak.";
+  var doluSayisi = { aciolcer: 0, yazilim: 0 };
 
   var tamamlananSayisi = 0;
   var seciliKart = null;
@@ -2517,18 +2746,22 @@ window.SAYFA_INIT[3] = function (kok) {
       kartEl.classList.remove("secili");
       if (seciliKart === kartKodu) seciliKart = null;
 
-      var yuvaBos = kok.querySelector("#s3-yuva-bos-" + hedefKodu);
-      var yuvaDolu = kok.querySelector("#s3-yuva-dolu-" + hedefKodu);
+      var yuva = kok.querySelector("#s3-yuva-" + hedefKodu + "-" + doluSayisi[hedefKodu]);
+      doluSayisi[hedefKodu]++;
       var cerceve = kok.querySelector("#s3-cerceve-" + hedefKodu);
-
-      if (yuvaBos) yuvaBos.style.display = "none";
-      if (yuvaDolu) yuvaDolu.style.display = "inline";
-      if (cerceve) cerceve.classList.add("s3-hedef-kilitli");
+      if (yuva) {
+        yuva.querySelector(".s3-yuva-ok").style.display = "none";
+        yuva.querySelector(".s3-yuva-dolu").style.display = "inline";
+        yuva.querySelector(".s3-yuva-yazi").textContent = kartAdlari[kartKodu];
+        yuva.querySelector(".s3-yuva-kutu").classList.add("s3-yuva-tamam");
+      }
+      if (cerceve && doluSayisi[hedefKodu] >= 2) cerceve.classList.add("s3-hedef-kilitli");
 
       EGITSEL.dontVer(kok, "dogru", dogruMesajlar[kartKodu]);
       tamamlananSayisi++;
 
-      if (tamamlananSayisi === 3) {
+      if (tamamlananSayisi === 4) {
+        EGITSEL.dontVer(kok, "dogru", "Tüm durumlar uygun araçla eşleşti.");
         var yenidenBtn = kok.querySelector("#s3-yeniden-btn");
         if (yenidenBtn) yenidenBtn.style.display = "inline-flex";
       }
@@ -2639,13 +2872,16 @@ window.SAYFA_INIT[3] = function (kok) {
         k.classList.remove("s3-kilitli", "yerlesti", "secili", "s3-shake");
         k.removeAttribute("aria-disabled");
       });
-      ["iletki", "dijital", "geometri"].forEach(function (h) {
+      doluSayisi = { aciolcer: 0, yazilim: 0 };
+      ["aciolcer", "yazilim"].forEach(function (h) {
         var cerceve = kok.querySelector("#s3-cerceve-" + h);
-        var yuvaBos = kok.querySelector("#s3-yuva-bos-" + h);
-        var yuvaDolu = kok.querySelector("#s3-yuva-dolu-" + h);
         if (cerceve) cerceve.classList.remove("s3-hedef-kilitli", "s3-hedef-aktif");
-        if (yuvaBos) yuvaBos.style.display = "inline";
-        if (yuvaDolu) yuvaDolu.style.display = "none";
+      });
+      kok.querySelectorAll(".s3-yuva").forEach(function (y) {
+        y.querySelector(".s3-yuva-ok").style.display = "";
+        y.querySelector(".s3-yuva-dolu").style.display = "none";
+        y.querySelector(".s3-yuva-yazi").textContent = "";
+        y.querySelector(".s3-yuva-kutu").classList.remove("s3-yuva-tamam");
       });
     });
   }
@@ -2654,19 +2890,19 @@ window.SAYFA_INIT[3] = function (kok) {
 </div>
 </div>
 </section>
-<section class="sayfa" id="sayfa-4" tabindex="-1" data-baslik="İletkiyi Doğru Hizala">
+<section class="sayfa" id="sayfa-4" tabindex="-1" data-baslik="Açıölçeri Doğru Hizala">
 <div class="sayfa-icerik">
 <div class="sayfa-duzen" style="--sutun-sol:8fr;--sutun-sag:4fr">
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 03:28 -->
-<!-- SAYFA_BASLIK: İletkiyi Doğru Hizala -->
-<!-- YONERGE: İletkiyi sürükleyerek açının köşe noktası ve taban çizgisiyle hizala. -->
+<!-- SAYFA_BASLIK: Açıölçeri Doğru Hizala -->
+<!-- YONERGE: Açıölçeri sürükleyerek açının köşe noktası ve taban çizgisiyle hizala. -->
 <!-- ETIKET: KEŞİF -->
 <!-- SUTUN_ORAN: 8fr 4fr -->
 <!-- PALET: zemin #ffffff #f5efe6 | baskin #e3ecfa #bdd4f6 #5b8edc #2859a8 | ikincil #eaf6f0 #a8e2cb #389c74 | notr #8c877d #4e4a42 | vurgu #e6a117 | kontur #1e2538 -->
 <section class="bolum sahne s4-sahne-zemini">
   <div class="sahne-kap">
     <svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet" role="img">
-      <title>Açı ve İletki Hizalama Sahnesi</title>
+      <title>Açı ve Açıölçer Hizalama Sahnesi</title>
       <defs>
         <linearGradient id="s4-grad-zemin" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#ffffff"/>
@@ -2762,7 +2998,7 @@ window.SAYFA_INIT[3] = function (kok) {
 
       <!-- KATMAN 3: ÖN PLAN (SÜRÜKLENEBİLİR İLETKİ) -->
       <g id="sayfa4-katman-on">
-        <g id="s4-iletki" class="s4-surukle" transform="translate(600 300)" role="button" tabindex="0" aria-label="İletki">
+        <g id="s4-iletki" class="s4-surukle" transform="translate(600 300)" role="button" tabindex="0" aria-label="Açıölçer">
           <!-- Vurgu Halkası (Seçilince Açılır) -->
           <path class="s4-vurgu-halka" d="M -156 0 A 156 156 0 0 1 156 0" fill="none" stroke="#5b8edc" stroke-width="6" stroke-linecap="round" opacity="0"/>
 
@@ -2851,9 +3087,8 @@ window.SAYFA_INIT[3] = function (kok) {
           <line class="s4-taban-cizgi" x1="-150" y1="0" x2="150" y2="0" stroke="#1e2538" stroke-width="3" stroke-linecap="round"/>
 
           <!-- İletki Başlık Rozeti / Ekran Yazısı -->
-          <rect x="-38" y="-92" width="76" height="24" rx="8" fill="#ffffff" fill-opacity="0.85" stroke="#bdd4f6" stroke-width="1.5"/>
-          <line x1="-12" y1="-69" x2="12" y2="-69" stroke="#bdd4f6" stroke-width="1.5" stroke-linecap="round"/>
-          <text x="0" y="-76" text-anchor="middle" class="svg-not" fill="#2859a8">İletki</text>
+          <rect x="-50" y="-94" width="100" height="26" rx="8" fill="#ffffff" fill-opacity="0.85" stroke="#bdd4f6" stroke-width="1.5"/>
+          <text x="0" y="-75" text-anchor="middle" class="svg-not" fill="#2859a8">Açıölçer</text>
         </g>
       </g>
     </svg>
@@ -2861,8 +3096,8 @@ window.SAYFA_INIT[3] = function (kok) {
 </section>
 <section class="bolum etkilesim">
 <div class="panel-basi">
-<div class="baslik-satiri"><h2>İletkiyi Doğru Hizala</h2><span class="etiket">KEŞİF</span></div>
-<p class="yonerge">İletkiyi sürükleyerek açının köşe noktası ve taban çizgisiyle hizala.</p>
+<div class="baslik-satiri"><h2>Açıölçeri Doğru Hizala</h2><span class="etiket">KEŞİF</span></div>
+<p class="yonerge">Açıölçeri sürükleyerek açının köşe noktası ve taban çizgisiyle hizala.</p>
 </div>
 
   <div class="kontrol-govde">
@@ -2871,14 +3106,14 @@ window.SAYFA_INIT[3] = function (kok) {
         <span class="kutucuk">1</span>
         <strong>Köşe Noktası</strong>
       </div>
-      <div class="kucuk-not">İletkinin merkez artı işaretini açının köşesine yerleştir.</div>
+      <div class="kucuk-not">Açıölçerin merkez artı işaretini açının köşesine yerleştir.</div>
     </div>
     <div class="kart s4-kart" id="s4-kart-taban">
       <div class="s4-kart-baslik">
         <span class="kutucuk">2</span>
         <strong>Taban Çizgisi</strong>
       </div>
-      <div class="kucuk-not">İletkinin alt taban çizgisini açının alt koluyla çakıştır.</div>
+      <div class="kucuk-not">Açıölçerin alt taban çizgisini açının alt koluyla çakıştır.</div>
     </div>
   </div>
   <div class="kontrol-eylem">
@@ -3197,14 +3432,14 @@ window.SAYFA_INIT[4] = function (kok) {
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 03:32 -->
 <!-- PALET: zemin #ffffff #edf3f8 | baskin #cde6f7 #98cde9 #5da8d6 | ikincil #19324d #27486b #3d638c | notr #d4dfe8 #697d91 | vurgu #2fa352 #d48222 | kontur #16273a -->
 <!-- SAYFA_BASLIK: Doğru Skalayı Oku -->
-<!-- YONERGE: İletkinin merkezine yerleştirilen açının ölçüsünü doğru skalayı takip ederek belirle. -->
+<!-- YONERGE: Açıölçerin merkezine yerleştirilen açının ölçüsünü doğru skalayı takip ederek belirle. -->
 <!-- ETIKET: UYGULAMA -->
 <!-- SUTUN_ORAN: 8fr 4fr -->
 
 <section class="bolum sahne s5-sahne-zemini">
   <div class="sahne-kap">
-    <svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet" role="img" aria-label="İletki ile Açı Ölçümü Sahnesi">
-      <title>İletki ile Açı Ölçümü</title>
+    <svg viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Açıölçer ile Açı Ölçümü Sahnesi">
+      <title>Açıölçer ile Açı Ölçümü</title>
       <defs>
         <linearGradient id="s5-zemin-degrade" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stop-color="#ffffff"/>
@@ -3418,7 +3653,7 @@ window.SAYFA_INIT[4] = function (kok) {
 <section class="bolum etkilesim">
 <div class="panel-basi">
 <div class="baslik-satiri"><h2>Doğru Skalayı Oku</h2><span class="etiket">UYGULAMA</span></div>
-<p class="yonerge">İletkinin merkezine yerleştirilen açının ölçüsünü doğru skalayı takip ederek belirle.</p>
+<p class="yonerge">Açıölçerin merkezine yerleştirilen açının ölçüsünü doğru skalayı takip ederek belirle.</p>
 </div>
 
   <div class="kontrol-govde">
@@ -3665,20 +3900,16 @@ window.SAYFA_INIT[5] = function (kok) {
         <line x1="125" y1="26" x2="135" y2="34" stroke="#2f5385" stroke-width="2" stroke-linecap="round" />
         <line x1="125" y1="42" x2="135" y2="34" stroke="#2f5385" stroke-width="2" stroke-linecap="round" />
 
-        <!-- Kareli ızgara çizgileri (Yatay 8 çizgi) -->
-        <line x1="40" y1="100" x2="720" y2="100" stroke="#dbe2ec" stroke-width="1" />
-        <line x1="40" y1="155" x2="720" y2="155" stroke="#dbe2ec" stroke-width="1" />
-        <line x1="40" y1="210" x2="720" y2="210" stroke="#dbe2ec" stroke-width="1" />
-        <line x1="40" y1="265" x2="720" y2="265" stroke="#dbe2ec" stroke-width="1" />
-        <line x1="40" y1="320" x2="720" y2="320" stroke="#dbe2ec" stroke-width="1" />
+        <!-- Kareli ızgara: her kare 65×65 (eksenler x=260, y=380) -->
+        <line x1="40" y1="120" x2="720" y2="120" stroke="#dbe2ec" stroke-width="1" />
+        <line x1="40" y1="185" x2="720" y2="185" stroke="#dbe2ec" stroke-width="1" />
+        <line x1="40" y1="250" x2="720" y2="250" stroke="#dbe2ec" stroke-width="1" />
+        <line x1="40" y1="315" x2="720" y2="315" stroke="#dbe2ec" stroke-width="1" />
         <line x1="40" y1="380" x2="720" y2="380" stroke="#96a5b8" stroke-width="1.5" />
-        <line x1="40" y1="435" x2="720" y2="435" stroke="#dbe2ec" stroke-width="1" />
-        <line x1="40" y1="490" x2="720" y2="490" stroke="#dbe2ec" stroke-width="1" />
-
-        <!-- Kareli ızgara çizgileri (Dikey 11 çizgi) -->
-        <line x1="75" y1="65" x2="75" y2="505" stroke="#dbe2ec" stroke-width="1" />
-        <line x1="135" y1="65" x2="135" y2="505" stroke="#dbe2ec" stroke-width="1" />
-        <line x1="200" y1="65" x2="200" y2="505" stroke="#dbe2ec" stroke-width="1" />
+        <line x1="40" y1="445" x2="720" y2="445" stroke="#dbe2ec" stroke-width="1" />
+        <line x1="65" y1="65" x2="65" y2="505" stroke="#dbe2ec" stroke-width="1" />
+        <line x1="130" y1="65" x2="130" y2="505" stroke="#dbe2ec" stroke-width="1" />
+        <line x1="195" y1="65" x2="195" y2="505" stroke="#dbe2ec" stroke-width="1" />
         <line x1="260" y1="65" x2="260" y2="505" stroke="#96a5b8" stroke-width="1.5" />
         <line x1="325" y1="65" x2="325" y2="505" stroke="#dbe2ec" stroke-width="1" />
         <line x1="390" y1="65" x2="390" y2="505" stroke="#dbe2ec" stroke-width="1" />
@@ -3686,7 +3917,7 @@ window.SAYFA_INIT[5] = function (kok) {
         <line x1="520" y1="65" x2="520" y2="505" stroke="#dbe2ec" stroke-width="1" />
         <line x1="585" y1="65" x2="585" y2="505" stroke="#dbe2ec" stroke-width="1" />
         <line x1="650" y1="65" x2="650" y2="505" stroke="#dbe2ec" stroke-width="1" />
-        <line x1="710" y1="65" x2="710" y2="505" stroke="#dbe2ec" stroke-width="1" />
+        <line x1="715" y1="65" x2="715" y2="505" stroke="#dbe2ec" stroke-width="1" />
 
         <!-- Cetvel çentikleri -->
         <line x1="260" y1="375" x2="260" y2="385" stroke="#68798e" stroke-width="1.5" />
@@ -3701,11 +3932,12 @@ window.SAYFA_INIT[5] = function (kok) {
         <text x="730" y="384" class="svg-not" fill="#68798e">x</text>
         <text x="260" y="60" class="svg-not" fill="#68798e" text-anchor="middle">y</text>
 
-        <!-- Ölçek göstergesi -->
-        <line x1="620" y1="490" x2="680" y2="490" stroke="#68798e" stroke-width="1.5" />
-        <line x1="620" y1="486" x2="620" y2="494" stroke="#68798e" stroke-width="1.5" />
-        <line x1="680" y1="486" x2="680" y2="494" stroke="#68798e" stroke-width="1.5" />
-        <text x="650" y="484" text-anchor="middle" class="svg-not" fill="#68798e">1 br</text>
+        <!-- Ölçek göstergesi: 1 br = bir karenin bir kenarı -->
+        <rect x="585" y="380" width="65" height="65" fill="#c5daf0" fill-opacity="0.55" stroke="none" />
+        <line x1="585" y1="445" x2="650" y2="445" stroke="#2f5385" stroke-width="3" />
+        <line x1="585" y1="437" x2="585" y2="453" stroke="#2f5385" stroke-width="2" />
+        <line x1="650" y1="437" x2="650" y2="453" stroke="#2f5385" stroke-width="2" />
+        <text x="617.5" y="472" text-anchor="middle" class="svg-not" fill="#2f5385">1 br</text>
       </g>
 
       <!-- ORTA KATMAN: Üçgen ve Geometrik Nesneler -->
@@ -3727,11 +3959,17 @@ window.SAYFA_INIT[5] = function (kok) {
           <path id="s6-aci-dilim" d="M 260 380 L 310 380 A 50 50 0 0 0 285 337 Z" fill="#ea8c2a" fill-opacity="0.22" opacity="0" />
           <path id="s6-aci-yayi" d="M 310 380 A 50 50 0 0 0 285 337" fill="none" stroke="#ea8c2a" stroke-width="3.5" stroke-linecap="round" opacity="0" />
           
+          <!-- Dönen ışın: BC'den BA'ya dönerek açıyı oluşturur (ölçüm sonrası) -->
+          <g id="s6-donen-isin" opacity="0">
+            <line id="s6-isin-cizgi" x1="260" y1="380" x2="540" y2="380" stroke="#ea8c2a" stroke-width="3" stroke-linecap="round" />
+            <circle id="s6-isin-uc" cx="540" cy="380" r="5" fill="#ea8c2a" />
+          </g>
+
           <!-- Açı değer etiketi 60° (Ölçüm tamamlanınca görünür) -->
           <g id="s6-aci-etiket-grup" opacity="0">
             <rect x="308" y="328" width="46" height="26" rx="6" fill="#162a48" opacity="0.12" />
             <rect x="306" y="326" width="46" height="26" rx="6" fill="#f5f7fb" stroke="#ea8c2a" stroke-width="1.5" />
-            <text x="329" y="344" text-anchor="middle" class="svg-metin" fill="#ea8c2a">60°</text>
+            <text id="s6-aci-yazi" x="329" y="344" text-anchor="middle" class="svg-metin" fill="#ea8c2a">60°</text>
           </g>
         </g>
       </g>
@@ -3790,6 +4028,14 @@ window.SAYFA_INIT[5] = function (kok) {
         <span>Açı Aracı</span>
       </button>
     </div>
+    <div class="s6-bilgi" id="s6-bilgi" hidden>
+      <p>Açı, bir ışının başlangıç noktası çevresinde dönmesiyle oluşur.</p>
+      <ul class="s6-bilgi-liste">
+        <li>Tam tur dönme: <strong>tam açı</strong> (360°)</li>
+        <li>Yarım tur dönme: <strong>doğru açı</strong> (180°)</li>
+        <li><strong>1 derece</strong>, tam açının 360 eş parçasından biridir.</li>
+      </ul>
+    </div>
   </div>
   <div class="kontrol-eylem">
     <button type="button" class="buton" id="s6-btn-sifirla">Tekrar Ölç</button>
@@ -3842,6 +4088,28 @@ window.SAYFA_INIT[5] = function (kok) {
     transition: r 0.2s ease, opacity 0.25s ease;
   }
 
+  #sayfa-6 .s6-bilgi {
+    background: var(--panel);
+    border: 1px solid var(--cizgi);
+    border-radius: var(--r-secenek);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    color: var(--metin);
+  }
+
+  #sayfa-6 .s6-bilgi[hidden] {
+    display: none;
+  }
+
+  #sayfa-6 .s6-bilgi-liste {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-left: 18px;
+  }
+
   @keyframes s6-sallanti {
     0%, 100% { transform: translateX(0); }
     20%, 60% { transform: translateX(-5px); }
@@ -3868,6 +4136,43 @@ window.SAYFA_INIT[6] = function (kok) {
   var dilim = kok.querySelector("#s6-aci-dilim");
   var etiket = kok.querySelector("#s6-aci-etiket-grup");
   var svgZemin = kok.querySelector("#s6-svg-zemin");
+  var donenIsin = kok.querySelector("#s6-donen-isin");
+  var isinCizgi = kok.querySelector("#s6-isin-cizgi");
+  var isinUc = kok.querySelector("#s6-isin-uc");
+  var aciYazi = kok.querySelector("#s6-aci-yazi");
+  var bilgi = kok.querySelector("#s6-bilgi");
+  var animId = null;
+
+  // Ölçüm sonrası: B'den çıkan ışın BC'den BA'ya döner, açı 0°'den 60°'ye büyür.
+  function donmeCanlandir() {
+    var B = { x: 260, y: 380 }, L = 280, r = 50, hedef = 60, sure = 1500, t0 = null;
+    donenIsin.setAttribute("opacity", "1");
+    yay.setAttribute("opacity", "1");
+    dilim.setAttribute("opacity", "1");
+    etiket.setAttribute("opacity", "1");
+    function kare(zaman) {
+      if (t0 === null) t0 = zaman;
+      var o = Math.min(1, (zaman - t0) / sure);
+      var e = o < 0.5 ? 2 * o * o : 1 - Math.pow(-2 * o + 2, 2) / 2;
+      var a = hedef * e * Math.PI / 180;
+      var ux = Math.cos(a), uy = -Math.sin(a);
+      isinCizgi.setAttribute("x2", (B.x + L * ux).toFixed(1));
+      isinCizgi.setAttribute("y2", (B.y + L * uy).toFixed(1));
+      isinUc.setAttribute("cx", (B.x + L * ux).toFixed(1));
+      isinUc.setAttribute("cy", (B.y + L * uy).toFixed(1));
+      var px = (B.x + r * ux).toFixed(1), py = (B.y + r * uy).toFixed(1);
+      yay.setAttribute("d", "M 310 380 A 50 50 0 0 0 " + px + " " + py);
+      dilim.setAttribute("d", "M 260 380 L 310 380 A 50 50 0 0 0 " + px + " " + py + " Z");
+      aciYazi.textContent = Math.round(hedef * e) + "°";
+      if (o < 1) { animId = requestAnimationFrame(kare); }
+      else {
+        animId = null;
+        donenIsin.setAttribute("opacity", "0");
+        if (bilgi) bilgi.hidden = false;
+      }
+    }
+    animId = requestAnimationFrame(kare);
+  }
 
   function sifirlaNoktalar() {
     tiklananNoktalar = [];
@@ -3880,9 +4185,12 @@ window.SAYFA_INIT[6] = function (kok) {
     for (var j = 0; j < halkalar.length; j++) {
       halkalar[j].setAttribute("opacity", "0");
     }
+    if (animId) { cancelAnimationFrame(animId); animId = null; }
     if (yay) yay.setAttribute("opacity", "0");
     if (dilim) dilim.setAttribute("opacity", "0");
     if (etiket) etiket.setAttribute("opacity", "0");
+    if (donenIsin) donenIsin.setAttribute("opacity", "0");
+    if (bilgi) bilgi.hidden = true;
   }
 
   function titresim() {
@@ -3932,10 +4240,8 @@ window.SAYFA_INIT[6] = function (kok) {
 
       if (tiklananNoktalar.length === 3) {
         tamamlandi = true;
-        if (yay) yay.setAttribute("opacity", "1");
-        if (dilim) dilim.setAttribute("opacity", "1");
-        if (etiket) etiket.setAttribute("opacity", "1");
-        EGITSEL.dontVer(kok, "dogru", "Köşe açısı ölçüldü.");
+        donmeCanlandir();
+        EGITSEL.dontVer(kok, "dogru", "B köşesindeki açı 60° ölçüldü.");
       }
     } else {
       titresim();
@@ -4920,7 +5226,7 @@ window.SAYFA_INIT[7] = function (kok) {
             <line x1="192" y1="68" x2="184" y2="76" stroke="#1c2d42" stroke-width="1.5" />
             <path d="M 50 120 A 80 80 0 0 1 120 48" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-opacity="0.5" />
             <circle cx="130" cy="125" r="3" fill="#0eb4b0" />
-            <text x="130" y="160" text-anchor="middle" class="svg-not" fill="#1c2d42">İletki (Açıölçer)</text>
+            <text x="130" y="160" text-anchor="middle" class="svg-not" fill="#1c2d42">Açıölçer</text>
           </g>
           <!-- 3. Dinamik Geometri Yazılımı Kartı -->
           <g transform="translate(65, 275)">
@@ -5177,12 +5483,12 @@ window.SAYFA_INIT[8] = function (kok) {
     {
       no: 1,
       sahneId: "s8-sahne-s1",
-      kok: "Bir açıyı iletki ile ölçerken, iletkinin açının tepe noktasıyla tam olarak çakıştırılması gereken bölümü hangisidir?",
+      kok: "Bir açıyı açıölçer ile ölçerken, açıölçerin açının tepe noktasıyla tam olarak çakıştırılması gereken bölümü hangisidir?",
       secenekler: [
         { metin: "Derece ölçek yayı", dogru: false },
         { metin: "Merkez noktası", dogru: true },
         { metin: "Taban çizgisi ucu", dogru: false },
-        { metin: "İletkinin dış kenarı", dogru: false }
+        { metin: "Açıölçerin dış kenarı", dogru: false }
       ],
       donut: "Merkez noktası köşeye yerleştirilir."
     },
@@ -5192,7 +5498,7 @@ window.SAYFA_INIT[8] = function (kok) {
       kok: "Aşağıdaki araçlardan hangisi bir açının ölçüsünü doğrudan belirlemek için kullanılan bir araç veya teknoloji değildir?",
       secenekler: [
         { metin: "Dijital açıölçer", dogru: false },
-        { metin: "İletki", dogru: false },
+        { metin: "Açıölçer", dogru: false },
         { metin: "Dinamik geometri yazılımı", dogru: false },
         { metin: "Pergel", dogru: true }
       ],
@@ -5204,7 +5510,7 @@ window.SAYFA_INIT[8] = function (kok) {
       kok: "Bir usta, yeni yapılan bir çatının eğim açısını yapı üzerinde doğrudan ve hassas bir şekilde ölçmek istemektedir. Bu durum için en uygun araç hangisidir?",
       secenekler: [
         { metin: "Dijital eğimölçer", dogru: true },
-        { metin: "Defter tipi iletki", dogru: false },
+        { metin: "Defter tipi açıölçer", dogru: false },
         { metin: "Çizim cetveli", dogru: false },
         { metin: "Dinamik geometri yazılımı", dogru: false }
       ],
@@ -5213,7 +5519,7 @@ window.SAYFA_INIT[8] = function (kok) {
     {
       no: 4,
       sahneId: "s8-sahne-s4",
-      kok: "İletki taban çizgisini açının sağ kolundaki 0° çizgisine hizalayan bir öğrenci, diğer kolun üzerinde 50° ve 130° değerlerini görmektedir. Dar açı oluşturan bu açının doğru ölçüsü hangisidir ve neden seçilmelidir?",
+      kok: "Açıölçerin taban çizgisini açının sağ kolundaki 0° çizgisine hizalayan bir öğrenci, diğer kolun üzerinde 50° ve 130° değerlerini görmektedir. Dar açı oluşturan bu açının doğru ölçüsü hangisidir ve neden seçilmelidir?",
       secenekler: [
         { metin: "130° seçilmelidir; dış skala her zaman önceliklidir.", dogru: false },
         { metin: "50° seçilmelidir; kolun hizalandığı 0° çizgisinden başlayan skala okunur.", dogru: true },
@@ -5406,7 +5712,7 @@ window.SAYFA_INIT[8] = function (kok) {
 
 </div>
 
-<script src="ortak/1bc67de94160b102.js"></script>
+<script src="ortak/6f7cf695c04baec6.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 </body>

@@ -59,6 +59,13 @@ window.EGITSEL = {
      KALIR: 200+ mevcut parça dontVer(kok, ...) diye çağırıyor.
      tip: "dogru" | "yanlis" */
   dontVer: function (kok, tip, mesaj) {
+    /* Nötr tipler (2026-09-26, geoeba parti raporu 7.4.x): bazı sayfalar
+       yönlendirmeyi dontVer(kok, "uyari", …) diye veriyor; eskiden her
+       bilinmeyen tip «yanlis»a dönüp kırmızı + yanlış sesi basıyordu. */
+    if (tip === "uyari" || tip === "bilgi" || tip === "notr" || tip === "ipucu") {
+      if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj); }
+      return;
+    }
     tip = tip === "dogru" ? "dogru" : "yanlis";
     if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj, tip); }
     else { console.warn("EGITSEL.dontVer: SABLON_TOAST yok"); }
@@ -96,6 +103,194 @@ window.EGITSEL = {
       if ("disabled" in el) { el.disabled = kilitli !== false; }
       el.classList.toggle("locked", kilitli !== false);
     });
+  },
+
+  /* ÇOKTAN SEÇMELİ DEĞERLENDİRME MOTORU (2026-09-26, geoeba uzman raporu:
+     «değerlendirme soruları kendi içinde ileri-geri yapılamıyor», «sonucu
+     gör dediğinde kaç doğru kaç yanlış gösteren ekran çıkmıyor», «baştan
+     başlayınca bazı sorular çözülmüş geliyor», «lisede sorular 5 şıklı
+     olmalı», «en az 2 seçim hakkı verilmeli, yanlışta hemen doğru cevap
+     gelmemeli»). Her değerlendirme sayfası bu mekaniği kendisi yazıyordu ve
+     her biri başka eksik taşıyordu; motor TEK doğruluk kaynağıdır.
+       EGITSEL.degerlendirme(kok, {
+         sorular: [{metin, siklar: [{metin, dogru}], donut}],  // şık sayısı serbest (≤6)
+         hak: 2,                // soru başına deneme hakkı
+         karistir: true,        // şık sırası (soru başına BİR kez karışır)
+         soruDegisti: function (i, soru) {},     // sahneyi soruya eşle
+         cevaplandi: function (i, dogruMu, soru) {},
+         bitti: function (dogru, toplam) {}
+       })
+     Arayüz .kontrol-govde / .kontrol-eylem İÇİNE kurulur (içerikleri
+     değiştirilir); metin ve şıklar LaTeX içerebilir (MathJax dizilir). */
+  degerlendirme: function (kok, ayar) {
+    ayar = ayar || {};
+    var sorular = (ayar.sorular || []).filter(function (s) { return s && s.siklar && s.siklar.length; });
+    var govde = ayar.govde || (kok && kok.querySelector(".kontrol-govde"));
+    var eylem = ayar.eylem || (kok && kok.querySelector(".kontrol-eylem"));
+    if (!govde || !sorular.length) { console.warn("EGITSEL.degerlendirme: govde/soru yok"); return null; }
+    var HAK = Math.max(1, ayar.hak || 2);
+    var HARF = ["A", "B", "C", "D", "E", "F"];
+    var durum, aktif = 0, sonucEkrani = false;
+
+    function karisik(n) {
+      var d = [];
+      for (var i = 0; i < n; i++) { d.push(i); }
+      if (ayar.karistir === false) { return d; }
+      for (var j = d.length - 1; j > 0; j--) {
+        var k = Math.floor(Math.random() * (j + 1)); var t = d[j]; d[j] = d[k]; d[k] = t;
+      }
+      return d;
+    }
+    function sifirla() {
+      durum = sorular.map(function (s) {
+        return { sira: karisik(s.siklar.length), denenen: [], sonuc: "bos" };  // bos|devam|dogru|yanlis
+      });
+      aktif = 0; sonucEkrani = false;
+    }
+    function el(etiket, sinif, metin) {
+      var e = document.createElement(etiket);
+      if (sinif) { e.className = sinif; }
+      if (metin !== undefined) { e.innerHTML = metin; }
+      return e;
+    }
+    function diz(kap) {
+      try {
+        if (window.MathJax && window.MathJax.typesetPromise) { window.MathJax.typesetPromise([kap]); }
+        else if (window.MathJax && window.MathJax.typeset) { window.MathJax.typeset([kap]); }
+      } catch (e) { /* dizgi hatası etkileşimi durdurmaz */ }
+    }
+    function sayim() {
+      var s = { dogru: 0, yanlis: 0, bos: 0 };
+      durum.forEach(function (d) { if (d.sonuc === "dogru") s.dogru++; else if (d.sonuc === "yanlis") s.yanlis++; else s.bos++; });
+      return s;
+    }
+    function noktalar(ust) {
+      var kap = el("div", "deg-noktalar");
+      kap.setAttribute("role", "group");
+      kap.setAttribute("aria-label", "Sorular");
+      sorular.forEach(function (_, i) {
+        var d = durum[i];
+        var b = el("button", "deg-nokta " + d.sonuc + (i === aktif && !sonucEkrani ? " aktif" : ""), String(i + 1));
+        b.type = "button";
+        b.setAttribute("aria-label", (i + 1) + ". soru" + (d.sonuc === "dogru" ? ", doğru" : d.sonuc === "yanlis" ? ", yanlış" : ""));
+        b.addEventListener("click", function () { git(i); });
+        kap.appendChild(b);
+      });
+      ust.appendChild(kap);
+    }
+    function eylemKur(dugmeler) {
+      if (!eylem) { return; }
+      eylem.innerHTML = "";
+      var satir = el("div", "deg-eylem");
+      dugmeler.forEach(function (d) {
+        var b = el("button", "buton" + (d.birincil ? " birincil" : ""), d.metin);
+        b.type = "button";
+        if (d.pasif) { b.disabled = true; }
+        b.addEventListener("click", d.is);
+        satir.appendChild(b);
+      });
+      eylem.appendChild(satir);
+    }
+    function ciz() {
+      sonucEkrani = false;
+      var soru = sorular[aktif], d = durum[aktif];
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Soru " + (aktif + 1) + " / " + sorular.length));
+      noktalar(ust);
+      kap.appendChild(ust);
+      kap.appendChild(el("div", "panel deg-metin", soru.metin || ""));
+      var liste = el("div", "deg-siklar");
+      var bitmis = d.sonuc === "dogru" || d.sonuc === "yanlis";
+      d.sira.forEach(function (asilNo, gorunen) {
+        var sik = soru.siklar[asilNo];
+        var b = el("button", "parca-btn");
+        b.type = "button";
+        b.appendChild(el("span", "kutucuk", HARF[gorunen] || String(gorunen + 1)));
+        b.appendChild(el("span", "", sik.metin));
+        var denendi = d.denenen.indexOf(asilNo) > -1;
+        if (denendi && !sik.dogru) { b.classList.add("yanlis-secim"); b.disabled = true; }
+        if (bitmis) {
+          b.disabled = true;
+          if (sik.dogru) { b.classList.add("dogru-secim"); }
+          else if (!denendi) { b.classList.add("soluk"); }
+        }
+        b.addEventListener("click", function () { sec(asilNo); });
+        liste.appendChild(b);
+      });
+      kap.appendChild(liste);
+      govde.appendChild(kap);
+      diz(govde);
+      var son = aktif === sorular.length - 1;
+      eylemKur([
+        { metin: "Önceki", pasif: aktif === 0, is: function () { git(aktif - 1); } },
+        { metin: son ? "Sonuçları Gör" : "Sonraki", birincil: true,
+          is: function () { if (son) { sonuc(); } else { git(aktif + 1); } } }
+      ]);
+      if (typeof ayar.soruDegisti === "function") {
+        try { ayar.soruDegisti(aktif, soru); } catch (e) { console.error("degerlendirme.soruDegisti", e); }
+      }
+    }
+    function sec(asilNo) {
+      var soru = sorular[aktif], d = durum[aktif];
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis" || d.denenen.indexOf(asilNo) > -1) { return; }
+      d.denenen.push(asilNo);
+      var dogruMu = !!soru.siklar[asilNo].dogru;
+      var kalan = HAK - d.denenen.length;
+      if (dogruMu) {
+        d.sonuc = "dogru";
+        window.EGITSEL.dontVer(kok, "dogru", soru.donut || "Doğru seçim.");
+      } else if (kalan > 0) {
+        d.sonuc = "devam";
+        window.EGITSEL.dontVer(kok, "yanlis", "Bir hakkın daha var, tekrar dene.");
+      } else {
+        d.sonuc = "yanlis";
+        window.EGITSEL.dontVer(kok, "yanlis", soru.donut || "Doğru seçenek işaretlendi.");
+      }
+      ciz();
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis") {
+        if (typeof ayar.cevaplandi === "function") {
+          try { ayar.cevaplandi(aktif, d.sonuc === "dogru", soru); } catch (e) { console.error("degerlendirme.cevaplandi", e); }
+        }
+      }
+    }
+    function git(i) {
+      if (i < 0 || i >= sorular.length) { return; }
+      aktif = i;
+      ciz();
+    }
+    function sonuc() {
+      sonucEkrani = true;
+      var s = sayim(), n = sorular.length;
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Sonuçlar"));
+      noktalar(ust);
+      kap.appendChild(ust);
+      var kutu = el("div", "panel deg-sonuc");
+      kutu.appendChild(el("div", "deg-puan buyuk-sayi", s.dogru + " / " + n));
+      var sayac = el("div", "deg-sayac");
+      sayac.appendChild(el("span", "d", "Doğru: " + s.dogru));
+      sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
+      sayac.appendChild(el("span", "b", "Boş: " + s.bos));
+      kutu.appendChild(sayac);
+      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kap.appendChild(kutu);
+      govde.appendChild(kap);
+      eylemKur([
+        { metin: "Soruları İncele", is: function () { git(0); } },
+        { metin: "Tekrar Çöz", birincil: true, is: function () { sifirla(); ciz(); } }
+      ]);
+      if (typeof ayar.bitti === "function") {
+        try { ayar.bitti(s.dogru, n); } catch (e) { console.error("degerlendirme.bitti", e); }
+      }
+    }
+    sifirla();
+    ciz();
+    return { git: git, sonuc: sonuc, sifirla: function () { sifirla(); ciz(); } };
   },
 
   /* 2B TUVAL YÜKSEK ÇÖZÜNÜRLÜK (2026-08-17 çözünürlük raporu, P0)
@@ -205,171 +400,8 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
                                              "svg"] } };
 </script>
 <script src="ortak/f5b3f5fac24e774b.js"></script>
-<script src="ortak/b47118f55e978615.js"></script>
+<script src="ortak/27c9562c7880c36e.js"></script>
 <script src="ortak/17f319aeaf055a36.js"></script>
-<script>/* RoundedBoxGeometry.js — yerel gömme */
-/* three.js r155 örnek portu — RoundedBoxGeometry (examples/jsm/geometries/RoundedBoxGeometry.js)
- * Lisans: MIT (three.js yazarları). Global yapı (THREE.*) için IIFE olarak
- * uyarlandı. Kullanım: new THREE.RoundedBoxGeometry(w, h, d, segment, yarıçap)
- * — kutu kenarlarına pah/yuvarlatma; segment 2-4 yeter, yarıçap kısa kenarın
- * yarısını aşamaz. Montaj bu dosyayı yalnız «RoundedBoxGeometry» geçince
- * gömer (uretici/sablon.py kutuphane_dosyalari). 2026-09-03. */
-( function () {
-
-	const _tempNormal = new THREE.Vector3();
-
-	function getUv( face, normal, uvAxis, projectionAxis, radius, sideLength ) {
-
-		const totArcLength = 2 * Math.PI * radius / 4;
-
-		// length of the planes between the arcs on each axis
-		const centerLength = Math.max( sideLength - 2 * radius, 0 );
-		const halfArc = Math.PI / 4;
-
-		// Get the vector projected onto the Y axis
-		_tempNormal.copy( normal );
-		_tempNormal[ projectionAxis ] = 0;
-		_tempNormal.normalize();
-
-		// total amount of UV space alloted to a single arc
-		const arcUvRatio = 0.5 * totArcLength / ( totArcLength + centerLength );
-
-		// the distance along one arc the point is at
-		const arcAngleRatio = 1.0 - ( _tempNormal.angleTo( face ) / halfArc );
-
-		if ( Math.sign( _tempNormal[ uvAxis ] ) === 1 ) {
-
-			return arcAngleRatio * arcUvRatio;
-
-		} else {
-
-			// total amount of UV space alloted to the plane between the arcs
-			const lenUv = centerLength / ( totArcLength + centerLength );
-			return lenUv + arcUvRatio + arcUvRatio * ( 1.0 - arcAngleRatio );
-
-		}
-
-	}
-
-	class RoundedBoxGeometry extends THREE.BoxGeometry {
-
-		constructor( width = 1, height = 1, depth = 1, segments = 2, radius = 0.1 ) {
-
-			// ensure segments is odd so we have a plane connecting the rounded corners
-			segments = segments * 2 + 1;
-
-			// ensure radius isn't bigger than shortest side
-			radius = Math.min( width / 2, height / 2, depth / 2, radius );
-
-			super( 1, 1, 1, segments, segments, segments );
-
-			// if we just have one segment we're the same as a regular box
-			if ( segments === 1 ) return;
-
-			const geometry2 = this.toNonIndexed();
-
-			this.index = null;
-			this.attributes.position = geometry2.attributes.position;
-			this.attributes.normal = geometry2.attributes.normal;
-			this.attributes.uv = geometry2.attributes.uv;
-
-			//
-
-			const position = new THREE.Vector3();
-			const normal = new THREE.Vector3();
-
-			const box = new THREE.Vector3( width, height, depth ).divideScalar( 2 ).subScalar( radius );
-
-			const positions = this.attributes.position.array;
-			const normals = this.attributes.normal.array;
-			const uvs = this.attributes.uv.array;
-
-			const faceTris = positions.length / 6;
-			const faceDirVector = new THREE.Vector3();
-			const halfSegmentSize = 0.5 / segments;
-
-			for ( let i = 0, j = 0; i < positions.length; i += 3, j += 2 ) {
-
-				position.fromArray( positions, i );
-				normal.copy( position );
-				normal.x -= Math.sign( normal.x ) * halfSegmentSize;
-				normal.y -= Math.sign( normal.y ) * halfSegmentSize;
-				normal.z -= Math.sign( normal.z ) * halfSegmentSize;
-				normal.normalize();
-
-				positions[ i + 0 ] = box.x * Math.sign( position.x ) + normal.x * radius;
-				positions[ i + 1 ] = box.y * Math.sign( position.y ) + normal.y * radius;
-				positions[ i + 2 ] = box.z * Math.sign( position.z ) + normal.z * radius;
-
-				normals[ i + 0 ] = normal.x;
-				normals[ i + 1 ] = normal.y;
-				normals[ i + 2 ] = normal.z;
-
-				const side = Math.floor( i / faceTris );
-
-				switch ( side ) {
-
-					case 0: // right
-
-						// generate UVs along Z then Y
-						faceDirVector.set( 1, 0, 0 );
-						uvs[ j + 0 ] = getUv( faceDirVector, normal, 'z', 'y', radius, depth );
-						uvs[ j + 1 ] = 1.0 - getUv( faceDirVector, normal, 'y', 'z', radius, height );
-						break;
-
-					case 1: // left
-
-						// generate UVs along Z then Y
-						faceDirVector.set( - 1, 0, 0 );
-						uvs[ j + 0 ] = 1.0 - getUv( faceDirVector, normal, 'z', 'y', radius, depth );
-						uvs[ j + 1 ] = 1.0 - getUv( faceDirVector, normal, 'y', 'z', radius, height );
-						break;
-
-					case 2: // top
-
-						// generate UVs along X then Z
-						faceDirVector.set( 0, 1, 0 );
-						uvs[ j + 0 ] = 1.0 - getUv( faceDirVector, normal, 'x', 'z', radius, width );
-						uvs[ j + 1 ] = getUv( faceDirVector, normal, 'z', 'x', radius, depth );
-						break;
-
-					case 3: // bottom
-
-						// generate UVs along X then Z
-						faceDirVector.set( 0, - 1, 0 );
-						uvs[ j + 0 ] = 1.0 - getUv( faceDirVector, normal, 'x', 'z', radius, width );
-						uvs[ j + 1 ] = 1.0 - getUv( faceDirVector, normal, 'z', 'x', radius, depth );
-						break;
-
-					case 4: // front
-
-						// generate UVs along X then Y
-						faceDirVector.set( 0, 0, 1 );
-						uvs[ j + 0 ] = 1.0 - getUv( faceDirVector, normal, 'x', 'y', radius, width );
-						uvs[ j + 1 ] = 1.0 - getUv( faceDirVector, normal, 'y', 'x', radius, height );
-						break;
-
-					case 5: // back
-
-						// generate UVs along X then Y
-						faceDirVector.set( 0, 0, - 1 );
-						uvs[ j + 0 ] = getUv( faceDirVector, normal, 'x', 'y', radius, width );
-						uvs[ j + 1 ] = 1.0 - getUv( faceDirVector, normal, 'y', 'x', radius, height );
-						break;
-
-				}
-
-			}
-
-		}
-
-	}
-
-	THREE.RoundedBoxGeometry = RoundedBoxGeometry;
-
-} )();
-
-</script>
 <script>/* StudyoOrtami.js — yerel gömme */
 /* 2026-09-11 — 8c2a9012 (10 Eylül main yedeği) sürümünden bayt bayt taşındı;
  * kullanıcı kararı «StudyoOrtami olsun bir deneyelim». Yalnız bu dosya taşındı:
@@ -483,6 +515,50 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   var ESIK = 4;                 // px — bu kadar gezmeden sürükleme başlamaz
                                 // (tıkla-seç yedeği tetiklenmeye devam etsin)
 
+  /* İZLEYİCİNİN SAYFA KAPSAMI (2026-09-26, geoeba uzman raporu: «doğru
+     sürüklemede ‹Daha dikkatli ol› uyarısı çıkıyor / yanlış ses geliyor» —
+     3, 4, 9 ve 10. sınıfta onlarca sayfa). Kök neden tarayıcıda ölçüldü
+     (MAT.3.1.3): 1. sayfanın `pdnd.monitorForElements` izleyicisi sayfa
+     süzgeci olmadan kuruluyor; SAYFA_INIT bir kez koşuyor ve temizleyici hiç
+     çağrılmıyor, yani öğrenci o sayfayı geçtikten sonra da YAŞIYOR. 5.
+     sayfada kart doğru sepete bırakılınca sayfa 5 «dogru» dönütü veriyor,
+     ardından sayfa 1'in izleyicisi aynı bırakmayı kendi sorusu sanıp
+     «Birler basamağını tekrar hesapla.» diye «yanlis» basıyordu (toast'ta
+     son söz onun; ses frenine takılan da doğru ses). Korpusta 578 sayfa
+     izleyici kuruyor — hepsi aynı deliği taşıyordu.
+     Çözüm tek yerde, sayfa kodu değişmeden: izleyici KURULDUĞU ANDAKİ aktif
+     sayfaya bağlanır (INIT ve sıfırla düğmeleri o sayfa ekrandayken koşar)
+     ve yalnız kaynağı o sayfanın içinde olan sürüklemeleri görür. */
+  function sahipSayfa() {
+    try {           // node test koşumunun sahte document'ında querySelector yok
+      return typeof document.querySelector === "function"
+        ? document.querySelector(".sayfa.aktif") : null;
+    } catch (e) { return null; }
+  }
+  function kapsamla(yap) {
+    var sahip = sahipSayfa();
+    if (!yap || !sahip) { return yap; }
+    var asilIzin = yap.canMonitor;
+    var kopya = {};
+    for (var k in yap) { kopya[k] = yap[k]; }
+    kopya.canMonitor = function (args) {
+      var kaynak = args && args.source && args.source.element;
+      // Kaynak bir SAYFANIN içindeyse o sayfa sahip olmalı; hiçbir sayfada
+      // değilse (sayfa kodu kaynağı sürükleme için gövdeye taşımış olabilir)
+      // karar sahibin o an ekranda olmasıdır.
+      var sayfasi = kaynak && kaynak.nodeType === 1 && kaynak.closest
+        ? kaynak.closest(".sayfa") : null;
+      if (sayfasi ? sayfasi !== sahip
+                  : (kaynak && kaynak.nodeType === 1 && sahip.contains
+                     ? !sahip.contains(kaynak) && !sahip.classList.contains("aktif")
+                     : !sahip.classList.contains("aktif"))) {
+        return false;
+      }
+      return typeof asilIzin === "function" ? asilIzin.call(yap, args) : true;
+    };
+    return kopya;
+  }
+
   function svgMi(el) {
     return el && typeof SVGElement !== "undefined" && el instanceof SVGElement;
   }
@@ -589,6 +665,12 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     // Sözleşme zaten istiyor ama unutuluyor: touch-action olmadan tarayıcı
     // hareketi sayfa kaydırması sanıp sürüklemeyi iptal eder.
     el.style.touchAction = "none";
+    // Dokunmatikte hareket kararını KÖK <svg> verir (2026-09-26, geoeba parti
+    // raporu MAT.4.1.3: parmakla sürükleme kaydırma sanılıp iptal ediliyordu).
+    // Sahne sabit 1280×720, kaydırılmaz — kökte kapatmak güvenli.
+    if (el.ownerSVGElement && el.ownerSVGElement.style) {
+      el.ownerSVGElement.style.touchAction = "none";
+    }
 
     var basla = null, aktif = null;
 
@@ -619,13 +701,18 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       var hayalet = null;
       try { hayalet = hayaletKur(el); }
       catch (e) { console.warn("pdnd-svg: hayalet kurulamadı", e); }
-      aktif = { kaynak: kaynak, oncekiler: [], ilk: girdi(ev), hayalet: hayalet };
+      aktif = { kaynak: kaynak, oncekiler: [], ilk: girdi(ev), hayalet: hayalet,
+                izleyiciler: [] };
       var yuk = konum(ev, []);
       cagir(yap, "onGenerateDragPreview", yuk);
       cagir(yap, "onDragStart", yuk);
+      // canMonitor pdnd'de olduğu gibi BİR KEZ, başlangıçta sorulur ve o
+      // sürüklemenin bütün olayları (onDrag/onDrop dahil) yalnız izin veren
+      // izleyicilere gider — eskiden yalnız onDragStart süzülüyordu.
       IZLEYICILER.forEach(function (m) {
         if (typeof m.canMonitor === "function"
             && !m.canMonitor({ initial: yuk.location.initial, source: kaynak })) { return; }
+        aktif.izleyiciler.push(m);
         cagir(m, "onDragStart", yuk);
       });
     }
@@ -678,7 +765,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         cagir(h.__yap, "onDrag", Object.assign({ self: h }, yuk));
       });
       cagir(yap, "onDrag", yuk);
-      IZLEYICILER.forEach(function (m) { cagir(m, "onDrag", yuk); });
+      aktif.izleyiciler.forEach(function (m) { cagir(m, "onDrag", yuk); });
       aktif.oncekiler = hedefler;
     }
 
@@ -698,7 +785,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         cagir(h.__yap, "onDrop", Object.assign({ self: h }, yuk));
       });
       cagir(yap, "onDrop", yuk);
-      IZLEYICILER.forEach(function (m) { cagir(m, "onDrop", yuk); });
+      vardi.izleyiciler.forEach(function (m) { cagir(m, "onDrop", yuk); });
     }
 
     el.addEventListener("pointerdown", pointerdown);
@@ -735,13 +822,14 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   };
 
   window.pdnd.monitorForElements = function (yap) {
-    IZLEYICILER.add(yap);
-    var temizle = gercek.monitorForElements(yap);
+    var kapsamli = kapsamla(yap);        // sayfa kapsamı — bkz. kapsamla()
+    IZLEYICILER.add(kapsamli);
+    var temizle = gercek.monitorForElements(kapsamli);
     var temiz = false;
     return function () {
       if (temiz) { return; }
       temiz = true;
-      IZLEYICILER.delete(yap);
+      IZLEYICILER.delete(kapsamli);
       if (typeof temizle === "function") { temizle(); }
     };
   };
@@ -762,9 +850,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
      yanındaki <ad>-ses/ klasöründe, göreli yolla. Ayar kapalıysa yuva BOŞ kalır
      ve gövde sonundaki anlatım motoru hiç kurulmaz. -->
 
-<link rel="stylesheet" href="ortak/2edecd4e5084d377.css">
+<link rel="stylesheet" href="ortak/6fb4a00f79bc6a84.css">
 <!-- URETIM BILGISI
-  montaj: 2026-09-18 22:41
+  montaj: 2026-09-27 03:09
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 22:37
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 22:37
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 22:39
@@ -778,13 +866,13 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   sayfa 11: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 22:37
   sayfa 12: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 22:37
   sayfa 13: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 22:36
-  sayfa 14: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 22:39
+  sayfa 14: bilinmiyor (damgasız eski üretim)
   sayfa 15: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 22:37
 -->
 </head>
 <body>
 <section id="ekran-kapak" class="sk-sinif-9" aria-label="Giriş kapağı">
-<link rel="stylesheet" href="ortak/957a404b18aeed56.css">
+<link rel="stylesheet" href="ortak/4dd4f261731e45c9.css">
 <svg class="sk-fon" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
 <defs>
   <linearGradient id="skg9-su" x1="0" y1="0" x2="0" y2="1">
@@ -893,8 +981,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   <rect x="54" y="156" width="92" height="20" rx="6" fill="#101a44"/>
   <path d="M100 44l6 12 13 2-9.5 9 2.5 13L100 74l-12 6 2.5-13L81 58l13-2z" fill="#fff"/>
 </svg>
-    <h2>Tebrikler!</h2>
-    <p class="st-alt"><b>Sayılar</b> içeriğini başarıyla tamamladın.</p>
+    <h2 data-tam="Tebrikler!" data-bos="Henüz etkinlik yapmadın">Tebrikler!</h2>
+    <p class="st-alt" data-tam="&lt;b&gt;Sayılar&lt;/b&gt; içeriğini başarıyla tamamladın."
+       data-bos="Etkinlikleri yapmadan sona geldin. Baştan başlayıp etkinlikleri tamamlamak ister misin?"><b>Sayılar</b> içeriğini başarıyla tamamladın.</p>
     <div class="st-yildizlar" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg></div>
     <div class="st-ogrendim"><h3>Bu içerikte şunları öğrendin</h3><ul><li>Gerçek sayı aralıklarının gösteriminde ve aralıklarla ilgili işlemlerde küme sembol ve işlemlerinden yararlanabilme</li></ul></div>
     <div class="st-dugmeler">
@@ -927,9 +1016,29 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       kap.appendChild(p);
     }
   }
+  /* HİÇ ETKİNLİK YAPILMADIYSA TEBRİK YOK (geoeba uzman notu 2026-09-26, 7. sınıf
+     G: «hiç soru çözmeden bölüm sonuna gelindiğinde tebrikler mesajı yerine
+     yeniden denemek ister misin gibi bir mesaj gelebilir»). Ölçüt: öğrencinin
+     aldığı doğru/yanlış dönüt sayısı — dönütün tek boğazı EGITSEL.dontVer'dir. */
+  var donutSayisi = 0;
+  function donutSay() {
+    var E = window.EGITSEL;
+    if (!E || typeof E.dontVer !== "function" || E.dontVer.__tebrikSayaci) return;
+    var asil = E.dontVer;
+    E.dontVer = function () { donutSayisi++; return asil.apply(this, arguments); };
+    E.dontVer.__tebrikSayaci = true;
+  }
+  donutSay();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", donutSay);
   var oncekiOdak = null;
   function ac() {
-    konfetiKur();
+    var bos = donutSayisi === 0;
+    tebrik.classList.toggle("st-bos", bos);
+    var baslik = tebrik.querySelector("h2");
+    var alt = tebrik.querySelector(".st-alt");
+    if (baslik) baslik.textContent = bos ? baslik.getAttribute("data-bos") : baslik.getAttribute("data-tam");
+    if (alt) alt.innerHTML = bos ? alt.getAttribute("data-bos") : alt.getAttribute("data-tam");
+    if (!bos) konfetiKur();
     oncekiOdak = document.activeElement;
     tebrik.classList.add("acik");
     tebrik.removeAttribute("aria-hidden");
@@ -947,9 +1056,14 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     var hedef = e.target && e.target.closest && e.target.closest("#sonraki-buton");
     if (hedef && aktifSayfa >= sayfaSayisi()) ac();
   }, true);
+  /* «Baştan Başla» TAM SIFIRLAR (uzman notu, 7. sınıf E: «bazı sorular çözülmüş
+     hâlde geliyor, bazıları sıfırlanmış»): sayfalar SAYFA_INIT'i bir kez koşar
+     ve durumunu bellekte tutar; 1. sayfaya dönmek hiçbirini sıfırlamıyordu.
+     Belgeyi yeniden yüklemek tek güvenilir sıfırlamadır. */
   tebrik.querySelector(".st-bastan").addEventListener("click", function () {
     kapat();
-    if (window.SABLON_GEC) window.SABLON_GEC(1);
+    try { window.location.reload(); }
+    catch (e) { if (window.SABLON_GEC) window.SABLON_GEC(1); }
   });
   tebrik.querySelector(".st-kapat").addEventListener("click", kapat);
   document.addEventListener("keydown", function (e) {
@@ -2106,25 +2220,28 @@ window.SAYFA_INIT[2] = function (kok) {
       </g>
 
       <g id="sayfa3-katman-araliklar">
-        <rect x="250" y="152" width="250" height="32" rx="16" fill="#9ec4e6" fill-opacity="0.25" stroke="#24639c" stroke-width="1.5" stroke-dasharray="4,3" />
-        <rect x="400" y="152" width="200" height="32" rx="16" fill="#f5cd8a" fill-opacity="0.25" stroke="#cf7d23" stroke-width="1.5" stroke-dasharray="4,3" />
+        <!-- Uzman notu: ortak bölge A ve B'yi örtüyordu. A ve B artık AYRI satırlarda,
+             sayı doğrusu üzerindeki yerlerinde TAM görünür; ortak bölge (sürüklenecek
+             şerit) alt satırdadır, kesikli izdüşümler sınırlarını gösterir. -->
+        <line x1="400" y1="130" x2="400" y2="150" stroke="#1b9468" stroke-width="2" stroke-dasharray="4,3" />
+        <line x1="500" y1="88" x2="500" y2="150" stroke="#1b9468" stroke-width="2" stroke-dasharray="4,3" />
 
-        <g id="s3-serit-mavi" class="s3-serit" data-parca="mavi" role="button" tabindex="0" aria-label="A Aralığı Yalnız Mavi Parça">
-          <rect x="250" y="152" width="150" height="32" rx="16" fill="url(#s3-grad-mavi)" fill-opacity="0.85" stroke="#24639c" stroke-width="2.5" />
-          <path d="M 262 156 Q 325 153 388 156" stroke="#eaf1f7" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.6" />
-          <path d="M 265 178 Q 325 181 385 178" stroke="#24639c" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.5" />
-          <ellipse cx="280" cy="160" rx="20" ry="4" fill="#eaf1f7" opacity="0.45" />
-          <circle cx="250" cy="168" r="8" fill="#24639c" stroke="#eaf1f7" stroke-width="2.5" />
-          <circle cx="250" cy="168" r="3" fill="#9ec4e6" />
+        <g id="s3-serit-mavi" class="s3-serit" data-parca="mavi" role="button" tabindex="0" aria-label="A Aralığı, eksi 3 ile 2 arası">
+          <rect x="250" y="60" width="250" height="28" rx="14" fill="url(#s3-grad-mavi)" fill-opacity="0.85" stroke="#24639c" stroke-width="2.5" />
+          <path d="M 262 64 Q 375 61 488 64" stroke="#eaf1f7" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.6" />
+          <path d="M 265 83 Q 375 86 485 83" stroke="#24639c" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.5" />
+          <ellipse cx="290" cy="67" rx="24" ry="4" fill="#eaf1f7" opacity="0.45" />
+          <circle cx="250" cy="74" r="8" fill="#24639c" stroke="#eaf1f7" stroke-width="2.5" />
+          <circle cx="500" cy="74" r="8" fill="#24639c" stroke="#eaf1f7" stroke-width="2.5" />
         </g>
 
-        <g id="s3-serit-sari" class="s3-serit" data-parca="sari" role="button" tabindex="0" aria-label="B Aralığı Yalnız Sarı Parça">
-          <rect x="500" y="152" width="100" height="32" rx="16" fill="url(#s3-grad-sari)" fill-opacity="0.85" stroke="#cf7d23" stroke-width="2.5" />
-          <path d="M 508 156 Q 550 153 592 156" stroke="#eaf1f7" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.6" />
-          <path d="M 512 178 Q 550 181 588 178" stroke="#cf7d23" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.5" />
-          <ellipse cx="530" cy="160" rx="18" ry="4" fill="#eaf1f7" opacity="0.45" />
-          <circle cx="600" cy="168" r="8" fill="#cf7d23" stroke="#eaf1f7" stroke-width="2.5" />
-          <circle cx="600" cy="168" r="3" fill="#f5cd8a" />
+        <g id="s3-serit-sari" class="s3-serit" data-parca="sari" role="button" tabindex="0" aria-label="B Aralığı, 0 ile 4 arası">
+          <rect x="400" y="102" width="200" height="28" rx="14" fill="url(#s3-grad-sari)" fill-opacity="0.85" stroke="#cf7d23" stroke-width="2.5" />
+          <path d="M 412 106 Q 500 103 588 106" stroke="#eaf1f7" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.6" />
+          <path d="M 415 125 Q 500 128 585 125" stroke="#cf7d23" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.5" />
+          <ellipse cx="440" cy="109" rx="22" ry="4" fill="#eaf1f7" opacity="0.45" />
+          <circle cx="400" cy="116" r="8" fill="#cf7d23" stroke="#eaf1f7" stroke-width="2.5" />
+          <circle cx="600" cy="116" r="8" fill="#cf7d23" stroke="#eaf1f7" stroke-width="2.5" />
         </g>
 
         <g id="s3-serit-ortak" class="s3-serit s3-serit-ortak" data-parca="ortak" role="button" tabindex="0" aria-label="Ortak Bölge A Kesişim B Şeridi" filter="url(#s3-golge)">
@@ -2172,17 +2289,15 @@ window.SAYFA_INIT[2] = function (kok) {
       </g>
 
       <g id="sayfa3-katman-etiketler">
-        <ellipse cx="315" cy="138" rx="36" ry="3" fill="#2c3b4d" opacity="0.08" />
-        <rect x="270" y="108" width="90" height="28" rx="14" fill="#9ec4e6" fill-opacity="0.3" stroke="#24639c" stroke-width="1.5" />
-        <text class="svg-metin" x="315" y="127" text-anchor="middle" fill="#24639c">A Aralığı</text>
+        <!-- Etiketler şeritlerin YANINDA durur (şeritleri örtmez) -->
+        <rect x="140" y="60" width="96" height="28" rx="14" fill="#9ec4e6" fill-opacity="0.3" stroke="#24639c" stroke-width="1.5" />
+        <text class="svg-metin" x="188" y="80" text-anchor="middle" fill="#24639c">A Aralığı</text>
 
-        <ellipse cx="450" cy="108" rx="42" ry="3" fill="#1b9468" opacity="0.12" />
-        <rect x="400" y="76" width="100" height="30" rx="15" fill="#bfe8d4" fill-opacity="0.4" stroke="#1b9468" stroke-width="2" />
-        <text class="svg-metin" x="450" y="97" text-anchor="middle" fill="#1b9468">Ortak Bölge</text>
+        <rect x="290" y="102" width="96" height="28" rx="14" fill="#f5cd8a" fill-opacity="0.3" stroke="#cf7d23" stroke-width="1.5" />
+        <text class="svg-metin" x="338" y="122" text-anchor="middle" fill="#cf7d23">B Aralığı</text>
 
-        <ellipse cx="570" cy="138" rx="36" ry="3" fill="#2c3b4d" opacity="0.08" />
-        <rect x="525" y="108" width="90" height="28" rx="14" fill="#f5cd8a" fill-opacity="0.3" stroke="#cf7d23" stroke-width="1.5" />
-        <text class="svg-metin" x="570" y="127" text-anchor="middle" fill="#cf7d23">B Aralığı</text>
+        <rect x="514" y="153" width="112" height="30" rx="15" fill="#bfe8d4" fill-opacity="0.4" stroke="#1b9468" stroke-width="2" />
+        <text class="svg-metin" x="570" y="174" text-anchor="middle" fill="#1b9468">Ortak Bölge</text>
       </g>
     </svg>
   </div>
@@ -2485,7 +2600,7 @@ window.SAYFA_INIT[3] = function (kok) {
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 22:38 -->
 <!-- PALET: zemin #efe8d6 #dfd5bd | baskin #d6ecf8 #4aa6db #1d78b5 #135482 | ikincil #fae8b2 #e59b24 #b8740c | notr #8a95a5 #283342 | vurgu #1ea368 | kontur #1c2633 -->
 <!-- SAYFA_BASLIK: Aralıkların Birleşim Alanı -->
-<!-- YONERGE: Aralık şeritlerini sırayla birleşim yuvasına taşıyarak birleşim kümesini keşfet. -->
+<!-- YONERGE: Aralık şeritlerini sayı doğrusu üzerindeki yerlerine taşıyarak birleşim kümesini keşfet. -->
 <!-- ETIKET: KEŞİF -->
 <!-- SUTUN_ORAN: 8fr 4fr -->
 <section class="bolum sahne s4-sahne-zemini">
@@ -2571,29 +2686,10 @@ window.SAYFA_INIT[3] = function (kok) {
         <text x="660" y="262" class="svg-metin" text-anchor="middle" fill="#283342">4</text>
         <text x="720" y="262" class="svg-metin" text-anchor="middle" fill="#283342">5</text>
 
-        <!-- Birleşim Yuvası -->
-        <rect x="90" y="310" width="660" height="200" rx="16" fill="url(#s4-deg-yuva)" fill-opacity="0.35" stroke="#4aa6db" stroke-width="3" stroke-dasharray="8 6" />
-        <ellipse cx="420" cy="505" rx="320" ry="4" fill="#1c2633" fill-opacity="0.1" />
-
-        <!-- Yuva Odak Köşelikleri (İncelikli Tasarım) -->
-        <path d="M 104 330 L 104 322 Q 104 318 108 318 L 116 318" stroke="#1d78b5" stroke-width="2.5" fill="none" stroke-linecap="round" />
-        <path d="M 736 330 L 736 322 Q 736 318 732 318 L 724 318" stroke="#1d78b5" stroke-width="2.5" fill="none" stroke-linecap="round" />
-        <path d="M 104 490 L 104 498 Q 104 502 108 502 L 116 502" stroke="#1d78b5" stroke-width="2.5" fill="none" stroke-linecap="round" />
-        <path d="M 736 490 L 736 498 Q 736 502 732 502 L 724 502" stroke="#1d78b5" stroke-width="2.5" fill="none" stroke-linecap="round" />
-
-        <!-- Yuva İçi Kılavuz Hizalama Çizgileri -->
-        <line x1="300" y1="380" x2="300" y2="480" stroke="#8a95a5" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.4" />
-        <line x1="420" y1="380" x2="420" y2="480" stroke="#8a95a5" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.4" />
-        <line x1="480" y1="380" x2="480" y2="480" stroke="#8a95a5" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.4" />
-        <line x1="660" y1="380" x2="660" y2="480" stroke="#8a95a5" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.4" />
-
-        <!-- Yuva Başlık ve Semboller -->
-        <text x="110" y="342" class="svg-metin" fill="#135482" font-weight="bold">Birleşim Yuvası</text>
-        <ellipse cx="420" cy="425" rx="60" ry="36" fill="#d6ecf8" fill-opacity="0.45" />
-        <text x="420" y="445" class="svg-baslik" text-anchor="middle" fill="#d6ecf8" fill-opacity="0.85">∪</text>
-        <text x="420" y="342" class="svg-baslik" text-anchor="middle" fill="#1d78b5">A ∪ B</text>
-        <line x1="120" y1="430" x2="720" y2="430" stroke="#8a95a5" stroke-width="2" stroke-dasharray="4 4" />
-        <rect id="s4-hedef-yuva" x="90" y="310" width="660" height="200" rx="16" fill="#ffffff" fill-opacity="0.001" pointer-events="all" />
+        <!-- Uzman notu: şeritler ayrı bir «birleşim yuvasına» değil, SAYI DOĞRUSU
+             üzerindeki yerlerine konur. Bırakma hedefi sayı doğrusunun kendisidir. -->
+        <rect id="s4-dogru-vurgu" x="84" y="198" width="672" height="78" rx="10" fill="#d6ecf8" fill-opacity="0.35" stroke="#4aa6db" stroke-width="2.5" stroke-dasharray="8 6" opacity="0" />
+        <text id="s4-birlesim-yazi" x="420" y="318" class="svg-baslik" text-anchor="middle" fill="#1d78b5">A ∪ B = ?</text>
       </g>
 
       <g id="sayfa4-katman-on">
@@ -2637,25 +2733,30 @@ window.SAYFA_INIT[3] = function (kok) {
           <text x="540" y="128" class="svg-metin" text-anchor="middle" fill="#135482">[0, 4]</text>
         </g>
 
-        <!-- Birleşik Sonuç Bandı: [-2, 4] -->
-        <g id="s4-birlesik-sonuc" class="s4-gizli">
-          <ellipse cx="480" cy="454" rx="182" ry="7" fill="#1c2633" fill-opacity="0.3" />
-          <rect x="300" y="411" width="360" height="38" rx="8" fill="url(#s4-deg-birlesim)" stroke="#1c2633" stroke-width="3" />
-          <path d="M 306 415 L 654 415 C 656 415 657 417 657 419 L 657 422 C 540 426 410 425 303 422 L 303 419 C 303 417 304 415 306 415 Z" fill="#ffffff" fill-opacity="0.35" />
-          <!-- Birleşim Gövde Dokusu ve Kaynaşan Sınır Çizgileri -->
-          <line x1="360" y1="417" x2="360" y2="443" stroke="#d6ecf8" stroke-width="2" stroke-linecap="round" opacity="0.5" />
-          <line x1="420" y1="417" x2="420" y2="443" stroke="#d6ecf8" stroke-width="2" stroke-linecap="round" opacity="0.5" />
-          <line x1="480" y1="417" x2="480" y2="443" stroke="#d6ecf8" stroke-width="2" stroke-linecap="round" opacity="0.5" />
-          <line x1="540" y1="417" x2="540" y2="443" stroke="#d6ecf8" stroke-width="2" stroke-linecap="round" opacity="0.5" />
-          <line x1="600" y1="417" x2="600" y2="443" stroke="#d6ecf8" stroke-width="2" stroke-linecap="round" opacity="0.5" />
-          <!-- Uç Noktalar (-2 Kapalı, 4 Kapalı) -->
-          <circle cx="300" cy="430" r="10" fill="#283342" stroke="#ffffff" stroke-width="3" />
-          <circle cx="298" cy="427" r="2.5" fill="#ffffff" fill-opacity="0.9" />
-          <circle cx="660" cy="430" r="10" fill="#283342" stroke="#ffffff" stroke-width="3" />
-          <circle cx="658" cy="427" r="2.5" fill="#ffffff" fill-opacity="0.9" />
-          <text x="480" y="436" class="svg-metin" text-anchor="middle" fill="#ffffff" font-weight="bold">[-2, 4]</text>
-          <text x="480" y="482" class="svg-metin" text-anchor="middle" fill="#1ea368" font-weight="bold">A ∪ B = [-2, 4]</text>
+        <!-- Sayı doğrusuna yerleşen A: [-2, 1) — eksenin üst yarısında turuncu bant -->
+        <g id="s4-eksen-a" display="none">
+          <rect x="300" y="215" width="180" height="13" rx="6" fill="url(#s4-deg-serit-a)" stroke="#b8740c" stroke-width="2" />
+          <circle cx="300" cy="221" r="7" fill="#283342" stroke="#fae8b2" stroke-width="2.5" />
+          <circle cx="480" cy="221" r="7" fill="#efe8d6" stroke="#b8740c" stroke-width="2.5" />
+          <text x="270" y="210" class="svg-metin" text-anchor="middle" fill="#b8740c">A</text>
         </g>
+        <!-- Sayı doğrusuna yerleşen B: [0, 4] — eksenin alt yarısında mavi bant -->
+        <g id="s4-eksen-b" display="none">
+          <rect x="420" y="232" width="240" height="13" rx="6" fill="url(#s4-deg-serit-b)" stroke="#135482" stroke-width="2" />
+          <circle cx="420" cy="239" r="7" fill="#283342" stroke="#d6ecf8" stroke-width="2.5" />
+          <circle cx="660" cy="239" r="7" fill="#283342" stroke="#d6ecf8" stroke-width="2.5" />
+          <text x="690" y="220" class="svg-metin" text-anchor="middle" fill="#135482">B</text>
+        </g>
+
+        <!-- Birleşik Sonuç Bandı: [-2, 4] — sayı doğrusunun ÜZERİNDE -->
+        <g id="s4-birlesik-sonuc" class="s4-gizli">
+          <rect x="300" y="219" width="360" height="22" rx="11" fill="#1ea368" fill-opacity="0.35" stroke="#1ea368" stroke-width="3" />
+          <circle cx="300" cy="230" r="10" fill="#283342" stroke="#ffffff" stroke-width="3" />
+          <circle cx="660" cy="230" r="10" fill="#283342" stroke="#ffffff" stroke-width="3" />
+        </g>
+
+        <!-- Görünmez bırakma hedefi: sayı doğrusu -->
+        <rect id="s4-hedef-yuva" x="84" y="198" width="672" height="78" rx="10" fill="#ffffff" fill-opacity="0.001" pointer-events="all" role="button" tabindex="0" aria-label="Sayı doğrusu" />
       </g>
     </svg>
   </div>
@@ -2663,13 +2764,13 @@ window.SAYFA_INIT[3] = function (kok) {
 <section class="bolum etkilesim">
 <div class="panel-basi">
 <div class="baslik-satiri"><h2>Aralıkların Birleşim Alanı</h2><span class="etiket">KEŞİF</span></div>
-<p class="yonerge">Aralık şeritlerini sırayla birleşim yuvasına taşıyarak birleşim kümesini keşfet.</p>
+<p class="yonerge">Aralık şeritlerini sayı doğrusu üzerindeki yerlerine taşıyarak birleşim kümesini keşfet.</p>
 </div>
 
   <div class="kontrol-govde">
     <div class="s4-kart">
       <p class="s4-kart-metin">
-        Aralık şeritlerini sayı doğrusundan tutup <strong>Birleşim Yuvası</strong> hedef alanına taşıyın veya sırayla tıklayarak aktarın.
+        Aralık şeritlerini tutup <strong>sayı doğrusu</strong> üzerindeki yerlerine bırakın ya da önce şeride, sonra sayı doğrusuna tıklayın.
       </p>
     </div>
     <div class="s4-durum-kapsayici">
@@ -2811,38 +2912,45 @@ window.SAYFA_INIT[4] = function (kok) {
   var durumEtiketB = kok.querySelector("#s4-durum-etiket-b");
   var sonucPanel = kok.querySelector("#s4-sonuc-panel");
   var btnSifirla = kok.querySelector("#s4-btn-sifirla");
+  var eksenA = kok.querySelector("#s4-eksen-a");
+  var eksenB = kok.querySelector("#s4-eksen-b");
+  var dogruVurgu = kok.querySelector("#s4-dogru-vurgu");
+  var birlesimYazi = kok.querySelector("#s4-birlesim-yazi");
 
+  // Uzman notu: şerit sayı doğrusu üzerindeki YERİNE iner (kayar), sonra eksende
+  // kendi rengindeki bantla (uç nokta dolu/boş) gösterilir.
   function yuvayaYerlestir(tur) {
     if (tur === "A" && !yerlesenA) {
       yerlesenA = true;
       seritA.classList.remove("s4-secili");
       seritA.classList.add("s4-yerlesti");
-      seritA.style.transform = "translate(0px, 310px)";
-      durumEtiketA.textContent = "Yuvada";
+      seritA.style.transform = "translate(0px, 124px)";
+      setTimeout(function () { seritA.style.display = "none"; eksenA.setAttribute("display", "inline"); }, 320);
+      durumEtiketA.textContent = "Sayı doğrusunda";
       durumEtiketA.classList.add("s4-tamam");
     } else if (tur === "B" && !yerlesenB) {
       yerlesenB = true;
       seritB.classList.remove("s4-secili");
       seritB.classList.add("s4-yerlesti");
-      seritB.style.transform = "translate(0px, 270px)";
-      durumEtiketB.textContent = "Yuvada";
+      seritB.style.transform = "translate(0px, 80px)";
+      setTimeout(function () { seritB.style.display = "none"; eksenB.setAttribute("display", "inline"); }, 320);
+      durumEtiketB.textContent = "Sayı doğrusunda";
       durumEtiketB.classList.add("s4-tamam");
     }
     seciliSerit = null;
 
     if (yerlesenA && yerlesenB) {
       setTimeout(function () {
-        seritA.style.display = "none";
-        seritB.style.display = "none";
         sonucBant.classList.remove("s4-gizli");
         sonucPanel.classList.remove("s4-gizli");
+        if (birlesimYazi) birlesimYazi.textContent = "A ∪ B = [-2, 4]";
         if (window.MathJax && window.MathJax.typesetPromise) {
           window.MathJax.typesetPromise([sonucPanel]);
         }
-        EGITSEL.dontVer(kok, "dogru", "Kapsanan tüm sayılar birleşti.");
-      }, 350);
+        EGITSEL.dontVer(kok, "dogru", "Kapsanan tüm sayılar birleşti: A ∪ B = [-2, 4].");
+      }, 450);
     } else {
-      window.SABLON_TOAST("Şerit yuvaya yerleşti. Diğer aralık şeridini de birleşim yuvasına bırakın.");
+      window.SABLON_TOAST("Şerit sayı doğrusuna yerleşti. Diğer aralık şeridini de taşı.");
     }
   }
 
@@ -2855,7 +2963,8 @@ window.SAYFA_INIT[4] = function (kok) {
       seritB.style.transform = "translate(0px, 0px)";
     }
     seciliSerit = null;
-    EGITSEL.dontVer(kok, "yanlis", "Şeridi birleşim yuvasına bırak.");
+    // Boşa bırakma yanlış cevap değildir: nötr yönlendirme.
+    window.SABLON_TOAST("Şeridi sayı doğrusunun üzerine bırak.");
   }
 
   seritA.addEventListener("click", function () {
@@ -2885,8 +2994,8 @@ window.SAYFA_INIT[4] = function (kok) {
   hedefYuva.addEventListener("click", function () {
     if (seciliSerit) {
       yuvayaYerlestir(seciliSerit);
-    } else {
-      EGITSEL.dontVer(kok, "yanlis", "Şeridi birleşim yuvasına bırak.");
+    } else if (!(yerlesenA && yerlesenB)) {
+      window.SABLON_TOAST("Önce bir aralık şeridi seç.");
     }
   });
 
@@ -2924,7 +3033,10 @@ window.SAYFA_INIT[4] = function (kok) {
     });
     pdnd.dropTargetForElements({
       element: hedefYuva,
-      getData: function () { return { hedef: "birlesim" }; }
+      getData: function () { return { hedef: "birlesim" }; },
+      onDragEnter: function () { if (dogruVurgu) dogruVurgu.setAttribute("opacity", "1"); },
+      onDragLeave: function () { if (dogruVurgu) dogruVurgu.setAttribute("opacity", "0"); },
+      onDrop: function () { if (dogruVurgu) dogruVurgu.setAttribute("opacity", "0"); }
     });
     pdnd.monitorForElements({
       onDragStart: function (args) {
@@ -2961,6 +3073,9 @@ window.SAYFA_INIT[4] = function (kok) {
 
     sonucBant.classList.add("s4-gizli");
     sonucPanel.classList.add("s4-gizli");
+    eksenA.setAttribute("display", "none");
+    eksenB.setAttribute("display", "none");
+    if (birlesimYazi) birlesimYazi.textContent = "A ∪ B = ?";
 
     durumEtiketA.textContent = "Bekliyor";
     durumEtiketA.classList.remove("s4-tamam");
@@ -3142,6 +3257,13 @@ window.SAYFA_INIT[4] = function (kok) {
           <circle cx="585" cy="240" r="2.5" fill="#246299" opacity="0.6" />
           <circle cx="625" cy="240" r="2.5" fill="#246299" opacity="0.6" />
           <circle cx="665" cy="240" r="2.5" fill="#246299" opacity="0.6" />
+        </g>
+
+        <!-- Budamadan sonra: fark kümesinin cebirsel gösterimi, kesilen bölgenin boşalan
+             yerinde AYRI bir etikette (uzman notu: kalan parçanın içine sığmıyordu). -->
+        <g id="s5-fark-sonuc" opacity="0">
+          <rect x="322" y="222" width="206" height="36" rx="18" fill="#ebe3d5" stroke="#845ec2" stroke-width="2.5" />
+          <text class="svg-metin" x="425" y="246" text-anchor="middle" fill="#2d2722">A \ B = [-4, -2)</text>
         </g>
 
         <!-- SINIR NOKTALARI (DAİRELER) -->
@@ -3346,6 +3468,7 @@ window.SAYFA_INIT[5] = function (kok) {
   var eksi2Acik = kok.querySelector("#s5-eksi2-acik");
   var farkDeger = kok.querySelector("#s5-fark-deger");
   var farkEtiket = kok.querySelector("#s5-fark-etiket");
+  var farkSonuc = kok.querySelector("#s5-fark-sonuc");
   var sifirlaBtn = kok.querySelector("#s5-sifirla-btn");
 
   function araciGuncelle(aktif) {
@@ -3399,7 +3522,8 @@ window.SAYFA_INIT[5] = function (kok) {
     if (eksi2Acik) eksi2Acik.style.display = "block";
 
     if (farkDeger) farkDeger.textContent = "[-4, -2)";
-    if (farkEtiket) farkEtiket.textContent = "A \\ B = [-4, -2)";
+    // Parçanın içinde yalnız «A \ B» kalır; tam gösterim boşalan bölgedeki etikettedir.
+    if (farkSonuc) farkSonuc.setAttribute("opacity", "1");
 
     EGITSEL.dontVer(kok, "dogru", "Kesişen bölge aralıktan çıkarıldı.");
   });
@@ -3419,6 +3543,7 @@ window.SAYFA_INIT[5] = function (kok) {
     if (eksi2Acik) eksi2Acik.style.display = "none";
     if (farkDeger) farkDeger.textContent = "?";
     if (farkEtiket) farkEtiket.textContent = "A \\ B";
+    if (farkSonuc) farkSonuc.setAttribute("opacity", "0");
   });
 };
 </script>
@@ -6425,8 +6550,13 @@ window.SAYFA_INIT[10] = function (kok) {
   }
 
   // Tıklama ile Seçim ve Geçiş Yedeği
+  function surukleyeniYeniBitti(el) {
+    return el._surukleBitti && Date.now() - el._surukleBitti < 350;
+  }
+
   solEl.addEventListener("click", function (e) {
     e.stopPropagation();
+    if (surukleyeniYeniBitti(solEl)) return;
     if (seciliTutamak === "sol") {
       tipDegistir("sol");
     } else {
@@ -6436,6 +6566,7 @@ window.SAYFA_INIT[10] = function (kok) {
 
   sagEl.addEventListener("click", function (e) {
     e.stopPropagation();
+    if (surukleyeniYeniBitti(sagEl)) return;
     if (seciliTutamak === "sag") {
       tipDegistir("sag");
     } else {
@@ -6443,16 +6574,72 @@ window.SAYFA_INIT[10] = function (kok) {
     }
   });
 
-  function klavyeBagla(el) {
+  function klavyeBagla(el, tip) {
     el.addEventListener("keydown", function (e) {
       if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         el.click();
+      } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        var adim = e.key === "ArrowLeft" ? -1 : 1;
+        sinirTasi(tip, (tip === "sol" ? solDeger : sagDeger) + adim);
       }
     });
   }
-  klavyeBagla(solEl);
-  klavyeBagla(sagEl);
+  klavyeBagla(solEl, "sol");
+  klavyeBagla(sagEl, "sag");
+
+  // Uzman notu: «kesişimin sınırları olan sürgü zor hareket ediyor». Tutamaklar
+  // eskiden pdnd ile 40 px'lik dar bırakma şeritlerine atılıyordu (aradaki boşluğa
+  // bırakınca hiçbir şey olmuyor, tutamak işaretçiyi izlemiyordu). Artık bir sürgü
+  // gibi işaretçiyi İZLER ve en yakın tam sayıya oturur. İşaretçi SVG koordinatına
+  // getScreenCTM ile çevrilir (şablonun ölçekli çerçevesinde kaymaz).
+  var svgKok = solEl.ownerSVGElement;
+  function svgX(e) {
+    var ctm = svgKok && svgKok.getScreenCTM();
+    if (!ctm) return null;
+    var p = svgKok.createSVGPoint();
+    p.x = e.clientX;
+    p.y = e.clientY;
+    return p.matrixTransform(ctm.inverse()).x;
+  }
+  function tutamakSurgusu(el, tip) {
+    var surukluyor = false;
+    var hareketEtti = false;
+    el.addEventListener("pointerdown", function (e) {
+      e.preventDefault();
+      if (kilitli) return;
+      surukluyor = true;
+      hareketEtti = false;
+      try { el.setPointerCapture(e.pointerId); } catch (_) { /* yok sayılır */ }
+      odakAyarla(tip);
+      el.classList.add("s10-surukleniyor");
+    });
+    el.addEventListener("pointermove", function (e) {
+      if (!surukluyor || kilitli) return;
+      var x = svgX(e);
+      if (x === null) return;
+      var val = Math.round((x - 366) / 64);
+      if (val !== (tip === "sol" ? solDeger : sagDeger)) {
+        hareketEtti = true;
+        sinirTasi(tip, val);
+      }
+    });
+    function birak(e) {
+      if (!surukluyor) return;
+      surukluyor = false;
+      el.classList.remove("s10-surukleniyor");
+      try { el.releasePointerCapture(e.pointerId); } catch (_) { /* yok sayılır */ }
+      if (hareketEtti) {
+        el._surukleBitti = Date.now();
+        odakAyarla(null);
+      }
+    }
+    el.addEventListener("pointerup", birak);
+    el.addEventListener("pointercancel", birak);
+  }
+  tutamakSurgusu(solEl, "sol");
+  tutamakSurgusu(sagEl, "sag");
 
   kok.querySelectorAll(".s10-hedef-nokta").forEach(function (hedef) {
     hedef.addEventListener("click", function () {
@@ -6495,7 +6682,7 @@ window.SAYFA_INIT[10] = function (kok) {
     odakAyarla(null);
     hataTemizle();
     aralikGuncelle();
-    EGITSEL.kilitle(kok, ".s10-ayar-btn", false);
+    EGITSEL.kilitle(kok, ".s10-sol-btn, .s10-sag-btn", false);
     kok.querySelector("#s10-kontrol").disabled = false;
   });
 
@@ -6511,7 +6698,9 @@ window.SAYFA_INIT[10] = function (kok) {
       odakAyarla(null);
       sonucGrup.classList.add("s10-parilda");
       EGITSEL.dontVer(kok, "dogru", "Ortak aralık doğru ayarlandı.");
-      EGITSEL.kilitle(kok, ".s10-ayar-btn", true);
+      // Sıfırla düğmesi de .s10-ayar-btn sınıfındaydı ve burada kilitleniyordu
+      // (uzman: «sıfırla butonu çalışmıyor») → yalnız dolu/boş düğmeleri kilitlenir.
+      EGITSEL.kilitle(kok, ".s10-sol-btn, .s10-sag-btn", true);
       kok.querySelector("#s10-kontrol").disabled = true;
     } else {
       if (!solDogru) {
@@ -6527,49 +6716,6 @@ window.SAYFA_INIT[10] = function (kok) {
       }, 700);
     }
   });
-
-  // Pragmatic Drag and Drop Entegrasyonu
-  var temizleyiciler = [];
-  if (typeof pdnd !== "undefined") {
-    temizleyiciler.push(pdnd.draggable({
-      element: solEl,
-      getInitialData: function () { return { tip: "sol" }; },
-      onDragStart: function () {
-        odakAyarla("sol");
-        solEl.classList.add("s10-surukleniyor");
-      },
-      onDrop: function () {
-        solEl.classList.remove("s10-surukleniyor");
-      }
-    }));
-
-    temizleyiciler.push(pdnd.draggable({
-      element: sagEl,
-      getInitialData: function () { return { tip: "sag" }; },
-      onDragStart: function () {
-        odakAyarla("sag");
-        sagEl.classList.add("s10-surukleniyor");
-      },
-      onDrop: function () {
-        sagEl.classList.remove("s10-surukleniyor");
-      }
-    }));
-
-    kok.querySelectorAll(".s10-hedef-nokta").forEach(function (hedef) {
-      var val = parseInt(hedef.dataset.deger, 10);
-      temizleyiciler.push(pdnd.dropTargetForElements({
-        element: hedef,
-        getData: function () { return { deger: val }; },
-        onDrop: function (args) {
-          var kaynak = args.source && args.source.data;
-          if (kaynak && kaynak.tip) {
-            sinirTasi(kaynak.tip, val);
-            odakAyarla(null);
-          }
-        }
-      }));
-    });
-  }
 
   aralikGuncelle();
 };
@@ -7086,15 +7232,37 @@ window.SAYFA_INIT[11] = function (kok) {
     }
   });
 
+  // Uzman notu: «boyadığın yer senkronize değil, imleç başka yeri gösteriyor».
+  // Eskiden bant her harekette EN YAKIN tam sayıya sıçrıyor, fırça halkası ise
+  // işaretçinin serbest (x, y) konumunda duruyordu. Artık fırça halkası sayı
+  // doğrusuna kilitli, sürükleme SIRASINDA bant halkayı tam izler; tam sayıya
+  // oturma yalnız fırça bırakılınca olur.
+  function canliBant(xA, xB) {
+    var x1 = Math.min(xA, xB);
+    var w = Math.max(0, Math.abs(xB - xA));
+    boyaliKatman.setAttribute("opacity", "1");
+    boyaliBant.setAttribute("x", x1);
+    boyaliBant.setAttribute("width", w);
+    var shineW = Math.max(0, w - 12);
+    boyaliParlama.setAttribute("d", "M" + (x1 + 6) + " 303 h" + shineW + " a5 5 0 0 1 0 7 h-" + shineW + " a5 5 0 0 1 0 -7 z");
+    solUc.setAttribute("opacity", "0");
+    sagUc.setAttribute("opacity", "0");
+  }
+
+  function imlecX(pt) {
+    return Math.max(ticks[0].x, Math.min(ticks[ticks.length - 1].x, pt.x));
+  }
+
   svg.addEventListener("pointermove", function (e) {
     var pt = getSvgPoint(e);
-    fircaImlec.setAttribute("transform", "translate(" + pt.x + "," + pt.y + ")");
+    var cx = imlecX(pt);
+    fircaImlec.setAttribute("transform", "translate(" + cx + "," + 315 + ")");
 
     if (surukleniyor && !tamamlandi) {
-      var t = findClosestTick(pt.x);
+      var t = findClosestTick(cx);
       currentMinVal = Math.min(dragStartVal, t.val);
       currentMaxVal = Math.max(dragStartVal, t.val);
-      guncelleGorselBant(currentMinVal, currentMaxVal);
+      canliBant(getXByVal(dragStartVal), cx);
     }
   });
 
@@ -7117,24 +7285,33 @@ window.SAYFA_INIT[11] = function (kok) {
       fircaBtn.classList.add("secili");
       fircaImlec.setAttribute("opacity", "1");
     }
+    e.preventDefault();
     surukleniyor = true;
     var pt = getSvgPoint(e);
-    var t = findClosestTick(pt.x);
+    var cx = imlecX(pt);
+    fircaImlec.setAttribute("transform", "translate(" + cx + "," + 315 + ")");
+    var t = findClosestTick(cx);
     dragStartVal = t.val;
     currentMinVal = t.val;
     currentMaxVal = t.val;
-    guncelleGorselBant(currentMinVal, currentMaxVal);
+    canliBant(getXByVal(dragStartVal), getXByVal(dragStartVal));
   });
 
   window.addEventListener("pointerup", function () {
     if (!surukleniyor || tamamlandi) return;
     surukleniyor = false;
-    degerlendir();
+    // Fırça bırakılınca bant en yakın tam sayılara oturur.
+    guncelleGorselBant(currentMinVal, currentMaxVal);
+    // Ara adım sessizdir: yalnız doğru boyama hemen onaylanır; eksik/taşan
+    // boyamanın açıklaması «Kontrol Et» ile gelir.
+    if (currentMinVal === -3 && currentMaxVal === 4) {
+      degerlendir();
+    }
   });
 
   function degerlendir() {
     if (currentMinVal === null || currentMaxVal === null) {
-      EGITSEL.dontVer(kok, "yanlis", "Her iki aralığı boyayın.");
+      window.SABLON_TOAST("Önce fırçayla sayı doğrusunu boya.");
       return;
     }
 
@@ -7318,7 +7495,9 @@ window.SAYFA_INIT[11] = function (kok) {
         <text x="690" y="239" text-anchor="middle" class="svg-not" fill="#9e5813">B Kümesi</text>
         <text x="690" y="257" text-anchor="middle" class="svg-not" fill="#df8f2d">[1, 6)</text>
 
-        <g id="s12-hedef-rehber" opacity="0.4">
+        <!-- Cevap rehberi BAŞLANGIÇTA GİZLİ: uzman notu «fark çerçevesini tıkladığın an
+             görselde beliriyor» — kart seçilince doğru bölge gösteriliyordu. -->
+        <g id="s12-hedef-rehber" opacity="0">
           <line x1="172" y1="145" x2="172" y2="350" stroke="#48bf84" stroke-width="2" stroke-dasharray="6,4"/>
           <line x1="380" y1="145" x2="380" y2="350" stroke="#48bf84" stroke-width="2" stroke-dasharray="6,4"/>
           <rect x="172" y="155" width="208" height="150" rx="14" fill="#48bf84" fill-opacity="0.08" stroke="#48bf84" stroke-width="1.5" stroke-dasharray="6,4"/>
@@ -7370,6 +7549,7 @@ window.SAYFA_INIT[11] = function (kok) {
     </div>
   </div>
   <div class="kontrol-eylem">
+    <button class="buton" id="s12-sifirla" type="button">Sıfırla</button>
     <button class="buton birincil" id="s12-kontrol">Kontrol Et</button>
   </div>
 </section>
@@ -7481,14 +7661,19 @@ window.SAYFA_INIT[12] = function (kok) {
   var durumMetni = kok.querySelector("#s12-durum-metni");
   var kontrolBtn = kok.querySelector("#s12-kontrol");
 
-  function yanlisBirakma() {
+  function yanlisBirakma(bosa) {
     kartEl.classList.remove("secili");
     seciliMi = false;
     kartEl.classList.add("s12-titre");
     setTimeout(function () {
       kartEl.classList.remove("s12-titre");
     }, 400);
-    EGITSEL.dontVer(kok, "yanlis", "Yalnız A bölgesini seç.");
+    if (bosa) {
+      // Boşa bırakma yanlış cevap değildir: nötr yönlendirme.
+      window.SABLON_TOAST("Çerçeveyi sayı doğrusu üzerindeki bir bölgeye bırak.");
+    } else {
+      EGITSEL.dontVer(kok, "yanlis", "A \\ B, A'da olup B'de olmayan sayılardır.");
+    }
   }
 
   function dogruYerlesme() {
@@ -7500,7 +7685,7 @@ window.SAYFA_INIT[12] = function (kok) {
     kartEl.setAttribute("aria-disabled", "true");
     sahneCerceve.style.display = "inline";
     hedefRehber.style.opacity = "0.2";
-    durumMetni.textContent = "Sınır noktalarına tıklayarak dahil veya hariç durumunu ayarla.";
+    durumMetni.textContent = "Sınır noktalarına tıklayarak dahil (dolu) veya hariç (boş) durumunu ayarla, sonra Kontrol Et'e bas.";
   }
 
   function durumKontrol(manuelKontrol) {
@@ -7540,7 +7725,6 @@ window.SAYFA_INIT[12] = function (kok) {
       },
       onDragStart: function () {
         kartEl.classList.add("surukleniyor");
-        hedefRehber.style.opacity = "1";
       }
     }));
 
@@ -7548,9 +7732,6 @@ window.SAYFA_INIT[12] = function (kok) {
       element: hedefEl,
       getData: function () {
         return { hedef: "fark" };
-      },
-      onDragEnter: function () {
-        hedefRehber.style.opacity = "1";
       }
     }));
 
@@ -7564,10 +7745,10 @@ window.SAYFA_INIT[12] = function (kok) {
     temizleyiciler.push(pdnd.monitorForElements({
       onDrop: function (args) {
         kartEl.classList.remove("surukleniyor");
-        hedefRehber.style.opacity = "0.4";
+        if (yerlesti || tamamlandi) return;
         var dropTargets = args.location.current.dropTargets;
         if (!dropTargets || dropTargets.length === 0) {
-          yanlisBirakma();
+          yanlisBirakma(true);
           return;
         }
         var hedefData = dropTargets[0].data;
@@ -7584,7 +7765,6 @@ window.SAYFA_INIT[12] = function (kok) {
     if (yerlesti || tamamlandi) return;
     seciliMi = !seciliMi;
     kartEl.classList.toggle("secili", seciliMi);
-    hedefRehber.style.opacity = seciliMi ? "1" : "0.4";
   });
 
   hedefEl.addEventListener("click", function () {
@@ -7610,11 +7790,10 @@ window.SAYFA_INIT[12] = function (kok) {
     sagOdak.style.display = "none";
     solDaire.setAttribute("fill", solDolu ? "#3177b8" : "#f4efe4");
     solUcEl.setAttribute("aria-label", "Sol uç nokta -3 (" + (solDolu ? "dolu" : "boş") + ")");
-    if (!solDolu) {
-      EGITSEL.dontVer(kok, "yanlis", "A kümesi sınırı dahildir.");
-    } else {
-      durumKontrol(false);
-    }
+    // Ara adım sessiz: uç noktayı değiştirmek hemen «yanlış» demez (uzman notu:
+    // sınırları oynatmana izin vermeden uyarı çıkıyordu). Doğru olunca onaylanır,
+    // açıklama Kontrol Et ile gelir.
+    durumKontrol(false);
   });
 
   sagUcEl.addEventListener("click", function () {
@@ -7624,11 +7803,7 @@ window.SAYFA_INIT[12] = function (kok) {
     solOdak.style.display = "none";
     sagDaire.setAttribute("fill", sagDolu ? "#3177b8" : "#f4efe4");
     sagUcEl.setAttribute("aria-label", "Sağ uç nokta 1 (" + (sagDolu ? "dolu" : "boş") + ")");
-    if (sagDolu) {
-      EGITSEL.dontVer(kok, "yanlis", "Çıkarılan sınır hariç tutulur.");
-    } else {
-      durumKontrol(false);
-    }
+    durumKontrol(false);
   });
 
   kartEl.addEventListener("keydown", function (e) {
@@ -7659,6 +7834,34 @@ window.SAYFA_INIT[12] = function (kok) {
     }
     durumKontrol(true);
   });
+
+  // Uzman notu: «sıfırla butonu olmalı» — etkinliği ilk hâline döndürür.
+  var sifirlaBtn = kok.querySelector("#s12-sifirla");
+  if (sifirlaBtn) {
+    sifirlaBtn.addEventListener("click", function () {
+      yerlesti = false;
+      seciliMi = false;
+      tamamlandi = false;
+      solDolu = false;
+      sagDolu = true;
+      kartEl.classList.remove("secili", "yerlesti", "surukleniyor", "s12-titre");
+      kartEl.removeAttribute("aria-disabled");
+      sahneCerceve.style.display = "none";
+      hedefRehber.style.opacity = "0";
+      farkDolgu.setAttribute("fill", "#48bf84");
+      farkDolgu.setAttribute("fill-opacity", "0.25");
+      farkDolgu.setAttribute("stroke", "#48bf84");
+      farkDolgu.setAttribute("stroke-dasharray", "8,6");
+      solDaire.setAttribute("fill", "#f4efe4");
+      sagDaire.setAttribute("fill", "#3177b8");
+      solOdak.style.display = "inline";
+      sagOdak.style.display = "none";
+      solUcEl.setAttribute("aria-label", "Sol uç nokta -3");
+      sagUcEl.setAttribute("aria-label", "Sağ uç nokta 1");
+      durumMetni.textContent = "Fark Çerçevesini sayı doğrusunda A \\ B fark bölgesine sürükle veya tıkla.";
+      EGITSEL.kilitle(kok, "#s12-kontrol", false);
+    });
+  }
 };
 </script>
 </div>
@@ -8292,715 +8495,285 @@ window.SAYFA_INIT[13] = function (kok) {
 </div>
 </div>
 </section>
-<section class="sayfa" id="sayfa-14" tabindex="-1" data-baslik="Derinlik Tarama Filtresi">
+<section class="sayfa" id="sayfa-14" tabindex="-1" data-baslik="Kesişime Ait mi">
 <div class="sayfa-icerik">
-<div class="sayfa-duzen">
-<!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 22:39 -->
-<!-- SAYFA_BASLIK: Derinlik Tarama Filtresi -->
-<!-- YONERGE: Alt ve üst sınır sürgülerini ayarlayarak [4, 8] aralığını filtrele ve iç mekanizmayı izole et. -->
+<div class="sayfa-duzen" style="--sutun-sol:7fr;--sutun-sag:5fr">
+<!-- PALET: zemin #eaf1f7 #dde7f1 | baskin #24639c #4b8ec8 #9ec4e6 | ikincil #cf7d23 #e8a24c #f5cd8a | notr #2c3b4d #63778d | vurgu #1b9468 #bfe8d4 | kontur #182432 -->
+<!-- SAYFA_BASLIK: Kesişime Ait mi -->
+<!-- YONERGE: Her sayının A ∩ B kümesine ait olup olmadığını ∈ ya da ∉ ile işaretle, sonra Kontrol Et'e bas. -->
 <!-- ETIKET: UYGULAMA -->
+<!-- SUTUN_ORAN: 7fr 5fr -->
 <section class="bolum sahne s14-sahne-zemini">
   <div class="sahne-kap">
-    <div class="s14-tuval-kutu" id="s14-tuval-kutu" aria-label="3B Mekanik Parça ve Derinlik Tarama Sahnesi"></div>
+    <svg viewBox="50 20 700 540" preserveAspectRatio="xMidYMid meet" role="img">
+      <title>A ve B aralıkları ile sınanacak sayılar</title>
+      <defs>
+        <linearGradient id="s14-grad-mavi" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#9ec4e6" />
+          <stop offset="45%" stop-color="#4b8ec8" />
+          <stop offset="100%" stop-color="#24639c" />
+        </linearGradient>
+        <linearGradient id="s14-grad-sari" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f5cd8a" />
+          <stop offset="45%" stop-color="#e8a24c" />
+          <stop offset="100%" stop-color="#cf7d23" />
+        </linearGradient>
+        <linearGradient id="s14-grad-yesil" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#bfe8d4" />
+          <stop offset="60%" stop-color="#1b9468" />
+          <stop offset="100%" stop-color="#157553" />
+        </linearGradient>
+        <linearGradient id="s14-grad-eksen" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#dde7f1" />
+          <stop offset="100%" stop-color="#eaf1f7" />
+        </linearGradient>
+        <radialGradient id="s14-grad-notr" cx="0.35" cy="0.3" r="0.8">
+          <stop offset="0%" stop-color="#eaf1f7" />
+          <stop offset="100%" stop-color="#dde7f1" />
+        </radialGradient>
+        <radialGradient id="s14-grad-ic" cx="0.35" cy="0.3" r="0.8">
+          <stop offset="0%" stop-color="#bfe8d4" />
+          <stop offset="100%" stop-color="#1b9468" />
+        </radialGradient>
+        <radialGradient id="s14-grad-dis" cx="0.35" cy="0.3" r="0.8">
+          <stop offset="0%" stop-color="#dde7f1" />
+          <stop offset="100%" stop-color="#63778d" />
+        </radialGradient>
+      </defs>
+      <g id="sayfa14-katman-arka">
+        <path d="M 50 470 Q 250 452 400 466 T 750 460 L 750 560 L 50 560 Z" fill="#dde7f1" opacity="0.55" />
+        <path d="M 50 505 Q 250 490 500 500 T 750 496 L 750 560 L 50 560 Z" fill="#eaf1f7" opacity="0.7" />
+        <ellipse cx="400" cy="340" rx="340" ry="12" fill="#2c3b4d" opacity="0.08" />
+      </g>
+      <g id="sayfa14-katman-orta">
+        <rect x="96" y="60" width="44" height="28" rx="14" fill="#9ec4e6" fill-opacity="0.35" stroke="#24639c" stroke-width="1.5" />
+        <text class="svg-metin" x="118" y="80" text-anchor="middle" fill="#24639c">A</text>
+        <rect x="160" y="62" width="300" height="24" rx="12" fill="url(#s14-grad-mavi)" fill-opacity="0.85" stroke="#24639c" stroke-width="2.5" />
+        <path d="M 176 67 Q 310 63 444 67" stroke="#eaf1f7" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.6" />
+        <circle cx="160" cy="74" r="8" fill="#24639c" stroke="#eaf1f7" stroke-width="2.5" />
+        <circle cx="460" cy="74" r="8" fill="#eaf1f7" stroke="#24639c" stroke-width="3" />
+        <rect x="290" y="138" width="44" height="28" rx="14" fill="#f5cd8a" fill-opacity="0.35" stroke="#cf7d23" stroke-width="1.5" />
+        <text class="svg-metin" x="312" y="158" text-anchor="middle" fill="#cf7d23">B</text>
+        <rect x="340" y="140" width="300" height="24" rx="12" fill="url(#s14-grad-sari)" fill-opacity="0.85" stroke="#cf7d23" stroke-width="2.5" />
+        <path d="M 356 145 Q 490 141 624 145" stroke="#eaf1f7" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.6" />
+        <circle cx="340" cy="152" r="8" fill="#eaf1f7" stroke="#cf7d23" stroke-width="3" />
+        <circle cx="640" cy="152" r="8" fill="#cf7d23" stroke="#eaf1f7" stroke-width="2.5" />
+        <g id="s14-kesisim" opacity="0">
+          <line x1="340" y1="164" x2="340" y2="218" stroke="#1b9468" stroke-width="2" stroke-dasharray="4,3" />
+          <line x1="460" y1="86" x2="460" y2="218" stroke="#1b9468" stroke-width="2" stroke-dasharray="4,3" />
+          <rect x="340" y="218" width="120" height="24" rx="12" fill="url(#s14-grad-yesil)" stroke="#1b9468" stroke-width="2.5" />
+          <circle cx="340" cy="230" r="8" fill="#eaf1f7" stroke="#1b9468" stroke-width="3" />
+          <circle cx="460" cy="230" r="8" fill="#eaf1f7" stroke="#1b9468" stroke-width="3" />
+          <rect x="478" y="216" width="148" height="28" rx="14" fill="#bfe8d4" fill-opacity="0.6" stroke="#1b9468" stroke-width="1.5" />
+          <text class="svg-metin" x="552" y="236" text-anchor="middle" fill="#157553">A ∩ B = (0, 2)</text>
+        </g>
+        <rect x="62" y="304" width="676" height="28" rx="14" fill="url(#s14-grad-eksen)" stroke="#63778d" stroke-width="2" />
+        <line x1="80" y1="318" x2="720" y2="318" stroke="#2c3b4d" stroke-width="3" stroke-linecap="round" />
+        <path d="M 90 311 L 72 318 L 90 325 Z" fill="#2c3b4d" />
+        <path d="M 710 311 L 728 318 L 710 325 Z" fill="#2c3b4d" />
+        <line x1="100" y1="309" x2="100" y2="327" stroke="#2c3b4d" stroke-width="2.5" />
+        <line x1="160" y1="309" x2="160" y2="327" stroke="#2c3b4d" stroke-width="2.5" />
+        <line x1="220" y1="309" x2="220" y2="327" stroke="#2c3b4d" stroke-width="2.5" />
+        <line x1="280" y1="309" x2="280" y2="327" stroke="#2c3b4d" stroke-width="2.5" />
+        <line x1="340" y1="309" x2="340" y2="327" stroke="#2c3b4d" stroke-width="2.5" />
+        <line x1="400" y1="309" x2="400" y2="327" stroke="#2c3b4d" stroke-width="2.5" />
+        <line x1="460" y1="309" x2="460" y2="327" stroke="#2c3b4d" stroke-width="2.5" />
+        <line x1="520" y1="309" x2="520" y2="327" stroke="#2c3b4d" stroke-width="2.5" />
+        <line x1="580" y1="309" x2="580" y2="327" stroke="#2c3b4d" stroke-width="2.5" />
+        <line x1="640" y1="309" x2="640" y2="327" stroke="#2c3b4d" stroke-width="2.5" />
+        <line x1="700" y1="309" x2="700" y2="327" stroke="#2c3b4d" stroke-width="2.5" />
+        <text class="svg-not" x="100" y="296" text-anchor="middle" fill="#2c3b4d">−4</text>
+        <text class="svg-not" x="160" y="296" text-anchor="middle" fill="#2c3b4d">−3</text>
+        <text class="svg-not" x="220" y="296" text-anchor="middle" fill="#2c3b4d">−2</text>
+        <text class="svg-not" x="280" y="296" text-anchor="middle" fill="#2c3b4d">−1</text>
+        <text class="svg-not" x="340" y="296" text-anchor="middle" fill="#2c3b4d">0</text>
+        <text class="svg-not" x="400" y="296" text-anchor="middle" fill="#2c3b4d">1</text>
+        <text class="svg-not" x="460" y="296" text-anchor="middle" fill="#2c3b4d">2</text>
+        <text class="svg-not" x="520" y="296" text-anchor="middle" fill="#2c3b4d">3</text>
+        <text class="svg-not" x="580" y="296" text-anchor="middle" fill="#2c3b4d">4</text>
+        <text class="svg-not" x="640" y="296" text-anchor="middle" fill="#2c3b4d">5</text>
+        <text class="svg-not" x="700" y="296" text-anchor="middle" fill="#2c3b4d">6</text>
+      </g>
+      <g id="sayfa14-katman-on">
+        <g id="s14-pin-0" class="s14-pin" data-satir="0">
+          <line x1="160" y1="326" x2="160" y2="392" stroke="#63778d" stroke-width="2" stroke-dasharray="4,3" />
+          <circle class="s14-nokta" cx="160" cy="318" r="6" fill="#eaf1f7" stroke="#2c3b4d" stroke-width="2" />
+          <ellipse cx="160" cy="434" rx="16" ry="4" fill="#182432" opacity="0.18" />
+          <circle class="s14-govde" cx="160" cy="410" r="18" fill="url(#s14-grad-notr)" stroke="#63778d" stroke-width="2.5" />
+          <ellipse cx="154" cy="402" rx="7" ry="4" fill="#ffffff" opacity="0.35" />
+          <text class="svg-not" x="160" y="416" text-anchor="middle" fill="#182432">−3</text>
+        </g>
+        <g id="s14-pin-1" class="s14-pin" data-satir="1">
+          <line x1="340" y1="326" x2="340" y2="392" stroke="#63778d" stroke-width="2" stroke-dasharray="4,3" />
+          <circle class="s14-nokta" cx="340" cy="318" r="6" fill="#eaf1f7" stroke="#2c3b4d" stroke-width="2" />
+          <ellipse cx="340" cy="434" rx="16" ry="4" fill="#182432" opacity="0.18" />
+          <circle class="s14-govde" cx="340" cy="410" r="18" fill="url(#s14-grad-notr)" stroke="#63778d" stroke-width="2.5" />
+          <ellipse cx="334" cy="402" rx="7" ry="4" fill="#ffffff" opacity="0.35" />
+          <text class="svg-not" x="340" y="416" text-anchor="middle" fill="#182432">0</text>
+        </g>
+        <g id="s14-pin-2" class="s14-pin" data-satir="2">
+          <line x1="400" y1="326" x2="400" y2="392" stroke="#63778d" stroke-width="2" stroke-dasharray="4,3" />
+          <circle class="s14-nokta" cx="400" cy="318" r="6" fill="#eaf1f7" stroke="#2c3b4d" stroke-width="2" />
+          <ellipse cx="400" cy="434" rx="16" ry="4" fill="#182432" opacity="0.18" />
+          <circle class="s14-govde" cx="400" cy="410" r="18" fill="url(#s14-grad-notr)" stroke="#63778d" stroke-width="2.5" />
+          <ellipse cx="394" cy="402" rx="7" ry="4" fill="#ffffff" opacity="0.35" />
+          <text class="svg-not" x="400" y="416" text-anchor="middle" fill="#182432">1</text>
+        </g>
+        <g id="s14-pin-3" class="s14-pin" data-satir="3">
+          <line x1="443.9" y1="326" x2="420" y2="472" stroke="#63778d" stroke-width="2" stroke-dasharray="4,3" />
+          <circle class="s14-nokta" cx="443.9" cy="318" r="6" fill="#eaf1f7" stroke="#2c3b4d" stroke-width="2" />
+          <ellipse cx="420" cy="514" rx="16" ry="4" fill="#182432" opacity="0.18" />
+          <circle class="s14-govde" cx="420" cy="490" r="18" fill="url(#s14-grad-notr)" stroke="#63778d" stroke-width="2.5" />
+          <ellipse cx="414" cy="482" rx="7" ry="4" fill="#ffffff" opacity="0.35" />
+          <text class="svg-not" x="420" y="496" text-anchor="middle" fill="#182432">√3</text>
+        </g>
+        <g id="s14-pin-4" class="s14-pin" data-satir="4">
+          <line x1="460" y1="326" x2="460" y2="392" stroke="#63778d" stroke-width="2" stroke-dasharray="4,3" />
+          <circle class="s14-nokta" cx="460" cy="318" r="6" fill="#eaf1f7" stroke="#2c3b4d" stroke-width="2" />
+          <ellipse cx="460" cy="434" rx="16" ry="4" fill="#182432" opacity="0.18" />
+          <circle class="s14-govde" cx="460" cy="410" r="18" fill="url(#s14-grad-notr)" stroke="#63778d" stroke-width="2.5" />
+          <ellipse cx="454" cy="402" rx="7" ry="4" fill="#ffffff" opacity="0.35" />
+          <text class="svg-not" x="460" y="416" text-anchor="middle" fill="#182432">2</text>
+        </g>
+        <g id="s14-pin-5" class="s14-pin" data-satir="5">
+          <line x1="640" y1="326" x2="640" y2="392" stroke="#63778d" stroke-width="2" stroke-dasharray="4,3" />
+          <circle class="s14-nokta" cx="640" cy="318" r="6" fill="#eaf1f7" stroke="#2c3b4d" stroke-width="2" />
+          <ellipse cx="640" cy="434" rx="16" ry="4" fill="#182432" opacity="0.18" />
+          <circle class="s14-govde" cx="640" cy="410" r="18" fill="url(#s14-grad-notr)" stroke="#63778d" stroke-width="2.5" />
+          <ellipse cx="634" cy="402" rx="7" ry="4" fill="#ffffff" opacity="0.35" />
+          <text class="svg-not" x="640" y="416" text-anchor="middle" fill="#182432">5</text>
+        </g>
+      </g>
+    </svg>
   </div>
 </section>
+
 <section class="bolum etkilesim">
 <div class="panel-basi">
-<div class="baslik-satiri"><h2>Derinlik Tarama Filtresi</h2><span class="etiket">UYGULAMA</span></div>
-<p class="yonerge">Alt ve üst sınır sürgülerini ayarlayarak [4, 8] aralığını filtrele ve iç mekanizmayı izole et.</p>
+<div class="baslik-satiri"><h2>Kesişime Ait mi</h2><span class="etiket">UYGULAMA</span></div>
+<p class="yonerge">Her sayının A ∩ B kümesine ait olup olmadığını ∈ ya da ∉ ile işaretle, sonra Kontrol Et'e bas.</p>
 </div>
 
   <div class="kontrol-govde">
-    <div class="s14-kart" id="s14-aralik-karti">
-      <div class="s14-kart-baslik">Derinlik Aralığı</div>
-      <div class="s14-deger-satiri">
-        <span class="s14-rozet-hedef">Hedef: [4, 8] cm</span>
-        <span class="s14-rozet-guncel" id="s14-aralik-metin">[0, 12] cm</span>
-      </div>
-      <div class="s14-durum-etiket" id="s14-durum-etiket">Dış Gövde: Aktif | İç Dişli: Gizli</div>
+    <div class="s14-kutu">
+      <div class="s14-tanim">\( A = [-3,\, 2) \) &nbsp; \( B = (0,\, 5] \)</div>
     </div>
-
-    <div class="s14-kart">
-      <div class="s14-surukle-grup">
-        <label for="s14-alt-sinir" class="s14-etiket">Alt Sınır (\(z_{\text{alt}}\)): <span id="s14-alt-val">0</span> cm</label>
-        <input type="range" id="s14-alt-sinir" min="0" max="12" step="1" value="0" aria-label="Alt Sınır">
-      </div>
-
-      <div class="s14-surukle-grup">
-        <label for="s14-ust-sinir" class="s14-etiket">Üst Sınır (\(z_{\text{üst}}\)): <span id="s14-ust-val">12</span> cm</label>
-        <input type="range" id="s14-ust-sinir" min="0" max="12" step="1" value="12" aria-label="Üst Sınır">
-      </div>
-
-      <div class="s14-cetvel" aria-hidden="true">
-        <div class="s14-cetvel-hedef"></div>
-        <div class="s14-cetvel-aralik" id="s14-cetvel-aralik"></div>
-      </div>
-      <div class="s14-cetvel-sayilar" aria-hidden="true">
-        <span>0</span><span>2</span><span>4</span><span>6</span><span>8</span><span>10</span><span>12</span>
-      </div>
+    <div class="s14-kutu s14-liste">
+      <div class="s14-satir" id="s14-satir-0" data-cevap="dis"><span class="s14-sayi">\( -3 \)</span><button class="parca-btn s14-sec" data-deger="ic">∈ A ∩ B</button><button class="parca-btn s14-sec" data-deger="dis">∉ A ∩ B</button></div>
+      <div class="s14-satir" id="s14-satir-1" data-cevap="dis"><span class="s14-sayi">\( 0 \)</span><button class="parca-btn s14-sec" data-deger="ic">∈ A ∩ B</button><button class="parca-btn s14-sec" data-deger="dis">∉ A ∩ B</button></div>
+      <div class="s14-satir" id="s14-satir-2" data-cevap="ic"><span class="s14-sayi">\( 1 \)</span><button class="parca-btn s14-sec" data-deger="ic">∈ A ∩ B</button><button class="parca-btn s14-sec" data-deger="dis">∉ A ∩ B</button></div>
+      <div class="s14-satir" id="s14-satir-3" data-cevap="ic"><span class="s14-sayi">\( \sqrt{3} \)</span><button class="parca-btn s14-sec" data-deger="ic">∈ A ∩ B</button><button class="parca-btn s14-sec" data-deger="dis">∉ A ∩ B</button></div>
+      <div class="s14-satir" id="s14-satir-4" data-cevap="dis"><span class="s14-sayi">\( 2 \)</span><button class="parca-btn s14-sec" data-deger="ic">∈ A ∩ B</button><button class="parca-btn s14-sec" data-deger="dis">∉ A ∩ B</button></div>
+      <div class="s14-satir" id="s14-satir-5" data-cevap="dis"><span class="s14-sayi">\( 5 \)</span><button class="parca-btn s14-sec" data-deger="ic">∈ A ∩ B</button><button class="parca-btn s14-sec" data-deger="dis">∉ A ∩ B</button></div>
     </div>
   </div>
   <div class="kontrol-eylem">
-    <button class="buton birincil" id="s14-btn-kontrol">Filtreyi Uygula</button>
+    <button class="buton birincil" id="s14-kontrol">Kontrol Et</button>
+    <button class="buton" id="s14-sifirla">Sıfırla</button>
   </div>
 </section>
 
 <style>
 @layer sayfa {
 
-  #sayfa-14 .s14-sahne-zemini {
-    background: linear-gradient(180deg, #ded0c4, #c9b6a6);
-  }
-  #sayfa-14 .s14-tuval-kutu {
-    width: 100%;
-    height: 100%;
-    position: relative;
-    min-height: 480px;
-  }
-  #sayfa-14 .s14-kart {
-    background: var(--panel);
-    border: 1px solid var(--cizgi);
-    border-radius: var(--r-kart);
-    padding: 14px 16px;
-    margin-bottom: 12px;
-  }
-  #sayfa-14 .s14-kart.s14-uyari {
-    border-color: var(--uyari);
-  }
-  #sayfa-14 .s14-kart.s14-dogru {
-    border-color: var(--dogru);
-  }
-  #sayfa-14 .s14-kart-baslik {
-    font-weight: 700;
-    color: var(--metin);
-    margin-bottom: 8px;
-  }
-  #sayfa-14 .s14-deger-satiri {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 8px;
-  }
-  #sayfa-14 .s14-rozet-hedef {
-    background: var(--panel-acik);
-    border: 1px solid var(--cizgi);
-    border-radius: 999px;
-    padding: 4px 10px;
-    color: var(--metin);
-  }
-  #sayfa-14 .s14-rozet-guncel {
-    font-weight: 700;
-    color: var(--vurgu);
-  }
-  #sayfa-14 .s14-durum-etiket {
-    color: var(--metin-soluk);
-  }
-  #sayfa-14 .s14-surukle-grup {
-    margin-bottom: 14px;
-  }
-  #sayfa-14 .s14-etiket {
-    display: block;
-    margin-bottom: 6px;
-    color: var(--metin);
-  }
-  #sayfa-14 .s14-cetvel {
-    position: relative;
-    height: 12px;
-    background: var(--panel-acik);
-    border: 1px solid var(--cizgi);
-    border-radius: 999px;
-    margin-top: 14px;
-    margin-bottom: 6px;
-  }
-  #sayfa-14 .s14-cetvel-hedef {
-    position: absolute;
-    top: 0;
-    left: 33.33%;
-    width: 33.33%;
-    height: 100%;
-    background: var(--dogru-acik);
-    border-left: 2px dashed var(--dogru);
-    border-right: 2px dashed var(--dogru);
-    opacity: 0.6;
-    box-sizing: border-box;
-  }
-  #sayfa-14 .s14-cetvel-aralik {
-    position: absolute;
-    top: 0;
-    left: 0%;
-    width: 100%;
-    height: 100%;
-    background: var(--vurgu);
-    opacity: 0.7;
-    border-radius: 999px;
-    box-sizing: border-box;
-    transition: left 0.05s ease, width 0.05s ease;
-  }
-  #sayfa-14 .s14-cetvel-sayilar {
-    display: flex;
-    justify-content: space-between;
-    color: var(--metin-soluk);
-    padding: 0 2px;
-  }
+#sayfa-14 .s14-sahne-zemini {
+  background: linear-gradient(180deg, #eaf1f7, #dde7f1);
+}
+#sayfa-14 .s14-kutu {
+  background: var(--panel);
+  border: 1px solid var(--cizgi);
+  border-radius: var(--r-kart);
+  padding: 12px 14px;
+}
+#sayfa-14 .s14-tanim {
+  text-align: center;
+}
+#sayfa-14 .s14-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#sayfa-14 .s14-satir {
+  display: grid;
+  grid-template-columns: 56px 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+}
+#sayfa-14 .s14-sayi {
+  text-align: center;
+  font-weight: 700;
+}
+#sayfa-14 .s14-sec {
+  justify-content: center;
+}
 
 }
 </style>
 
 <script>
 window.SAYFA_INIT[14] = function (kok) {
-  var kutu = kok.querySelector("#s14-tuval-kutu");
-  var altInput = kok.querySelector("#s14-alt-sinir");
-  var ustInput = kok.querySelector("#s14-ust-sinir");
-  var altVal = kok.querySelector("#s14-alt-val");
-  var ustVal = kok.querySelector("#s14-ust-val");
-  var aralikMetin = kok.querySelector("#s14-aralik-metin");
-  var aralikKarti = kok.querySelector("#s14-aralik-karti");
-  var durumEtiket = kok.querySelector("#s14-durum-etiket");
-  var cetvelAralik = kok.querySelector("#s14-cetvel-aralik");
-  var btnKontrol = kok.querySelector("#s14-btn-kontrol");
+  var bitti = false;
+  var satirlar = Array.prototype.slice.call(kok.querySelectorAll(".s14-satir"));
+  var secimler = {};
 
-  var scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xd8cab8);
+  function pinBoya(i, deger) {
+    var pin = kok.querySelector("#s14-pin-" + i);
+    var dolgu = deger === "ic" ? "url(#s14-grad-ic)" : deger === "dis" ? "url(#s14-grad-dis)" : "url(#s14-grad-notr)";
+    var nokta = deger === "ic" ? "#1b9468" : deger === "dis" ? "#63778d" : "#eaf1f7";
+    pin.querySelector(".s14-govde").setAttribute("fill", dolgu);
+    pin.querySelector(".s14-nokta").setAttribute("fill", nokta);
+  }
 
-  var camera = new THREE.PerspectiveCamera(45, kutu.clientWidth / kutu.clientHeight, 0.1, 100);
-  camera.position.set(11, 7.5, 14);
+  satirlar.forEach(function (satir, i) {
+    EGITSEL.secimGrubu(kok, "#s14-satir-" + i + " .s14-sec", function (el, deger) {
+      if (bitti) return;
+      secimler[i] = deger;
+      Array.prototype.forEach.call(satir.querySelectorAll(".s14-sec"), function (b) {
+        b.classList.remove("dogru-secim", "yanlis-secim");
+      });
+      pinBoya(i, secimler[i]);
+    });
+  });
 
-  var renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(kutu.clientWidth, kutu.clientHeight);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.localClippingEnabled = true;
-  kutu.appendChild(renderer.domElement);
-
-  var controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 2.2, 6);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.05;
-  controls.maxPolarAngle = Math.PI / 2 - 0.02;
-  controls.minDistance = 6;
-  controls.maxDistance = 26;
-
-  scene.environment = new THREE.PMREMGenerator(renderer)
-    .fromScene(new THREE.StudyoOrtami({ gok: "#ebe0d5", zemin: "#cb8b52" }), 0.04).texture;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 0.9;
-
-  var anaIsik = new THREE.DirectionalLight(0xfff5e6, 2.0);
-  anaIsik.position.set(12, 18, 10);
-  anaIsik.castShadow = true;
-  anaIsik.shadow.mapSize.width = 2048;
-  anaIsik.shadow.mapSize.height = 2048;
-  anaIsik.shadow.camera.near = 0.5;
-  anaIsik.shadow.camera.far = 40;
-  anaIsik.shadow.camera.left = -10;
-  anaIsik.shadow.camera.right = 10;
-  anaIsik.shadow.camera.top = 10;
-  anaIsik.shadow.camera.bottom = -10;
-  anaIsik.shadow.normalBias = 0.03;
-  scene.add(anaIsik);
-
-  var dolguIsik = new THREE.DirectionalLight(0xc7e6e5, 0.4);
-  dolguIsik.position.set(-10, 8, -6);
-  scene.add(dolguIsik);
-
-  var rimIsik = new THREE.DirectionalLight(0xffeacc, 0.45);
-  rimIsik.position.set(-8, 14, -10);
-  scene.add(rimIsik);
-
-  var ambIsik = new THREE.AmbientLight(0xffffff, 0.2);
-  scene.add(ambIsik);
-
-  function tuvalDokuUret(tabanRenk, cizgiRenk, desenTipi) {
-    var cvs = document.createElement("canvas");
-    cvs.width = 512;
-    cvs.height = 512;
-    var ctx = cvs.getContext("2d");
-    ctx.fillStyle = tabanRenk;
-    ctx.fillRect(0, 0, 512, 512);
-    ctx.strokeStyle = cizgiRenk;
-    ctx.lineWidth = 2;
-    if (desenTipi === "cizgi") {
-      for (var i = 0; i < 512; i += 8) {
-        ctx.beginPath();
-        ctx.moveTo(0, i);
-        ctx.lineTo(512, i);
-        ctx.stroke();
-      }
-    } else if (desenTipi === "izgara") {
-      for (var j = 0; j < 512; j += 16) {
-        ctx.beginPath();
-        ctx.moveTo(j, 0); ctx.lineTo(j, 512);
-        ctx.moveTo(0, j); ctx.lineTo(512, j);
-        ctx.stroke();
-      }
+  kok.querySelector("#s14-kontrol").addEventListener("click", function () {
+    if (bitti) return;
+    var eksik = satirlar.some(function (s, i) { return !secimler[i]; });
+    if (eksik) { SABLON_TOAST("Önce her sayı için ∈ ya da ∉ seç."); return; }
+    var hatalar = [];
+    satirlar.forEach(function (s, i) {
+      var btn = s.querySelector('.s14-sec[data-deger="' + secimler[i] + '"]');
+      var dogru = secimler[i] === s.getAttribute("data-cevap");
+      btn.classList.add(dogru ? "dogru-secim" : "yanlis-secim");
+      if (!dogru) hatalar.push(i);
+    });
+    if (!hatalar.length) {
+      bitti = true;
+      kok.querySelector("#s14-kesisim").setAttribute("opacity", "1");
+      EGITSEL.kilitle(kok, ".s14-sec", true);
+      EGITSEL.dontVer(kok, "dogru", "A ∩ B = (0, 2) olur ve iki uç da açıktır");
+      return;
+    }
+    var ipucu;
+    if (hatalar.indexOf(1) > -1 || hatalar.indexOf(4) > -1) {
+      ipucu = "Açık uçtaki sayı aralığa ait değildir, 0 ve 2'ye yeniden bak";
+    } else if (hatalar.indexOf(0) > -1 || hatalar.indexOf(5) > -1) {
+      ipucu = "Kesişimdeki sayı hem A'da hem B'de olmalıdır";
     } else {
-      for (var k = 0; k < 4000; k++) {
-        var rx = Math.random() * 512;
-        var ry = Math.random() * 512;
-        ctx.fillStyle = cizgiRenk;
-        ctx.fillRect(rx, ry, 1.5, 1.5);
-      }
+      ipucu = "√3 yaklaşık 1,73 olduğundan 0 ile 2 arasında kalır";
     }
-    var doku = new THREE.CanvasTexture(cvs);
-    doku.wrapS = THREE.RepeatWrapping;
-    doku.wrapT = THREE.RepeatWrapping;
-    doku.repeat.set(4, 4);
-    doku.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    return doku;
-  }
-
-  var zeminDoku = tuvalDokuUret("#ded0c4", "#c9b6a6", "kum");
-  var demirDoku = tuvalDokuUret("#909090", "#777777", "cizgi");
-  var bronzDoku = tuvalDokuUret("#b07e46", "#d8b597", "cizgi");
-
-  var _malzeme3b = MALZEME3B(renderer);
-  var cizgiDoku = _malzeme3b.cizgiDoku;
-  var normalDokusu = _malzeme3b.normalDokusu;
-
-  var sadeZeminMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    map: zeminDoku,
-    roughness: 0.85,
-    metalness: 0
-  });
-  var zeminMesh = new THREE.Mesh(new THREE.PlaneGeometry(36, 36), sadeZeminMat);
-  zeminMesh.rotation.x = -Math.PI / 2;
-  zeminMesh.position.set(0, 0, 6);
-  zeminMesh.receiveShadow = true;
-  scene.add(zeminMesh);
-
-  var kontakGolgeMat = new THREE.MeshBasicMaterial({
-    color: 0x827063,
-    transparent: true,
-    opacity: 0.35
-  });
-  var kontakGolge = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 13.2), kontakGolgeMat);
-  kontakGolge.rotation.x = -Math.PI / 2;
-  kontakGolge.position.set(0, 0.01, 6);
-  scene.add(kontakGolge);
-
-  var clipPlaneAlt = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-  var clipPlaneUst = new THREE.Plane(new THREE.Vector3(0, 0, -1), 12);
-
-  var demirMatOn = new THREE.MeshStandardMaterial({
-    color: new THREE.Color().setRGB(0.53, 0.51, 0.49, THREE.LinearSRGBColorSpace),
-    metalness: 1,
-    roughness: 0.55,
-    roughnessMap: demirDoku,
-    normalMap: normalDokusu(demirDoku, 0.8),
-    normalScale: new THREE.Vector2(0.15, 0.15),
-    envMapIntensity: 1,
-    clippingPlanes: [clipPlaneAlt]
+    EGITSEL.dontVer(kok, "yanlis", ipucu);
   });
 
-  var demirMatArka = new THREE.MeshStandardMaterial({
-    color: new THREE.Color().setRGB(0.53, 0.51, 0.49, THREE.LinearSRGBColorSpace),
-    metalness: 1,
-    roughness: 0.55,
-    roughnessMap: demirDoku,
-    normalMap: normalDokusu(demirDoku, 0.8),
-    normalScale: new THREE.Vector2(0.15, 0.15),
-    envMapIntensity: 1,
-    clippingPlanes: [clipPlaneUst]
+  kok.querySelector("#s14-sifirla").addEventListener("click", function () {
+    bitti = false;
+    secimler = {};
+    EGITSEL.kilitle(kok, ".s14-sec", false);
+    Array.prototype.forEach.call(kok.querySelectorAll(".s14-sec"), function (b) {
+      b.classList.remove("secili", "dogru-secim", "yanlis-secim");
+    });
+    satirlar.forEach(function (s, i) { pinBoya(i, null); });
+    kok.querySelector("#s14-kesisim").setAttribute("opacity", "0");
   });
-
-  var demirMatOrta = new THREE.MeshStandardMaterial({
-    color: new THREE.Color().setRGB(0.53, 0.51, 0.49, THREE.LinearSRGBColorSpace),
-    metalness: 1,
-    roughness: 0.55,
-    roughnessMap: demirDoku,
-    normalMap: normalDokusu(demirDoku, 0.8),
-    normalScale: new THREE.Vector2(0.15, 0.15),
-    envMapIntensity: 1,
-    transparent: true,
-    opacity: 1.0
-  });
-
-  var bronzMat = new THREE.MeshStandardMaterial({
-    color: 0xb07e46,
-    metalness: 1,
-    roughness: 0.28,
-    roughnessMap: bronzDoku,
-    envMapIntensity: 1.3,
-    clippingPlanes: [clipPlaneAlt, clipPlaneUst]
-  });
-
-  var milMat = new THREE.MeshStandardMaterial({
-    color: 0xc4c7cc,
-    metalness: 1,
-    roughness: 0.35,
-    envMapIntensity: 1.1
-  });
-
-  var hayaletMat = new THREE.MeshStandardMaterial({
-    color: 0x3bbab6,
-    transparent: true,
-    opacity: 0.16,
-    depthWrite: false,
-    roughness: 0.9,
-    metalness: 0,
-    side: THREE.DoubleSide
-  });
-
-  var kenarMat = new THREE.LineBasicMaterial({
-    color: 0x3bbab6,
-    transparent: true,
-    opacity: 0.6
-  });
-
-  var duzlemMat = new THREE.MeshBasicMaterial({
-    color: 0x3bbab6,
-    transparent: true,
-    opacity: 0.25,
-    side: THREE.DoubleSide,
-    depthWrite: false
-  });
-
-  var cizgiDuzlemMat = new THREE.LineBasicMaterial({
-    color: 0x7fd2cf,
-    transparent: true,
-    opacity: 0.8
-  });
-
-  var cetvelMat = new THREE.MeshStandardMaterial({
-    color: 0x3d3f63,
-    metalness: 0.6,
-    roughness: 0.4
-  });
-
-  var hedefKusagiMat = new THREE.MeshBasicMaterial({
-    color: 0x63c583,
-    transparent: true,
-    opacity: 0.35,
-    side: THREE.DoubleSide
-  });
-
-  var anaGrup = new THREE.Group();
-  scene.add(anaGrup);
-
-  var milGeo = new THREE.CylinderGeometry(0.35, 0.35, 13.6, 32);
-  var milMesh = new THREE.Mesh(milGeo, milMat);
-  milMesh.rotation.x = Math.PI / 2;
-  milMesh.position.set(0, 2.2, 6);
-  milMesh.castShadow = true;
-  anaGrup.add(milMesh);
-
-  var rulmanGeo = new THREE.CylinderGeometry(0.65, 0.65, 0.5, 32);
-  var rulmanOn = new THREE.Mesh(rulmanGeo, milMat);
-  rulmanOn.rotation.x = Math.PI / 2;
-  rulmanOn.position.set(0, 2.2, 0.1);
-  rulmanOn.castShadow = true;
-  anaGrup.add(rulmanOn);
-
-  var rulmanArka = new THREE.Mesh(rulmanGeo, milMat);
-  rulmanArka.rotation.x = Math.PI / 2;
-  rulmanArka.position.set(0, 2.2, 11.9);
-  rulmanArka.castShadow = true;
-  anaGrup.add(rulmanArka);
-
-  var disliGrup = new THREE.Group();
-  disliGrup.position.set(0, 2.2, 6);
-  anaGrup.add(disliGrup);
-
-  var gobekGeo = new THREE.CylinderGeometry(0.85, 0.85, 3.6, 32);
-  var gobekMesh = new THREE.Mesh(gobekGeo, bronzMat);
-  gobekMesh.rotation.x = Math.PI / 2;
-  gobekMesh.castShadow = true;
-  disliGrup.add(gobekMesh);
-
-  var carkGeo = new THREE.CylinderGeometry(2.0, 2.0, 3.2, 48);
-  var carkMesh = new THREE.Mesh(carkGeo, bronzMat);
-  carkMesh.rotation.x = Math.PI / 2;
-  carkMesh.castShadow = true;
-  disliGrup.add(carkMesh);
-
-  var disGeo = new THREE.BoxGeometry(0.28, 0.48, 3.16);
-  var disSayisi = 16;
-  for (var d = 0; d < disSayisi; d++) {
-    var aci = (d / disSayisi) * Math.PI * 2;
-    var disMesh = new THREE.Mesh(disGeo, bronzMat);
-    disMesh.position.set(Math.cos(aci) * 2.05, Math.sin(aci) * 2.05, 0);
-    disMesh.rotation.z = aci + 0.32;
-    disMesh.castShadow = true;
-    disliGrup.add(disMesh);
-  }
-
-  var onGrup = new THREE.Group();
-  anaGrup.add(onGrup);
-
-  var onFlansGeo = new THREE.RoundedBoxGeometry(4.8, 4.8, 0.8, 4, 0.25);
-  var onFlans = new THREE.Mesh(onFlansGeo, demirMatOn);
-  onFlans.position.set(0, 2.2, 0.4);
-  onFlans.castShadow = true;
-  onGrup.add(onFlans);
-
-  var onKovanGeo = new THREE.CylinderGeometry(2.35, 2.35, 2.8, 32);
-  var onKovan = new THREE.Mesh(onKovanGeo, demirMatOn);
-  onKovan.rotation.x = Math.PI / 2;
-  onKovan.position.set(0, 2.2, 2.2);
-  onKovan.castShadow = true;
-  onGrup.add(onKovan);
-
-  var onPabucGeo = new THREE.BoxGeometry(5.2, 0.5, 3.56);
-  var onPabuc = new THREE.Mesh(onPabucGeo, demirMatOn);
-  onPabuc.position.set(0, 0.25, 1.8);
-  onPabuc.castShadow = true;
-  onGrup.add(onPabuc);
-
-  var civataGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.9, 32);
-  var civataKonumlar = [
-    [-1.9, 4.1], [1.9, 4.1], [-1.9, 0.3], [1.9, 0.3]
-  ];
-  for (var c = 0; c < civataKonumlar.length; c++) {
-    var civata = new THREE.Mesh(civataGeo, demirMatOn);
-    civata.rotation.x = Math.PI / 2;
-    civata.position.set(civataKonumlar[c][0], civataKonumlar[c][1], 0.4);
-    civata.castShadow = true;
-    onGrup.add(civata);
-  }
-
-  var arkaGrup = new THREE.Group();
-  anaGrup.add(arkaGrup);
-
-  var arkaKovanGeo = new THREE.CylinderGeometry(2.35, 2.35, 2.8, 32);
-  var arkaKovan = new THREE.Mesh(arkaKovanGeo, demirMatArka);
-  arkaKovan.rotation.x = Math.PI / 2;
-  arkaKovan.position.set(0, 2.2, 9.8);
-  arkaKovan.castShadow = true;
-  arkaGrup.add(arkaKovan);
-
-  var arkaFlansGeo = new THREE.RoundedBoxGeometry(4.8, 4.8, 0.8, 4, 0.25);
-  var arkaFlans = new THREE.Mesh(arkaFlansGeo, demirMatArka);
-  arkaFlans.position.set(0, 2.2, 11.6);
-  arkaFlans.castShadow = true;
-  arkaGrup.add(arkaFlans);
-
-  var arkaPabucGeo = new THREE.BoxGeometry(5.2, 0.5, 3.56);
-  var arkaPabuc = new THREE.Mesh(arkaPabucGeo, demirMatArka);
-  arkaPabuc.position.set(0, 0.25, 10.2);
-  arkaPabuc.castShadow = true;
-  arkaGrup.add(arkaPabuc);
-
-  for (var c2 = 0; c2 < civataKonumlar.length; c2++) {
-    var civata2 = new THREE.Mesh(civataGeo, demirMatArka);
-    civata2.rotation.x = Math.PI / 2;
-    civata2.position.set(civataKonumlar[c2][0], civataKonumlar[c2][1], 11.6);
-    civata2.castShadow = true;
-    arkaGrup.add(civata2);
-  }
-
-  var ortaGrup = new THREE.Group();
-  anaGrup.add(ortaGrup);
-
-  var ortaGovdeGeo = new THREE.CylinderGeometry(2.4, 2.4, 3.8, 32, 1, false, 0, Math.PI);
-  var ortaKapak = new THREE.Mesh(ortaGovdeGeo, demirMatOrta);
-  ortaKapak.rotation.x = Math.PI / 2;
-  ortaKapak.rotation.y = 0;
-  ortaKapak.position.set(0, 2.2, 6);
-  ortaKapak.castShadow = true;
-  ortaGrup.add(ortaKapak);
-
-  var nervurGeo = new THREE.TorusGeometry(2.45, 0.08, 24, 64, Math.PI);
-  for (var n = -1.2; n <= 1.2; n += 0.8) {
-    var nervur = new THREE.Mesh(nervurGeo, demirMatOrta);
-    nervur.position.set(0, 2.2, 6 + n);
-    nervur.castShadow = true;
-    ortaGrup.add(nervur);
-  }
-
-  var yanKabukGeo = new THREE.BoxGeometry(0.3, 2.2, 3.76);
-  var yanSol = new THREE.Mesh(yanKabukGeo, demirMatOrta);
-  yanSol.position.set(-2.3, 1.1, 6);
-  yanSol.castShadow = true;
-  ortaGrup.add(yanSol);
-
-  var yanSag = new THREE.Mesh(yanKabukGeo, demirMatOrta);
-  yanSag.position.set(2.3, 1.1, 6);
-  yanSag.castShadow = true;
-  ortaGrup.add(yanSag);
-
-  var taramaGrup = new THREE.Group();
-  scene.add(taramaGrup);
-
-  var taramaKutuGeo = new THREE.BoxGeometry(5.3, 5.3, 1);
-  var taramaKutu = new THREE.Mesh(taramaKutuGeo, hayaletMat);
-  taramaKutu.position.set(0, 2.2, 6);
-  taramaKutu.renderOrder = 2;
-  taramaGrup.add(taramaKutu);
-
-  var taramaKenar = new THREE.LineSegments(new THREE.EdgesGeometry(taramaKutuGeo), kenarMat);
-  taramaKenar.position.set(0, 2.2, 6);
-  taramaKenar.renderOrder = 3;
-  taramaGrup.add(taramaKenar);
-
-  var duzlemGeo = new THREE.PlaneGeometry(5.4, 5.4);
-  var duzlemAlt = new THREE.Mesh(duzlemGeo, duzlemMat);
-  duzlemAlt.renderOrder = 4;
-  taramaGrup.add(duzlemAlt);
-
-  var duzlemAltKenar = new THREE.LineSegments(new THREE.EdgesGeometry(duzlemGeo), cizgiDuzlemMat);
-  duzlemAlt.add(duzlemAltKenar);
-
-  var duzlemUst = new THREE.Mesh(duzlemGeo, duzlemMat);
-  duzlemUst.renderOrder = 4;
-  taramaGrup.add(duzlemUst);
-
-  var duzlemUstKenar = new THREE.LineSegments(new THREE.EdgesGeometry(duzlemGeo), cizgiDuzlemMat);
-  duzlemUst.add(duzlemUstKenar);
-
-  var cetvelGrup = new THREE.Group();
-  scene.add(cetvelGrup);
-
-  var cetvelRayGeo = new THREE.BoxGeometry(0.15, 0.05, 12.4);
-  var cetvelRay = new THREE.Mesh(cetvelRayGeo, cetvelMat);
-  cetvelRay.position.set(3.2, 0.03, 6);
-  cetvelRay.receiveShadow = true;
-  cetvelGrup.add(cetvelRay);
-
-  var hedefKusakGeo = new THREE.PlaneGeometry(0.6, 4.0);
-  var hedefKusak = new THREE.Mesh(hedefKusakGeo, hedefKusagiMat);
-  hedefKusak.rotation.x = -Math.PI / 2;
-  hedefKusak.position.set(3.2, 0.04, 6);
-  cetvelGrup.add(hedefKusak);
-
-  var centikGeo = new THREE.BoxGeometry(0.5, 0.06, 0.08);
-  for (var k = 0; k <= 12; k += 2) {
-    var centik = new THREE.Mesh(centikGeo, cetvelMat);
-    centik.position.set(3.2, 0.04, k);
-    cetvelGrup.add(centik);
-  }
-
-  function araligiGuncelle(kaynak) {
-    var zAlt = parseInt(altInput.value, 10);
-    var zUst = parseInt(ustInput.value, 10);
-
-    if (zAlt > zUst) {
-      if (kaynak === "alt") {
-        zUst = zAlt;
-        ustInput.value = zUst;
-      } else {
-        zAlt = zUst;
-        altInput.value = zAlt;
-      }
-    }
-
-    clipPlaneAlt.constant = -zAlt;
-    clipPlaneUst.constant = zUst;
-
-    var kalinlik = Math.max(0.01, zUst - zAlt);
-    var merkezZ = (zAlt + zUst) / 2;
-
-    taramaKutu.scale.set(1, 1, kalinlik);
-    taramaKutu.position.set(0, 2.2, merkezZ);
-    taramaKenar.scale.set(1, 1, kalinlik);
-    taramaKenar.position.set(0, 2.2, merkezZ);
-
-    duzlemAlt.position.set(0, 2.2, zAlt);
-    duzlemUst.position.set(0, 2.2, zUst);
-
-    var tamHedef = (zAlt === 4 && zUst === 8);
-    var daraltildi = (zAlt > 4 || zUst < 8);
-
-    if (zAlt >= 3.9 && zUst <= 8.1) {
-      demirMatOrta.opacity = 0;
-      demirMatOrta.visible = false;
-    } else {
-      demirMatOrta.visible = true;
-      var sapma = Math.abs(zAlt - 4) + Math.abs(zUst - 8);
-      demirMatOrta.opacity = Math.min(1.0, Math.max(0.2, sapma / 5));
-    }
-
-    altVal.textContent = zAlt;
-    ustVal.textContent = zUst;
-    aralikMetin.textContent = "[" + zAlt + ", " + zUst + "] cm";
-
-    var solYuzde = (zAlt / 12) * 100;
-    var genislikYuzde = ((zUst - zAlt) / 12) * 100;
-    cetvelAralik.style.left = solYuzde + "%";
-    cetvelAralik.style.width = genislikYuzde + "%";
-
-    aralikKarti.classList.remove("s14-uyari", "s14-dogru");
-    if (tamHedef) {
-      durumEtiket.textContent = "Dış Gövde: Elendi | İç Dişli: İzole Edildi";
-      aralikKarti.classList.add("s14-dogru");
-      bronzMat.emissive.setHex(0x386661);
-      bronzMat.emissiveIntensity = 0.55;
-    } else if (daraltildi) {
-      durumEtiket.textContent = "Uyarı: Aralık fazla dar! Dişli kenarları kesildi.";
-      aralikKarti.classList.add("s14-uyari");
-      bronzMat.emissive.setHex(0x000000);
-      bronzMat.emissiveIntensity = 0;
-    } else {
-      durumEtiket.textContent = "Dış Gövde: Kısmen Mevcut | İç Dişli: Gizli/Kısmi";
-      aralikKarti.classList.add("s14-dogru");
-      aralikKarti.classList.remove("s14-dogru");
-      bronzMat.emissive.setHex(0x000000);
-      bronzMat.emissiveIntensity = 0;
-    }
-  }
-
-  altInput.addEventListener("input", function () { araligiGuncelle("alt"); });
-  ustInput.addEventListener("input", function () { araligiGuncelle("ust"); });
-
-  btnKontrol.addEventListener("click", function () {
-    var zAlt = parseInt(altInput.value, 10);
-    var zUst = parseInt(ustInput.value, 10);
-    if (zAlt === 4 && zUst === 8) {
-      EGITSEL.dontVer(kok, "dogru", "Hedef mekanizma izole edildi.");
-      bronzMat.emissive.setHex(0x63c583);
-      bronzMat.emissiveIntensity = 0.85;
-    } else {
-      EGITSEL.dontVer(kok, "yanlis", "Aralık sınırlarını [4, 8] yapın.");
-    }
-  });
-
-  araligiGuncelle("alt");
-
-  var calisiyor = true;
-  var animId = null;
-
-  function dongu() {
-    if (!calisiyor) return;
-    animId = requestAnimationFrame(dongu);
-    controls.update();
-
-    var zAlt = parseInt(altInput.value, 10);
-    var zUst = parseInt(ustInput.value, 10);
-    if (zAlt === 4 && zUst === 8) {
-      disliGrup.rotation.z += 0.015;
-      milMesh.rotation.z += 0.015;
-    }
-
-    var t = performance.now() * 0.003;
-    duzlemMat.opacity = 0.22 + Math.sin(t) * 0.06;
-
-    renderer.render(scene, camera);
-  }
-  animId = requestAnimationFrame(dongu);
-
-  window.SAYFA_DURAKLAT[14] = function () {
-    calisiyor = false;
-    if (animId) cancelAnimationFrame(animId);
-  };
-
-  window.SAYFA_DEVAM[14] = function () {
-    if (!calisiyor) {
-      calisiyor = true;
-      animId = requestAnimationFrame(dongu);
-    }
-  };
-
-  var ro = new ResizeObserver(function () {
-    var w = kutu.clientWidth;
-    var h = kutu.clientHeight;
-    if (w > 0 && h > 0) {
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    }
-  });
-  ro.observe(kutu);
 };
 </script>
 
@@ -9013,7 +8786,7 @@ window.SAYFA_INIT[14] = function (kok) {
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 22:37 -->
 <!-- PALET: zemin #dce9f5 #cde0f0 | baskin #1a4b88 #2e6db4 #4b8fd9 #8fc2f2 | ikincil #ab6d16 #d48b22 #e8ad4a | notr #3c4d5e #8da3b8 | vurgu #1f8f7a | kontur #15293d -->
 <!-- SAYFA_BASLIK: Değerlendirme -->
-<!-- YONERGE: Soruyu incele, doğru seçeneği işaretle ve Yanıtla düğmesine tıkla. -->
+<!-- YONERGE: Soruları dikkatle inceleyerek doğru seçenekleri belirleyiniz. -->
 <!-- ETIKET: DEĞERLENDİRME -->
 <!-- SUTUN_ORAN: 7fr 5fr -->
 <section class="bolum sahne s15-sahne-zemini">
@@ -9231,7 +9004,7 @@ window.SAYFA_INIT[14] = function (kok) {
           <circle cx="310" cy="284" r="9" fill="#ab6d16" stroke="#15293d" stroke-width="2"/>
           <circle cx="520" cy="284" r="9" fill="#ab6d16" stroke="#15293d" stroke-width="2"/>
           <text class="svg-metin" x="570" y="289" fill="#ab6d16" text-anchor="start">B = [1, 7]</text>
-          <rect x="170" y="205" width="140" height="150" rx="8" fill="#1f8f7a" fill-opacity="0.2" stroke="#1f8f7a" stroke-width="2.5" stroke-dasharray="6,4"/>
+          <rect id="s15-s4-cevap" x="170" y="205" width="140" height="150" rx="8" fill="#1f8f7a" fill-opacity="0.2" stroke="#1f8f7a" stroke-width="2.5" stroke-dasharray="6,4" display="none"/>
           <rect x="175" y="140" width="130" height="42" rx="10" fill="url(#s15-grad-vurgu)" stroke="#15293d" stroke-width="2.5"/>
           <ellipse cx="240" cy="148" rx="45" ry="4" fill="#8fc2f2" fill-opacity="0.35"/>
           <text class="svg-baslik" x="240" y="167" fill="#dce9f5" text-anchor="middle">A \ B = ?</text>
@@ -9270,7 +9043,7 @@ window.SAYFA_INIT[14] = function (kok) {
             <path d="M 215 298 L 210 305 L 250 305 L 245 298" fill="none" stroke="#15293d" stroke-width="2" stroke-linecap="round"/>
             <path d="M 270 292 Q 284 288 270 282" fill="none" stroke="#4b8fd9" stroke-width="2" stroke-linecap="round"/>
           </g>
-          <rect x="250" y="120" width="390" height="130" rx="10" fill="#1f8f7a" fill-opacity="0.2" stroke="#1f8f7a" stroke-width="2.5" stroke-dasharray="6,4"/>
+          <rect id="s15-s5-cevap" x="250" y="120" width="390" height="130" rx="10" fill="#1f8f7a" fill-opacity="0.2" stroke="#1f8f7a" stroke-width="2.5" stroke-dasharray="6,4" display="none"/>
           <rect x="350" y="150" width="190" height="42" rx="10" fill="url(#s15-grad-vurgu)" stroke="#15293d" stroke-width="2.5"/>
           <ellipse cx="445" cy="158" rx="70" ry="4" fill="#8fc2f2" fill-opacity="0.35"/>
           <text class="svg-baslik" x="445" y="177" fill="#dce9f5" text-anchor="middle">2. İHA Koridoru ?</text>
@@ -9288,26 +9061,11 @@ window.SAYFA_INIT[14] = function (kok) {
 <section class="bolum etkilesim">
 <div class="panel-basi">
 <div class="baslik-satiri"><h2>Değerlendirme</h2><span class="etiket">DEĞERLENDİRME</span></div>
-<p class="yonerge">Soruyu incele, doğru seçeneği işaretle ve Yanıtla düğmesine tıkla.</p>
+<p class="yonerge">Soruları dikkatle inceleyerek doğru seçenekleri belirleyiniz.</p>
 </div>
 
-  <div class="kontrol-govde">
-    <div class="kart s15-soru-kart">
-      <div class="s15-soru-ust" aria-live="polite">
-        <span class="etiket s15-soru-sayac">Soru 1 / 5</span>
-      </div>
-      <p class="s15-soru-metin">Sayı doğrusu üzerinde \( -3 \) noktası içi boş daire, \( 4 \) noktası ise içi dolu daire ile gösterilmiş ve bu iki nokta arasındaki tüm gerçek sayılar taranmıştır. Bu aralığın küme sembolleriyle gösterimi aşağıdakilerden hangisidir?</p>
-    </div>
-    <div class="s15-secenek-liste">
-      <button class="parca-btn s15-secenek-btn" data-deger="0"><span class="kutucuk">A</span><span class="s15-sec-metin">\( (-3, 4] \)</span></button>
-      <button class="parca-btn s15-secenek-btn" data-deger="1"><span class="kutucuk">B</span><span class="s15-sec-metin">\( [-3, 4) \)</span></button>
-      <button class="parca-btn s15-secenek-btn" data-deger="2"><span class="kutucuk">C</span><span class="s15-sec-metin">\( (-3, 4) \)</span></button>
-      <button class="parca-btn s15-secenek-btn" data-deger="3"><span class="kutucuk">D</span><span class="s15-sec-metin">\( [-3, 4] \)</span></button>
-    </div>
-  </div>
-  <div class="kontrol-eylem">
-    <button class="buton birincil" id="s15-eylem-btn" disabled>Yanıtla</button>
-  </div>
+  <div class="kontrol-govde"></div>
+  <div class="kontrol-eylem"></div>
 </section>
 <style>
 @layer sayfa {
@@ -9315,244 +9073,96 @@ window.SAYFA_INIT[14] = function (kok) {
 #sayfa-15 .s15-sahne-zemini {
   background: linear-gradient(180deg, #dce9f5, #cde0f0);
 }
-#sayfa-15 .s15-soru-kart {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background: var(--panel);
-  border: 1px solid var(--cizgi);
-  border-radius: var(--r-kart);
-  padding: 16px 20px;
-}
-#sayfa-15 .s15-soru-ust {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-#sayfa-15 .s15-secenek-liste {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 12px;
-}
-#sayfa-15 .s15-secenek-btn {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  text-align: left;
-  width: 100%;
-}
-#sayfa-15 .s15-sec-metin {
-  flex: 1;
-}
-#sayfa-15 .s15-sonuc-icerik {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 8px;
-}
-#sayfa-15 .s15-sonuc-puan {
-  color: var(--metin);
-}
-#sayfa-15 .s15-sonuc-mesaj {
-  color: var(--metin-soluk);
-}
 
 }
 </style>
 <script>
 window.SAYFA_INIT[15] = function (kok) {
-  var sorular = [
+  // Lise: her soruda 5 şık (uzman notu). Soru/şık metinleri korunmuş, eksik şık
+  // konuya uygun ve açıkça yanlış bir çeldiriciyle tamamlanmıştır.
+  var SORULAR = [
     {
-      no: 1,
-      soru: "Sayı doğrusu üzerinde \\( -3 \\) noktası içi boş daire, \\( 4 \\) noktası ise içi dolu daire ile gösterilmiş ve bu iki nokta arasındaki tüm gerçek sayılar taranmıştır. Bu aralığın küme sembolleriyle gösterimi aşağıdakilerden hangisidir?",
-      secenekler: [
+      metin: "Sayı doğrusu üzerinde \\( -3 \\) noktası içi boş daire, \\( 4 \\) noktası ise içi dolu daire ile gösterilmiş ve bu iki nokta arasındaki tüm gerçek sayılar taranmıştır. Bu aralığın küme sembolleriyle gösterimi aşağıdakilerden hangisidir?",
+      siklar: [
         { metin: "\\( (-3, 4] \\)", dogru: true },
         { metin: "\\( [-3, 4) \\)", dogru: false },
         { metin: "\\( (-3, 4) \\)", dogru: false },
-        { metin: "\\( [-3, 4] \\)", dogru: false }
+        { metin: "\\( [-3, 4] \\)", dogru: false },
+        { metin: "\\( [4, -3) \\)", dogru: false }
       ],
-      donut: "Boş yay, dolu köşelidir."
+      donut: "Boş uç yay parantez, dolu uç köşeli parantezle yazılır: \\( (-3, 4] \\)."
     },
     {
-      no: 2,
-      soru: "Sayı doğrusu üzerinde iki farklı gerçek sayı aralığının üst üste çakıştığı ortak sayıları ifade etmek için aşağıdaki küme işlemlerinden hangisi kullanılır?",
-      secenekler: [
+      metin: "Sayı doğrusu üzerinde iki farklı gerçek sayı aralığının üst üste çakıştığı ortak sayıları ifade etmek için aşağıdaki küme işlemlerinden hangisi kullanılır?",
+      siklar: [
         { metin: "\\( \\cup \\)", dogru: false },
         { metin: "\\( \\cap \\)", dogru: true },
         { metin: "\\( \\setminus \\)", dogru: false },
-        { metin: "\\( ' \\)", dogru: false }
+        { metin: "\\( ' \\)", dogru: false },
+        { metin: "\\( \\subset \\)", dogru: false }
       ],
-      donut: "Ortak bölge kesişim sembolüdür."
+      donut: "Ortak bölge kesişim (\\( \\cap \\)) ile gösterilir."
     },
     {
-      no: 3,
-      soru: "Bir kütüphanenin birinci çalışma salonu 09.00 ile 17.00 saatleri arasında, ikinci çalışma salonu ise 13.00 ile 21.00 saatleri arasında kesintisiz hizmet vermektedir. Gün boyunca en az bir salonun açık olduğu toplam hizmet süresini modellemek için hangi küme işlemi belirlenmelidir?",
-      secenekler: [
+      metin: "Bir kütüphanenin birinci çalışma salonu 09.00 ile 17.00 saatleri arasında, ikinci çalışma salonu ise 13.00 ile 21.00 saatleri arasında kesintisiz hizmet vermektedir. Gün boyunca en az bir salonun açık olduğu toplam hizmet süresini modellemek için hangi küme işlemi belirlenmelidir?",
+      siklar: [
         { metin: "Kesişim (\\( \\cap \\))", dogru: false },
         { metin: "Birleşim (\\( \\cup \\))", dogru: true },
         { metin: "Fark (\\( \\setminus \\))", dogru: false },
-        { metin: "Tümleyen (\\( ' \\))", dogru: false }
+        { metin: "Tümleyen (\\( ' \\))", dogru: false },
+        { metin: "Alt küme (\\( \\subset \\))", dogru: false }
       ],
-      donut: "Toplam kapsam birleşim gerektirir."
+      donut: "«En az biri açık» toplam kapsamdır; birleşim gerektirir."
     },
     {
-      no: 4,
-      soru: "\\( A = [-2, 5) \\) ve \\( B = [1, 7] \\) gerçek sayı aralıkları veriliyor. Buna göre \\( A \\setminus B \\) fark kümesi aşağıdakilerden hangisidir?",
-      secenekler: [
+      metin: "\\( A = [-2, 5) \\) ve \\( B = [1, 7] \\) gerçek sayı aralıkları veriliyor. Buna göre \\( A \\setminus B \\) fark kümesi aşağıdakilerden hangisidir?",
+      siklar: [
         { metin: "\\( [-2, 1) \\)", dogru: true },
         { metin: "\\( [-2, 1] \\)", dogru: false },
         { metin: "\\( (1, 5) \\)", dogru: false },
-        { metin: "\\( [5, 7] \\)", dogru: false }
+        { metin: "\\( [5, 7] \\)", dogru: false },
+        { metin: "\\( [1, 5) \\)", dogru: false }
       ],
-      donut: "Çıkarılan sınır açık kalır."
+      donut: "B'nin sol ucu 1 dahil olduğundan fark kümesinde 1 hariç kalır: \\( [-2, 1) \\)."
     },
     {
-      no: 5,
-      soru: "Şehir içi hava sahasında uçuş yapan birinci insansız hava aracının dikey güvenlik koridoru \\( [120, 250] \\) metre irtifa aralığı olarak belirlenmiştir. İkinci hava aracının bu araçla havada hiçbir irtifada çakışmaması için dikey koridoru aşağıdakilerden hangisi olabilir?",
-      secenekler: [
+      metin: "Şehir içi hava sahasında uçuş yapan birinci insansız hava aracının dikey güvenlik koridoru \\( [120, 250] \\) metre irtifa aralığı olarak belirlenmiştir. İkinci hava aracının bu araçla havada hiçbir irtifada çakışmaması için dikey koridoru aşağıdakilerden hangisi olabilir?",
+      siklar: [
         { metin: "\\( [200, 300] \\)", dogru: false },
         { metin: "\\( [100, 150] \\)", dogru: false },
         { metin: "\\( (250, 400] \\)", dogru: true },
-        { metin: "\\( [250, 350] \\)", dogru: false }
+        { metin: "\\( [250, 350] \\)", dogru: false },
+        { metin: "\\( [0, 120] \\)", dogru: false }
       ],
-      donut: "Kesişim kümesi boş olmalıdır."
+      donut: "Kesişim boş olmalı: 250 dahil edilemez, \\( (250, 400] \\)."
     }
   ];
 
-  var aktifIndex = 0;
-  var seciliDeger = null;
-  var dogruSayisi = 0;
-  var durum = "yanitla";
-  var mevcutSecenekler = [];
-
-  var soruKarti = kok.querySelector(".s15-soru-kart");
-  var secenekListe = kok.querySelector(".s15-secenek-liste");
-  var eylemBtn = kok.querySelector("#s15-eylem-btn");
-
-  function karistir(dizi) {
-    var k = dizi.slice();
-    for (var i = k.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var t = k[i];
-      k[i] = k[j];
-      k[j] = t;
-    }
-    return k;
-  }
-
-  function sahneGuncelle(no) {
+  // Cevaba ait sahne vurguları (4. ve 5. soru) yalnız soru cevaplanınca açılır.
+  var cevaplananlar = {};
+  function sahneGuncelle(idx) {
     for (var i = 1; i <= 5; i++) {
       var g = kok.querySelector("#s15-sahne-soru-" + i);
-      if (g) {
-        g.style.display = (i === no) ? "inline" : "none";
-      }
+      if (g) { g.style.display = (i === idx + 1) ? "inline" : "none"; }
     }
+    var c4 = kok.querySelector("#s15-s4-cevap");
+    if (c4) { c4.setAttribute("display", cevaplananlar[3] ? "inline" : "none"); }
+    var c5 = kok.querySelector("#s15-s5-cevap");
+    if (c5) { c5.setAttribute("display", cevaplananlar[4] ? "inline" : "none"); }
   }
 
-  function soruYukle(index) {
-    var q = sorular[index];
-    seciliDeger = null;
-    durum = "yanitla";
-    eylemBtn.textContent = "Yanıtla";
-    eylemBtn.disabled = true;
-
-    sahneGuncelle(q.no);
-
-    soruKarti.innerHTML =
-      '<div class="s15-soru-ust" aria-live="polite">' +
-        '<span class="etiket s15-soru-sayac">Soru ' + q.no + ' / ' + sorular.length + '</span>' +
-      '</div>' +
-      '<p class="s15-soru-metin">' + q.soru + '</p>';
-
-    mevcutSecenekler = karistir(q.secenekler);
-    var harfler = ["A", "B", "C", "D"];
-    var html = "";
-    for (var i = 0; i < mevcutSecenekler.length; i++) {
-      var s = mevcutSecenekler[i];
-      html +=
-        '<button class="parca-btn s15-secenek-btn" data-deger="' + i + '">' +
-          '<span class="kutucuk">' + harfler[i] + '</span>' +
-          '<span class="s15-sec-metin">' + s.metin + '</span>' +
-        '</button>';
-    }
-    secenekListe.innerHTML = html;
-
-    if (window.MathJax && window.MathJax.typeset) {
-      window.MathJax.typeset([soruKarti, secenekListe]);
-    }
-  }
-
-  EGITSEL.secimGrubu(kok, ".s15-secenek-btn", function (el, deger) {
-    if (durum !== "yanitla") return;
-    seciliDeger = parseInt(deger, 10);
-    eylemBtn.disabled = false;
-  });
-
-  soruYukle(aktifIndex);
-
-  eylemBtn.addEventListener("click", function () {
-    if (durum === "yanitla") {
-      if (seciliDeger === null) return;
-      var q = sorular[aktifIndex];
-      var secilenObj = mevcutSecenekler[seciliDeger];
-      var dogruMu = secilenObj && secilenObj.dogru;
-
-      EGITSEL.kilitle(kok, ".s15-secenek-btn", true);
-
-      var butonlar = kok.querySelectorAll(".s15-secenek-btn");
-      for (var i = 0; i < butonlar.length; i++) {
-        var btn = butonlar[i];
-        var idx = parseInt(btn.dataset.deger, 10);
-        if (mevcutSecenekler[idx].dogru) {
-          btn.classList.add("dogru-secim");
-        } else if (idx === seciliDeger) {
-          btn.classList.add("yanlis-secim");
-        }
-      }
-
-      if (dogruMu) {
-        dogruSayisi++;
-        EGITSEL.dontVer(kok, "dogru", q.donut);
-      } else {
-        EGITSEL.dontVer(kok, "yanlis", q.donut);
-      }
-
-      durum = "sonraki";
-      eylemBtn.disabled = false;
-      if (aktifIndex < sorular.length - 1) {
-        eylemBtn.textContent = "Sonraki Soru";
-      } else {
-        eylemBtn.textContent = "Testi Tamamla";
-      }
-    } else if (durum === "sonraki") {
-      if (aktifIndex < sorular.length - 1) {
-        aktifIndex++;
-        soruYukle(aktifIndex);
-      } else {
-        durum = "tekrar";
-        eylemBtn.textContent = "Tekrar Dene";
-        eylemBtn.disabled = false;
-
-        soruKarti.innerHTML =
-          '<div class="s15-soru-ust" aria-live="polite">' +
-            '<span class="etiket s15-soru-sayac">Sonuç</span>' +
-          '</div>' +
-          '<div class="s15-sonuc-icerik">' +
-            '<p class="s15-sonuc-puan">5 sorudan <strong>' + dogruSayisi + '</strong> tanesini doğru yanıtladın.</p>' +
-            '<p class="s15-sonuc-mesaj">' +
-              (dogruSayisi >= 4
-                ? 'Tebrikler! Gerçek sayı aralıkları ve küme işlemlerini başarıyla tamamladın.'
-                : 'Aralık gösterimlerini ve küme sembollerini pekiştirmek için testi tekrar çözebilirsin.') +
-            '</p>' +
-          '</div>';
-
-        secenekListe.innerHTML = "";
-      }
-    } else if (durum === "tekrar") {
-      aktifIndex = 0;
-      dogruSayisi = 0;
-      soruYukle(aktifIndex);
+  // Değerlendirme mekaniği şablonun ortak motorundadır: soru numaralarıyla
+  // ileri-geri gezinme, soru başına 2 hak, 5 şık, sonuç ekranı ve Tekrar Çöz.
+  EGITSEL.degerlendirme(kok, {
+    sorular: SORULAR,
+    hak: 2,
+    soruDegisti: function (i) {
+      if (i === 0 && !kok.querySelector(".deg-nokta.dogru, .deg-nokta.yanlis")) { cevaplananlar = {}; }
+      sahneGuncelle(i);
+    },
+    cevaplandi: function (i) {
+      cevaplananlar[i] = true;
+      sahneGuncelle(i);
     }
   });
 };
@@ -9579,7 +9189,7 @@ window.SAYFA_INIT[15] = function (kok) {
 
 </div>
 
-<script src="ortak/73af8f294529c663.js"></script>
+<script src="ortak/9fa15ef107fc817a.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 </body>

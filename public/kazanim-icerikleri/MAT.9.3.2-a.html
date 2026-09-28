@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MAT.9.3.2 — Algoritmik yapılar içerisindeki mantık bağlaçlarını ve niceleyicileri …</title>
+<title>MAT.9.5.2 — Algoritmik yapılar içerisindeki mantık bağlaçlarını ve niceleyicileri …</title>
 <script>
 /* Sayfa modülü kayıt defterleri — parça script'lerinden ÖNCE tanımlı olmalı */
 window.SAYFA_INIT = {}; window.SAYFA_TAMAM = {};
@@ -59,6 +59,13 @@ window.EGITSEL = {
      KALIR: 200+ mevcut parça dontVer(kok, ...) diye çağırıyor.
      tip: "dogru" | "yanlis" */
   dontVer: function (kok, tip, mesaj) {
+    /* Nötr tipler (2026-09-26, geoeba parti raporu 7.4.x): bazı sayfalar
+       yönlendirmeyi dontVer(kok, "uyari", …) diye veriyor; eskiden her
+       bilinmeyen tip «yanlis»a dönüp kırmızı + yanlış sesi basıyordu. */
+    if (tip === "uyari" || tip === "bilgi" || tip === "notr" || tip === "ipucu") {
+      if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj); }
+      return;
+    }
     tip = tip === "dogru" ? "dogru" : "yanlis";
     if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj, tip); }
     else { console.warn("EGITSEL.dontVer: SABLON_TOAST yok"); }
@@ -96,6 +103,194 @@ window.EGITSEL = {
       if ("disabled" in el) { el.disabled = kilitli !== false; }
       el.classList.toggle("locked", kilitli !== false);
     });
+  },
+
+  /* ÇOKTAN SEÇMELİ DEĞERLENDİRME MOTORU (2026-09-26, geoeba uzman raporu:
+     «değerlendirme soruları kendi içinde ileri-geri yapılamıyor», «sonucu
+     gör dediğinde kaç doğru kaç yanlış gösteren ekran çıkmıyor», «baştan
+     başlayınca bazı sorular çözülmüş geliyor», «lisede sorular 5 şıklı
+     olmalı», «en az 2 seçim hakkı verilmeli, yanlışta hemen doğru cevap
+     gelmemeli»). Her değerlendirme sayfası bu mekaniği kendisi yazıyordu ve
+     her biri başka eksik taşıyordu; motor TEK doğruluk kaynağıdır.
+       EGITSEL.degerlendirme(kok, {
+         sorular: [{metin, siklar: [{metin, dogru}], donut}],  // şık sayısı serbest (≤6)
+         hak: 2,                // soru başına deneme hakkı
+         karistir: true,        // şık sırası (soru başına BİR kez karışır)
+         soruDegisti: function (i, soru) {},     // sahneyi soruya eşle
+         cevaplandi: function (i, dogruMu, soru) {},
+         bitti: function (dogru, toplam) {}
+       })
+     Arayüz .kontrol-govde / .kontrol-eylem İÇİNE kurulur (içerikleri
+     değiştirilir); metin ve şıklar LaTeX içerebilir (MathJax dizilir). */
+  degerlendirme: function (kok, ayar) {
+    ayar = ayar || {};
+    var sorular = (ayar.sorular || []).filter(function (s) { return s && s.siklar && s.siklar.length; });
+    var govde = ayar.govde || (kok && kok.querySelector(".kontrol-govde"));
+    var eylem = ayar.eylem || (kok && kok.querySelector(".kontrol-eylem"));
+    if (!govde || !sorular.length) { console.warn("EGITSEL.degerlendirme: govde/soru yok"); return null; }
+    var HAK = Math.max(1, ayar.hak || 2);
+    var HARF = ["A", "B", "C", "D", "E", "F"];
+    var durum, aktif = 0, sonucEkrani = false;
+
+    function karisik(n) {
+      var d = [];
+      for (var i = 0; i < n; i++) { d.push(i); }
+      if (ayar.karistir === false) { return d; }
+      for (var j = d.length - 1; j > 0; j--) {
+        var k = Math.floor(Math.random() * (j + 1)); var t = d[j]; d[j] = d[k]; d[k] = t;
+      }
+      return d;
+    }
+    function sifirla() {
+      durum = sorular.map(function (s) {
+        return { sira: karisik(s.siklar.length), denenen: [], sonuc: "bos" };  // bos|devam|dogru|yanlis
+      });
+      aktif = 0; sonucEkrani = false;
+    }
+    function el(etiket, sinif, metin) {
+      var e = document.createElement(etiket);
+      if (sinif) { e.className = sinif; }
+      if (metin !== undefined) { e.innerHTML = metin; }
+      return e;
+    }
+    function diz(kap) {
+      try {
+        if (window.MathJax && window.MathJax.typesetPromise) { window.MathJax.typesetPromise([kap]); }
+        else if (window.MathJax && window.MathJax.typeset) { window.MathJax.typeset([kap]); }
+      } catch (e) { /* dizgi hatası etkileşimi durdurmaz */ }
+    }
+    function sayim() {
+      var s = { dogru: 0, yanlis: 0, bos: 0 };
+      durum.forEach(function (d) { if (d.sonuc === "dogru") s.dogru++; else if (d.sonuc === "yanlis") s.yanlis++; else s.bos++; });
+      return s;
+    }
+    function noktalar(ust) {
+      var kap = el("div", "deg-noktalar");
+      kap.setAttribute("role", "group");
+      kap.setAttribute("aria-label", "Sorular");
+      sorular.forEach(function (_, i) {
+        var d = durum[i];
+        var b = el("button", "deg-nokta " + d.sonuc + (i === aktif && !sonucEkrani ? " aktif" : ""), String(i + 1));
+        b.type = "button";
+        b.setAttribute("aria-label", (i + 1) + ". soru" + (d.sonuc === "dogru" ? ", doğru" : d.sonuc === "yanlis" ? ", yanlış" : ""));
+        b.addEventListener("click", function () { git(i); });
+        kap.appendChild(b);
+      });
+      ust.appendChild(kap);
+    }
+    function eylemKur(dugmeler) {
+      if (!eylem) { return; }
+      eylem.innerHTML = "";
+      var satir = el("div", "deg-eylem");
+      dugmeler.forEach(function (d) {
+        var b = el("button", "buton" + (d.birincil ? " birincil" : ""), d.metin);
+        b.type = "button";
+        if (d.pasif) { b.disabled = true; }
+        b.addEventListener("click", d.is);
+        satir.appendChild(b);
+      });
+      eylem.appendChild(satir);
+    }
+    function ciz() {
+      sonucEkrani = false;
+      var soru = sorular[aktif], d = durum[aktif];
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Soru " + (aktif + 1) + " / " + sorular.length));
+      noktalar(ust);
+      kap.appendChild(ust);
+      kap.appendChild(el("div", "panel deg-metin", soru.metin || ""));
+      var liste = el("div", "deg-siklar");
+      var bitmis = d.sonuc === "dogru" || d.sonuc === "yanlis";
+      d.sira.forEach(function (asilNo, gorunen) {
+        var sik = soru.siklar[asilNo];
+        var b = el("button", "parca-btn");
+        b.type = "button";
+        b.appendChild(el("span", "kutucuk", HARF[gorunen] || String(gorunen + 1)));
+        b.appendChild(el("span", "", sik.metin));
+        var denendi = d.denenen.indexOf(asilNo) > -1;
+        if (denendi && !sik.dogru) { b.classList.add("yanlis-secim"); b.disabled = true; }
+        if (bitmis) {
+          b.disabled = true;
+          if (sik.dogru) { b.classList.add("dogru-secim"); }
+          else if (!denendi) { b.classList.add("soluk"); }
+        }
+        b.addEventListener("click", function () { sec(asilNo); });
+        liste.appendChild(b);
+      });
+      kap.appendChild(liste);
+      govde.appendChild(kap);
+      diz(govde);
+      var son = aktif === sorular.length - 1;
+      eylemKur([
+        { metin: "Önceki", pasif: aktif === 0, is: function () { git(aktif - 1); } },
+        { metin: son ? "Sonuçları Gör" : "Sonraki", birincil: true,
+          is: function () { if (son) { sonuc(); } else { git(aktif + 1); } } }
+      ]);
+      if (typeof ayar.soruDegisti === "function") {
+        try { ayar.soruDegisti(aktif, soru); } catch (e) { console.error("degerlendirme.soruDegisti", e); }
+      }
+    }
+    function sec(asilNo) {
+      var soru = sorular[aktif], d = durum[aktif];
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis" || d.denenen.indexOf(asilNo) > -1) { return; }
+      d.denenen.push(asilNo);
+      var dogruMu = !!soru.siklar[asilNo].dogru;
+      var kalan = HAK - d.denenen.length;
+      if (dogruMu) {
+        d.sonuc = "dogru";
+        window.EGITSEL.dontVer(kok, "dogru", soru.donut || "Doğru seçim.");
+      } else if (kalan > 0) {
+        d.sonuc = "devam";
+        window.EGITSEL.dontVer(kok, "yanlis", "Bir hakkın daha var, tekrar dene.");
+      } else {
+        d.sonuc = "yanlis";
+        window.EGITSEL.dontVer(kok, "yanlis", soru.donut || "Doğru seçenek işaretlendi.");
+      }
+      ciz();
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis") {
+        if (typeof ayar.cevaplandi === "function") {
+          try { ayar.cevaplandi(aktif, d.sonuc === "dogru", soru); } catch (e) { console.error("degerlendirme.cevaplandi", e); }
+        }
+      }
+    }
+    function git(i) {
+      if (i < 0 || i >= sorular.length) { return; }
+      aktif = i;
+      ciz();
+    }
+    function sonuc() {
+      sonucEkrani = true;
+      var s = sayim(), n = sorular.length;
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Sonuçlar"));
+      noktalar(ust);
+      kap.appendChild(ust);
+      var kutu = el("div", "panel deg-sonuc");
+      kutu.appendChild(el("div", "deg-puan buyuk-sayi", s.dogru + " / " + n));
+      var sayac = el("div", "deg-sayac");
+      sayac.appendChild(el("span", "d", "Doğru: " + s.dogru));
+      sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
+      sayac.appendChild(el("span", "b", "Boş: " + s.bos));
+      kutu.appendChild(sayac);
+      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kap.appendChild(kutu);
+      govde.appendChild(kap);
+      eylemKur([
+        { metin: "Soruları İncele", is: function () { git(0); } },
+        { metin: "Tekrar Çöz", birincil: true, is: function () { sifirla(); ciz(); } }
+      ]);
+      if (typeof ayar.bitti === "function") {
+        try { ayar.bitti(s.dogru, n); } catch (e) { console.error("degerlendirme.bitti", e); }
+      }
+    }
+    sifirla();
+    ciz();
+    return { git: git, sonuc: sonuc, sifirla: function () { sifirla(); ciz(); } };
   },
 
   /* 2B TUVAL YÜKSEK ÇÖZÜNÜRLÜK (2026-08-17 çözünürlük raporu, P0)
@@ -197,7 +392,7 @@ window.EGITSEL = {
    kalıyordu. İlkokul (1-4) matematikte \frac = \dfrac (rakamlar gövde boyunda). */
 window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
                           displayMath: [["\\[", "\\]"], ["$$", "$$"]],
-                          macros: /^MAT\.[1-4]\./.test("MAT.9.3.2")
+                          macros: /^MAT\.[1-4]\./.test("MAT.9.5.2")
                                   ? { frac: ["\\dfrac{#1}{#2}", 2] } : {} },
                    options: { skipHtmlTags: ["script", "noscript", "style",
                                              "textarea", "pre", "code",
@@ -205,7 +400,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
                                              "svg"] } };
 </script>
 <script src="ortak/f5b3f5fac24e774b.js"></script>
-<script src="ortak/b47118f55e978615.js"></script>
+<script src="ortak/27c9562c7880c36e.js"></script>
 <script src="ortak/17f319aeaf055a36.js"></script>
 <script>/* RoundedBoxGeometry.js — yerel gömme */
 /* three.js r155 örnek portu — RoundedBoxGeometry (examples/jsm/geometries/RoundedBoxGeometry.js)
@@ -482,6 +677,50 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   var ESIK = 4;                 // px — bu kadar gezmeden sürükleme başlamaz
                                 // (tıkla-seç yedeği tetiklenmeye devam etsin)
 
+  /* İZLEYİCİNİN SAYFA KAPSAMI (2026-09-26, geoeba uzman raporu: «doğru
+     sürüklemede ‹Daha dikkatli ol› uyarısı çıkıyor / yanlış ses geliyor» —
+     3, 4, 9 ve 10. sınıfta onlarca sayfa). Kök neden tarayıcıda ölçüldü
+     (MAT.3.1.3): 1. sayfanın `pdnd.monitorForElements` izleyicisi sayfa
+     süzgeci olmadan kuruluyor; SAYFA_INIT bir kez koşuyor ve temizleyici hiç
+     çağrılmıyor, yani öğrenci o sayfayı geçtikten sonra da YAŞIYOR. 5.
+     sayfada kart doğru sepete bırakılınca sayfa 5 «dogru» dönütü veriyor,
+     ardından sayfa 1'in izleyicisi aynı bırakmayı kendi sorusu sanıp
+     «Birler basamağını tekrar hesapla.» diye «yanlis» basıyordu (toast'ta
+     son söz onun; ses frenine takılan da doğru ses). Korpusta 578 sayfa
+     izleyici kuruyor — hepsi aynı deliği taşıyordu.
+     Çözüm tek yerde, sayfa kodu değişmeden: izleyici KURULDUĞU ANDAKİ aktif
+     sayfaya bağlanır (INIT ve sıfırla düğmeleri o sayfa ekrandayken koşar)
+     ve yalnız kaynağı o sayfanın içinde olan sürüklemeleri görür. */
+  function sahipSayfa() {
+    try {           // node test koşumunun sahte document'ında querySelector yok
+      return typeof document.querySelector === "function"
+        ? document.querySelector(".sayfa.aktif") : null;
+    } catch (e) { return null; }
+  }
+  function kapsamla(yap) {
+    var sahip = sahipSayfa();
+    if (!yap || !sahip) { return yap; }
+    var asilIzin = yap.canMonitor;
+    var kopya = {};
+    for (var k in yap) { kopya[k] = yap[k]; }
+    kopya.canMonitor = function (args) {
+      var kaynak = args && args.source && args.source.element;
+      // Kaynak bir SAYFANIN içindeyse o sayfa sahip olmalı; hiçbir sayfada
+      // değilse (sayfa kodu kaynağı sürükleme için gövdeye taşımış olabilir)
+      // karar sahibin o an ekranda olmasıdır.
+      var sayfasi = kaynak && kaynak.nodeType === 1 && kaynak.closest
+        ? kaynak.closest(".sayfa") : null;
+      if (sayfasi ? sayfasi !== sahip
+                  : (kaynak && kaynak.nodeType === 1 && sahip.contains
+                     ? !sahip.contains(kaynak) && !sahip.classList.contains("aktif")
+                     : !sahip.classList.contains("aktif"))) {
+        return false;
+      }
+      return typeof asilIzin === "function" ? asilIzin.call(yap, args) : true;
+    };
+    return kopya;
+  }
+
   function svgMi(el) {
     return el && typeof SVGElement !== "undefined" && el instanceof SVGElement;
   }
@@ -588,6 +827,12 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     // Sözleşme zaten istiyor ama unutuluyor: touch-action olmadan tarayıcı
     // hareketi sayfa kaydırması sanıp sürüklemeyi iptal eder.
     el.style.touchAction = "none";
+    // Dokunmatikte hareket kararını KÖK <svg> verir (2026-09-26, geoeba parti
+    // raporu MAT.4.1.3: parmakla sürükleme kaydırma sanılıp iptal ediliyordu).
+    // Sahne sabit 1280×720, kaydırılmaz — kökte kapatmak güvenli.
+    if (el.ownerSVGElement && el.ownerSVGElement.style) {
+      el.ownerSVGElement.style.touchAction = "none";
+    }
 
     var basla = null, aktif = null;
 
@@ -618,13 +863,18 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       var hayalet = null;
       try { hayalet = hayaletKur(el); }
       catch (e) { console.warn("pdnd-svg: hayalet kurulamadı", e); }
-      aktif = { kaynak: kaynak, oncekiler: [], ilk: girdi(ev), hayalet: hayalet };
+      aktif = { kaynak: kaynak, oncekiler: [], ilk: girdi(ev), hayalet: hayalet,
+                izleyiciler: [] };
       var yuk = konum(ev, []);
       cagir(yap, "onGenerateDragPreview", yuk);
       cagir(yap, "onDragStart", yuk);
+      // canMonitor pdnd'de olduğu gibi BİR KEZ, başlangıçta sorulur ve o
+      // sürüklemenin bütün olayları (onDrag/onDrop dahil) yalnız izin veren
+      // izleyicilere gider — eskiden yalnız onDragStart süzülüyordu.
       IZLEYICILER.forEach(function (m) {
         if (typeof m.canMonitor === "function"
             && !m.canMonitor({ initial: yuk.location.initial, source: kaynak })) { return; }
+        aktif.izleyiciler.push(m);
         cagir(m, "onDragStart", yuk);
       });
     }
@@ -677,7 +927,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         cagir(h.__yap, "onDrag", Object.assign({ self: h }, yuk));
       });
       cagir(yap, "onDrag", yuk);
-      IZLEYICILER.forEach(function (m) { cagir(m, "onDrag", yuk); });
+      aktif.izleyiciler.forEach(function (m) { cagir(m, "onDrag", yuk); });
       aktif.oncekiler = hedefler;
     }
 
@@ -697,7 +947,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         cagir(h.__yap, "onDrop", Object.assign({ self: h }, yuk));
       });
       cagir(yap, "onDrop", yuk);
-      IZLEYICILER.forEach(function (m) { cagir(m, "onDrop", yuk); });
+      vardi.izleyiciler.forEach(function (m) { cagir(m, "onDrop", yuk); });
     }
 
     el.addEventListener("pointerdown", pointerdown);
@@ -734,13 +984,14 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   };
 
   window.pdnd.monitorForElements = function (yap) {
-    IZLEYICILER.add(yap);
-    var temizle = gercek.monitorForElements(yap);
+    var kapsamli = kapsamla(yap);        // sayfa kapsamı — bkz. kapsamla()
+    IZLEYICILER.add(kapsamli);
+    var temizle = gercek.monitorForElements(kapsamli);
     var temiz = false;
     return function () {
       if (temiz) { return; }
       temiz = true;
-      IZLEYICILER.delete(yap);
+      IZLEYICILER.delete(kapsamli);
       if (typeof temizle === "function") { temizle(); }
     };
   };
@@ -761,9 +1012,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
      yanındaki <ad>-ses/ klasöründe, göreli yolla. Ayar kapalıysa yuva BOŞ kalır
      ve gövde sonundaki anlatım motoru hiç kurulmaz. -->
 
-<link rel="stylesheet" href="ortak/6d1eb72a5a4832a6.css">
+<link rel="stylesheet" href="ortak/a6aa9fad6404f978.css">
 <!-- URETIM BILGISI
-  montaj: 2026-09-18 12:22
+  montaj: 2026-09-27 03:09
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 00:57
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 00:54
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 01:01
@@ -775,7 +1026,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 </head>
 <body>
 <section id="ekran-kapak" class="sk-sinif-9" aria-label="Giriş kapağı">
-<link rel="stylesheet" href="ortak/957a404b18aeed56.css">
+<link rel="stylesheet" href="ortak/4dd4f261731e45c9.css">
 <svg class="sk-fon" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
 <defs>
   <linearGradient id="skg9-su" x1="0" y1="0" x2="0" y2="1">
@@ -846,7 +1097,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
         <div class="sk-sinif" aria-label="9. sınıf"><div><b>9.</b><small>SINIF</small></div></div>
         <div class="sk-etiketler">
           <span class="sk-ders">Matematik</span>
-          <span class="sk-unite-no">3. Tema</span>
+          <span class="sk-unite-no">5. Tema</span>
         </div>
       </div>
       <h1 class="sk-baslik"><span>Algoritma ve Bilişim</span></h1>
@@ -862,7 +1113,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   <div class="sk-govde">
     <section class="sk-blok sk-cikti" aria-label="Öğrenme Çıktısı">
       <h2><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#4f63d8"/><circle cx="12" cy="12" r="6.5" fill="#fff"/><circle cx="12" cy="12" r="3.2" fill="#4f63d8"/></svg>Öğrenme Çıktısı</h2>
-      <div class="sk-kaydir" tabindex="0"><ul class="sk-liste"><li><span class="sk-kod">MAT.9.3.2</span><span>Algoritmik yapılar içerisindeki mantık bağlaçlarını ve niceleyicileri çözümleyebilme</span></li></ul></div>
+      <div class="sk-kaydir" tabindex="0"><ul class="sk-liste"><li><span class="sk-kod">MAT.9.5.2</span><span>Algoritmik yapılar içerisindeki mantık bağlaçlarını ve niceleyicileri çözümleyebilme</span></li></ul></div>
     </section>
     <section class="sk-blok sk-surec" aria-label="Süreç bileşenleri"><h2><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#1fb5b0" d="M4 7h4a2 2 0 1 1 4 0h4v4a2 2 0 1 0 0 4v4h-4a2 2 0 1 0-4 0H4v-4a2 2 0 1 1 0-4z"/></svg>Süreç Bileşenleri</h2><div class="sk-kaydir" tabindex="0"><div class="sk-grup"><ol class="sk-liste"><li><span class="sk-harf">a</span><span>Algoritmik yapılar içerisinde kullanılan mantık bağlaçlarını ve niceleyicileri belirler.</span></li><li><span class="sk-harf">b</span><span>Algoritmik yapılar ile mantık bağlaçları ve niceleyiciler arasındaki ilişkileri belirler.</span></li></ol></div></div></section>
   </div>
@@ -883,8 +1134,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   <rect x="54" y="156" width="92" height="20" rx="6" fill="#101a44"/>
   <path d="M100 44l6 12 13 2-9.5 9 2.5 13L100 74l-12 6 2.5-13L81 58l13-2z" fill="#fff"/>
 </svg>
-    <h2>Tebrikler!</h2>
-    <p class="st-alt"><b>Algoritma ve Bilişim</b> içeriğini başarıyla tamamladın.</p>
+    <h2 data-tam="Tebrikler!" data-bos="Henüz etkinlik yapmadın">Tebrikler!</h2>
+    <p class="st-alt" data-tam="&lt;b&gt;Algoritma ve Bilişim&lt;/b&gt; içeriğini başarıyla tamamladın."
+       data-bos="Etkinlikleri yapmadan sona geldin. Baştan başlayıp etkinlikleri tamamlamak ister misin?"><b>Algoritma ve Bilişim</b> içeriğini başarıyla tamamladın.</p>
     <div class="st-yildizlar" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg></div>
     <div class="st-ogrendim"><h3>Bu içerikte şunları öğrendin</h3><ul><li>Algoritmik yapılar içerisindeki mantık bağlaçlarını ve niceleyicileri çözümleyebilme</li></ul></div>
     <div class="st-dugmeler">
@@ -917,9 +1169,29 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
       kap.appendChild(p);
     }
   }
+  /* HİÇ ETKİNLİK YAPILMADIYSA TEBRİK YOK (geoeba uzman notu 2026-09-26, 7. sınıf
+     G: «hiç soru çözmeden bölüm sonuna gelindiğinde tebrikler mesajı yerine
+     yeniden denemek ister misin gibi bir mesaj gelebilir»). Ölçüt: öğrencinin
+     aldığı doğru/yanlış dönüt sayısı — dönütün tek boğazı EGITSEL.dontVer'dir. */
+  var donutSayisi = 0;
+  function donutSay() {
+    var E = window.EGITSEL;
+    if (!E || typeof E.dontVer !== "function" || E.dontVer.__tebrikSayaci) return;
+    var asil = E.dontVer;
+    E.dontVer = function () { donutSayisi++; return asil.apply(this, arguments); };
+    E.dontVer.__tebrikSayaci = true;
+  }
+  donutSay();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", donutSay);
   var oncekiOdak = null;
   function ac() {
-    konfetiKur();
+    var bos = donutSayisi === 0;
+    tebrik.classList.toggle("st-bos", bos);
+    var baslik = tebrik.querySelector("h2");
+    var alt = tebrik.querySelector(".st-alt");
+    if (baslik) baslik.textContent = bos ? baslik.getAttribute("data-bos") : baslik.getAttribute("data-tam");
+    if (alt) alt.innerHTML = bos ? alt.getAttribute("data-bos") : alt.getAttribute("data-tam");
+    if (!bos) konfetiKur();
     oncekiOdak = document.activeElement;
     tebrik.classList.add("acik");
     tebrik.removeAttribute("aria-hidden");
@@ -937,9 +1209,14 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
     var hedef = e.target && e.target.closest && e.target.closest("#sonraki-buton");
     if (hedef && aktifSayfa >= sayfaSayisi()) ac();
   }, true);
+  /* «Baştan Başla» TAM SIFIRLAR (uzman notu, 7. sınıf E: «bazı sorular çözülmüş
+     hâlde geliyor, bazıları sıfırlanmış»): sayfalar SAYFA_INIT'i bir kez koşar
+     ve durumunu bellekte tutar; 1. sayfaya dönmek hiçbirini sıfırlamıyordu.
+     Belgeyi yeniden yüklemek tek güvenilir sıfırlamadır. */
   tebrik.querySelector(".st-bastan").addEventListener("click", function () {
     kapat();
-    if (window.SABLON_GEC) window.SABLON_GEC(1);
+    try { window.location.reload(); }
+    catch (e) { if (window.SABLON_GEC) window.SABLON_GEC(1); }
   });
   tebrik.querySelector(".st-kapat").addEventListener("click", kapat);
   document.addEventListener("keydown", function (e) {
@@ -956,7 +1233,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 00:57 -->
 <!-- PALET: zemin #d2e4f5 #c4dbf0 | baskin #84b6e8 #3a7ec9 #1e5296 #143b70 | ikincil #7cd3b2 #2fa87e #1c7354 | notr #edf3fa #9eb2c7 #4b637d | vurgu #e25b45 | kontur #0f2744 -->
 <!-- SAYFA_BASLIK: Akışta Mantık Bağlaçları -->
-<!-- YONERGE: Mantık bağlacı kartlarını akış şemasındaki doğru karar yuvalarına yerleştirin. -->
+<!-- YONERGE: Üye olunan bir mobil uygulamaya giriş yapabilmek için aşağıda verilen mantık bağlacı kartlarını akış şemasındaki doğru karar yuvalarına yerleştirin. -->
 <!-- ETIKET: UYGULAMA -->
 <!-- SUTUN_ORAN: 8fr 4fr -->
 
@@ -1189,7 +1466,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 <section class="bolum etkilesim">
 <div class="panel-basi">
 <div class="baslik-satiri"><h2>Akışta Mantık Bağlaçları</h2><span class="etiket">UYGULAMA</span></div>
-<p class="yonerge">Mantık bağlacı kartlarını akış şemasındaki doğru karar yuvalarına yerleştirin.</p>
+<p class="yonerge">Üye olunan bir mobil uygulamaya giriş yapabilmek için aşağıda verilen mantık bağlacı kartlarını akış şemasındaki doğru karar yuvalarına yerleştirin.</p>
 </div>
 
   <div class="kontrol-govde">
@@ -2850,8 +3127,8 @@ window.SAYFA_INIT[3] = function (kok) {
         <!-- Düğüm 1 -> Düğüm 2 (Evet) -->
         <path id="s4-yol-d1-d2" class="s4-yol" d="M 460 150 C 510 150, 530 200, 530 260" marker-end="url(#s4-ok-uc)"/>
 
-        <!-- Düğüm 1 -> Düğüm 3 (Hayır) -->
-        <path id="s4-yol-d1-d3" class="s4-yol" d="M 280 150 C 230 150, 210 200, 210 260" marker-end="url(#s4-ok-uc)"/>
+        <!-- Düğüm 1 -> Burs Reddedildi (Hayır) — uzman notu: soruda geçmeyen «gelir» düğümü çıkarıldı -->
+        <path id="s4-yol-d1-ret" class="s4-yol" d="M 280 150 C 230 150, 210 220, 210 456" marker-end="url(#s4-ok-uc)"/>
 
         <!-- Düğüm 2 -> Burs Onaylandı (Evet) -->
         <path id="s4-yol-d2-onay" class="s4-yol" d="M 530 354 L 530 456" marker-end="url(#s4-ok-uc)"/>
@@ -2859,16 +3136,12 @@ window.SAYFA_INIT[3] = function (kok) {
         <!-- Düğüm 2 -> Burs Reddedildi (Hayır - Hatalı Akış) -->
         <path id="s4-yol-d2-ret" class="s4-yol" d="M 440 310 C 370 310, 310 390, 245 456" marker-end="url(#s4-ok-uc)"/>
 
-        <!-- Düğüm 3 -> Burs Reddedildi (Hayır) -->
-        <path id="s4-yol-d3-ret" class="s4-yol" d="M 210 354 L 210 456" marker-end="url(#s4-ok-uc)"/>
-
         <!-- Konnektör Pim Noktaları (Bağlantı Boncukları) -->
         <circle cx="370" cy="74" r="4" fill="#9bb0c1" stroke="#1e3328" stroke-width="1.5"/>
         <circle cx="460" cy="150" r="4" fill="#c4d7c5" stroke="#1e3328" stroke-width="1.5"/>
         <circle cx="280" cy="150" r="4" fill="#c4d7c5" stroke="#1e3328" stroke-width="1.5"/>
         <circle cx="530" cy="354" r="4" fill="#88ab89" stroke="#1e3328" stroke-width="1.5"/>
         <circle cx="440" cy="310" r="4" fill="#9bb0c1" stroke="#1e3328" stroke-width="1.5"/>
-        <circle cx="210" cy="354" r="4" fill="#9bb0c1" stroke="#1e3328" stroke-width="1.5"/>
 
         <!-- Yol Etiket Hapları (Evet / Hayır) -->
         <!-- D1 -> D2 (Evet) -->
@@ -2897,14 +3170,6 @@ window.SAYFA_INIT[3] = function (kok) {
 
         <!-- D2 -> Reddedildi (Hayır) -->
         <g transform="translate(345, 360)">
-          <ellipse cx="0" cy="12" rx="22" ry="4" fill="#1e3328" opacity="0.2"/>
-          <rect x="-26" y="-12" width="52" height="24" rx="10" fill="url(#s4-grad-hap-hayir)" stroke="#1e3328" stroke-width="1.5"/>
-          <path d="M -20 -8 Q 0 -11 20 -8" stroke="#ffffff" stroke-width="1.5" fill="none" opacity="0.5" stroke-linecap="round"/>
-          <text text-anchor="middle" y="5" class="svg-not" fill="#1e3328">Hayır</text>
-        </g>
-
-        <!-- D3 -> Reddedildi (Hayır) -->
-        <g transform="translate(178, 405)">
           <ellipse cx="0" cy="12" rx="22" ry="4" fill="#1e3328" opacity="0.2"/>
           <rect x="-26" y="-12" width="52" height="24" rx="10" fill="url(#s4-grad-hap-hayir)" stroke="#1e3328" stroke-width="1.5"/>
           <path d="M -20 -8 Q 0 -11 20 -8" stroke="#ffffff" stroke-width="1.5" fill="none" opacity="0.5" stroke-linecap="round"/>
@@ -3010,24 +3275,6 @@ window.SAYFA_INIT[3] = function (kok) {
           <!-- Akış İzi Parıltı Rozeti -->
           <circle id="s4-parilti-d2" cx="530" cy="310" r="42" fill="none" stroke="#c85a4a" stroke-width="3" opacity="0" class="s4-parilti-halka"/>
         </g>
-
-        <!-- DÜĞÜM 3: Gelir <= 15000 -->
-        <g id="s4-dugum-3" class="s4-dugum" data-dugum="3" role="button" tabindex="0" aria-label="Düğüm 3: Gelir 15000 veya altı mı?">
-          <ellipse cx="210" cy="358" rx="80" ry="12" fill="#1e3328" opacity="0.25"/>
-          <!-- Baklava Şekli (cx=210, cy=310, rx=90, ry=44) -->
-          <polygon points="210,266 300,310 210,354 120,310" fill="url(#s4-grad-dugum)" stroke="#1e3328" stroke-width="2.5" stroke-linejoin="round"/>
-          <!-- Alt Prizma Gölgesi -->
-          <path d="M 120 310 L 210 354 L 300 310" stroke="#365938" stroke-width="2" fill="none" opacity="0.35" stroke-linejoin="round"/>
-          <!-- Üst Prizma Işığı -->
-          <path d="M 123 308 L 210 268 L 297 308" stroke="#ffffff" stroke-width="2" fill="none" opacity="0.5" stroke-linejoin="round"/>
-          <!-- Üst Parlama Yayı -->
-          <path d="M 150 295 Q 210 275 270 295" stroke="#ffffff" stroke-width="3" fill="none" opacity="0.4" stroke-linecap="round"/>
-          <!-- Düğüm Başlık Kapsülü -->
-          <rect x="170" y="288" width="80" height="18" rx="6" fill="#eef2ed" fill-opacity="0.75" stroke="#88ab89" stroke-width="1"/>
-          <!-- Etiket & Koşul -->
-          <text text-anchor="middle" x="210" y="302" class="svg-not" fill="#365938">Düğüm 3</text>
-          <text text-anchor="middle" x="210" y="325" class="svg-metin" fill="#1e3328">Gelir ≤ 15000</text>
-        </g>
       </g>
     </svg>
   </div>
@@ -3054,9 +3301,9 @@ window.SAYFA_INIT[3] = function (kok) {
     <div class="panel s4-panel-grup">
       <div class="s4-grup-baslik">Burs Kuralı</div>
       <div class="s4-kural-alani">
-        <span class="s4-kural-vurgu">Sporcu ∨ Sanatçı</span>
+        <span class="s4-kural-vurgu">Not ≥ 3.5 ∧ (Sporcu ∨ Sanatçı)</span>
       </div>
-      <div class="kucuk-not s4-kucuk-bilgi">Aday en az bir koşulu sağladığı için burs hakkı kazanmalıdır.</div>
+      <div class="kucuk-not s4-kucuk-bilgi">Notu yeterli olan aday, sporcu ya da sanatçı olmak koşullarından en az birini sağladığı için burs hakkı kazanmalıdır.</div>
     </div>
 
     <!-- Grup 3: Akış İlerleme Durumu -->
@@ -3175,6 +3422,11 @@ window.SAYFA_INIT[3] = function (kok) {
     stroke-width: 3.5px;
   }
 
+  #sayfa-4 .s4-dugum {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
   #sayfa-4 .s4-dugum-dogru {
     transform: scale(1.05);
   }
@@ -3232,8 +3484,10 @@ window.SAYFA_INIT[3] = function (kok) {
     transition: transform 0.25s ease;
   }
 
-  #sayfa-4 .s4-kutu-vurgu {
-    transform: scale(1.04);
+  /* SVG transform niteliğini (translate) ezmemek için ölçek yerine kontur vurgusu */
+  #sayfa-4 .s4-kutu-vurgu > rect:first-of-type {
+    stroke: #c85a4a;
+    stroke-width: 4;
   }
 
 }
@@ -5062,58 +5316,14 @@ window.SAYFA_INIT[6] = function (kok) {
 <p class="yonerge">Soruları dikkatle okuyarak mantıksal yapılara uygun doğru seçeneği işaretleyin.</p>
 </div>
 
-  <div class="kontrol-govde">
-    <div class="panel s7-soru-karti">
-      <div class="s7-meta-serit" aria-live="polite">
-        <span class="etiket" id="s7-soru-numara">Soru 1 / 5</span>
-        <span class="kucuk-not" id="s7-puan-durum">Doğru: 0 / 5</span>
-      </div>
-      <p class="s7-soru-metin" id="s7-soru-yazi">Bir e-ticaret sepeti kontrol algoritmasında, sepette yer alan ürünler taranırken "stokta tükenmiş en az bir ürünün bulunması" durumunu sorgulayan döngü karar bloğunda hangi mantıksal niceleyici kullanılmalıdır?</p>
-      <div class="s7-secenekler" id="s7-secenek-kutusu">
-        <button class="parca-btn" type="button" data-deger="0"><span class="kutucuk">A</span><span class="s7-sec-yazi">Evrensel niceleyici (∀)</span></button>
-        <button class="parca-btn" type="button" data-deger="1"><span class="kutucuk">B</span><span class="s7-sec-yazi">Varlıksal niceleyici (∃)</span></button>
-        <button class="parca-btn" type="button" data-deger="2"><span class="kutucuk">C</span><span class="s7-sec-yazi">DEĞİL bağlacı (¬)</span></button>
-        <button class="parca-btn" type="button" data-deger="3"><span class="kutucuk">D</span><span class="s7-sec-yazi">Eşdeğerlik bağlacı (⇔)</span></button>
-      </div>
-    </div>
-  </div>
-  <div class="kontrol-eylem">
-    <button class="buton birincil" id="s7-eylem-btn" type="button">Kontrol Et</button>
-  </div>
+  <div class="kontrol-govde"></div>
+  <div class="kontrol-eylem"></div>
 </section>
 <style>
 @layer sayfa {
 
   #sayfa-7 .s7-sahne-zemini {
     background: linear-gradient(180deg, #e3eff3, #d5e5eb);
-  }
-  #sayfa-7 .s7-soru-karti {
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-  #sayfa-7 .s7-meta-serit {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-  #sayfa-7 .s7-secenekler {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  #sayfa-7 .s7-sec-yazi {
-    flex: 1;
-    text-align: left;
-  }
-  #sayfa-7 .s7-sonuc-kutusu {
-    padding: 20px;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    align-items: center;
   }
 
 }
@@ -5122,226 +5332,100 @@ window.SAYFA_INIT[6] = function (kok) {
 window.SAYFA_INIT[7] = function (kok) {
   var SORULAR = [
     {
-      id: 1,
       metin: "Bir e-ticaret sepeti kontrol algoritmasında, sepette yer alan ürünler taranırken \"stokta tükenmiş en az bir ürünün bulunması\" durumunu sorgulayan döngü karar bloğunda hangi mantıksal niceleyici kullanılmalıdır?",
-      secenekler: [
+      siklar: [
         { metin: "Evrensel niceleyici (∀)", dogru: false },
         { metin: "Varlıksal niceleyici (∃)", dogru: true },
         { metin: "DEĞİL bağlacı (¬)", dogru: false },
-        { metin: "Eşdeğerlik bağlacı (⇔)", dogru: false }
+        { metin: "Eşdeğerlik bağlacı (⇔)", dogru: false },
+        { metin: "VE bağlacı (∧)", dogru: false }
       ],
-      donut: "En az bir varlıksaldır."
+      donut: "«En az bir» ifadesi varlıksal niceleyici (∃) ile kurulur."
     },
     {
-      id: 2,
       metin: "İki adet ışın sensörüne sahip otonom bir gezgin aracın düz bir hatta güvenle ilerleyebilmesi için \"sol sensörün engelsiz olması\" ile \"sağ sensörün engelsiz olması\" şartlarının her ikisinin de aynı anda sağlanması gerekmektedir. Bu karar yapısını kuran mantık bağlacı hangisidir?",
-      secenekler: [
+      siklar: [
         { metin: "VEYA (∨)", dogru: false },
         { metin: "VE (∧)", dogru: true },
         { metin: "DEĞİL (¬)", dogru: false },
-        { metin: "YA DA (⊻)", dogru: false }
+        { metin: "YA DA (⊻)", dogru: false },
+        { metin: "İSE (⇒)", dogru: false }
       ],
-      donut: "İki şart da aranır."
+      donut: "İki şartın birlikte arandığı karar VE (∧) bağlacıyla kurulur."
     },
     {
-      id: 3,
       metin: "Bir burs başvuru algoritmasında onay kararı için \"Başarı Notu ≥ 85 VE Gelir Seviyesi Düşük\" şartı aranmaktadır. Karar düğümündeki \"VE\" bağlacı yerine yanlışlıkla \"VEYA\" bağlacı yerleştirilirse algoritmanın çıktısında nasıl bir sapma oluşur?",
-      secenekler: [
+      siklar: [
         { metin: "Başarı notu 85 altında olan düşük gelirli adaylar da onay alır.", dogru: true },
         { metin: "Her iki şartı birlikte sağlayan adayların başvurusu reddedilir.", dogru: false },
         { metin: "Gelir seviyesi düşük olan tüm adayların başvuruları geçersiz sayılır.", dogru: false },
-        { metin: "Başarı notu 85 üzerinde olan tüm adaylar sistem tarafından elenir.", dogru: false }
+        { metin: "Başarı notu 85 üzerinde olan tüm adaylar sistem tarafından elenir.", dogru: false },
+        { metin: "Algoritmanın çıktısında hiçbir değişiklik oluşmaz.", dogru: false }
       ],
-      donut: "Şartlardan biri yeterli olur."
+      donut: "VEYA ile şartlardan birini sağlamak onay için yeterli olur."
     },
     {
-      id: 4,
       metin: "Bir lojistik konveyör bandında kolileri denetleyen tarayıcı döngüsü, \"∃x (x kolisi kusurludur)\" yani \"en az bir kusurlu ürün tespitinde hattı durdur\" kuralıyla çalıştırılmaktadır. Bu algoritmanın çalışma davranışı için hangisi doğrudur?",
-      secenekler: [
+      siklar: [
         { metin: "İlk kusurlu ürün algılandığında döngüden erken çıkış yapılır.", dogru: true },
         { metin: "Tüm koliler bant sonuna kadar taranmadan hat asla durdurulmaz.", dogru: false },
         { metin: "Yalnızca son koli kusurlu olduğunda sistem alarm üretir.", dogru: false },
-        { metin: "Kusursuz koliler geldikçe döngü hemen sonlandırılarak durulur.", dogru: false }
+        { metin: "Kusursuz koliler geldikçe döngü hemen sonlandırılarak durulur.", dogru: false },
+        { metin: "Hat, kusurlu kolilerin sayısı kusursuzları geçtiğinde durdurulur.", dogru: false }
       ],
-      donut: "İlk tespitte döngü sonlanır."
+      donut: "∃ koşulu ilk kusurlu kolide sağlanır, döngü erken sonlanır."
     },
     {
-      id: 5,
       metin: "Bir algoritmadaki döngüden çıkış koşulu \\( \\neg(A \\wedge B) \\) bileşik ifadesi olarak kurgulanmıştır. Bu koşul De Morgan denklikleri ile sadeleştirildiğinde aşağıdaki mantıksal ifadelerden hangisine denk olur?",
-      secenekler: [
+      siklar: [
         { metin: "\\( \\neg A \\wedge \\neg B \\)", dogru: false },
         { metin: "\\( \\neg A \\vee \\neg B \\)", dogru: true },
         { metin: "\\( A \\vee B \\)", dogru: false },
-        { metin: "\\( A \\wedge \\neg B \\)", dogru: false }
+        { metin: "\\( A \\wedge \\neg B \\)", dogru: false },
+        { metin: "\\( \\neg A \\vee B \\)", dogru: false }
       ],
-      donut: "Bağlaç VEYA işlemine dönüşür."
+      donut: "De Morgan: ¬(A ∧ B) ≡ ¬A ∨ ¬B, bağlaç VEYA olur."
     }
   ];
 
-  function karistir(dizi) {
-    var d = dizi.slice();
-    for (var i = d.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var gecici = d[i];
-      d[i] = d[j];
-      d[j] = gecici;
-    }
-    return d;
+  // Sahne soruya eşlenir; sahnedeki cevap yazıları yalnız o soru cevaplanınca açılır.
+  var CEVAP_YAZI = ["Koşul: ∃x (Tükendi)", "Şart: Sol ∧ Sağ", "Sapma: VEYA Genişletti",
+                    "Davranış: Erken Çıkış", "Denk: ¬A ∨ ¬B"];
+  var ilkYazi = [];
+  for (var k = 0; k < SORULAR.length; k++) {
+    var el0 = kok.querySelector("#s7-durum-s" + (k + 1));
+    ilkYazi.push(el0 ? el0.textContent : "");
   }
-
-  var aktifIndex = 0;
-  var dogruSayisi = 0;
-  var secilenSecenek = null;
-  var cevaplandi = false;
-  var aktifKarisik = [];
-
-  var soruNumaraEl = kok.querySelector("#s7-soru-numara");
-  var puanDurumEl = kok.querySelector("#s7-puan-durum");
-  var soruYaziEl = kok.querySelector("#s7-soru-yazi");
-  var secenekKutusu = kok.querySelector("#s7-secenek-kutusu");
-  var eylemBtn = kok.querySelector("#s7-eylem-btn");
-  var soruKarti = kok.querySelector(".s7-soru-karti");
-
-  function soruGoster() {
-    cevaplandi = false;
-    secilenSecenek = null;
-    var soru = SORULAR[aktifIndex];
-
-    if (soruNumaraEl) soruNumaraEl.textContent = "Soru " + (aktifIndex + 1) + " / " + SORULAR.length;
-    if (puanDurumEl) puanDurumEl.textContent = "Doğru: " + dogruSayisi + " / " + SORULAR.length;
-    if (soruYaziEl) soruYaziEl.innerHTML = soru.metin;
-
-    var harfler = ["A", "B", "C", "D"];
-    aktifKarisik = karistir(soru.secenekler);
-    if (secenekKutusu) {
-      var html = "";
-      aktifKarisik.forEach(function (sec, idx) {
-        html += '<button class="parca-btn" type="button" data-deger="' + idx + '">' +
-          '<span class="kutucuk">' + harfler[idx] + '</span>' +
-          '<span class="s7-sec-yazi">' + sec.metin + '</span>' +
-          '</button>';
-      });
-      secenekKutusu.innerHTML = html;
-    }
-
-    EGITSEL.secimGrubu(kok, ".parca-btn", function (el, deger) {
-      if (cevaplandi) return;
-      secilenSecenek = parseInt(deger, 10);
-    });
-
-    if (eylemBtn) {
-      eylemBtn.textContent = "Kontrol Et";
-      eylemBtn.className = "buton birincil";
-      eylemBtn.disabled = false;
-    }
-
+  var cevaplananlar = {};
+  function sahneGuncelle(idx) {
     var gruplar = kok.querySelectorAll(".s7-sahne-grup");
     for (var g = 0; g < gruplar.length; g++) {
-      gruplar[g].style.display = (g === aktifIndex) ? "inline" : "none";
+      gruplar[g].style.display = (g === idx) ? "inline" : "none";
     }
-
-    if (window.MathJax) {
-      if (MathJax.typesetPromise) {
-        MathJax.typesetPromise([kok.querySelector(".s7-soru-karti")]);
-      } else if (MathJax.typeset) {
-        MathJax.typeset([kok.querySelector(".s7-soru-karti")]);
-      }
+    for (var i = 0; i < SORULAR.length; i++) {
+      var el = kok.querySelector("#s7-durum-s" + (i + 1));
+      if (el) { el.textContent = cevaplananlar[i] ? CEVAP_YAZI[i] : ilkYazi[i]; }
     }
+    var esdeger = kok.querySelector("#s7-esdeger-yazi");
+    if (esdeger) { esdeger.textContent = cevaplananlar[4] ? "¬A ∨ ¬B" : "?"; }
   }
 
-  if (eylemBtn) {
-    eylemBtn.addEventListener("click", function () {
-      if (aktifIndex === -1) {
-        aktifIndex = 0;
-        dogruSayisi = 0;
-        if (soruKarti) {
-          soruKarti.innerHTML = '<div class="s7-meta-serit" aria-live="polite">' +
-            '<span class="etiket" id="s7-soru-numara">Soru 1 / 5</span>' +
-            '<span class="kucuk-not" id="s7-puan-durum">Doğru: 0 / 5</span>' +
-            '</div>' +
-            '<p class="s7-soru-metin" id="s7-soru-yazi"></p>' +
-            '<div class="s7-secenekler" id="s7-secenek-kutusu"></div>';
-          soruNumaraEl = kok.querySelector("#s7-soru-numara");
-          puanDurumEl = kok.querySelector("#s7-puan-durum");
-          soruYaziEl = kok.querySelector("#s7-soru-yazi");
-          secenekKutusu = kok.querySelector("#s7-secenek-kutusu");
-        }
-        soruGoster();
-        return;
-      }
-
-      if (!cevaplandi) {
-        if (secilenSecenek === null) {
-          if (window.SABLON_TOAST) {
-            window.SABLON_TOAST("Lütfen bir seçenek işaretleyin.");
-          }
-          return;
-        }
-
-        cevaplandi = true;
-        EGITSEL.kilitle(kok, ".parca-btn", true);
-
-        var btnler = kok.querySelectorAll(".parca-btn");
-        var dogruIdx = -1;
-        for (var k = 0; k < aktifKarisik.length; k++) {
-          if (aktifKarisik[k].dogru) { dogruIdx = k; break; }
-        }
-
-        var secilenDogruMu = (secilenSecenek === dogruIdx);
-        if (secilenDogruMu) {
-          dogruSayisi++;
-          if (btnler[secilenSecenek]) btnler[secilenSecenek].classList.add("dogru-secim");
-          EGITSEL.dontVer(kok, "dogru", "Doğru! " + SORULAR[aktifIndex].donut);
-          if (puanDurumEl) puanDurumEl.textContent = "Doğru: " + dogruSayisi + " / " + SORULAR.length;
-        } else {
-          if (btnler[secilenSecenek]) btnler[secilenSecenek].classList.add("yanlis-secim");
-          if (dogruIdx >= 0 && btnler[dogruIdx]) btnler[dogruIdx].classList.add("dogru-secim");
-          EGITSEL.dontVer(kok, "yanlis", "Yanlış. " + SORULAR[aktifIndex].donut);
-        }
-
-        var durumEl = kok.querySelector("#s7-durum-s" + (aktifIndex + 1));
-        if (durumEl) {
-          if (aktifIndex === 0) durumEl.textContent = "Koşul: ∃x (Tükendi)";
-          else if (aktifIndex === 1) durumEl.textContent = "Şart: Sol ∧ Sağ";
-          else if (aktifIndex === 2) durumEl.textContent = "Sapma: VEYA Genişletti";
-          else if (aktifIndex === 3) durumEl.textContent = "Davranış: Erken Çıkış";
-          else if (aktifIndex === 4) {
-            durumEl.textContent = "Denk: ¬A ∨ ¬B";
-            var esdegerYazi = kok.querySelector("#s7-esdeger-yazi");
-            if (esdegerYazi) esdegerYazi.textContent = "¬A ∨ ¬B";
-          }
-        }
-
-        if (aktifIndex < SORULAR.length - 1) {
-          eylemBtn.textContent = "Sonraki Soru";
-          eylemBtn.className = "buton birincil";
-        } else {
-          eylemBtn.textContent = "Sonuçları Gör";
-          eylemBtn.className = "buton birincil";
-        }
-      } else {
-        if (aktifIndex < SORULAR.length - 1) {
-          aktifIndex++;
-          soruGoster();
-        } else {
-          if (soruKarti) {
-            var basari = (dogruSayisi >= 4);
-            soruKarti.innerHTML = '<div class="s7-sonuc-kutusu">' +
-              '<span class="etiket">Değerlendirme Tamamlandı</span>' +
-              '<div class="buyuk-sayi">' + dogruSayisi + ' / ' + SORULAR.length + '</div>' +
-              '<p>' + (basari ? 'Tebrikler! Mantık bağlaçları ve niceleyicileri başarıyla çözümlediniz.' : 'Konuyu pekiştirmek için testi tekrar çözebilirsiniz.') + '</p>' +
-              '</div>';
-          }
-          eylemBtn.textContent = "Testi Tekrar Başlat";
-          eylemBtn.className = "buton";
-          cevaplandi = false;
-          aktifIndex = -1;
-        }
-      }
-    });
-  }
-
-  soruGoster();
+  // Değerlendirme mekaniği şablonun ortak motorundadır (MathJax dizgisi dahil —
+  // bu yorumdaki «MathJax» sözcüğü montajın tex-svg gömme tetiğidir, silme):
+  // soru numaralarıyla ileri-geri gezinme, soru başına 2 hak, 5 şık, sonuç ekranı ve Tekrar Çöz.
+  EGITSEL.degerlendirme(kok, {
+    sorular: SORULAR,
+    hak: 2,
+    soruDegisti: function (i) {
+      // «Tekrar Çöz» tam sıfırlar: hiçbir soru cevaplı değilse sahne yazıları da kapanır.
+      if (i === 0 && !kok.querySelector(".deg-nokta.dogru, .deg-nokta.yanlis")) { cevaplananlar = {}; }
+      sahneGuncelle(i);
+    },
+    cevaplandi: function (i) {
+      cevaplananlar[i] = true;
+      sahneGuncelle(i);
+    }
+  });
 };
 </script>
 
@@ -5367,7 +5451,7 @@ window.SAYFA_INIT[7] = function (kok) {
 
 </div>
 
-<script src="ortak/af6c3e0e5c88b10b.js"></script>
+<script src="ortak/5502b187d230dc11.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 </body>
