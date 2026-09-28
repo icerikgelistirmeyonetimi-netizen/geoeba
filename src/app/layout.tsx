@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/state/ThemeContext';
 import { CurriculumProvider } from '@/state/CurriculumContext';
 import { WorkspaceProvider } from '@/state/WorkspaceContext';
 import { Header } from '@/components/layout/Header';
+import { yaziTipiKurallari } from './yaziTipleri';
 
 export const metadata: Metadata = {
   title: 'GeoEBA - Etkileşimli Matematik ve Geometri Platformu',
@@ -27,6 +28,8 @@ export default function RootLayout({
     <html lang="tr" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Düzenlenmiş Manrope / Fraunces kesimleri (tek katlı a): public/fonts, yaziTipleri.ts */}
+        <style dangerouslySetInnerHTML={{ __html: yaziTipiKurallari() }} />
       </head>
       <body className="min-h-screen bg-background text-foreground antialiased selection:bg-primary/20">
         <ThemeProvider>
