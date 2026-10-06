@@ -15,6 +15,7 @@ import { StylePanel } from './StylePanel';
 import { EsitUzunluklarSimgesi } from './EsitlikSimgeleri';
 import { KademeDuzeyiMenusu } from './KademeDuzeyiMenusu';
 import { aracGorunurMu, kademeEtiketi } from './kademeDuzeyleri';
+import { gorunenKisayol } from './ilkokulKipi';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import {
   FileText,
@@ -83,9 +84,14 @@ export interface WorkspaceMenuBarProps {
 
 type MenuKey = 'dosya' | 'duzenle' | 'gorunum' | 'araclar' | 'ekle' | 'ayarlar' | 'yardim' | 'kademe' | null;
 
-/** Menüdeki araç kısayolu ipucu: harf elle yazılmaz, klavyenin gerçek bağından (TOOL_SHORTCUTS) okunur. */
+/**
+ * Menüdeki araç kısayolu ipucu: harf elle yazılmaz, klavyenin gerçek bağından (TOOL_SHORTCUTS) okunur.
+ * İlkokulda gösterilmez (alan uzmanı: kısayol harfleri ilkokul öğrencisi için gerekli değil); kısayol çalışır.
+ */
 function AracKisayolu({ arac }: { arac: ToolMode }) {
-  return <span className="text-[10px] text-muted-foreground whitespace-nowrap">{TOOL_SHORTCUTS[arac]}</span>;
+  const [kademe] = useKademeDuzeyi();
+  const harf = gorunenKisayol(arac, kademe);
+  return harf ? <span className="text-[10px] text-muted-foreground whitespace-nowrap">{harf}</span> : null;
 }
 
 export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
@@ -174,6 +180,8 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   // Araçlar menüsü de araç paneli gibi seçili kademenin araçlarını gösterir (Kademe menüsü)
   const [kademeDuzeyi] = useKademeDuzeyi();
   const aracMenudeGorunur = (arac: ToolMode) => aracGorunurMu(kademeDuzeyi, arac);
+  // İlkokulda koordinat ekseni, nokta koordinatları ve bölge adları zemin seçeneklerinde sunulmaz (ilkokulKipi.ts)
+  const ilkokul = kademeDuzeyi === 'ilkokul';
 
   // Menü dışına tıklanınca kapat
   useEffect(() => {
@@ -694,6 +702,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   {viewport.showGrid && <Check className="w-3.5 h-3.5 text-primary" />}
                 </button>
 
+                {!ilkokul && (
                 <button
                   onClick={() => {
                     setViewport((prev) => ({ ...prev, showAxes: !prev.showAxes }));
@@ -706,6 +715,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   </div>
                   {viewport.showAxes && <Check className="w-3.5 h-3.5 text-primary" />}
                 </button>
+                )}
 
                 <div className="my-1 border-t border-border/60" />
 
@@ -1043,6 +1053,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   {viewport.showGrid && <Check className="w-3.5 h-3.5 text-primary" />}
                 </button>
 
+                {!ilkokul && (
                 <button
                   onClick={() => {
                     setViewport((prev) => ({ ...prev, showAxes: !prev.showAxes }));
@@ -1055,7 +1066,9 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   </div>
                   {viewport.showAxes && <Check className="w-3.5 h-3.5 text-primary" />}
                 </button>
+                )}
 
+                {!ilkokul && (
                 <button
                   onClick={() => {
                     setViewport((prev) => ({ ...prev, showCoordinates: !prev.showCoordinates }));
@@ -1068,7 +1081,9 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   </div>
                   {viewport.showCoordinates && <Check className="w-3.5 h-3.5 text-primary" />}
                 </button>
+                )}
 
+                {!ilkokul && (
                 <button
                   onClick={() => {
                     setViewport((prev) => ({ ...prev, showQuadrants: !prev.showQuadrants }));
@@ -1081,6 +1096,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   </div>
                   {viewport.showQuadrants && <Check className="w-3.5 h-3.5 text-primary" />}
                 </button>
+                )}
 
                 <button
                   onClick={() => {
@@ -1684,6 +1700,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                       </div>
 
                       {/* Eksenler */}
+                      {!ilkokul && (
                       <label className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                         <div className="flex items-center gap-2.5">
                           <Compass className="w-4 h-4 text-ada-vurgu" />
@@ -1703,8 +1720,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                           <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                         )}
                       </label>
+                      )}
 
                       {/* Nokta Koordinatları */}
+                      {!ilkokul && (
                       <label className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                         <div className="flex items-center gap-2.5">
                           <Maximize className="w-4 h-4 text-ada-deniz dark:text-ada-vurgu" />
@@ -1724,8 +1743,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                           <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                         )}
                       </label>
+                      )}
 
                       {/* Bölge İsimleri */}
+                      {!ilkokul && (
                       <label className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">
                         <div className="flex items-center gap-2.5">
                           <Grid2x2 className="w-4 h-4 text-ada-altin" />
@@ -1745,6 +1766,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                           <div className="w-5 h-5 rounded-md border-2 border-border bg-card shrink-0" />
                         )}
                       </label>
+                      )}
 
                       {/* Siyah-Beyaz Mod */}
                       <label className="flex items-center justify-between p-2.5 rounded-xl bg-card border border-border hover:border-primary/50 cursor-pointer transition-all shadow-xs select-none">

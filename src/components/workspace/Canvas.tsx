@@ -162,6 +162,8 @@ import { eksenSayilariniYerlestir, tuvalEngelleri, type EksenCentigi } from './e
 import { useTheme } from '@/state/ThemeContext';
 import { KayanCubuk, CubukMetni, CubukAyirici, CubukDugmesi } from './KayanCubuk';
 import { aracYonergesi } from './aracYonergeleri';
+import { useIlkokulKipi } from '@/hooks/useKademeDuzeyi';
+import { ilkokulSimetriDogrusu, ilkokulUzunlukMetni, type SimetriYonu } from './ilkokulKipi';
 import { aciEtiketiUzakta, cizgiCercevesi, cizgiEtiketiUzakta, etiketAcisi, etiketDondurme, kenarEkseninden, kenarEksenine, yayEtiketiYerlesimi, type YayEtiketGeometrisi } from './olcuEtiketi';
 import { MatematikEtiketi, type EtiketRengi, type KutuStili } from './MatematikEtiketi';
 import { MatematikMetni } from './MatematikMetni';
@@ -329,6 +331,9 @@ export function Canvas({
 
   const { selectedLevel, selectedGrade, isFreeSandbox, selectedActivity } = useCurriculum();
   const isPrimary = selectedLevel?.id === 'ilkokul' || (selectedGrade && selectedGrade.gradeNumber <= 4);
+  // İlkokul kipi (Kademe: İlkokul; 1-4. sınıf etkinliği): tam sayı ölçü, imleç koordinatı yok, eksen seçeneği yok,
+  // yansıtma yalnız şekil seçtirir (alan uzmanları, 2. tur; ilkokulKipi.ts)
+  const ilkokul = useIlkokulKipi();
 
   const {
     objectClipboard, setObjectClipboard,
@@ -469,6 +474,8 @@ export function Canvas({
   const [dragCreateCurrent, setDragCreateCurrent] = useState<Point2D | null>(null);
   const [rotatingFeedback, setRotatingFeedback] = useState<{ shapeId: string; deg: number } | null>(null);
   const [reflectTargetPolyId, setReflectTargetPolyId] = useState<string | null>(null);
+  /** İlkokul yansıtmasında simetri doğrusunun yönü (şeklin yanına dikey ya da yatay konur) */
+  const [ilkokulSimetriYonu, setIlkokulSimetriYonu] = useState<SimetriYonu>('dikey');
   const [reflectAxisLine, setReflectAxisLine] = useState<{ id: string; p1: Point2D; p2: Point2D; name: string } | null>(null);
 
   // Serbest Çizim (Kalem) Durumu
@@ -951,8 +958,8 @@ export function Canvas({
   // EŞİTLİK İŞARETLERİ (|, ||, |||): birbirine değen şekillerde eşit uzunluk/yaylar + elle konanlar.
   // Yalnız nesneler ve aç/kapa değişince hesaplanır; kaydırma/yakınlaştırma yeniden gruplamaz (viewport'a bağlı DEĞİL).
   const esitlik = useMemo(
-    () => esitlikIsaretleri(objects, { otomatik: viewport.showEqualityMarks !== false, tamSayi: styleSettings.tamSayiOlcu === true }),
-    [objects, viewport.showEqualityMarks, styleSettings.tamSayiOlcu]
+    () => esitlikIsaretleri(objects, { otomatik: viewport.showEqualityMarks !== false, tamSayi: styleSettings.tamSayiOlcu === true || ilkokul }),
+    [objects, viewport.showEqualityMarks, styleSettings.tamSayiOlcu, ilkokul]
   );
   // Çentiğin altında kalmaması gereken noktalar. DİZİ: StrictMode render'ı aynı props ile iki kez çağırır,
   // tek kullanımlık bir yineleyici (pointsById.values()) ikinci çağrıda boş gelirdi.
@@ -1545,7 +1552,11 @@ export function Canvas({
 
   // ------------------------------------------------------------------ ÖLÇÜ YAZIMI (MEB) ÖN GEÇİŞİ
   /** Kullanıcının ölçü/açı yazımı ayarı: Tam/Kısa ve şapka / ∠ (src/math/matematikYazimi.ts). */
-  const yazim = useMemo(() => yazimAyari(styleSettings), [styleSettings]);
+  // İlkokulda ölçüler hep TAM sayı (alan uzmanları: "ondalık kesir kullanılmamalı"), ayar kapalı olsa da
+  const yazim = useMemo(() => {
+    const y = yazimAyari(styleSettings);
+    return ilkokul ? { ...y, tamSayi: true } : y;
+  }, [styleSettings, ilkokul]);
   /** Nokta arayıcı: yazım kuralları nesnenin .label'ını değil, GÖRÜNEN nokta adlarını kullanır. */
   const noktaBul = useMemo(() => noktaBulucu(pointsById), [pointsById]);
 
@@ -2780,6 +2791,8 @@ export function Canvas({
             },
           ]
         : [];
+      // İlkokulda zemin seçeneklerinde koordinat ekseni sunulmaz (kareli, noktalı, izometrik kalır)
+      if (ilkokul) bostaMaddeler.splice(bostaMaddeler.findIndex((m) => m.id === 'eksenleri-goster'), 1);
       if (izMaddesi.length) bostaMaddeler[0] = { ...bostaMaddeler[0], separatorBefore: true };
       return [...izMaddesi, ...(objectClipboard?.objects.length ? [pasteItem] : []), ...bostaMaddeler];
     }
@@ -3384,8 +3397,9 @@ export function Canvas({
       }
 
       maddeler.push({ id: 'ic-dis-aci', label: 'İç açı / dış açı', onSelect: () => toggleAngleReflex(ang.id) });
-      // Rozete tıklamak dışında garantili bir çıkış yolu: menüden de gizlenebilsin
-      maddeler.push({
+      // Rozete tıklamak dışında garantili bir çıkış yolu: menüden de gizlenebilsin.
+      // İlkokulda açı değeri (derece) açılmaz: açıölçerle ölçme yok (TYMM)
+      if (!ilkokul || ang.showValue !== false) maddeler.push({
         id: 'aci-deger-gorunurluk',
         label: ang.showValue === false ? 'Açı değerini göster' : 'Açı değerini gizle',
         onSelect: () =>
@@ -3720,6 +3734,12 @@ export function Canvas({
         setReflectTargetPolyId(poly.id);
         setSelectedObjectId(poly.id);
 
+        // İlkokul: yalnız şekil seçilir; simetriği seçili yöndeki simetri doğrusuna göre hemen çizilir
+        if (ilkokul) {
+          ilkokulSimetrisiniCiz(poly, ilkokulSimetriYonu);
+          return;
+        }
+
         if (reflectAxisLine) {
           reflectPolygonAcrossSymmetryLine(poly, reflectAxisLine.p1, reflectAxisLine.p2, reflectAxisLine.name);
           setReflectAxisLine(null);
@@ -4018,7 +4038,8 @@ export function Canvas({
     targetPoly: PolygonObject,
     p1: Point2D,
     p2: Point2D,
-    axisName: string
+    axisName: string,
+    secenek: { ek?: MathObject[]; aciklama?: string } = {}
   ) => {
     const polyPoints = targetPoly.pointIds.map((id) => pointsById.get(id)).filter(Boolean) as PointObject[];
 
@@ -4044,7 +4065,40 @@ export function Canvas({
       createdAt: Date.now(),
     };
 
-    addObjects([...newPts, symPoly], `${targetPoly.label || 'Çokgen'}, ${axisName} eksenine göre yansıtıldı`);
+    addObjects(
+      [...newPts, symPoly, ...(secenek.ek ?? [])],
+      secenek.aciklama ?? `${targetPoly.label || 'Çokgen'}, ${axisName} eksenine göre yansıtıldı`
+    );
+  };
+
+  /**
+   * İlkokul yansıtması: simetri doğrusu şeklin yanına (dikey: sağ kenar, yatay: alt kenar; ızgara çizgisinde) kesikli
+   * çizgiyle çizilir ve şeklin simetriği doğrunun öbür yanına eklenir. "x ekseni" yok (alan uzmanı, 3. sınıf).
+   */
+  const ilkokulSimetrisiniCiz = (poly: PolygonObject, yon: SimetriYonu) => {
+    const koseler = poly.pointIds.map((id) => pointsById.get(id)).filter(Boolean) as PointObject[];
+    if (koseler.length < 3) return;
+    const { p1, p2 } = ilkokulSimetriDogrusu(koseler, yon);
+    const [la, lb] = generateNextPointLabels(existingPointLabels(), 2);
+    const uc1: PointObject = { ...makePoint(la, p1.x, p1.y, '#9333ea'), showLabel: false, visible: false };
+    const uc2: PointObject = { ...makePoint(lb, p2.x, p2.y, '#9333ea'), showLabel: false, visible: false };
+    const dogru: SegmentObject = {
+      id: createId('seg'),
+      type: 'segment',
+      label: 'Simetri doğrusu',
+      showLabel: false,
+      startPointId: uc1.id,
+      endPointId: uc2.id,
+      color: '#9333ea',
+      style: 'dashed',
+      thickness: 2,
+      visible: true,
+      createdAt: Date.now(),
+    };
+    reflectPolygonAcrossSymmetryLine(poly, p1, p2, 'simetri doğrusu', {
+      ek: [uc1, uc2, dogru],
+      aciklama: `${poly.label || 'Şekil'}: simetri doğrusuna göre simetriği çizildi`,
+    });
   };
 
   // Zoom Hızlı Eylemleri (görünüm merkezi etrafında)
@@ -4178,7 +4232,7 @@ export function Canvas({
             aria-label="Seç ve Taşı"
             aria-keyshortcuts="V"
             aria-pressed={activeTool === 'select'}
-            title="Seç ve Taşı (V)"
+            title={ilkokul ? 'Seç ve Taşı' : 'Seç ve Taşı (V)'}
             className={`relative w-9 h-9 shrink-0 rounded-xl flex items-center justify-center border shadow-sm backdrop-blur-md transition-colors cursor-pointer ${
               activeTool === 'select'
                 ? 'bg-primary border-primary text-primary-foreground'
@@ -4186,7 +4240,8 @@ export function Canvas({
             }`}
           >
             <MousePointer className="w-5 h-5" />
-            <kbd className="absolute bottom-0.5 right-1 text-[8px] leading-none opacity-75">V</kbd>
+            {/* İlkokulda kısayol harfi gösterilmez (kısayol çalışır) */}
+            {!ilkokul && <kbd className="absolute bottom-0.5 right-1 text-[8px] leading-none opacity-75">V</kbd>}
           </button>
           {/* Görünümü Kaydır (El): imlecin hemen yanında */}
           <button
@@ -6101,6 +6156,7 @@ export function Canvas({
                     y2={s2.y}
                     stroke={isSelected ? '#ec4899' : seg.color || '#0284c7'}
                     strokeWidth={sw(isSelected ? (seg.thickness || 2.5) + 1.5 : seg.thickness || 2.5)}
+                    strokeDasharray={seg.style === 'dashed' ? '8 6' : seg.style === 'dotted' ? '2 5' : undefined}
                     strokeLinecap="round"
                     className="hover:opacity-80 transition-all"
                   />
@@ -7638,7 +7694,7 @@ export function Canvas({
                   fill="#ffffff"
                   className="font-bold text-xs font-sans tracking-wide"
                 >
-                  {formatTurkishNumber(dist)} {isCm ? 'cm' : 'br'}
+                  {ilkokul ? ilkokulUzunlukMetni(dist, isCm ? 'cm' : 'br') : `${formatTurkishNumber(dist)} ${isCm ? 'cm' : 'br'}`}
                 </text>
               </g>
             </g>
@@ -7734,8 +7790,35 @@ export function Canvas({
       </svg>
 
 
+      {/* İLKOKUL SİMETRİ ÇUBUĞU: yalnız şekil seçilir; simetri doğrusu dikey ya da yatay (eksen düğmesi yok) */}
+      {['reflect', 'symmetry'].includes(activeTool) && ilkokul && (() => {
+        const hedefId = reflectTargetPolyId || selectedObjectId;
+        const sekil = objects.find((o) => o.id === hedefId && o.type === 'polygon') as PolygonObject | undefined;
+        const yonSec = (yon: SimetriYonu) => {
+          setIlkokulSimetriYonu(yon);
+          if (sekil) ilkokulSimetrisiniCiz(sekil, yon);
+        };
+        return (
+          <KayanCubuk konum="ust" data-yansitma-cubugu data-ilkokul-simetri>
+            <CubukMetni
+              vurgu="lavanta"
+              simge={<FlipHorizontal2 className="w-4 h-4" />}
+              baslik="Simetri"
+              aciklama={sekil ? 'Simetri doğrusunu seç' : 'Simetriğini çizmek istediğin şekle dokun'}
+            />
+            <CubukAyirici />
+            <CubukDugmesi tur={ilkokulSimetriYonu === 'dikey' ? 'birincil' : 'normal'} aria-pressed={ilkokulSimetriYonu === 'dikey'} onClick={() => yonSec('dikey')}>
+              Dikey simetri doğrusu
+            </CubukDugmesi>
+            <CubukDugmesi tur={ilkokulSimetriYonu === 'yatay' ? 'birincil' : 'normal'} aria-pressed={ilkokulSimetriYonu === 'yatay'} onClick={() => yonSec('yatay')}>
+              Yatay simetri doğrusu
+            </CubukDugmesi>
+          </KayanCubuk>
+        );
+      })()}
+
       {/* YANSITMA VE SİMETRİ EKSENİ SEÇİM ÇUBUĞU */}
-      {['reflect', 'symmetry'].includes(activeTool) && (() => {
+      {['reflect', 'symmetry'].includes(activeTool) && !ilkokul && (() => {
         const reflectTargetId = reflectTargetPolyId || selectedObjectId;
         const targetPoly = objects.find((o) => o.id === reflectTargetId && o.type === 'polygon') as
           | PolygonObject
@@ -7768,7 +7851,7 @@ export function Canvas({
 
       {/* 4. ARAÇ YÖNERGE ÇUBUĞU: simge rozeti + başlık · açıklama (emoji yok; metinler aracYonergeleri.ts) */}
       {(() => {
-        const yonerge = aracYonergesi(activeTool, pendingPointIds.length);
+        const yonerge = aracYonergesi(activeTool, pendingPointIds.length, { ilkokul });
         if (!yonerge) return null;
         return (
           <KayanCubuk konum="alt" data-yonerge-cubugu>
@@ -7855,10 +7938,15 @@ export function Canvas({
 
       {/* Alt bilgi: köşede yalın metin — çubuk/kutu yok (kullanıcı isteği) */}
       <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 text-[11px] font-medium leading-none text-muted-foreground select-none pointer-events-none">
-        <span>
-          İmleç <span className="font-mono text-foreground">{formatCoordinate(mouseWorldPos)}</span>
-        </span>
-        <span aria-hidden="true">·</span>
+        {/* İlkokulda ondalık imleç konumu gösterilmez (koordinat düzlemi yok) */}
+        {!ilkokul && (
+          <>
+            <span>
+              İmleç <span className="font-mono text-foreground">{formatCoordinate(mouseWorldPos)}</span>
+            </span>
+            <span aria-hidden="true">·</span>
+          </>
+        )}
         <span>
           Ölçek <span className="font-mono text-foreground">%{Math.round((viewport.zoom / DEFAULT_ZOOM) * 100)}</span>
         </span>

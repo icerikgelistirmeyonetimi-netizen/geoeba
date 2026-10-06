@@ -20,7 +20,7 @@ import { AkisSemasi } from './AkisSemasi';
 import { SozdeKodGorunumu } from './SozdeKodGorunumu';
 import { GOREV_TURU_ADI, type Gorev, type KodGorunumu, type Unite } from './gorev';
 import { UNITELER, sinifGruplari, uniteBul } from './mufredat';
-import { gorevGuncelle, gorevKaydi, gorevKodu, kaydiYaz, kaydiYukle, uniteGuncelle, uniteIlerlemesi, uniteKaydi, type LabKaydi } from './kayit';
+import { gorevGuncelle, gorevKaydi, gorevKodu, ilkEksikGorev, kaydiYaz, kaydiYukle, uniteGuncelle, uniteIlerlemesi, uniteKaydi, type LabKaydi } from './kayit';
 import { blokSayisi, bloklar, sayiMetni, type Program } from './program';
 import { izgara, koordinatlar } from './dunya';
 import { calistir, type Iz } from './yorumlayici';
@@ -165,6 +165,8 @@ function GorevEkrani({
 
   // Ünitenin bütün zorunlu görevleri tamam → ünite sonu (bir kez)
   const ilerleme = uniteIlerlemesi(kayit, unite);
+  // Ünitede tamamlanmamış ilk zorunlu görev (yoksa null): son görev bitip ünite bitmediyse oraya yönlendirilir
+  const eksikGorev = ilkEksikGorev(kayit, unite);
   useEffect(() => {
     if (ilerleme.tamam === ilerleme.toplam && !uk.bitti) {
       setKayit((k) => uniteGuncelle(k, unite.id, (u) => ({ ...u, bitti: true })));
@@ -377,6 +379,18 @@ function GorevEkrani({
         {gk.tamam && sira < unite.gorevler.length - 1 && (
           <button type="button" onClick={() => gorevSec(sira + 1)} className={`${DUGME} bg-primary text-primary-foreground hover:bg-primary/90`} data-sonraki-gorev>
             Sonraki görev <SIMGE.ok className="h-4 w-4" />
+          </button>
+        )}
+        {/* Son görev bitti ama ünitede eksik görev var: hangisi olduğunu söyle, oraya götür (ünite kartı "tamamlanmadı" gösterir) */}
+        {gk.tamam && sira === unite.gorevler.length - 1 && eksikGorev !== null && eksikGorev !== sira && (
+          <button
+            type="button"
+            onClick={() => gorevSec(eksikGorev)}
+            className={`${DUGME} bg-ada-fener/20 text-foreground hover:bg-ada-fener/30`}
+            title={`Ünitenin bitmesi için ${eksikGorev + 1}. görev de tamamlanmalı`}
+            data-eksik-gorev={eksikGorev + 1}
+          >
+            Eksik: {eksikGorev + 1}. görev <SIMGE.ok className="h-4 w-4" />
           </button>
         )}
         <button type="button" onClick={() => setNotAcik(true)} className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Öğretmen notu" title="Öğretmen notu" data-ogretmen-notu-dugmesi>

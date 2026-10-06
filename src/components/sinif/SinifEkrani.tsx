@@ -19,6 +19,7 @@ import React, {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useReducer,
   useRef,
   useState,
@@ -36,7 +37,8 @@ import {
   pencereKatmani,
   type PencereKonumu,
 } from "./akis";
-import { CIZIM_KIMLIGI, UYGULAMALAR, uygulamaBul } from "./uygulamalar";
+import { CIZIM_KIMLIGI, kademeninUygulamalari, uygulamaBul } from "./uygulamalar";
+import { useIlkokulKipi } from "@/hooks/useKademeDuzeyi";
 import { homografi, type Kose } from "./homografi";
 import s from "./sinif.module.css";
 
@@ -159,6 +161,15 @@ export interface SinifEkraniProps {
 
 export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
   const [d, gonder] = useReducer(akisIndirgeyici, BASLANGIC_DURUMU);
+  // İlkokul kademesinde Olasılık Laboratuvarı masaüstünde yok (alan uzmanları, 2. tur; uygulamalar.tsx)
+  const ilkokul = useIlkokulKipi();
+  const gorunenUygulamalar = useMemo(() => kademeninUygulamalari(ilkokul), [ilkokul]);
+  useEffect(() => {
+    // İlkokula geçilince açık kalmış gizli uygulamanın penceresi kapanır
+    for (const p of d.pencereler) {
+      if (!gorunenUygulamalar.some((u) => u.id === p.id)) gonder({ tur: "PENCERE_KAPAT", id: p.id });
+    }
+  }, [gorunenUygulamalar, d.pencereler]);
   const dRef = useRef(d);
   dRef.current = d;
 
@@ -589,7 +600,7 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
         )}
         {masaustunde(d.faz) && (
           <Masaustu
-            uygulamalar={UYGULAMALAR}
+            uygulamalar={gorunenUygulamalar}
             pencereler={d.pencereler}
             ondeki={ondekiId}
             baslatMenusu={d.baslatMenusu}

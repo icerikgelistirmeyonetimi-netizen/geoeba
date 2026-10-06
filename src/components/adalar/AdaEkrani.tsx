@@ -5,7 +5,7 @@
  *
  * `ana-sayfa`: üç kademe adası ve Matematik Atölyesi. Adaya tıklamak o kademenin adasını,
  * atölye Serbest Çizim Stüdyosu'nu açar. Kademe adasında sınıf binasına ya da alttaki
- * sınıf düğmesine tıklamak sağda o sınıfın ünitelerini listeleyen paneli açar; ünitenin
+ * sınıf düğmesine tıklamak sağda o sınıfın temalarını (TYMM; veride "theme") listeleyen paneli açar; temanın
  * konusu seçilince panel sola doğru genişler ve konunun içeriği panelin içinde açılır
  * (sol üstteki başlık yazıları ve alttaki düğmeler bu sürede çekilir).
  *
@@ -24,6 +24,8 @@ import {
   sahneSinifKimligi,
   sinifAdi,
   sinifNumarasi,
+  temaBilgisi,
+  temaSayisiMetni,
   uniteAdi,
   type AdaSayfasiKimligi,
 } from './adaEslemeleri';
@@ -477,7 +479,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
     await gecis(() => geriCagirmalar.current.onKademeSec(hedef));
   }
 
-  /** Sınıf binası ya da düğmesi: sağda ünite panelini açar, kamera binaya yaklaşır. */
+  /** Sınıf binası ya da düğmesi: sağda tema panelini açar, kamera binaya yaklaşır. */
   function sinifaGit(sinif: GradeId) {
     if (gidiliyor.current) return;
     const kimlik = sahneSinifKimligi(sinif);
@@ -493,7 +495,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
     setAcikUnite(null);
     setPanelAcik(true);
     const uniteSayisi = sinifUniteleri(sinif).length;
-    setCanli(`${sinifAdi(sinif)}: ${uniteSayisi} ünite listelendi.`);
+    setCanli(`${sinifAdi(sinif)}: ${temaSayisiMetni(uniteSayisi)} listelendi.`);
     const sahne = sahneRef.current;
     if (sahne && !yalin) {
       sahne.kilitle(kimlik);
@@ -563,7 +565,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
     setCanli(`${konu.title} açıldı.`);
   }
 
-  /** İçeriği kapatır; panel ünite listesi boyutuna döner, odak seçilen konuya geri verilir. */
+  /** İçeriği kapatır; panel tema listesi boyutuna döner, odak seçilen konuya geri verilir. */
   function icerigiKapat() {
     if (!icerik) return;
     panelGeometrisiDegisecek();
@@ -720,7 +722,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
           )}
           <h1 className={s.baslik}>{ANA ? 'Matematik Takımadaları' : kademe?.baslik}</h1>
           <p className={s.aciklama}>
-            {ANA ? 'Matematiğin yeni rotası' : `${kademe?.aralik} · Ünitelerini görmek için bir sınıf seç.`}
+            {ANA ? 'Matematiğin yeni rotası' : `${kademe?.aralik} · Temalarını görmek için bir sınıf seç.`}
           </p>
         </div>
         {!ANA && (
@@ -862,10 +864,10 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
                   <h2 id="ada-panel-basligi" className={s['panel-baslik']}>
                     {sinifAdi(panelSinif)}
                   </h2>
-                  <p className={s['panel-sayi']}>{paneldekiUniteler.length} ünite</p>
+                  <p className={s['panel-sayi']}>{temaSayisiMetni(paneldekiUniteler.length)}</p>
                 </div>
               </div>
-              <ul className={s['unite-listesi']} aria-label={`${sinifAdi(panelSinif)} üniteleri`}>
+              <ul className={s['unite-listesi']} aria-label={`${sinifAdi(panelSinif)} temaları`}>
                 {paneldekiUniteler.map((unite) => {
                   const acik = acikUnite === unite.id;
                   return (
@@ -887,7 +889,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
                         <span className={s['unite-metin']}>
                           <span className={s['unite-ad']}>{uniteAdi(unite.themeName || unite.fullTitle)}</span>
                           <span className={s['unite-bilgi']}>
-                            {unite.topics.length} konu · {unite.lessonHours} ders saati
+                            {temaBilgisi(unite)}
                           </span>
                         </span>
                         <span className={s['unite-ok']}>{ikon.ok}</span>
@@ -929,7 +931,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
                     type="button"
                     className={s['icerik-geri']}
                     aria-label="İçeriği kapat"
-                    title="Ünite listesine dön"
+                    title="Tema listesine dön"
                     onClick={icerigiKapat}
                   >
                     {ikon.geri}

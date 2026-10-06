@@ -56,6 +56,22 @@ export function sinifAdi(sinif: GradeId): string {
   return sinif === 0 ? 'Hazırlık' : `${sinif}. Sınıf`;
 }
 
+/**
+ * Sınıf panelindeki tema sayısı: "6 tema". TYMM'de (2024) sınıfın büyük bölümleri "tema"dır; alan uzmanları
+ * (7, 9 ve 10. sınıf, 2. tur) görünen ve okunan "ünite" sözcüğünün "tema" olmasını istedi.
+ */
+export const temaSayisiMetni = (n: number): string => `${n} tema`;
+
+/**
+ * Tema satırının alt yazısı: temadaki öğrenme çıktısı sayısı ("4 öğrenme çıktısı"). Uzmanlar "konu" ifadesinin
+ * "çıktı" olmasını (10. sınıf) ve ders saatinin öğrenciye gösterilmemesini (7. sınıf) istedi. Temanın her konusu
+ * programın bir öğrenme çıktısıdır (MAT.x.y.z kodu); veride `outcomeCount` da tutulur ve konu sayısına eşittir.
+ */
+export function temaBilgisi(tema: { topics: readonly unknown[]; outcomeCount?: number }): string {
+  const n = tema.outcomeCount ?? tema.topics.length;
+  return `${n} öğrenme çıktısı`;
+}
+
 const KUCUK_KALAN_BAGLACLAR = new Set(['ve', 'ile', 'veya', 'ya', 'da', 'de']);
 
 /**

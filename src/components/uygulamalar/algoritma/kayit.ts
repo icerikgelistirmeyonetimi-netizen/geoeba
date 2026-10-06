@@ -29,6 +29,8 @@ export interface UniteKaydi {
 
 export interface AtolyeKaydi {
   program?: Program;
+  /** Dünya başına kod (Atolye.dunyaBasinaKod): dünya kimliği → öğrencinin o sahadaki kodu */
+  programlar?: Record<string, Program>;
   /** En iyi sonuç: 0–3 yıldız */
   yildiz: number;
 }
@@ -93,8 +95,14 @@ function atolyeleriCoz(ham: unknown): Record<string, AtolyeKaydi> {
   for (const [id, a] of Object.entries(ham as Record<string, unknown>)) {
     if (!ATOLYE_KIMLIKLERI.has(id) || !a || typeof a !== 'object') continue;
     const x = a as AtolyeKaydi;
+    const dunyaKimlikleri = new Set(ATOLYELER.find((t) => t.id === id)?.dunyalar.map((d) => d.id) ?? []);
+    const programlar: Record<string, Program> = {};
+    if (x.programlar && typeof x.programlar === 'object') {
+      for (const [d, p] of Object.entries(x.programlar)) if (dunyaKimlikleri.has(d) && programGecerli(p)) programlar[d] = p;
+    }
     sonuc[id] = {
       program: programGecerli(x.program) ? x.program : undefined,
+      ...(Object.keys(programlar).length ? { programlar } : {}),
       yildiz: typeof x.yildiz === 'number' ? Math.max(0, Math.min(3, Math.round(x.yildiz))) : 0,
     };
   }
@@ -179,4 +187,15 @@ export function kaydiYaz(k: LabKaydi): void {
 export function uniteIlerlemesi(k: LabKaydi, u: Unite): { tamam: number; toplam: number } {
   const zorunlu = u.gorevler.filter((g) => !g.zorlu);
   return { tamam: zorunlu.filter((g) => k.gorevler[g.id]?.tamam).length, toplam: zorunlu.length };
+}
+
+/**
+ * Ünitede henüz tamamlanmamış ilk zorunlu görevin sırası (0'dan); hepsi tamamsa null.
+ * "Sıradaki görev" bunu gösterir, son açılan görevi (`aktif`) değil: alan uzmanı (3. sınıf, 2. tur) 6. görevi
+ * bitirdiği hâlde ünite kartında "Sıradaki: 6. görev" yazdığı için görevi tamamlanmamış sanıyordu; eksik olan
+ * önceki bir görevdi (ör. tahmini tutmayan 1. görev).
+ */
+export function ilkEksikGorev(k: LabKaydi, u: Unite): number | null {
+  const i = u.gorevler.findIndex((g) => !g.zorlu && !k.gorevler[g.id]?.tamam);
+  return i < 0 ? null : i;
 }

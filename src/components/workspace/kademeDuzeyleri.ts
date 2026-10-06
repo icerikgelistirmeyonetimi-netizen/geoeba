@@ -17,8 +17,15 @@
  *    Simetriğini Oluştur), Kesir (Kesirle Göster), Medya (Görsel Ekle, Yazı Ekle). Oluşturma (Construct)
  *    araçları "ilkokul seviyesinin üzerindedir, yazılımda kullanılmayacaktır". Raporun Grafik Araçları ekranı
  *    Temel Araçlar'da Seç ve Taşı, Nokta, Sürgü ve Kalem'i, Medya'da Yazı Ekle'yi ister; atölyede tek panel
- *    olduğu için Sürgü de ilkokul listesindedir. Raporun kapsamadığı yerlerde 1-4. sınıf kazanımları
+ *    olduğu için Sürgü önce ilkokul listesine alınmıştı (aşağıdaki güncellemeyle çıktı). Raporun kapsamadığı yerlerde 1-4. sınıf kazanımları
  *    (TYMM 2024; 4. sınıf için 2018 programı da) ölçüt alınır.
+ *    ALAN UZMANLARI GÜNCELLEMESİ (atölye inceleme, 2. tur; 2, 3 ve 4. sınıf uzmanları) raporun listesini şu
+ *    noktalarda DEĞİŞTİRİR: Doğru Parçası, Doğru ve Işın ilkokulda yoktur (TYMM MAT.4.3.5: "ışın, doğru ve doğru
+ *    parçası gibi temel geometrik kavramlara girilmeden"); şekil Çokgen ("Şekil Oluştur"), Kare, Dikdörtgen ve
+ *    Düzgün Çokgenle kurulur, simetri doğrusunu Yansıt aracı kendisi çizer. Cebir ve Fonksiyon grubu (Sürgü)
+ *    ilkokulda yoktur. "Alanı Bul" hesap gösterdiği için yoktur: ilkokulda (4. sınıf) alan birim karelerle
+ *    kaplanarak bulunur ("Alanı Modelle"). Araçların ilkokuldaki görünüm kuralları (zemin, tam sayı ölçü, harfsiz
+ *    köşe, açıölçerin yalnız tanıtılması, en çok sekizgen) ilkokulKipi.ts'tedir.
  *  - Ortaokul ve lise: 5-8 ve 9-12. sınıf matematik programlarının gerektirdiği araçların birleşimi
  *    (TYMM 2024, tymm.meb.gov.tr; 8 ve 12. sınıf 2026-2027'de 2018 programını izler, ikisi birlikte).
  *    Yorumlardaki kodlar programın resmî öğrenme çıktısı kodlarıdır (metinleri: scripts/veri/kazanim-metinleri.json).
@@ -72,19 +79,17 @@ export const KADEME_DUZEYLERI: Readonly<Record<KademeId, KademeTanimi>> = {
     ad: 'İlkokul',
     siniflar: '1-4. sınıf',
     konular:
-      'Nokta, doğru parçası, çember ve çokgenler; cetvel, gönye ve açıölçerle ölçme; çevre ve alan; döndürme ve simetri; sürgü; kesir modeli, görsel ve yazı',
+      'Nokta, çember ve çokgenler; cetvel ve gönye, açıölçeri tanıma; uzunluk ölçme, çevre, birim karelerle alan; döndürme ve simetri; kesir modeli, görsel ve yazı',
     araclar: [
       'point', // Nokta — Temel Araçlar (rapor); konum, hedef, köşe (MAT.1.3.1, MAT.1.3.5)
-      'segment', // Doğru Parçası — Temel Araçlar; Çizgi Araçları "İki Noktayı Birleştir" (rapor); kenar, simetri doğrusu (MAT.3.3.2, MAT.3.3.7)
-      'line', // Doğru — Temel Araçlar (rapor)
-      'ray', // açının kolları (M.4.2.3.2, 2018 programı)
+      // Doğru Parçası, Doğru, Işın: YOK (alan uzmanları, TYMM MAT.4.3.5; dosya başındaki not)
       'circle', // Çember — Temel Araçlar; Çember Araçları "Çember Çiz" (rapor); çember ve daire (MAT.1.3.5, MAT.2.3.3)
       'pen', // Kalem — Temel Araçlara eklenir (rapor); hedefe giden yol, şekil örüntüsü, kodlama (MAT.1.3.1, MAT.1.1.6, MAT.3.3.8)
       'measure_distance', // "Uzunluğu Ölç" — Ölçme Araçları (rapor); kenar uzunlukları (MAT.2.1.10-2.1.11, MAT.4.3.2)
       'unit_measure', // standart olmayan birimle uzunluk ve alan (MAT.1.1.8, MAT.2.1.10, MAT.3.3.4, MAT.4.3.4); rapor: uzunluk ondalıksız
-      'measure_angle', // "Açıyı İncele" ve Açıölçer — Ölçme Araçları (rapor); MAT.4.3.6, M.4.2.3.4
-      'angle', // açı oluşturma (MAT.4.3.5, M.4.2.3.2, M.4.2.3.5)
-      'measure_area', // "Alanı Bul" — Ölçme Araçları (rapor); MAT.4.3.4, M.4.3.3.2
+      'measure_angle', // Açıölçer — yalnız TANITIM: ilkokulda derece okunmaz (TYMM: "Geometri setinden açı ölçer tanıtılır. Açı ölçer ile açı ölçme uygulamalarına girilmez.")
+      'angle', // açı oluşturma, derece yazısız (MAT.4.3.5: açı bir dönme miktarı)
+      // "Alanı Bul": YOK — hesap gösterir; ilkokulda alan birim karelerle kaplanarak bulunur (alan uzmanı, 4. sınıf)
       'measure_perimeter', // çevre uzunluğu (MAT.3.3.4, MAT.4.3.3 — raporun gereksinim listesi)
       'area_model', // birim karelerle alan (MAT.4.3.4, M.4.3.3.1)
       'ruler', // Cetvel — Ölçme Araçları (rapor); MAT.2.1.11, MAT.3.3.3
@@ -93,7 +98,7 @@ export const KADEME_DUZEYLERI: Readonly<Record<KademeId, KademeTanimi>> = {
       'rectangle', // dikdörtgen çizme (raporun gereksinim listesi; MAT.1.3.5, MAT.4.3.2)
       'square', // kare çizme (raporun gereksinim listesi; MAT.1.3.5, MAT.4.3.2)
       'regular_polygon', // "Düzgün Çokgen" — Çokgen Araçları (rapor); beşgen, altıgen, sekizgen (MAT.3.3.2)
-      'slider', // "Sürgü" — Grafik Araçları ekranı, Temel Araçlar (rapor); fonksiyon grafiği ve giriş kutusu ilkokulda yok
+      // Sürgü ("Cebir ve Fonksiyon" grubu): YOK (alan uzmanı, 3. sınıf: "Cebir ve Fonksiyon aracı ilkokul için uygun değildir")
       'rotate', // "Şekli Döndür" — Dönüşüm Araçları (rapor); yön değişince biçim korunur (MAT.2.3.4, MAT.4.3.5)
       'reflect', // "Simetriğini Oluştur" — Dönüşüm Araçları (rapor); simetri doğrusuna göre tamamlama (MAT.3.3.7, MAT.4.3.9)
       'symmetry', // simetri doğruları (MAT.2.3.7, MAT.3.3.6, MAT.4.3.8)

@@ -16,7 +16,8 @@
  *   3. sınıf (blok, dört dünya; ezber kod bir dünyada kalır)
  *      a3-sera      Sera sabahı       çıkışa kadar + üç "eğer": sula, gübrele, topla
  *      a3-teras     Teras bahçe       basamak sayısı farklı merdivenler; iki kareye de bak
- *      a3-ayna      Ayna atölyesi     artı şeklinin her sahada başka yarısı çizili: bütün şekli çiz
+ *      a3-ayna      Ayna atölyesi     artı şeklinin her sahada başka yarısı çizili: eksik yarıyı her sahada
+ *                                     o sahanın kendi koduyla çiz (dünya başına kod, aşağıdaki not)
  *   4. sınıf (blok, dört dünya)
  *      a4-cevre     Bahçe çevresi     kare halka: 4 kez (3 kez ileri + iki "eğer"), sağa dön
  *      a4-kule      Kule şehri        uzunluğu ve yönü farklı sokaklar: çıkışa kadar 3 küplük kule
@@ -24,6 +25,12 @@
  *
  * 3–4. sınıfta çizim sahasında algılayıcı yoktur; genellik orada "hangi parça eksik olursa olsun
  * bütün şekli çizen kod" demektir (hazır çizili çizginin üstünden geçmek hata değildir).
+ *
+ * Ayna atölyesi bu genelliğin DIŞINDADIR (alan uzmanları, 2. tur): tek kod bütün artıyı çizince 3. ve 4. sahada
+ * şekil öğrenci hiçbir şey yapmadan tamamlanıyordu ("Kodlar verilen şekli kendi tamamlamaktadır. Öğrenci sadece
+ * izleyebilir."). Artık her sahanın kodu ayrıdır (`dunyaBasinaKod`): saha boş kodla açılır, robot simetri
+ * doğrusunun ucunda durur, öğrenci eksik yarıyı çizen kodu o sahada kendisi kurar. Bir sahanın kodu öbür
+ * sahada çalışmaz; aynadaki yarının kodu adımları aynı, dönüşleri ters koddur ("Aynada sağ sola döner").
  */
 import { programKur, type BlokSablonu, type KisaBlok } from './program';
 import { bahce, insaatAlani, saha, type BitkiTanimi, type DunyaTanimi, type Hedef } from './dunya';
@@ -200,18 +207,33 @@ const ARTI: readonly Cizgi[] = [
   [2, 4, 3, 4], [1, 4, 2, 4],
   [1, 3, 1, 4], [0, 3, 1, 3], [0, 2, 0, 3], [0, 1, 0, 2], [0, 1, 1, 1], [1, 0, 1, 1],
 ];
-const artiSahasi = (id: string, ad: string, hazir: (c: Cizgi) => boolean, eksen: DunyaTanimi['eksen'], sinar: string) =>
-  saha(id, ad, sahaKur(5, 5, ARTI, hazir, [2, 0]), { yon: 0, eksen, hedefGizli: true, sinar });
+/** Robot simetri doğrusunun bir ucunda (`bas`), eksik yarıya bakar (`yon`: 0 doğu · 1 güney · 2 batı · 3 kuzey) */
+const artiSahasi = (
+  id: string,
+  ad: string,
+  hazir: (c: Cizgi) => boolean,
+  eksen: DunyaTanimi['eksen'],
+  bas: [number, number],
+  yon: 0 | 1 | 2 | 3,
+  sinar: string
+) => saha(id, ad, sahaKur(5, 5, ARTI, hazir, bas), { yon, eksen, hedefGizli: true, sinar });
 
 const DIKEY_AYNA = { yon: 'dikey' as const, k: 2 };
 const YATAY_AYNA = { yon: 'yatay' as const, k: 2 };
 
 const AYNALAR: DunyaTanimi[] = [
-  artiSahasi('a3-ayna-1', 'Sol yarı çizili', (c) => enBuyukX(c) <= 2, DIKEY_AYNA, 'Sağ yarı aynada'),
-  artiSahasi('a3-ayna-2', 'Sağ yarı çizili', (c) => enKucukX(c) >= 2, DIKEY_AYNA, 'Sol yarı aynada: yalnız sağ yarıyı çizen kod yetmez'),
-  artiSahasi('a3-ayna-3', 'Üst yarı çizili', (c) => enBuyukY(c) <= 2, YATAY_AYNA, 'Yatay ayna: alt yarı eksik'),
-  artiSahasi('a3-ayna-4', 'Alt yarı çizili', (c) => enKucukY(c) >= 2, YATAY_AYNA, 'Yatay ayna: üst yarı eksik'),
+  artiSahasi('a3-ayna-1', 'Sol yarı çizili', (c) => enBuyukX(c) <= 2, DIKEY_AYNA, [2, 0], 0, 'Sağ yarı eksik; robot simetri doğrusunun üst ucunda, sağa bakıyor'),
+  artiSahasi('a3-ayna-2', 'Sağ yarı çizili', (c) => enKucukX(c) >= 2, DIKEY_AYNA, [2, 0], 2, 'Sol yarı eksik; robot sola bakıyor: 1. sahanın kodu burada aynada döner'),
+  artiSahasi('a3-ayna-3', 'Üst yarı çizili', (c) => enBuyukY(c) <= 2, YATAY_AYNA, [0, 2], 1, 'Yatay simetri doğrusu: alt yarı eksik; robot doğrunun sol ucunda, aşağı bakıyor'),
+  artiSahasi('a3-ayna-4', 'Alt yarı çizili', (c) => enKucukY(c) >= 2, YATAY_AYNA, [0, 2], 3, 'Yatay simetri doğrusu: üst yarı eksik; robot yukarı bakıyor'),
 ];
+/** Bir çeyrek "ileri, dön, ileri, öbür yana dön, ileri, dön, ileri"; iki çeyrek bir yarı. `ilk` çeyreğin ilk dönüşü. */
+const ARTI_YARISI = (ilk: 'sagaDon' | 'solaDon', onek: string) => {
+  const ters = ilk === 'sagaDon' ? 'solaDon' : 'sagaDon';
+  return k([['kez', 2, ['ileri', ilk, 'ileri', ters, 'ileri', ilk, 'ileri']]], onek);
+};
+/** Sahaların çözümleri (dünya sırasıyla): 1. ve 4. sahada ilk dönüş sağa, 2. ve 3. sahada (aynada) sola */
+const AYNA_COZUMLERI = [ARTI_YARISI('sagaDon', 'a3a1-'), ARTI_YARISI('solaDon', 'a3a2-'), ARTI_YARISI('solaDon', 'a3a3-'), ARTI_YARISI('sagaDon', 'a3a4-')];
 
 // ---------------------------------------------------------------------------
 // 4. sınıf (Mucit adası, blok görünümü, dört dünya)
@@ -400,17 +422,19 @@ export const ATOLYELER_1_4: readonly Atolye[] = [
     id: 'a3-ayna',
     sinif: 3,
     ad: 'Ayna atölyesi',
-    aciklama: 'Artı şeklinin her sahada başka bir yarısı çizili. Hangisi olursa olsun şekli tamamla.',
-    yonerge: 'Şeklin bir yarısı çizili; öbür yarısı aynadaki görüntüsü. Şekli tamamla. Her sahada başka yarı çizili: kodun hepsinde şekli tamamlasın.',
+    aciklama: 'Artı şeklinin her sahada başka bir yarısı çizili. Eksik yarıyı çizen kodu her sahada sen kur.',
+    yonerge: 'Şeklin bir yarısı çizili; öbür yarısı aynadaki görüntüsü. Robot simetri doğrusunun ucunda. Eksik yarıyı çizen kodu kur. Her sahada başka yarı eksik: her sahanın kodunu ayrı kur.',
     dunyalar: AYNALAR,
+    dunyaBasinaKod: true,
     hedef: CIZ,
     bitkiAdi: 'bitki',
     aracKutusu: [ILERI, SAGA, SOLA, kez(2)],
     enCokBlok: 8,
-    cozum: k([['kez', 4, ['ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri']]], 'a3a-'),
+    cozum: AYNA_COZUMLERI[0],
+    cozumler: AYNA_COZUMLERI,
     kazanimlar: ['MAT.3.3.6', 'MAT.3.3.7', 'MAT.3.3.8'],
     kalip: 'ayna',
-    ipucu: 'Artının iki simetri doğrusu var: dört çeyreği birbirinin eşi. Bir çeyreği çizen parçayı bul.',
+    ipucu: 'Çizili yarıyı parmağınla izle. Eksik yarı onun aynadaki görüntüsü: adımlar aynı, dönüşler ters. Bir çeyreği çizen parçayı bul, iki kez tekrarla.',
   },
 
   // --- 4. sınıf ------------------------------------------------------------------

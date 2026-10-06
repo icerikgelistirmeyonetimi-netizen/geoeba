@@ -14,8 +14,10 @@ const menu = readFileSync(path.resolve(__dirname, '..', 'WorkspaceMenuBar.tsx'),
 const maddeler = menu.split('<button');
 
 describe('menü çubuğu araç kısayolu ipuçları', () => {
-  it('ipucu bileşeni harfi TOOL_SHORTCUTS bağından okur', () => {
-    expect(menu).toMatch(/function AracKisayolu\([^)]*\)[^{]*\{[^}]*TOOL_SHORTCUTS\[arac\]/);
+  it('ipucu bileşeni harfi TOOL_SHORTCUTS bağından okur (ilkokulda harf gösterilmez: gorunenKisayol)', () => {
+    expect(menu).toMatch(/function AracKisayolu\([^)]*\)[^{]*\{[^}]*gorunenKisayol\(arac, /);
+    const ilkokulKipi = readFileSync(path.resolve(__dirname, '..', 'ilkokulKipi.ts'), 'utf8');
+    expect(ilkokulKipi).toMatch(/export function gorunenKisayol\([^)]*\)[^{]*\{[^}]*TOOL_SHORTCUTS\[arac as ToolMode\]/);
   });
 
   it('elle yazılmış araç harfi yok (Ctrl kısayolları menü çubuğunun kendi tuş işleyicisinde)', () => {

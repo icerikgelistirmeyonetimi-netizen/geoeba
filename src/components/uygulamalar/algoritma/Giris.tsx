@@ -13,7 +13,7 @@ import React, { useState } from 'react';
 import { SIMGE } from './simgeler';
 import { KADEMELER, VITRIN, kademe, sinifGruplari } from './mufredat';
 import { sinifAtolyeleri } from './atolyeler';
-import { atolyeKaydi, uniteIlerlemesi, uniteKaydi, type LabKaydi } from './kayit';
+import { atolyeKaydi, ilkEksikGorev, uniteIlerlemesi, uniteKaydi, type LabKaydi } from './kayit';
 import type { Unite } from './gorev';
 
 /** GitHub Pages proje sitesinde public/ dosyaları '/repo-adi' altındadır; basePath onlara kendiliğinden eklenmez */
@@ -185,6 +185,9 @@ export function SinifSayfasi({ sinif, kayit, koyu, onUnite, onAtolye, onGeri }: 
               const il = uniteIlerlemesi(kayit, u);
               const bitti = il.tamam === il.toplam;
               const uk = uniteKaydi(kayit, u.id);
+              // Sıradaki: tamamlanmamış İLK görev. Son açılan görev (uk.aktif) bitmiş olabilir; onu "sıradaki"
+              // diye göstermek bitmiş görevi tamamlanmamış gibi gösteriyordu (alan uzmanı, 3. sınıf 1. ünite 6. görev)
+              const eksik = ilkEksikGorev(kayit, u);
               return (
                 <button key={u.id} type="button" className={KUTU} onClick={() => onUnite(u.id)} aria-label={`${u.no}. ünite: ${u.ad}`} data-unite-kutusu={u.id}>
                   <Kapak kimlik={u.id} renk={k.renk} koyu={koyu} etiket={`${u.ad} sahnesi`}>
@@ -200,7 +203,11 @@ export function SinifSayfasi({ sinif, kayit, koyu, onUnite, onAtolye, onGeri }: 
                     <span className="text-[13px] font-semibold leading-snug text-muted-foreground">{u.yeniKavram}</span>
                     <div className="mt-auto pt-2">
                       <Ilerleme tamam={il.tamam} toplam={il.toplam} renk={k.renk} />
-                      {uk.aktif > 0 && !bitti && <span className="mt-1 block text-[12px] font-bold text-muted-foreground">Sıradaki: {uk.aktif + 1}. görev</span>}
+                      {(uk.aktif > 0 || il.tamam > 0) && eksik !== null && (
+                        <span className="mt-1 block text-[12px] font-bold text-muted-foreground" data-siradaki-gorev={eksik + 1}>
+                          Sıradaki: {eksik + 1}. görev
+                        </span>
+                      )}
                     </div>
                   </div>
                 </button>

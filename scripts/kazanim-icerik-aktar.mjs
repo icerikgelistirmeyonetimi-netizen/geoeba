@@ -248,6 +248,13 @@ async function main() {
         if (!secilen.includes(sayfa)) secilen.push(sayfa);
       }
     }
+    // İsteğe bağlı `dosyalar`: aynı kazanımın sayfaları iki çerçeveye BÖLÜNDÜYSE (ör. 3.1.15 uzunluk
+    // `-a`, kütle `-v2-a`; uzman notu 2026-10-06 «iki başlıkta aynı oyunlar») çerçeve yalnız bu
+    // dosyaları, bu sırayla gösterir. Listede olup kazanım sayfaları arasında bulunmayan ad atlanır.
+    if (Array.isArray(satir.dosyalar) && satir.dosyalar.length) {
+      const adla = new Map(secilen.map((s) => [s.ad, s]));
+      secilen.splice(0, secilen.length, ...satir.dosyalar.map((ad) => adla.get(ad)).filter(Boolean));
+    }
     if (secilen.length === 0) {
       bosCerceveler.push({
         kod: konu.kod,

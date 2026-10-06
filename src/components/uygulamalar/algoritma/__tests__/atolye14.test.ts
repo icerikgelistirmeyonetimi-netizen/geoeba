@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sina } from '../degerlendirme';
+import { sina, sinaAyri } from '../degerlendirme';
 import { izgara } from '../dunya';
 import { blokSayisi, programKur, type KisaBlok, type Program } from '../program';
 import { ATOLYELER_1_4 } from '../atolye14';
@@ -12,8 +12,10 @@ const atolye = (id: string): Atolye => {
   return a;
 };
 /** Sına düğmesinin yaptığı: görünen dünya + sınama dünyaları */
-const sinat = (a: Atolye, p: Program) =>
-  sina(p, { gorunen: a.dunyalar[0], sinama: a.dunyalar.slice(1), hedef: a.hedef, enFazlaBlok: a.enCokBlok, bitkiAdi: a.bitkiAdi }, 1);
+const ayarOf = (a: Atolye) => ({ gorunen: a.dunyalar[0], sinama: a.dunyalar.slice(1), hedef: a.hedef, enFazlaBlok: a.enCokBlok, bitkiAdi: a.bitkiAdi });
+const sinat = (a: Atolye, p: Program) => sina(p, ayarOf(a), 1);
+/** Dünya başına kodlu atölyede Sına: her saha kendi koduyla (Ayna atölyesi) */
+const sinatAyri = (a: Atolye, programlar: Program[]) => sinaAyri(programlar, ayarOf(a));
 
 const ileri = (n: number): KisaBlok[] => Array.from({ length: n }, () => 'ileri' as const);
 
@@ -21,6 +23,8 @@ interface Deneme {
   /** Çocuğun olası kodu */
   ad: string;
   program: KisaBlok[];
+  /** Dünya başına kodlu atölyede her sahanın kodu (verilirse `program` yok sayılır) */
+  programlar?: KisaBlok[][];
   yildiz: 0 | 1 | 2 | 3;
   /** Dünya adı → çocuğun okuduğu cümle */
   iletiler?: Record<string, string>;
@@ -135,10 +139,42 @@ const DENEMELER: Record<string, Deneme[]> = {
   ],
   'a3-ayna': [
     {
-      ad: 'yalnız ilk sahada eksik olan sağ yarıyı çizmek',
-      program: [['kez', 2, ['ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri']]],
+      ad: 'yalnız 1. sahanın kodunu kurmak: öbür sahalar kendiliğinden tamamlanmaz',
+      program: [],
+      programlar: [[['kez', 2, ['ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri']]], [], [], []],
       yildiz: 1,
-      iletiler: { 'Sağ yarı çizili': 'Şeklin 8 çizgisi eksik kaldı.', 'Üst yarı çizili': 'Şeklin 4 çizgisi eksik kaldı.' },
+      iletiler: { 'Sağ yarı çizili': 'Şeklin 8 çizgisi eksik kaldı.', 'Üst yarı çizili': 'Şeklin 8 çizgisi eksik kaldı.' },
+    },
+    {
+      ad: 'bütün artıyı çizen tek kodu her sahaya koymak: robot her sahada başka yerde, başka yöne bakıyor',
+      program: [],
+      programlar: Array.from({ length: 4 }, () => [['kez', 4, ['ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri']]] as KisaBlok[]),
+      yildiz: 1,
+      iletiler: { 'Sağ yarı çizili': 'Robot sahanın kenarına geldi; daha ileri gidemez.' },
+    },
+    {
+      ad: '1. sahanın kodunu 2. sahada dönüşleri çevirmeden kullanmak',
+      program: [],
+      programlar: [
+        [['kez', 2, ['ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri']]],
+        [['kez', 2, ['ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri']]],
+        [['kez', 2, ['ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri']]],
+        [['kez', 2, ['ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri']]],
+      ],
+      yildiz: 1,
+      iletiler: { 'Sağ yarı çizili': 'Robot sahanın kenarına geldi; daha ileri gidemez.', 'Üst yarı çizili': 'Program bu dünyada doğru çalıştı.' },
+    },
+    {
+      ad: 'her sahada döngüsüz kod',
+      program: [],
+      programlar: [
+        ['ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri', 'ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri'],
+        [['kez', 2, ['ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri']]],
+        [['kez', 2, ['ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri']]],
+        [['kez', 2, ['ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri']]],
+      ],
+      yildiz: 2,
+      not: '1. sahadaki kodunda 14 blok var. Her sahada 8 blok yeter.',
     },
   ],
   // --- 4. sınıf ---------------------------------------------------------------------
@@ -248,7 +284,7 @@ describe('Atölye 1–4: çocuğun kodları ve okuduğu cümleler', () => {
     for (const d of DENEMELER[a.id] ?? []) {
       it(`${a.id}: ${d.ad}`, () => {
         const p = programKur(d.program, `${a.id}-deneme-`);
-        const s = sinat(a, p);
+        const s = d.programlar ? sinatAyri(a, d.programlar.map((x, i) => programKur(x, `${a.id}-deneme-${i}-`))) : sinat(a, p);
         expect(s.yildiz, s.dunyalar.map((x) => `${x.dunya.ad}: ${x.ileti}`).join(' | ')).toBe(d.yildiz);
         if (d.yildiz === 1) {
           // Ezber kod: görünen dünyada çalışır, en az bir sınama dünyasında bozulur (★★ yok)
@@ -268,9 +304,37 @@ describe('Atölye 1–4: çocuğun kodları ve okuduğu cümleler', () => {
 
   it('çözümler her dünyada "Program bu dünyada doğru çalıştı." der', () => {
     for (const a of ATOLYELER_1_4) {
-      const s = sinat(a, a.cozum);
+      const s = a.dunyaBasinaKod ? sinatAyri(a, a.cozumler ?? []) : sinat(a, a.cozum);
       expect(s.yildiz, a.id).toBe(3);
       for (const d of s.dunyalar) expect(d.ileti, `${a.id}/${d.dunya.ad}`).toBe('Program bu dünyada doğru çalıştı.');
     }
+  });
+});
+
+describe('Ayna atölyesi: her sahanın kodu ayrı (alan uzmanları, 2. tur)', () => {
+  const a = atolye('a3-ayna');
+  it('dünya başına kod: aynadaki sahanın kodu dönüşleri ters koddur; öbür kod o sahada şekli tamamlamaz', () => {
+    expect(a.dunyaBasinaKod).toBe(true);
+    const cozumler = a.cozumler ?? [];
+    expect(cozumler).toHaveLength(a.dunyalar.length);
+    // Kimliksiz yazım: iki kod aynı bloklardan mı oluşuyor
+    const yazim = (p: Program): string => JSON.stringify(p, (k, v) => (k === 'id' ? undefined : v));
+    // 1-2 dikey aynada, 3-4 yatay aynada birbirinin aynası: dönüşleri ters iki kod
+    expect(yazim(cozumler[0])).not.toBe(yazim(cozumler[1]));
+    expect(yazim(cozumler[2])).not.toBe(yazim(cozumler[3]));
+    // Farklı bir kod öbür sahada şekli kendiliğinden tamamlamaz: her sahada öğrenci kodu kendisi kurar
+    for (let i = 0; i < a.dunyalar.length; i++) {
+      for (let j = 0; j < a.dunyalar.length; j++) {
+        if (i === j || yazim(cozumler[i]) === yazim(cozumler[j])) continue;
+        const programlar = a.dunyalar.map((_, k) => (k === j ? cozumler[i] : cozumler[k]));
+        const s = sinatAyri(a, programlar);
+        expect(s.dunyalar[j].basarili, `${i + 1}. sahanın kodu ${j + 1}. sahada`).toBe(false);
+      }
+    }
+  });
+  it('başlangıç: kod boş, şeklin yalnız yarısı çizili (Hepsini sına yıldız vermez)', () => {
+    const s = sinatAyri(a, []);
+    expect(s.yildiz).toBe(0);
+    for (const d of s.dunyalar) expect(d.ileti).toBe('Şeklin 8 çizgisi eksik kaldı.');
   });
 });

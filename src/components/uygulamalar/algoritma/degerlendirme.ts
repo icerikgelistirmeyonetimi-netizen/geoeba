@@ -224,6 +224,32 @@ export function sina(program: Program, a: SinamaAyari, tohum: number): SinamaSon
   };
 }
 
+/**
+ * Dünya başına kod (Atolye.dunyaBasinaKod): her dünya KENDİ programıyla çalıştırılır (`programlar[i]`, yoksa boş).
+ * ★ ilk dünya doğru · ★★ hepsi doğru · ★★★ ayrıca her program en çok `enFazlaBlok` blok. `blokSayisi` en uzun koddur.
+ * Sürpriz dünya kullanılmaz (her sahanın kodunu öğrenci o sahayı görerek kurar).
+ */
+export function sinaAyri(programlar: readonly Program[], a: SinamaAyari): SinamaSonucu {
+  const liste = [a.gorunen, ...a.sinama];
+  const dunyalar = liste.map((dunya, i) => {
+    const iz = calistir(programlar[i] ?? [], dunya, a.hedef);
+    return { dunya, gorunen: i === 0, iz, basarili: iz.sonuc.basarili, ileti: sonucIletisi(iz.sonuc, dunya, a.bitkiAdi) };
+  });
+  const sayilar = liste.map((_, i) => blokSayisi(programlar[i] ?? []));
+  const n = Math.max(0, ...sayilar);
+  const gorunenTamam = dunyalar[0].basarili;
+  const hepsi = dunyalar.every((d) => d.basarili);
+  const verimli = a.enFazlaBlok === undefined || n <= a.enFazlaBlok;
+  const yildiz: SinamaSonucu['yildiz'] = !gorunenTamam ? 0 : !hepsi ? 1 : verimli ? 3 : 2;
+  const uzun = sayilar.indexOf(n) + 1;
+  return {
+    dunyalar,
+    yildiz,
+    blokSayisi: n,
+    verimlilikNotu: yildiz === 2 && a.enFazlaBlok !== undefined ? `${uzun}. sahadaki kodunda ${n} blok var. Her sahada ${a.enFazlaBlok} blok yeter.` : null,
+  };
+}
+
 /** Görünen dünyadaki başarısızlık için ilk ileti (Çalıştır düğmesi sonrası). */
 export function tekDunyaSonucu(program: Program, dunya: DunyaTanimi, hedef: Hedef, bitkiAdi: SinamaAyari['bitkiAdi']): DunyaSonucu {
   const iz = calistir(program, dunya, hedef);

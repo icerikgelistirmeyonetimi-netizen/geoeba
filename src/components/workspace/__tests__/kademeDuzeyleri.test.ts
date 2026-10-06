@@ -27,17 +27,25 @@ const EMOJI = /\p{Extended_Pictographic}/u;
 const gorunenKimlikler = (duzey: KademeDuzeyi) =>
   gruplariSuz(TREE_TOOL_GROUPS, duzey).flatMap((g) => g.tools.map((t) => t.id as string));
 
-/** Raporun ilkokul menülerindeki araçlar (Dinamik Matematik Yazılımı İlkokul Raporu, 23.07.2026) */
+/**
+ * Raporun ilkokul menülerindeki araçlar (Dinamik Matematik Yazılımı İlkokul Raporu, 23.07.2026); alan uzmanlarının
+ * güncellemesiyle (2. tur) çıkanlar UZMAN_ILKOKULDA_YOK listesindedir.
+ */
 const RAPOR_ILKOKUL = [
-  'select', 'point', 'segment', 'line', 'polygon', 'circle', 'pen', // Temel Araçlar (Geometri ve Ölçüm ekranı)
-  'slider', // Temel Araçlar (Grafik Araçları ekranı)
+  'select', 'point', 'polygon', 'circle', 'pen', // Temel Araçlar (Geometri ve Ölçüm ekranı)
   'delete', // Düzenleme Araçları
-  'measure_angle', 'measure_distance', 'measure_area', 'ruler', 'setsquare', // Ölçme Araçları (+ açıölçer)
+  'measure_angle', 'measure_distance', 'ruler', 'setsquare', // Ölçme Araçları (+ açıölçer)
   'regular_polygon', // Çokgen Araçları
   'rotate', 'reflect', // Dönüşüm Araçları
   'fraction', // Kesir Araçları
   'image', 'text', // Medya Araçları
 ];
+/**
+ * Alan uzmanlarının (atölye inceleme, 2. tur) ilkokuldan çıkardığı araçlar: Doğru Parçası, Doğru, Işın (TYMM MAT.4.3.5:
+ * "ışın, doğru ve doğru parçası gibi temel geometrik kavramlara girilmeden"), Sürgü ("Cebir ve Fonksiyon aracı ilkokul
+ * için uygun değildir"), Alanı Bul (alan birim karelerle kaplanarak bulunur; hesap yok).
+ */
+const UZMAN_ILKOKULDA_YOK = ['segment', 'line', 'ray', 'slider', 'measure_area'];
 /** Raporda "ilkokul seviyesinin üzerinde, yazılımda kullanılmayacak" denen Oluşturma (Construct) araçları */
 const INSA_ARACLARI = ['midpoint', 'divide_ratio', 'perp_bisector', 'angle_bisector', 'perpendicular', 'parallel', 'compass', 'intersect'];
 
@@ -85,8 +93,21 @@ describe('kademe → araç eşlemesi', () => {
 
   it('ilkokul: raporun gereksinim listesi (kare, dikdörtgen, çevre, simetri, birim kare) 1-4. sınıf kazanımlarından tamamlanır', () => {
     const ilkokul = gorunenKimlikler('ilkokul');
-    for (const arac of ['square', 'rectangle', 'measure_perimeter', 'symmetry', 'area_model', 'unit_measure', 'angle', 'ray']) {
+    for (const arac of ['square', 'rectangle', 'measure_perimeter', 'symmetry', 'area_model', 'unit_measure', 'angle']) {
       expect(ilkokul, arac).toContain(arac);
+    }
+  });
+
+  it('ilkokul (alan uzmanları, 2. tur): doğru parçası, doğru, ışın, sürgü (Cebir ve Fonksiyon) ve Alanı Bul yok', () => {
+    const ilkokul = gorunenKimlikler('ilkokul');
+    for (const arac of UZMAN_ILKOKULDA_YOK) {
+      expect(ilkokul, arac).not.toContain(arac);
+      expect(aracGorunurMu('ilkokul', arac), arac).toBe(false);
+    }
+    expect(gruplariSuz(TREE_TOOL_GROUPS, 'ilkokul').some((g) => g.id === 'cebir_fonksiyon')).toBe(false);
+    // Ortaokul ve lisede bu araçlar yerinde (uzman notu yalnız ilkokul içindir)
+    for (const id of ['ortaokul', 'lise'] as const) {
+      for (const arac of UZMAN_ILKOKULDA_YOK) expect(aracGorunurMu(id, arac), `${id}: ${arac}`).toBe(true);
     }
   });
 
@@ -154,9 +175,9 @@ describe('kademe → araç eşlemesi', () => {
 describe('gruplariSuz: araç paneli süzgeci', () => {
   it('ilkokulda boşalan gruplar (çember, inşa, etkileşim) düşer; grup sayacı süzülmüş araç sayısıdır', () => {
     const gruplar = gruplariSuz(TREE_TOOL_GROUPS, 'ilkokul');
-    expect(gruplar.map((g) => g.id)).toEqual(['temel_cizim', 'duzenleme', 'olcme', 'cokgen', 'cebir_fonksiyon', 'donusum', 'kesir_medya']);
+    expect(gruplar.map((g) => g.id)).toEqual(['temel_cizim', 'duzenleme', 'olcme', 'cokgen', 'donusum', 'kesir_medya']);
     const sayac = Object.fromEntries(gruplar.map((g) => [g.id, g.tools.length]));
-    expect(sayac).toEqual({ temel_cizim: 6, duzenleme: 2, olcme: 9, cokgen: 4, cebir_fonksiyon: 1, donusum: 3, kesir_medya: 3 });
+    expect(sayac).toEqual({ temel_cizim: 3, duzenleme: 2, olcme: 8, cokgen: 4, donusum: 3, kesir_medya: 3 });
   });
 
   it('araçların panel sırası korunur', () => {

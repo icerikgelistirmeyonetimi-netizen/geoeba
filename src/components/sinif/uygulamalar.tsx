@@ -115,3 +115,17 @@ export const UYGULAMALAR: readonly UygulamaTanimi[] = [
 export function uygulamaBul(id: string): UygulamaTanimi | undefined {
   return UYGULAMALAR.find((u) => u.id === id);
 }
+
+/**
+ * İlkokul kademesinde (Çizim Stüdyosu'nun Kademe menüsü: İlkokul) masaüstünde gösterilmeyen uygulamalar.
+ * Olasılık Laboratuvarı: alan uzmanları (2. tur) — 3. sınıf: "zar kaldırılmalı, ilkokul öğrencileri için uygun
+ * değildir"; 4. sınıf: TYMM MAT.4.4.1 "olasılık tahminlerinde oran, kesir ve yüzde gibi sayı temsilleri kullanmaları
+ * beklenmez". Laboratuvar baştan sona zar / para / torba deneyleri, kesir ve yüzde (deneysel ve teorik olasılık)
+ * üzerine kurulu olduğundan ilkokulda gizlenir; ortaokul, lise ve "Tüm araçlar"da yerinde kalır.
+ */
+export const ILKOKULDA_GIZLI_UYGULAMALAR: readonly string[] = ['olasilik'];
+
+/** Masaüstü, görev çubuğu ve Başlat menüsünün kademeye göre listesi (sıra korunur) */
+export function kademeninUygulamalari(ilkokul: boolean, liste: readonly UygulamaTanimi[] = UYGULAMALAR): readonly UygulamaTanimi[] {
+  return ilkokul ? liste.filter((u) => !ILKOKULDA_GIZLI_UYGULAMALAR.includes(u.id)) : liste;
+}

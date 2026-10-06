@@ -96,6 +96,8 @@ import { ObjectClipboard, copyObjects, pasteObjects } from '@/math/objectClipboa
 import { ProjectFile, parseProjectFile } from '@/math/projectFile';
 import type { WorkspaceScene } from '@/types/workspaceScene';
 import type { Solid3DObject } from '@/types/workspace3d';
+import { ILKOKUL_EN_COK_KENAR, ilkokulKipindeMi, ilkokulUzunlukMetni, ilkokulYeniNesneleri } from '@/components/workspace/ilkokulKipi';
+import { kesirAyariniOku, kesirAyariniSinirla, kesirEtiketi } from '@/components/workspace/kesirModeli';
 
 export { createId } from './ids';
 
@@ -1633,7 +1635,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // -------------------------------------------------------------------------
 
   const commit = useCallback((next: ObjectsUpdater, description: string) => {
-    dispatch({ type: 'commit', next, description, now: Date.now() });
+    // İlkokul kipinde yeni noktalar harf adı, yeni çemberler merkez / yarıçap, yeni açılar derece, yeni çokgenler alan
+    // hesabı göstermez (alan uzmanları, 2. tur; ilkokulKipi.ts). Bütün nesne eklemeleri bu yoldan geçer.
+    const sarili: ObjectsUpdater = ilkokulKipindeMi()
+      ? (prev) => ilkokulYeniNesneleri(prev, typeof next === 'function' ? next(prev) : next)
+      : next;
+    dispatch({ type: 'commit', next: sarili, description, now: Date.now() });
   }, []);
 
   // Geçmişe kaydetmeden nesneleri değiştirme (sürükleme, kaydırıcı gibi geçici işlemler)
@@ -3420,6 +3427,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const nextPending = [...pending, pointId];
         commitPendingOnly();
 
+        // İlkokulda açıölçer yalnız tanıtılır, açı ölçülmez (TYMM: "Açı ölçer ile açı ölçme uygulamalarına girilmez")
+        if (ilkokulKipindeMi()) {
+          setPendingPointIds([]);
+          setHintMessageState('Açıölçeri tanı: gövdesini taşı, kolunu ve tabanını döndür. Açı ölçme ileriki sınıflarda.');
+          return;
+        }
+
         if (nextPending.length < 3) {
           setPendingPointIds(nextPending);
           setHintMessageState(
@@ -4021,7 +4035,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           const p2 = pointOf(nextPending[1]);
           if (p1 && p2) {
             const rawDist = calculateDistance(p1, p2);
-            const distStr = formatTurkishNumber(rawDist);
+            // İlkokulda ölçü pozitif tam sayıdır (ondalık yok; yuvarlanan değer "yaklaşık" der)
+            const ilkokul = ilkokulKipindeMi();
+            const distStr = ilkokul ? ilkokulUzunlukMetni(rawDist, unit).replace(/ (cm|br)$/, '') : formatTurkishNumber(rawDist);
             const segLabel = `|${p1.label}${p2.label}|`;
 
             const newSegment: SegmentObject = {
@@ -4041,7 +4057,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             commitWith([newSegment], `${segLabel} = ${distStr} ${unit} ölçüldü`);
             // İpucu kapsülü hem etkinlikte hem serbest masada görünür ve kendiliğinden
             // temizlenir; activeSuccessMessage yalnızca etkinlik başarı kutusuna aittir.
-            setHintMessageState(`${isCm ? 'Uzunluk' : 'Birim'} ölçümü: ${olcuMetni(uzunluk(p1, p2, rawDist, { birim: isCm ? 'cm' : 'br' }))}`);
+            setHintMessageState(
+              ilkokul
+                ? `${isCm ? 'Uzunluk' : 'Birim'} ölçümü: ${ilkokulUzunlukMetni(rawDist, unit)}`
+                : `${isCm ? 'Uzunluk' : 'Birim'} ölçümü: ${olcuMetni(uzunluk(p1, p2, rawDist, { birim: isCm ? 'cm' : 'br' }))}`
+            );
           } else {
             commitPendingOnly();
           }
@@ -4112,6 +4132,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           commitWith([newPolygon], `${newPolygon.label} oluşturuldu`);
           setPendingPointIds([]);
         } else if (!pending.includes(pointId)) {
+          // İlkokulda çokgen en çok sekizgen: 9. köşe konmaz, ilk köşeye dokunarak kapatılır
+          if (pending.length >= ILKOKUL_EN_COK_KENAR && ilkokulKipindeMi()) {
+            setHintMessageState(`İlkokulda çokgen en çok ${ILKOKUL_EN_COK_KENAR} köşeli olur (sekizgen). Şekli kapatmak için ilk köşeye dokun.`);
+            return;
+          }
           commitPendingOnly();
           setPendingPointIds([...pending, pointId]);
         }
@@ -4436,24 +4461,26 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // 5. KESİR MODELİ
+      // 5. KESİR MODELİ: pay, payda ve model kesir çubuğundan (KesirAraciCubugu) gelir. Eskiden hep 1/1 daire
+      // konuyordu (alan uzmanı, 3. sınıf: "sadece 1/1 kesri daire şeklinde yapılabilmektedir").
       if (tool === 'fraction') {
+        const kesir = kesirAyariniSinirla(kesirAyariniOku(), ilkokulKipindeMi());
         const fractionObj: FractionObject = {
           id: createId('frac'),
           type: 'fraction',
-          label: '1/1 Kesir Modeli',
+          label: kesirEtiketi(kesir.pay, kesir.payda),
           showLabel: true,
-          numerator: 1,
-          denominator: 1,
+          numerator: kesir.pay,
+          denominator: kesir.payda,
           x: worldPos.x,
           y: worldPos.y,
           radius: 2.5,
-          modelType: 'pie',
+          modelType: kesir.model,
           color: '#8b5cf6',
           visible: true,
           createdAt: Date.now(),
         };
-        addObject(fractionObj, '1/1 kesir modeli eklendi');
+        addObject(fractionObj, `${kesir.pay}/${kesir.payda} kesir modeli eklendi`);
         setSelectedObjectId(fractionObj.id);
         return;
       }

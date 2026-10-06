@@ -577,7 +577,17 @@ export function cetvelMenusu({ boy, donusSvg }: { boy: number; donusSvg: number 
   ];
 }
 
-export function iletkiMenusu({ aci, taban, olcuGoster = true }: { aci: number; taban: number; olcuGoster?: boolean }): OlcmeMenuMaddesi[] {
+/**
+ * Açıölçerin sağ tık menüsü. `ilkokul`: açıölçer yalnız TANITILIR (TYMM, 2. sınıf: "Geometri setinden açı ölçer tanıtılır.
+ * Açı ölçer ile açı ölçme uygulamalarına girilmez."): derece seçimi / yazımı, ölçüyü gösterme ve açıyı tuvale ekleme yok.
+ */
+export function iletkiMenusu({ aci, taban, olcuGoster = true, ilkokul = false }: { aci: number; taban: number; olcuGoster?: boolean; ilkokul?: boolean }): OlcmeMenuMaddesi[] {
+  if (ilkokul) {
+    return [
+      { id: 'iletki-taban-yatay', label: 'Tabanı yatay yap', ikon: 'MoveHorizontal', disabled: normalizeDeg(taban) === 0, eylem: { tur: 'iletkiTaban', taban: 0 } },
+      ...ortakSon('iletki'),
+    ];
+  }
   return [
     {
       id: 'iletki-aci',

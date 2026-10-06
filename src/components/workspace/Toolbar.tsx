@@ -69,10 +69,10 @@ import {
   MousePointer,
   Pencil,
 } from 'lucide-react';
-import { TOOL_SHORTCUTS } from './toolShortcuts';
 import { TOOL_GROUPS } from './toolDefinitions';
 import { TREE_TOOL_GROUPS, TreeToolItem } from './treeToolDefinitions';
 import { gruplariSuz, grupAcikliklari } from './kademeDuzeyleri';
+import { gorunenKisayol } from './ilkokulKipi';
 import { KademeAramaBosNotu, KademeSuzgeciSeridi } from './KademeSuzgeci';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { MathKeypad } from '@/components/workspace/MathKeypad';
@@ -1729,7 +1729,8 @@ export function Toolbar({
                         <div className="flex flex-col space-y-0.5 pl-3">
                           {matchingTools.map((tool) => {
                             const isActive = activeTool === tool.id;
-                            const shortcut = TOOL_SHORTCUTS[tool.id as ToolMode];
+                            // İlkokulda kısayol harfi gösterilmez (kısayol çalışır)
+                            const shortcut = gorunenKisayol(tool.id, kademeDuzeyi);
 
                             return (
                               <button
@@ -1831,7 +1832,7 @@ export function Toolbar({
                   .filter(aramayaUyar)
                   .map((tool) => {
                     const isActive = activeTool === tool.id;
-                    const shortcut = TOOL_SHORTCUTS[tool.id as ToolMode];
+                    const shortcut = gorunenKisayol(tool.id, kademeDuzeyi);
 
                     return (
                       <button

@@ -78,6 +78,9 @@ describe('komutlar ve kısayollar kısıtlanmaz', () => {
     ];
     for (const dosya of komutYolu) {
       expect(oku(dosya), path.relative(SRC, dosya)).not.toMatch(/kademeDuzey|KademeDuzey|useKademeDuzeyi|sinifDuzey|SinifDuzey/);
+      // Araç süzgecinin işlevleri de komut yolunda yok. İlkokul GÖRÜNÜM kuralları (ilkokulKipi: harfsiz köşe,
+      // tam sayı ölçü, en çok sekizgen) ayrı bir modüldür; yazılı komutla kurulan şekil yine kurulur.
+      expect(oku(dosya), path.relative(SRC, dosya)).not.toMatch(/aracGorunurMu|gorunenAraclar|araclariSuz|gruplariSuz/);
     }
   });
 });

@@ -87,3 +87,11 @@ export function useKademeDuzeyi(): [KademeDuzeyi, (yeni: KademeDuzeyi) => void] 
   const duzey = useSyncExternalStore(kademeDuzeyineAbone, kademeDuzeyiniOku, sunucuDegeri);
   return [duzey, kademeDuzeyiniAyarla];
 }
+
+/**
+ * İlkokul kipi açık mı (Kademe menüsünde İlkokul seçili; 1-4. sınıf etkinliği açılınca da seçilir: useIlkokulAtolyesi).
+ * Açıkken atölye ilkokul kurallarını uygular (components/workspace/ilkokulKipi.ts).
+ */
+export function useIlkokulKipi(): boolean {
+  return useKademeDuzeyi()[0] === 'ilkokul';
+}

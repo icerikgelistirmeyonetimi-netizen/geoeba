@@ -9,6 +9,8 @@ import { regularPolygonVertices } from '@/math/regularPolygon';
 import { createId } from '@/state/ids';
 import { Modal } from '@/components/ui/Modal';
 import { Hexagon, X, Check, Sparkles } from 'lucide-react';
+import { useIlkokulKipi } from '@/hooks/useKademeDuzeyi';
+import { ILKOKUL_EN_COK_KENAR } from './ilkokulKipi';
 
 interface RegularPolygonDialogProps {
   isOpen: boolean;
@@ -80,7 +82,8 @@ function getPolygonName(n: number): string {
   return `Düzgün ${n}-gen`;
 }
 
-const clampSides = (n: number) => Math.max(MIN_SIDES, Math.min(MAX_SIDES, Math.round(n)));
+/** Kenar sayısını sınırlar; ilkokulda en çok sekizgen (alan uzmanı, 3. sınıf) */
+export const clampSides = (n: number, enCok: number = MAX_SIDES) => Math.max(MIN_SIDES, Math.min(enCok, Math.round(n)));
 const clampRadius = (r: number) => Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, r));
 
 function parseNumberInput(raw: string): number | null {
@@ -94,15 +97,19 @@ export function RegularPolygonDialog({
   targetPos = { x: 0, y: 0 },
 }: RegularPolygonDialogProps) {
   const { addObjects, objects } = useWorkspace();
+  // İlkokul: en çok sekizgen; iç / dış açı derecesi ve köşegen sayısı kartı gösterilmez (açı ölçme yok)
+  const ilkokul = useIlkokulKipi();
+  const enCokKenar = ilkokul ? ILKOKUL_EN_COK_KENAR : MAX_SIDES;
+  const sablonlar = ilkokul ? PRESET_EDGES.filter((p) => p.count <= ILKOKUL_EN_COK_KENAR) : PRESET_EDGES;
   // Ham metin: kullanıcı "1" -> "12" yazarken ara değerler bozulmasın.
   const [sidesRaw, setSidesRaw] = useState('6');
   const [radiusRaw, setRadiusRaw] = useState('3');
 
   // Görüntüleme/hesaplama için geçerli (sınırlandırılmış) değerler
-  const sides = clampSides(parseNumberInput(sidesRaw) ?? 6);
+  const sides = clampSides(parseNumberInput(sidesRaw) ?? 6, enCokKenar);
   const radius = clampRadius(parseNumberInput(radiusRaw) ?? 3);
 
-  const setSides = (n: number) => setSidesRaw(String(clampSides(n)));
+  const setSides = (n: number) => setSidesRaw(String(clampSides(n, enCokKenar)));
   const setRadius = (r: number) => setRadiusRaw(formatTurkishNumber(clampRadius(r), 2));
 
   const interiorAngle = ((sides - 2) * 180) / sides;
@@ -236,7 +243,7 @@ export function RegularPolygonDialog({
             </button>
           </div>
           <p className="text-[10px] text-muted-foreground">
-            {MIN_SIDES} ile {MAX_SIDES} arasında bir tam sayı girin.
+            {MIN_SIDES} ile {enCokKenar} arasında bir tam sayı girin.{ilkokul ? ' İlkokulda en çok sekizgen çizilir.' : ''}
           </p>
         </div>
 
@@ -246,7 +253,7 @@ export function RegularPolygonDialog({
             Sık Kullanılan Çokgenler
           </div>
           <div className="grid grid-cols-4 gap-1.5">
-            {PRESET_EDGES.map((p) => (
+            {sablonlar.map((p) => (
               <button
                 key={p.count}
                 type="button"
@@ -269,7 +276,7 @@ export function RegularPolygonDialog({
         <div className="space-y-1.5 pt-1">
           <div className="flex justify-between items-center text-xs">
             <label className="font-semibold text-foreground" htmlFor="regular-polygon-radius-input">
-              Büyüklük (Yarıçap)
+              {ilkokul ? 'Büyüklük' : 'Büyüklük (Yarıçap)'}
             </label>
             <div className="flex items-center gap-1">
               <input
@@ -296,7 +303,8 @@ export function RegularPolygonDialog({
           />
         </div>
 
-        {/* MEB Eğitsel Matematik Özellikleri Kartı */}
+        {/* MEB Eğitsel Matematik Özellikleri Kartı (ilkokulda yok: açı derecesi ve köşegen ileriki sınıfların konusu) */}
+        {!ilkokul && (
         <div className="bg-ada-altin/10 border border-ada-altin/25 rounded-xl p-3 text-xs space-y-1.5">
           <div className="flex items-center gap-1.5 font-bold text-foreground">
             <Sparkles className="w-3.5 h-3.5" />
@@ -317,6 +325,7 @@ export function RegularPolygonDialog({
             </div>
           </div>
         </div>
+        )}
 
         {/* Düğmeler */}
         <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">

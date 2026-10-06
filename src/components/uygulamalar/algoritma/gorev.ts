@@ -140,8 +140,17 @@ export interface Atolye {
   aracKutusu: BlokSablonu[];
   /** ★★★ ölçütü */
   enCokBlok: number;
-  /** Bütün dünyalarda çalışan ve sınırı aşmayan bir çözüm (öğretmen notu, testler) */
+  /** Bütün dünyalarda çalışan ve sınırı aşmayan bir çözüm (öğretmen notu, testler); `dunyaBasinaKod`da 1. dünyanınki */
   cozum: Program;
+  /**
+   * Her dünyanın KENDİ kodu var (tek kod bütün dünyalarda sınanmaz): öğrenci her sahada kodu yeniden kurar.
+   * Ayna atölyesinde tek kod bütün şekli çizince 3. ve 4. sahada şekil öğrenci hiçbir şey yapmadan tamamlanıyordu
+   * (alan uzmanları, 2. tur: "Kodlar verilen şekli kendi tamamlamaktadır. Öğrenci sadece izleyebilir.").
+   * Yıldızlar: ★ 1. dünyada doğru · ★★ her dünya kendi koduyla doğru · ★★★ ayrıca her kod en çok `enCokBlok` blok.
+   */
+  dunyaBasinaKod?: boolean;
+  /** `dunyaBasinaKod`da her dünyanın bir çözümü (dünya sırasıyla; testler) */
+  cozumler?: Program[];
   degiskenler?: string[];
   olcumler?: OlcumTuru[];
   kazanimlar: string[];

@@ -7,6 +7,8 @@ import { workspaceOwnsKeyboard, toolForShortcut } from './toolShortcuts';
 import { ARAC_SECILDI_OLAYI } from './olcmeAraclari';
 import { Toolbar } from './Toolbar';
 import { CommandAssistant } from './CommandAssistant';
+import { KesirAraciCubugu } from './KesirAraciCubugu';
+import { useIlkokulAtolyesi } from './useIlkokulAtolyesi';
 import { Canvas } from './Canvas';
 import { PropertiesPanel } from './PropertiesPanel';
 import { ActivityPanel } from './ActivityPanel';
@@ -259,6 +261,9 @@ export function WorkspaceView() {
 
   // Adlı fonksiyonlar (f, g …) tuval çizilmeden önce ayrıştırıcıya bildirilir
   syncUserFunctions(objects);
+
+  // İlkokul kipi (Kademe: İlkokul; 1-4. sınıf etkinliği): kareli zemin, eksen ve koordinat bilgisi yok (ilkokulKipi.ts)
+  useIlkokulAtolyesi();
 
   // Düzen ve Panel Durumları
   const [showWorkspaceSettingsMenu, setShowWorkspaceSettingsMenu] = useState(false);
@@ -675,6 +680,8 @@ export function WorkspaceView() {
             onDragEnd={handleDragEnd}
           />
           <CommandAssistant onSelectTool={activateTool} />
+          {/* Kesir Göster: pay, payda ve model seçimi (araç etkinken ya da kesir modeli seçiliyken) */}
+          <KesirAraciCubugu />
         </div>
       </div>
     </div>

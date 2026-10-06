@@ -6,7 +6,7 @@ import { blokSayisi, kullanilanlar, programKur, type Program } from '../program'
 import { UNITELER, sinifGruplari, uniteBul } from '../mufredat';
 import { SINIF1, CICEK } from '../sinif1';
 import { GOREVLER as SINIF3_GOREVLERI, SULAMA_PROGRAMI, HASAT_COZUMU } from '../unite';
-import { bosKayit, eskiKaydiAktar, gorevGuncelle, gorevKodu, kaydiCoz, uniteIlerlemesi } from '../kayit';
+import { atolyeGuncelle, bosKayit, eskiKaydiAktar, gorevGuncelle, gorevKodu, ilkEksikGorev, kaydiCoz, uniteIlerlemesi } from '../kayit';
 import { kalipBul } from '../kaliplar';
 import type { Gorev, Unite } from '../gorev';
 import { atolyeleriDenetle, uniteleriDenetle } from './uniteDenetimi';
@@ -173,6 +173,31 @@ describe('ilerleme kaydı (v3)', () => {
     const s3 = uniteBul('s3-bak');
     const hepsi = SINIF3_GOREVLERI.filter((g) => !g.zorlu).reduce((x, g) => gorevGuncelle(x, g.id, (y) => ({ ...y, tamam: true })), bosKayit());
     expect(uniteIlerlemesi(hepsi, s3)).toEqual({ tamam: 6, toplam: 6 });
+  });
+
+  it('sıradaki görev: tamamlanmamış İLK zorunlu görev, son açılan değil (3. sınıf 1. ünite, 6. görev)', () => {
+    const u = uniteBul('s3-izle');
+    expect(u.gorevler).toHaveLength(6);
+    // Uzmanın durumu: 6. görevi bitirdi (son açılan görev 6.), 1. görevin tahmini tutmadı
+    let k = { ...bosKayit(), unite: u.id, uniteler: { [u.id]: { aktif: 5, bitti: false } } };
+    for (const g of u.gorevler.slice(1)) k = gorevGuncelle(k, g.id, (x) => ({ ...x, tamam: true }));
+    expect(uniteIlerlemesi(k, u)).toEqual({ tamam: 5, toplam: 6 });
+    // Eskiden kartta "Sıradaki: 6. görev" (aktif + 1) yazıyordu: 6. görev bitmiş hâlde tamamlanmamış görünüyordu
+    expect(ilkEksikGorev(k, u)).toBe(0);
+    k = gorevGuncelle(k, u.gorevler[0].id, (x) => ({ ...x, tamam: true }));
+    expect(ilkEksikGorev(k, u)).toBeNull();
+    expect(uniteIlerlemesi(k, u)).toEqual({ tamam: 6, toplam: 6 });
+    expect(ilkEksikGorev(bosKayit(), u)).toBe(0);
+  });
+
+  it('dünya başına kodlu atölyenin (Ayna) saha kodları kayda girer; bilinmeyen saha atılır', () => {
+    const p = programKur(['ileri', 'sagaDon']);
+    let k = atolyeGuncelle(bosKayit(), 'a3-ayna', (a) => ({ ...a, programlar: { 'a3-ayna-2': p, 'yok-saha': p } }));
+    k = atolyeGuncelle(k, 'a3-sera', (a) => ({ ...a, program: p }));
+    const geri = kaydiCoz(JSON.stringify(k));
+    expect(geri?.atolyeler?.['a3-ayna']?.programlar).toEqual({ 'a3-ayna-2': p });
+    expect(geri?.atolyeler?.['a3-sera']?.programlar).toBeUndefined();
+    expect(geri?.atolyeler?.['a3-sera']?.program).toEqual(p);
   });
 
   it('v2 (yalnız 3. sınıf) kaydı aktarılır', () => {

@@ -12,7 +12,7 @@ import { blokSayisi, bloklar, karsilastirmaMi, kullanilanlar, type Blok, type Bl
 import { KAZANIM_LISTESI } from '../kazanimlar';
 import { kalipBul } from '../kaliplar';
 import { FISSIZ_KOMUTLARI } from '../yazdir';
-import { sina } from '../degerlendirme';
+import { sina, sinaAyri } from '../degerlendirme';
 import type { Atolye, Gorev, Unite } from '../gorev';
 
 /** Çözümdeki bir bloğun araç kutusunda karşılığı var mı */
@@ -157,12 +157,20 @@ export function atolyeleriDenetle(atolyeler: readonly Atolye[]) {
       expect(kod.startsWith(`MAT.${a.sinif}.`), `${ad}: ${kod} bu sınıfın değil`).toBe(true);
     }
     const ayar = { gorunen: a.dunyalar[0], sinama: a.dunyalar.slice(1), hedef: a.hedef, enFazlaBlok: a.enCokBlok, bitkiAdi: a.bitkiAdi };
-    const s = sina(a.cozum, ayar, 1);
+    // Dünya başına kodlu atölye: her dünyanın kendi çözümü var; çözümlerin her biri yalnız kendi dünyasında sınanır
+    const cozumler = a.dunyaBasinaKod ? a.cozumler ?? [] : [a.cozum];
+    if (a.dunyaBasinaKod) {
+      expect(cozumler.length, `${ad}: her dünyaya bir çözüm`).toBe(a.dunyalar.length);
+      expect(a.cozum, `${ad}: cozum 1. dünyanın çözümü`).toBe(cozumler[0]);
+    }
+    const s = a.dunyaBasinaKod ? sinaAyri(cozumler, ayar) : sina(a.cozum, ayar, 1);
     expect(s.yildiz, `${ad} çözüm: ${s.dunyalar.filter((d) => !d.basarili).map((d) => `${d.dunya.ad}: ${d.ileti}`).join(' | ')}`).toBe(3);
-    expect(sina([], ayar, 1).yildiz, `${ad}: boş kod yıldız almamalı`).toBe(0);
-    for (const b of bloklar(a.cozum)) expect(sablonVarMi(a.aracKutusu, b), `${ad}: araç kutusunda ${b.tur} yok`).toBe(true);
+    expect((a.dunyaBasinaKod ? sinaAyri([], ayar) : sina([], ayar, 1)).yildiz, `${ad}: boş kod yıldız almamalı`).toBe(0);
     const bilinen = new Set([...(a.degiskenler ?? []), ...a.dunyalar.flatMap((d) => Object.keys(d.degiskenler ?? {}))]);
-    for (const v of kullanilanlar(a.cozum).degiskenler) expect(bilinen.has(v), `${ad}: ${v} bildirilmemiş`).toBe(true);
+    for (const cozum of cozumler) {
+      for (const b of bloklar(cozum)) expect(sablonVarMi(a.aracKutusu, b), `${ad}: araç kutusunda ${b.tur} yok`).toBe(true);
+      for (const v of kullanilanlar(cozum).degiskenler) expect(bilinen.has(v), `${ad}: ${v} bildirilmemiş`).toBe(true);
+    }
     for (const d of a.dunyalar) {
       const z = izgara(d);
       if (z.tur === 'sera') expect(d.bitkiler.length, `${ad} sıra`).toBeLessThanOrEqual(12);

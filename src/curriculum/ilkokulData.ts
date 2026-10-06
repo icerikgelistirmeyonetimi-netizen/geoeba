@@ -14,68 +14,9 @@ export const ilkokulLevel: Level = {
       "description": "1. Sınıf öğretim programı kazanımları.",
       "themes": [
         {
-          "id": "theme-1-1",
-          "code": "MAT.1.1",
-          "orderNumber": 1,
-          "themeName": "NESNELERİN GEOMETRİSİ (1)",
-          "fullTitle": "NESNELERİN GEOMETRİSİ (1)",
-          "lessonHours": 10,
-          "outcomeCount": 2,
-          "description": "",
-          "colorTheme": "#10b981",
-          "topics": [
-            {
-              "id": "topic-1-1-1-yer-yon-ve-konum-bildiren-i-fa",
-              "title": "Yer, Yön ve Konum Bildiren İfadeler",
-              "code": "MAT.1.1.1",
-              "category": "geometri",
-              "badge": "Yer, Yön ve Kon",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-1-1-1-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "geometri",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#10b981",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
-              "id": "topic-1-1-2-eslik",
-              "title": "Eşlik",
-              "code": "MAT.1.1.2",
-              "category": "geometri",
-              "badge": "Eşlik",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-1-1-2-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "geometri",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#10b981",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            }
-          ]
-        },
-        {
           "id": "theme-1-2",
           "code": "MAT.1.2",
-          "orderNumber": 2,
+          "orderNumber": 1,
           "themeName": "SAYILAR VE NİCELİKLER (1)",
           "fullTitle": "SAYILAR VE NİCELİKLER (1)",
           "lessonHours": 10,
@@ -272,7 +213,7 @@ export const ilkokulLevel: Level = {
         {
           "id": "theme-1-3",
           "code": "MAT.1.3",
-          "orderNumber": 3,
+          "orderNumber": 2,
           "themeName": "SAYILAR VE NİCELİKLER (2)",
           "fullTitle": "SAYILAR VE NİCELİKLER (2)",
           "lessonHours": 10,
@@ -296,6 +237,42 @@ export const ilkokulLevel: Level = {
                   "description": "",
                   "learningGoal": "",
                   "folderColor": "#f59e0b",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "theme-1-5",
+          "code": "MAT.1.5",
+          "orderNumber": 3,
+          "themeName": "SAYILAR VE NİCELİKLER (3)",
+          "fullTitle": "SAYILAR VE NİCELİKLER (3)",
+          "lessonHours": 10,
+          "outcomeCount": 1,
+          "description": "",
+          "colorTheme": "#eab308",
+          "topics": [
+            {
+              "id": "topic-1-5-1-paralarimiz",
+              "title": "Paralarımız",
+              "code": "MAT.1.5.1",
+              "category": "sayi",
+              "badge": "Paralarımız",
+              "description": "",
+              "learningOutcomes": [],
+              "activities": [
+                {
+                  "id": "act-1-5-1-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "sayi",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#eab308",
                   "initialObjects": [],
                   "steps": [],
                   "validationRules": [],
@@ -411,32 +388,55 @@ export const ilkokulLevel: Level = {
           ]
         },
         {
-          "id": "theme-1-5",
-          "code": "MAT.1.5",
+          "id": "theme-1-1",
+          "code": "MAT.1.1",
           "orderNumber": 5,
-          "themeName": "SAYILAR VE NİCELİKLER (3)",
-          "fullTitle": "SAYILAR VE NİCELİKLER (3)",
+          "themeName": "NESNELERİN GEOMETRİSİ (1)",
+          "fullTitle": "NESNELERİN GEOMETRİSİ (1)",
           "lessonHours": 10,
-          "outcomeCount": 1,
+          "outcomeCount": 2,
           "description": "",
-          "colorTheme": "#eab308",
+          "colorTheme": "#10b981",
           "topics": [
             {
-              "id": "topic-1-5-1-paralarimiz",
-              "title": "Paralarımız",
-              "code": "MAT.1.5.1",
-              "category": "sayi",
-              "badge": "Paralarımız",
+              "id": "topic-1-1-1-yer-yon-ve-konum-bildiren-i-fa",
+              "title": "Yer, Yön ve Konum Bildiren İfadeler",
+              "code": "MAT.1.1.1",
+              "category": "geometri",
+              "badge": "Yer, Yön ve Kon",
               "description": "",
               "learningOutcomes": [],
               "activities": [
                 {
-                  "id": "act-1-5-1-ornek",
+                  "id": "act-1-1-1-ornek",
                   "title": "Örnek Görev Kartı",
-                  "category": "sayi",
+                  "category": "geometri",
                   "description": "",
                   "learningGoal": "",
-                  "folderColor": "#eab308",
+                  "folderColor": "#10b981",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
+              "id": "topic-1-1-2-eslik",
+              "title": "Eşlik",
+              "code": "MAT.1.1.2",
+              "category": "geometri",
+              "badge": "Eşlik",
+              "description": "",
+              "learningOutcomes": [],
+              "activities": [
+                {
+                  "id": "act-1-1-2-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "geometri",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#10b981",
                   "initialObjects": [],
                   "steps": [],
                   "validationRules": [],
@@ -859,7 +859,7 @@ export const ilkokulLevel: Level = {
           "themeName": "İŞLEMLERDEN CEBİRSEL DÜŞÜNMEYE",
           "fullTitle": "İŞLEMLERDEN CEBİRSEL DÜŞÜNMEYE",
           "lessonHours": 10,
-          "outcomeCount": 8,
+          "outcomeCount": 7,
           "description": "",
           "colorTheme": "#f59e0b",
           "topics": [
@@ -897,29 +897,6 @@ export const ilkokulLevel: Level = {
               "activities": [
                 {
                   "id": "act-2-3-2-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "hepsi",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#f59e0b",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
-              "id": "topic-2-3-3-zihinden-toplama-ve-cikarma",
-              "title": "Zihinden Toplama ve Çıkarma",
-              "code": "MAT.2.3.3",
-              "category": "hepsi",
-              "badge": "Zihinden Toplam",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-2-3-3-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "hepsi",
                   "description": "",
@@ -1710,29 +1687,6 @@ export const ilkokulLevel: Level = {
           "colorTheme": "#f59e0b",
           "topics": [
             {
-              "id": "topic-3-3-1-toplama-ve-cikarma-i-slemleri",
-              "title": "Toplama ve Çıkarma İşlemleri",
-              "code": "MAT.3.3.1",
-              "category": "hepsi",
-              "badge": "Toplama ve Çıka",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-3-3-1-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "hepsi",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#f59e0b",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
               "id": "topic-3-3-2-tahmin-ve-zihinden-i-slem-topl",
               "title": "Tahmin ve Zihinden İşlem (Toplama-Çıkarma)",
               "code": "MAT.3.3.2",
@@ -1756,16 +1710,39 @@ export const ilkokulLevel: Level = {
               ]
             },
             {
-              "id": "topic-3-3-3-toplama-ve-cikarma-yorumlama",
-              "title": "Toplama ve Çıkarma Yorumlama",
-              "code": "MAT.3.3.3",
+              "id": "topic-3-3-1-toplama-ve-cikarma-i-slemleri",
+              "title": "Toplama ve Çıkarma İşlemleri",
+              "code": "MAT.3.3.1",
               "category": "hepsi",
               "badge": "Toplama ve Çıka",
               "description": "",
               "learningOutcomes": [],
               "activities": [
                 {
-                  "id": "act-3-3-3-ornek",
+                  "id": "act-3-3-1-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "hepsi",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#f59e0b",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
+              "id": "topic-3-3-5-tahmin-ve-zihinden-i-slem-carp",
+              "title": "Tahmin ve Zihinden İşlem (Çarpma ve Bölme)",
+              "code": "MAT.3.3.5",
+              "category": "hepsi",
+              "badge": "Tahmin ve Zihin",
+              "description": "",
+              "learningOutcomes": [],
+              "activities": [
+                {
+                  "id": "act-3-3-5-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "hepsi",
                   "description": "",
@@ -1802,16 +1779,16 @@ export const ilkokulLevel: Level = {
               ]
             },
             {
-              "id": "topic-3-3-5-tahmin-ve-zihinden-i-slem-carp",
-              "title": "Tahmin ve Zihinden İşlem (Çarpma ve Bölme)",
-              "code": "MAT.3.3.5",
+              "id": "topic-3-3-3-toplama-ve-cikarma-yorumlama",
+              "title": "Toplama ve Çıkarma Yorumlama",
+              "code": "MAT.3.3.3",
               "category": "hepsi",
-              "badge": "Tahmin ve Zihin",
+              "badge": "Toplama ve Çıka",
               "description": "",
               "learningOutcomes": [],
               "activities": [
                 {
-                  "id": "act-3-3-5-ornek",
+                  "id": "act-3-3-3-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "hepsi",
                   "description": "",

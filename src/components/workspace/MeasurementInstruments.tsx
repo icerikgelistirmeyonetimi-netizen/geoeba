@@ -32,6 +32,8 @@ import { createId } from '@/state/ids';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { GeometryToolIcon } from './GeometryToolIcon';
 import { workspaceOwnsKeyboard } from './toolShortcuts';
+import { useIlkokulKipi } from '@/hooks/useKademeDuzeyi';
+import { ilkokulAlanOkumasi } from './ilkokulKipi';
 import {
   ARAC_ADLARI,
   ARAC_SECILDI_OLAYI,
@@ -280,6 +282,8 @@ export function MeasurementInstruments({
   });
 
   const { setActiveTool, addObjects, objects } = useWorkspace();
+  // İlkokul: açıölçer derece okuması vermez (yalnız tanıtım); alan modeli çarpma değil birim kare sayısı yazar
+  const ilkokul = useIlkokulKipi();
   const gorunur = olcmeAraciMi(activeTool);
 
   const menuyuKapat = useCallback(() => setMenu(null), []);
@@ -874,7 +878,7 @@ export function MeasurementInstruments({
             y: kolTopuz.y,
             renk: 'mercan',
             glif: 'kol',
-            baslik: 'Açıyı ölçmek için kolu sürükleyin (Shift: 5° adım)',
+            baslik: ilkokul ? 'Kolu döndürmek için sürükleyin' : 'Açıyı ölçmek için kolu sürükleyin (Shift: 5° adım)',
             onPointerDown: (e) => {
               const p = koken;
               const bas = a;
@@ -907,13 +911,13 @@ export function MeasurementInstruments({
           })}
         </g>
 
-        {gosterim.olcu && aktifTutamac !== 'kol' && (
+        {gosterim.olcu && !ilkokul && aktifTutamac !== 'kol' && (
           <text x={yazi.x} y={yazi.y + 4} textAnchor="middle" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
             {iletkiOkumasi(a)}
           </text>
         )}
-        {aktifTutamac === 'kol' && okumaHapi(iletkiOkumasi(a), yereldenEkrana(koken, donus, kolTopuz))}
-        {aktifTutamac === 'taban' && okumaHapi(tabanOkumasi(taban), yereldenEkrana(koken, donus, tabanTopuz))}
+        {aktifTutamac === 'kol' && !ilkokul && okumaHapi(iletkiOkumasi(a), yereldenEkrana(koken, donus, kolTopuz))}
+        {aktifTutamac === 'taban' && !ilkokul && okumaHapi(tabanOkumasi(taban), yereldenEkrana(koken, donus, tabanTopuz))}
       </g>
     );
   };
@@ -1176,7 +1180,7 @@ export function MeasurementInstruments({
           )}
           {gosterim.alan && aktifTutamac !== 'kose' && (
             <text x={W / 2} y={22} textAnchor="middle" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
-              {alanOkumasi(sutun, satir)}
+              {ilkokul ? ilkokulAlanOkumasi(sutun, satir) : alanOkumasi(sutun, satir)}
             </text>
           )}
           {gosterim.cevre && (
@@ -1229,7 +1233,7 @@ export function MeasurementInstruments({
         </g>
 
         {aktifTutamac === 'kose' &&
-          okumaHapi(alanOkumasi(sutun, satir), { x: koken.x + koseTopuz.x, y: koken.y + koseTopuz.y })}
+          okumaHapi(ilkokul ? ilkokulAlanOkumasi(sutun, satir) : alanOkumasi(sutun, satir), { x: koken.x + koseTopuz.x, y: koken.y + koseTopuz.y })}
       </g>
     );
   };
@@ -1241,7 +1245,7 @@ export function MeasurementInstruments({
       case 'ruler':
         return cetvelMenusu({ boy: rulerLength, donusSvg: rulerRotation });
       case 'measure_angle':
-        return iletkiMenusu({ aci: protractorAngle, taban: protractorBaseAngle, olcuGoster: gosterim.olcu });
+        return iletkiMenusu({ aci: protractorAngle, taban: protractorBaseAngle, olcuGoster: gosterim.olcu, ilkokul });
       case 'setsquare':
         return gonyeMenusu({ donusSvg: setsquareRotation });
       default:

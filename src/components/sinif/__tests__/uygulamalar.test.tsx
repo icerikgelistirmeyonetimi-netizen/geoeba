@@ -2,7 +2,7 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CIZIM_KIMLIGI, UYGULAMALAR, UygulamaHazirlaniyor, uygulamaBul } from '../uygulamalar';
+import { CIZIM_KIMLIGI, ILKOKULDA_GIZLI_UYGULAMALAR, UYGULAMALAR, UygulamaHazirlaniyor, kademeninUygulamalari, uygulamaBul } from '../uygulamalar';
 import { manifest as veriGrafikManifesti } from '@/components/uygulamalar/veri-grafik/manifest';
 import { manifest as olasilikManifesti } from '@/components/uygulamalar/olasilik/manifest';
 import { manifest as veriGrafikIndex } from '@/components/uygulamalar/veri-grafik';
@@ -62,5 +62,16 @@ describe('uygulama kayıt defteri', () => {
     expect(html).toContain('Olasılık hazırlanıyor…');
     expect(html).toContain('eba-karakter-animasyon.svg');
     expect(renderToStaticMarkup(<UygulamaHazirlaniyor />)).toContain('Hazırlanıyor…');
+  });
+});
+
+describe('ilkokul kademesi (alan uzmanları, 2. tur)', () => {
+  it('Olasılık Laboratuvarı ilkokulda masaüstünde yok (zar, kesir ve yüzde: TYMM MAT.4.4.1); öbür uygulamalar sırasıyla kalır', () => {
+    expect(ILKOKULDA_GIZLI_UYGULAMALAR).toEqual(['olasilik']);
+    expect(kademeninUygulamalari(true).map((u) => u.id)).toEqual([CIZIM_KIMLIGI, 'veri-grafik', 'algoritma']);
+  });
+
+  it('ortaokul, lise ve "Tüm araçlar"da liste değişmez', () => {
+    expect(kademeninUygulamalari(false)).toBe(UYGULAMALAR);
   });
 });

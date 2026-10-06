@@ -11,7 +11,39 @@ export interface AracYonergesi {
 
 const sayac = (secilen: number, toplam: number) => (secilen > 0 ? ` (${secilen}/${toplam} seçildi)` : '');
 
-export function aracYonergesi(arac: string, secilen: number): AracYonergesi | null {
+/**
+ * İlkokul kipindeki yönergeler (alan uzmanları, 2. tur): "x ekseni / ekseni seçin" ve "doğru parçası" geçmez,
+ * açıölçer yalnız tanıtılır (ölçme yok), ölçüler tam sayıdır. Burada olmayan araçlar ortak yönergeyi kullanır.
+ */
+function ilkokulYonergesi(arac: string, secilen: number): AracYonergesi | null {
+  switch (arac) {
+    case 'measure_angle':
+      return {
+        baslik: 'Açıölçer',
+        aciklama: 'Açıölçeri tanı: gövdesini sürükleyerek taşı, koldaki tutamaçla kolunu, alttaki oklu tutamaçla tabanını döndür. İlkokulda açıölçerle açı ölçülmez.',
+      };
+    case 'angle':
+      return { baslik: 'Açı Oluştur', aciklama: `Sırayla 3 noktaya dokun: ortadaki nokta köşe olur${sayac(secilen, 3)}.` };
+    case 'measure_distance':
+      return { baslik: 'Uzunluk Ölç (cm)', aciklama: `İki köşeye ya da noktaya dokun; uzunluk tam santimetre yazılır${sayac(secilen, 2)}.` };
+    case 'unit_measure':
+      return { baslik: 'Birimle Ölç (br)', aciklama: `Kareli zeminde iki köşeye ya da noktaya dokun; uzunluk kaç kare kenarı olduğu (birim) yazılır${sayac(secilen, 2)}.` };
+    case 'reflect':
+    case 'symmetry':
+      return {
+        baslik: 'Simetri',
+        aciklama: 'Simetriğini çizmek istediğin şekle dokun. Simetri doğrusu şeklin yanına çizilir; üstteki düğmelerle dikey ya da yatay simetri doğrusunu seç.',
+      };
+    default:
+      return null;
+  }
+}
+
+export function aracYonergesi(arac: string, secilen: number, secenek: { ilkokul?: boolean } = {}): AracYonergesi | null {
+  if (secenek.ilkokul) {
+    const ozel = ilkokulYonergesi(arac, secilen);
+    if (ozel) return ozel;
+  }
   switch (arac) {
     case 'measure_angle':
       return {

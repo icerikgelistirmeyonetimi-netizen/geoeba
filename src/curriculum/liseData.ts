@@ -1304,16 +1304,16 @@ export const liseLevel: Level = {
           "themeName": "SAYMA, ALGORİTMA VE BİLİŞİM",
           "fullTitle": "SAYMA, ALGORİTMA VE BİLİŞİM",
           "lessonHours": 10,
-          "outcomeCount": 4,
+          "outcomeCount": 2,
           "description": "",
           "colorTheme": "#eab308",
           "topics": [
             {
               "id": "topic-10-5-1-sayma-yontemleri-toplama-ve-ca",
-              "title": "Sayma Yöntemleri (Toplama ve Çarpma Yoluyla Sayma)",
+              "title": "Sayma Stratejileri",
               "code": "MAT.10.5.1",
               "category": "hepsi",
-              "badge": "Sayma Yöntemler",
+              "badge": "Sayma Stratejil",
               "description": "",
               "learningOutcomes": [],
               "activities": [
@@ -1332,57 +1332,11 @@ export const liseLevel: Level = {
               ]
             },
             {
-              "id": "topic-10-5-2-faktoriyel",
-              "title": "Faktöriyel",
-              "code": "MAT.10.5.2",
-              "category": "hepsi",
-              "badge": "Faktöriyel",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-10-5-2-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "hepsi",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#eab308",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
-              "id": "topic-10-5-3-siralama-permutasyon-ve-secme-",
-              "title": "Sıralama (Permütasyon) ve Seçme (Kombinasyon)",
-              "code": "MAT.10.5.3",
-              "category": "hepsi",
-              "badge": "Sıralama (Permü",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-10-5-3-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "hepsi",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#eab308",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
               "id": "topic-10-5-4-sayma-problemleri-ve-algoritma",
-              "title": "Sayma Problemleri ve Algoritma",
+              "title": "Cebirsel ve Fonksiyonel İşlemlerin Algoritmik Yapısı",
               "code": "MAT.10.5.4",
               "category": "hepsi",
-              "badge": "Sayma Problemle",
+              "badge": "Cebirsel ve Fon",
               "description": "",
               "learningOutcomes": [],
               "activities": [
@@ -1409,13 +1363,13 @@ export const liseLevel: Level = {
           "themeName": "ANALİTİK İNCELEME",
           "fullTitle": "ANALİTİK İNCELEME",
           "lessonHours": 10,
-          "outcomeCount": 3,
+          "outcomeCount": 2,
           "description": "",
           "colorTheme": "#8b5cf6",
           "topics": [
             {
               "id": "topic-10-6-1-dik-koordinat-sistemi",
-              "title": "Dik Koordinat Sistemi",
+              "title": "Dik Koordinat Sisteminde Noktanın Analitik İncelenmesi",
               "code": "MAT.10.6.1",
               "category": "hepsi",
               "badge": "Dik Koordinat S",
@@ -1437,34 +1391,11 @@ export const liseLevel: Level = {
               ]
             },
             {
-              "id": "topic-10-6-2-i-ki-nokta-arasindaki-uzaklik",
-              "title": "İki Nokta Arasındaki Uzaklık",
-              "code": "MAT.10.6.2",
-              "category": "hepsi",
-              "badge": "İki Nokta Arası",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-10-6-2-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "hepsi",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#8b5cf6",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
               "id": "topic-10-6-3-dogrunun-analitik-i-ncelenmesi",
-              "title": "Doğrunun Analitik İncelenmesi ve Doğruların Birbirine Göre Konumları",
+              "title": "Dik Koordinat Sisteminde Doğrunun Analitik İncelenmesi",
               "code": "MAT.10.6.3",
               "category": "hepsi",
-              "badge": "Doğrunun Analit",
+              "badge": "Dik Koordinat S",
               "description": "",
               "learningOutcomes": [],
               "activities": [
@@ -1491,33 +1422,10 @@ export const liseLevel: Level = {
           "themeName": "VERİDEN OLASILIĞA",
           "fullTitle": "VERİDEN OLASILIĞA",
           "lessonHours": 10,
-          "outcomeCount": 3,
+          "outcomeCount": 2,
           "description": "",
           "colorTheme": "#06b6d4",
           "topics": [
-            {
-              "id": "topic-10-7-1-bagimli-ve-bagimsiz-olaylar",
-              "title": "Bağımlı ve Bağımsız Olaylar",
-              "code": "MAT.10.7.1",
-              "category": "istatistik",
-              "badge": "Bağımlı ve Bağı",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-10-7-1-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "istatistik",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#06b6d4",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
             {
               "id": "topic-10-7-2-kosullu-olasilik",
               "title": "Koşullu Olasılık",
@@ -1588,12 +1496,14 @@ export const liseLevel: Level = {
           "topics": [
             {
               "id": "topic-11-1-1-i-ki-nicel-degiskenli-veri-dag",
-              "title": "İki Nicel Değişkenli Veri Dağılımları (Serpme Diyagramı, Korelasyon)",
+              "title": "İki Nicel Değişkenli Veriler",
               "code": "MAT.11.1.1",
               "category": "hepsi",
               "badge": "İki Nicel Değiş",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.11.1.1. İki nicel değişkenli veri ile çalışabilme ve iki nicel değişken arasındaki ilişkililiğe dayalı karar verebilme"
+              ],
               "activities": [
                 {
                   "id": "act-11-1-1-ornek",
@@ -1611,12 +1521,14 @@ export const liseLevel: Level = {
             },
             {
               "id": "topic-11-1-2-baskalari-tarafindan-olusturul",
-              "title": "Başkaları Tarafından Oluşturulan Dağılımların İncelenmesi",
+              "title": "Başkaları Tarafından Oluşturulan İki Nicel Değişkenli Verileri İnceleme",
               "code": "MAT.11.1.2",
               "category": "hepsi",
               "badge": "Başkaları Taraf",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.11.1.2. Başkaları tarafından oluşturulan iki nicel değişkenli verilerin ilişkililiğine dayalı istatistiksel sonuç veya yorumları tartışabilme"
+              ],
               "activities": [
                 {
                   "id": "act-11-1-2-ornek",
@@ -1641,41 +1553,20 @@ export const liseLevel: Level = {
           "themeName": "GEOMETRİK ŞEKİLLER",
           "fullTitle": "GEOMETRİK ŞEKİLLER",
           "lessonHours": 10,
-          "outcomeCount": 3,
+          "outcomeCount": 5,
           "description": "",
           "colorTheme": "#f43f5e",
           "topics": [
             {
-              "id": "topic-11-2-1-cokgenler-ve-duzgun-cokgenler",
-              "title": "Çokgenler ve Düzgün Çokgenler",
-              "code": "MAT.11.2.1",
-              "category": "geometri",
-              "badge": "Çokgenler ve Dü",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-11-2-1-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "geometri",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#f43f5e",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
               "id": "topic-11-2-2-dortgenler-ve-ozel-dortgenler-",
-              "title": "Dörtgenler ve Özel Dörtgenler (Kenar, Açı, Köşegen, Simetri ve Alan Özellikleri)",
+              "title": "Dörtgenlerin Özellikleri",
               "code": "MAT.11.2.2",
               "category": "geometri",
-              "badge": "Dörtgenler ve Ö",
+              "badge": "Dörtgenlerin Öz",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.11.2.1. Üçgenlerde açı, benzerlik ve alan özelliklerinden yola çıkarak dörtgenlerin açı, kenar, köşegen, simetri ve alan özelliklerine ilişkin muhakeme yapabilme"
+              ],
               "activities": [
                 {
                   "id": "act-11-2-2-ornek",
@@ -1693,15 +1584,92 @@ export const liseLevel: Level = {
             },
             {
               "id": "topic-11-2-3-dortgenlerin-birbirleriyle-i-l",
-              "title": "Dörtgenlerin Birbirleriyle İlişkileri ve Sınıflandırılması",
+              "title": "Özel Dörtgenler Arasındaki İlişkiler",
               "code": "MAT.11.2.3",
               "category": "geometri",
-              "badge": "Dörtgenlerin Bi",
+              "badge": "Özel Dörtgenler",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.11.2.2. Özel dörtgenlerin kenar, açı, köşegen ve simetri özelliklerinden hareketle aralarındaki ilişkileri yapılandırabilme"
+              ],
               "activities": [
                 {
                   "id": "act-11-2-3-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "geometri",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#f43f5e",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
+              "id": "topic-11-2-1-cokgenler-ve-duzgun-cokgenler",
+              "title": "Çokgenlerin Sınıflandırılması",
+              "code": "MAT.11.2.1",
+              "category": "geometri",
+              "badge": "Çokgenlerin Sın",
+              "description": "",
+              "learningOutcomes": [
+                "MAT.11.2.3. Çokgenleri içbükey veya dışbükey olarak sınıflandırabilme"
+              ],
+              "activities": [
+                {
+                  "id": "act-11-2-1-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "geometri",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#f43f5e",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
+              "id": "topic-11-2-4-disbukey-cokgenlerin-ozellikle",
+              "title": "Dışbükey Çokgenlerin Özellikleri",
+              "code": "MAT.11.2.4",
+              "category": "geometri",
+              "badge": "Dışbükey Çokgen",
+              "description": "",
+              "learningOutcomes": [
+                "MAT.11.2.4. Dışbükey çokgenlerin kenar, açı, köşegen, simetri ve alan özelliklerine dair çıkarım yapabilme"
+              ],
+              "activities": [
+                {
+                  "id": "act-11-2-4-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "geometri",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#f43f5e",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
+              "id": "topic-11-2-5-cokgenlerle-i-lgili-problemler",
+              "title": "Çokgenlerle İlgili Problemler",
+              "code": "MAT.11.2.5",
+              "category": "geometri",
+              "badge": "Çokgenlerle İlg",
+              "description": "",
+              "learningOutcomes": [
+                "MAT.11.2.5. Çokgenlerin kenar, açı, köşegen, simetri ve alan özelliklerini içeren problemler çözebilme"
+              ],
+              "activities": [
+                {
+                  "id": "act-11-2-5-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "geometri",
                   "description": "",
@@ -1729,12 +1697,14 @@ export const liseLevel: Level = {
           "topics": [
             {
               "id": "topic-11-3-1-trigonometrik-referans-fonksiy",
-              "title": "Trigonometrik Referans Fonksiyonlar ve Nitel Özellikleri",
+              "title": "Trigonometrik Fonksiyonlar ve Nitel Özellikleri",
               "code": "MAT.11.3.1",
               "category": "hepsi",
-              "badge": "Trigonometrik R",
+              "badge": "Trigonometrik F",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.11.3.1. f(x)=sinx (x∈ℝ), f(x)=cosx (x∈ℝ), f(x)=tanx (x∈ℝ, x≠π/2+kπ, k∈ℤ ) ve f(x)=cotx (x∈ℝ, x≠kπ, k∈ℤ) şeklinde tanımlı trigonometrik referans fonksiyonların nitel özellikleri ile bu fonksiyonlardan türetilen [g(x) = k∙f(mx±r)±s (k, m, r, s ∈ ℝ, k≠0, m≠0)] trigonometrik fonksiyonların nitel özelliklerine ilişkin matematiksel muhakeme yapabilme"
+              ],
               "activities": [
                 {
                   "id": "act-11-3-1-ornek",
@@ -1752,12 +1722,14 @@ export const liseLevel: Level = {
             },
             {
               "id": "topic-11-3-2-trigonometrik-fonksiyonlarla-i",
-              "title": "Trigonometrik Fonksiyonlarla İfade Edilebilen Denklem ve Eşitsizlikler",
+              "title": "Trigonometrik Fonksiyonlarla İfade Edilebilen Denklemler İçeren Problemler",
               "code": "MAT.11.3.2",
               "category": "hepsi",
               "badge": "Trigonometrik F",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.11.3.2. Trigonometrik fonksiyonlarla ifade edilebilen denklemleri içeren problemleri çözebilme"
+              ],
               "activities": [
                 {
                   "id": "act-11-3-2-ornek",
@@ -1782,18 +1754,20 @@ export const liseLevel: Level = {
           "themeName": "NİCELİKLER VE DEĞİŞİMLER (2)",
           "fullTitle": "NİCELİKLER VE DEĞİŞİMLER (2)",
           "lessonHours": 10,
-          "outcomeCount": 3,
+          "outcomeCount": 4,
           "description": "",
           "colorTheme": "#3b82f6",
           "topics": [
             {
               "id": "topic-11-4-1-ustel-referans-fonksiyonlar-ve",
-              "title": "Üstel Referans Fonksiyonlar ve Nitel Özellikleri",
+              "title": "Üstel Fonksiyonlar ve Nitel Özellikleri",
               "code": "MAT.11.4.1",
               "category": "hepsi",
-              "badge": "Üstel Referans ",
+              "badge": "Üstel Fonksiyon",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.11.3.3. Gerçek sayılarda f(x) = aˣ (a>0, a≠1) şeklinde tanımlı üstel referans fonksiyonun nitel özellikleri ile bu fonksiyondan türetilen [g(x)=k∙f(mx ± r)±s (k, m, r, s ∈ ℝ, k≠0, m≠0)] üstel fonksiyonların nitel özelliklerine ilişkin matematiksel muhakeme yapabilme"
+              ],
               "activities": [
                 {
                   "id": "act-11-4-1-ornek",
@@ -1810,13 +1784,40 @@ export const liseLevel: Level = {
               ]
             },
             {
+              "id": "topic-11-4-4-ustel-fonksiyonlarin-ters-fonk",
+              "title": "Üstel Fonksiyonların Ters Fonksiyonları",
+              "code": "MAT.11.4.4",
+              "category": "hepsi",
+              "badge": "Üstel Fonksiyon",
+              "description": "",
+              "learningOutcomes": [
+                "MAT.11.3.4. Üstel fonksiyonların ters fonksiyonlarını inceleyerek logaritmik fonksiyona dair çıkarım yapabilme"
+              ],
+              "activities": [
+                {
+                  "id": "act-11-4-4-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "hepsi",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#3b82f6",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
               "id": "topic-11-4-2-logaritmik-referans-fonksiyonl",
-              "title": "Logaritmik Referans Fonksiyonlar ve Nitel Özellikleri",
+              "title": "Logaritmik Fonksiyonlar ve Nitel Özellikleri",
               "code": "MAT.11.4.2",
               "category": "hepsi",
-              "badge": "Logaritmik Refe",
+              "badge": "Logaritmik Fonk",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.11.3.5. f(x)=logₐx (a>0, a≠1, x>0 ) şeklinde tanımlı logaritmik referans fonksiyonun nitel özellikleri ile bu fonksiyondan türetilen [g(x)=k∙f(mx±r)±s (k, m, r, s ∈ ℝ, k≠0, m≠0)] logaritmik fonksiyonların nitel özelliklerine ilişkin matematiksel muhakeme yapabilme"
+              ],
               "activities": [
                 {
                   "id": "act-11-4-2-ornek",
@@ -1834,12 +1835,14 @@ export const liseLevel: Level = {
             },
             {
               "id": "topic-11-4-3-ustel-ve-logaritmik-denklem-il",
-              "title": "Üstel ve Logaritmik Denklem ile Eşitsizlikler",
+              "title": "Üstel ve Logaritmik Fonksiyonlarla İfade Edilebilen Denklem ve Eşitsizlikler İçeren Problemler",
               "code": "MAT.11.4.3",
               "category": "hepsi",
               "badge": "Üstel ve Logari",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.11.3.6. Gerçek yaşam durumlarında üstel ve logaritmik fonksiyonlarla ifade edilen denklem ve eşitsizlikleri içeren problemler çözebilme"
+              ],
               "activities": [
                 {
                   "id": "act-11-4-3-ornek",
@@ -1869,16 +1872,18 @@ export const liseLevel: Level = {
           "colorTheme": "#eab308",
           "topics": [
             {
-              "id": "topic-11-5-1-fonksiyonlarda-dort-i-slem",
-              "title": "Fonksiyonlarda Dört İşlem",
-              "code": "MAT.11.5.1",
+              "id": "topic-11-5-2-bileske-fonksiyon",
+              "title": "Bileşke Fonksiyon",
+              "code": "MAT.11.5.2",
               "category": "hepsi",
-              "badge": "Fonksiyonlarda ",
+              "badge": "Bileşke Fonksiy",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.11.3.7. Fonksiyonların bileşkelerine ilişkin muhakeme yapabilme"
+              ],
               "activities": [
                 {
-                  "id": "act-11-5-1-ornek",
+                  "id": "act-11-5-2-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "hepsi",
                   "description": "",
@@ -1892,16 +1897,18 @@ export const liseLevel: Level = {
               ]
             },
             {
-              "id": "topic-11-5-2-bileske-fonksiyon",
-              "title": "Bileşke Fonksiyon",
-              "code": "MAT.11.5.2",
+              "id": "topic-11-5-1-fonksiyonlarda-dort-i-slem",
+              "title": "Fonksiyonlarda Dört İşlem",
+              "code": "MAT.11.5.1",
               "category": "hepsi",
-              "badge": "Bileşke Fonksiy",
+              "badge": "Fonksiyonlarda ",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.11.3.8. Fonksiyonlarda dört işlem özelliklerini yorumlayabilme"
+              ],
               "activities": [
                 {
-                  "id": "act-11-5-2-ornek",
+                  "id": "act-11-5-1-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "hepsi",
                   "description": "",
@@ -1926,83 +1933,26 @@ export const liseLevel: Level = {
       "description": "12. Sınıf öğretim programı kazanımları.",
       "themes": [
         {
-          "id": "theme-12-1",
-          "code": "MAT.12.1",
+          "id": "theme-12-2",
+          "code": "MAT.12.2",
           "orderNumber": 1,
           "themeName": "NİCELİKLER VE DEĞİŞİMLER (1)",
           "fullTitle": "NİCELİKLER VE DEĞİŞİMLER (1)",
           "lessonHours": 10,
           "outcomeCount": 2,
           "description": "",
-          "colorTheme": "#10b981",
-          "topics": [
-            {
-              "id": "topic-12-1-1-polinom-fonksiyonlar-ve-nitel-",
-              "title": "Polinom Fonksiyonlar ve Nitel Özellikleri",
-              "code": "MAT.12.1.1",
-              "category": "hepsi",
-              "badge": "Polinom Fonksiy",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-12-1-1-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "hepsi",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#10b981",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
-              "id": "topic-12-1-2-polinom-fonksiyonlarla-i-fade-",
-              "title": "Polinom Fonksiyonlarla İfade Edilebilen Denklem ve Eşitsizlikler",
-              "code": "MAT.12.1.2",
-              "category": "hepsi",
-              "badge": "Polinom Fonksiy",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-12-1-2-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "hepsi",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#10b981",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "id": "theme-12-2",
-          "code": "MAT.12.2",
-          "orderNumber": 2,
-          "themeName": "NİCELİKLER VE DEĞİŞİMLER (2)",
-          "fullTitle": "NİCELİKLER VE DEĞİŞİMLER (2)",
-          "lessonHours": 10,
-          "outcomeCount": 3,
-          "description": "",
           "colorTheme": "#f43f5e",
           "topics": [
             {
               "id": "topic-12-2-1-aritmetik-diziler",
-              "title": "Aritmetik Diziler",
+              "title": "Aritmetik ve Geometrik Diziler",
               "code": "MAT.12.2.1",
               "category": "hepsi",
-              "badge": "Aritmetik Dizil",
+              "badge": "Aritmetik ve Ge",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.1.1. Aritmetik ve geometrik dizilerin özelliklerine ilişkin muhakeme yapabilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-2-1-ornek",
@@ -2019,36 +1969,15 @@ export const liseLevel: Level = {
               ]
             },
             {
-              "id": "topic-12-2-2-geometrik-diziler",
-              "title": "Geometrik Diziler",
-              "code": "MAT.12.2.2",
-              "category": "hepsi",
-              "badge": "Geometrik Dizil",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-12-2-2-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "hepsi",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#f43f5e",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
               "id": "topic-12-2-3-dizilerin-gercek-sayilarda-tan",
-              "title": "Dizilerin Gerçek Sayılarda Tanımlı Fonksiyonlarla Karşılaştırılması",
+              "title": "Gerçek Sayı Dizileri",
               "code": "MAT.12.2.3",
               "category": "hepsi",
-              "badge": "Dizilerin Gerçe",
+              "badge": "Gerçek Sayı Diz",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.1.2. Gerçek sayılarda tanımlı fonksiyonlar ile gerçek sayı dizilerini karşılaştırabilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-2-3-ornek",
@@ -2067,24 +1996,114 @@ export const liseLevel: Level = {
           ]
         },
         {
+          "id": "theme-12-1",
+          "code": "MAT.12.1",
+          "orderNumber": 2,
+          "themeName": "NİCELİKLER VE DEĞİŞİMLER (2)",
+          "fullTitle": "NİCELİKLER VE DEĞİŞİMLER (2)",
+          "lessonHours": 10,
+          "outcomeCount": 3,
+          "description": "",
+          "colorTheme": "#10b981",
+          "topics": [
+            {
+              "id": "topic-12-1-3-dogrusal-ve-karesel-fonksiyonl",
+              "title": "Doğrusal ve Karesel Fonksiyonlar ile Polinom Fonksiyonlar Arasındaki İlişki",
+              "code": "MAT.12.1.3",
+              "category": "hepsi",
+              "badge": "Doğrusal ve Kar",
+              "description": "",
+              "learningOutcomes": [
+                "MAT.12.1.3. Gerçek sayılarda tanımlı doğrusal ve karesel fonksiyonlar ile polinom fonksiyonlar arasındaki ilişkiyi ifade etmede analojik akıl yürütebilme"
+              ],
+              "activities": [
+                {
+                  "id": "act-12-1-3-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "hepsi",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#10b981",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
+              "id": "topic-12-1-1-polinom-fonksiyonlar-ve-nitel-",
+              "title": "Polinom Fonksiyonlar ve Nitel Özellikleri",
+              "code": "MAT.12.1.1",
+              "category": "hepsi",
+              "badge": "Polinom Fonksiy",
+              "description": "",
+              "learningOutcomes": [
+                "MAT.12.1.4. Gerçek katsayılı tek değişkenli polinom fonksiyonların nitel özelliklerine dair çıkarım yapabilme"
+              ],
+              "activities": [
+                {
+                  "id": "act-12-1-1-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "hepsi",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#10b981",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
+              "id": "topic-12-1-2-polinom-fonksiyonlarla-i-fade-",
+              "title": "Polinom ve Rasyonel Fonksiyonlarla İfade Edilebilen Denklem ve Eşitsizlikler İçeren Problemler",
+              "code": "MAT.12.1.2",
+              "category": "hepsi",
+              "badge": "Polinom ve Rasy",
+              "description": "",
+              "learningOutcomes": [
+                "MAT.12.1.5. Polinom ve rasyonel fonksiyonlarla ifade edilebilen denklem ve eşitsizlikleri içeren problemleri çözebilme"
+              ],
+              "activities": [
+                {
+                  "id": "act-12-1-2-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "hepsi",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#10b981",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            }
+          ]
+        },
+        {
           "id": "theme-12-3",
           "code": "MAT.12.3",
           "orderNumber": 3,
           "themeName": "GEOMETRİK ŞEKİLLER",
           "fullTitle": "GEOMETRİK ŞEKİLLER",
           "lessonHours": 10,
-          "outcomeCount": 2,
+          "outcomeCount": 3,
           "description": "",
           "colorTheme": "#f59e0b",
           "topics": [
             {
               "id": "topic-12-3-1-cember-ve-cemberin-temel-elema",
-              "title": "Çember ve Çemberin Temel Elemanları (Kesen, Kiriş, Teğet, Çap, Yay)",
+              "title": "Çemberin Elemanları",
               "code": "MAT.12.3.1",
               "category": "geometri",
-              "badge": "Çember ve Çembe",
+              "badge": "Çemberin Eleman",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.2.1. Çemberle ilişkili elemanları (kesen, kiriş, teğet, çap, yay) çözümleyebilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-3-1-ornek",
@@ -2102,15 +2121,42 @@ export const liseLevel: Level = {
             },
             {
               "id": "topic-12-3-2-cemberde-aci-ve-uzunluk-bagint",
-              "title": "Çemberde Açı ve Uzunluk Bağıntıları",
+              "title": "Çemberin Açı, Kiriş ve Teğet Özellikleri",
               "code": "MAT.12.3.2",
               "category": "geometri",
-              "badge": "Çemberde Açı ve",
+              "badge": "Çemberin Açı, K",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.2.2. Çemberin açı, kiriş ve teğet özellikleri ile ilgili çıkarım yapabilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-3-2-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "geometri",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#f59e0b",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
+              "id": "topic-12-3-3-cember-ve-daire-ile-i-lgili-pr",
+              "title": "Çember ve Daire ile İlgili Problemler",
+              "code": "MAT.12.3.3",
+              "category": "geometri",
+              "badge": "Çember ve Daire",
+              "description": "",
+              "learningOutcomes": [
+                "MAT.12.2.3. Çemberin açı, kiriş, teğet özelliklerini ve dairenin alanını kullanarak problem çözme"
+              ],
+              "activities": [
+                {
+                  "id": "act-12-3-3-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "geometri",
                   "description": "",
@@ -2132,7 +2178,7 @@ export const liseLevel: Level = {
           "themeName": "GEOMETRİK CİSİMLER",
           "fullTitle": "GEOMETRİK CİSİMLER",
           "lessonHours": 10,
-          "outcomeCount": 2,
+          "outcomeCount": 3,
           "description": "",
           "colorTheme": "#3b82f6",
           "topics": [
@@ -2143,7 +2189,9 @@ export const liseLevel: Level = {
               "category": "geometri",
               "badge": "Dik Prizma ve D",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.3.1. Dik prizma ve dik dairesel silindirin elemanlarını çözümleyebilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-4-1-ornek",
@@ -2161,15 +2209,42 @@ export const liseLevel: Level = {
             },
             {
               "id": "topic-12-4-2-dik-piramit-dik-dairesel-koni-",
-              "title": "Dik Piramit, Dik Dairesel Koni ve Küre (Yüzey Alanı ve Hacim Bağıntıları)",
+              "title": "Dik Piramit, Dik Dairesel Koni ve Küre",
               "code": "MAT.12.4.2",
               "category": "geometri",
               "badge": "Dik Piramit, Di",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.3.2. Dik prizma ile dik dairesel silindirden yararlanarak dik piramit, dik dairesel koni ve kürenin elemanları, yüzey alanları ve hacimleri arasındaki ilişkilere dair analojik akıl yürütebilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-4-2-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "geometri",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#3b82f6",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
+              "id": "topic-12-4-3-geometrik-cisimlerle-i-lgili-p",
+              "title": "Geometrik Cisimlerle İlgili Problemler",
+              "code": "MAT.12.4.3",
+              "category": "geometri",
+              "badge": "Geometrik Cisim",
+              "description": "",
+              "learningOutcomes": [
+                "MAT.12.3.3. Geometrik cisimlerin elemanları, yüzey alanı ve hacim bağıntılarını içeren problemleri çözebilme"
+              ],
+              "activities": [
+                {
+                  "id": "act-12-4-3-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "geometri",
                   "description": "",
@@ -2191,18 +2266,20 @@ export const liseLevel: Level = {
           "themeName": "DEĞİŞİMİN MATEMATİĞİ (1)",
           "fullTitle": "DEĞİŞİMİN MATEMATİĞİ (1)",
           "lessonHours": 10,
-          "outcomeCount": 2,
+          "outcomeCount": 4,
           "description": "",
           "colorTheme": "#eab308",
           "topics": [
             {
               "id": "topic-12-5-1-limit-kavrami-ve-ozellikleri",
-              "title": "Limit Kavramı ve Özellikleri",
+              "title": "Grafik Temsili Verilen Fonksiyonların Limiti",
               "code": "MAT.12.5.1",
               "category": "hepsi",
-              "badge": "Limit Kavramı v",
+              "badge": "Grafik Temsili ",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.4.1. Fonksiyonların belirli bir nokta civarındaki veya sonsuzdaki davranışını limit kavramını kullanarak grafikler üzerinden yorumlayabilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-5-1-ornek",
@@ -2219,13 +2296,65 @@ export const liseLevel: Level = {
               ]
             },
             {
+              "id": "topic-12-5-3-cebirsel-temsili-verilen-fonks",
+              "title": "Cebirsel Temsili Verilen Fonksiyonların Limiti",
+              "code": "MAT.12.5.3",
+              "category": "hepsi",
+              "badge": "Cebirsel Temsil",
+              "description": "",
+              "learningOutcomes": [
+                "MAT.12.4.2. Cebirsel temsili verilen bir fonksiyonun belirli bir noktadaki veya sonsuzdaki limiti hakkında muhakeme yapabilme"
+              ],
+              "activities": [
+                {
+                  "id": "act-12-5-3-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "hepsi",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#eab308",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
+              "id": "topic-12-5-4-fonksiyonlarin-limitinde-belir",
+              "title": "Fonksiyonların Limitinde Belirsizlik Durumları",
+              "code": "MAT.12.5.4",
+              "category": "hepsi",
+              "badge": "Fonksiyonların ",
+              "description": "",
+              "learningOutcomes": [
+                "MAT.12.4.3. Bir fonksiyonun bir noktadaki limitinin belirsizlik durumunu yorumlayabilme"
+              ],
+              "activities": [
+                {
+                  "id": "act-12-5-4-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "hepsi",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#eab308",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
               "id": "topic-12-5-2-sureklilik",
-              "title": "Süreklilik",
+              "title": "Fonksiyonların Sürekliliği",
               "code": "MAT.12.5.2",
               "category": "hepsi",
-              "badge": "Süreklilik",
+              "badge": "Fonksiyonların ",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.4.4. Bir fonksiyonun tanımlı olduğu noktalardaki sürekliliğini yorumlayabilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-5-2-ornek",
@@ -2250,18 +2379,20 @@ export const liseLevel: Level = {
           "themeName": "DEĞİŞİMİN MATEMATİĞİ (2)",
           "fullTitle": "DEĞİŞİMİN MATEMATİĞİ (2)",
           "lessonHours": 10,
-          "outcomeCount": 2,
+          "outcomeCount": 3,
           "description": "",
           "colorTheme": "#8b5cf6",
           "topics": [
             {
               "id": "topic-12-6-1-turev-kavrami-ve-diferansiyel",
-              "title": "Türev Kavramı ve Diferansiyel",
+              "title": "Fonksiyonların Türevi",
               "code": "MAT.12.6.1",
               "category": "hepsi",
-              "badge": "Türev Kavramı v",
+              "badge": "Fonksiyonların ",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.4.5. Bir fonksiyonun belirli bir nokta civarındaki değişim oranına ilişkin muhakeme yapabilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-6-1-ornek",
@@ -2278,13 +2409,40 @@ export const liseLevel: Level = {
               ]
             },
             {
+              "id": "topic-12-6-3-fonksiyonun-turevinin-olmadigi",
+              "title": "Fonksiyonun Türevinin Olmadığı Noktalar",
+              "code": "MAT.12.6.3",
+              "category": "hepsi",
+              "badge": "Fonksiyonun Tür",
+              "description": "",
+              "learningOutcomes": [
+                "MAT.12.4.6. Fonksiyonların türevinin olmadığı noktalar hakkında çıkarım yapabilme"
+              ],
+              "activities": [
+                {
+                  "id": "act-12-6-3-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "hepsi",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#8b5cf6",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
               "id": "topic-12-6-2-turev-alma-kurallari",
-              "title": "Türev Alma Kuralları",
+              "title": "Fonksiyonel İşlemlerin Türevi",
               "code": "MAT.12.6.2",
               "category": "hepsi",
-              "badge": "Türev Alma Kura",
+              "badge": "Fonksiyonel İşl",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.4.7. Türevin limit gösteriminden faydalanarak iki fonksiyonun toplamı, farkı, çarpımı, bölümü ve bileşkesinin türevine ilişkin muhakeme yapabilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-6-2-ornek",
@@ -2309,41 +2467,20 @@ export const liseLevel: Level = {
           "themeName": "DEĞİŞİMİN MATEMATİĞİ (3)",
           "fullTitle": "DEĞİŞİMİN MATEMATİĞİ (3)",
           "lessonHours": 10,
-          "outcomeCount": 3,
+          "outcomeCount": 2,
           "description": "",
           "colorTheme": "#06b6d4",
           "topics": [
             {
-              "id": "topic-12-7-1-ortalama-deger-ve-rolle-teorem",
-              "title": "Ortalama Değer ve Rolle Teoremleri",
-              "code": "MAT.12.7.1",
-              "category": "hepsi",
-              "badge": "Ortalama Değer ",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-12-7-1-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "hepsi",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#06b6d4",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
               "id": "topic-12-7-2-turevin-fiziksel-ve-geometrik-",
-              "title": "Türevin Fiziksel ve Geometrik Yorumu",
+              "title": "Türevin Geometrik Yorumu",
               "code": "MAT.12.7.2",
               "category": "hepsi",
-              "badge": "Türevin Fizikse",
+              "badge": "Türevin Geometr",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.4.8. Bir fonksiyonun ve onun türev fonksiyonunun matematiksel temsillerine ve bunlar arasındaki ilişkilere dair çıkarımlar yapabilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-7-2-ornek",
@@ -2361,12 +2498,14 @@ export const liseLevel: Level = {
             },
             {
               "id": "topic-12-7-3-ekstremum-noktalar-ve-optimiza",
-              "title": "Ekstremum Noktalar ve Optimizasyon Problemleri",
+              "title": "Türev Uygulamaları",
               "code": "MAT.12.7.3",
               "category": "hepsi",
-              "badge": "Ekstremum Nokta",
+              "badge": "Türev Uygulamal",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.4.9. Gerçek yaşam durumlarında türevi kullanarak problemler çözebilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-7-3-ornek",
@@ -2391,44 +2530,23 @@ export const liseLevel: Level = {
           "themeName": "HAZIR VERİLER ÜZERİNDE ÇALIŞMA",
           "fullTitle": "HAZIR VERİLER ÜZERİNDE ÇALIŞMA",
           "lessonHours": 10,
-          "outcomeCount": 2,
+          "outcomeCount": 1,
           "description": "",
           "colorTheme": "#ec4899",
           "topics": [
             {
               "id": "topic-12-8-1-toplumsal-ve-bilimsel-durumlar",
-              "title": "Toplumsal ve Bilimsel Durumlara İlişkin Hazır Verilerle İstatistiksel Araştırma Tasarımı",
+              "title": "Toplumsal ve Bilimsel Durumlara İlişkin Hazır Veriler",
               "code": "MAT.12.8.1",
               "category": "istatistik",
               "badge": "Toplumsal ve Bi",
               "description": "",
-              "learningOutcomes": [],
+              "learningOutcomes": [
+                "MAT.12.5.1. Toplumsal ve bilimsel durumlara ilişkin hazır veri ile çalışabilme ve hazır veriye dayalı karar verebilme"
+              ],
               "activities": [
                 {
                   "id": "act-12-8-1-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "istatistik",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#ec4899",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
-              "id": "topic-12-8-2-hazir-veriye-dayali-karar-verm",
-              "title": "Hazır Veriye Dayalı Karar Verme Süreçleri",
-              "code": "MAT.12.8.2",
-              "category": "istatistik",
-              "badge": "Hazır Veriye Da",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-12-8-2-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "istatistik",
                   "description": "",

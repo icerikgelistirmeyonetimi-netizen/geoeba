@@ -102,7 +102,7 @@ export const ortaokulLevel: Level = {
           "themeName": "SAYILAR VE NİCELİKLER (1)",
           "fullTitle": "SAYILAR VE NİCELİKLER (1)",
           "lessonHours": 10,
-          "outcomeCount": 3,
+          "outcomeCount": 2,
           "description": "",
           "colorTheme": "#f43f5e",
           "topics": [
@@ -117,29 +117,6 @@ export const ortaokulLevel: Level = {
               "activities": [
                 {
                   "id": "act-5-2-1-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "sayi",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#f43f5e",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
-              "id": "topic-5-2-2-basamak-degerlerini-cozumleme",
-              "title": "Basamak Değerlerini Çözümleme",
-              "code": "MAT.5.2.2",
-              "category": "sayi",
-              "badge": "Basamak Değerle",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-5-2-2-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "sayi",
                   "description": "",
@@ -315,7 +292,7 @@ export const ortaokulLevel: Level = {
           "themeName": "İŞLEMLERLE CEBİRSEL DÜŞÜNME",
           "fullTitle": "İŞLEMLERLE CEBİRSEL DÜŞÜNME",
           "lessonHours": 10,
-          "outcomeCount": 5,
+          "outcomeCount": 4,
           "description": "",
           "colorTheme": "#8b5cf6",
           "topics": [
@@ -330,29 +307,6 @@ export const ortaokulLevel: Level = {
               "activities": [
                 {
                   "id": "act-5-6-1-ornek",
-                  "title": "Örnek Görev Kartı",
-                  "category": "hepsi",
-                  "description": "",
-                  "learningGoal": "",
-                  "folderColor": "#8b5cf6",
-                  "initialObjects": [],
-                  "steps": [],
-                  "validationRules": [],
-                  "completedMessage": ""
-                }
-              ]
-            },
-            {
-              "id": "topic-5-6-2-degisme-birlesme-ve-dagilma-oz",
-              "title": "Değişme-Birleşme ve Dağılma Özellikleri",
-              "code": "MAT.5.6.2",
-              "category": "hepsi",
-              "badge": "Değişme-Birleşm",
-              "description": "",
-              "learningOutcomes": [],
-              "activities": [
-                {
-                  "id": "act-5-6-2-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "hepsi",
                   "description": "",
@@ -488,7 +442,7 @@ export const ortaokulLevel: Level = {
           "themeName": "SAYILAR VE NİCELİKLER (1)",
           "fullTitle": "SAYILAR VE NİCELİKLER (1)",
           "lessonHours": 10,
-          "outcomeCount": 3,
+          "outcomeCount": 4,
           "description": "",
           "colorTheme": "#10b981",
           "topics": [
@@ -549,6 +503,29 @@ export const ortaokulLevel: Level = {
               "activities": [
                 {
                   "id": "act-6-1-3-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "sayi",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#10b981",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
+              "id": "topic-6-1-4-ortak-kat-ve-ortak-bolen",
+              "title": "Ortak Kat ve Ortak Bölen",
+              "code": "MAT.6.1.4",
+              "category": "sayi",
+              "badge": "Ortak Kat ve Or",
+              "description": "",
+              "learningOutcomes": [],
+              "activities": [
+                {
+                  "id": "act-6-1-4-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "sayi",
                   "description": "",
@@ -747,7 +724,7 @@ export const ortaokulLevel: Level = {
           "themeName": "GEOMETRİK ŞEKİLLER",
           "fullTitle": "GEOMETRİK ŞEKİLLER",
           "lessonHours": 10,
-          "outcomeCount": 3,
+          "outcomeCount": 4,
           "description": "",
           "colorTheme": "#eab308",
           "topics": [
@@ -808,6 +785,29 @@ export const ortaokulLevel: Level = {
               "activities": [
                 {
                   "id": "act-6-5-3-ornek",
+                  "title": "Örnek Görev Kartı",
+                  "category": "geometri",
+                  "description": "",
+                  "learningGoal": "",
+                  "folderColor": "#eab308",
+                  "initialObjects": [],
+                  "steps": [],
+                  "validationRules": [],
+                  "completedMessage": ""
+                }
+              ]
+            },
+            {
+              "id": "topic-6-5-4-ucgen-yamuk-paralelkenar-esken",
+              "title": "Üçgen, Yamuk, Paralelkenar, Eşkenar Dörtgen, Dikdörtgen ve Karenin Açıları ile İlgili Problemler",
+              "code": "MAT.6.5.4",
+              "category": "geometri",
+              "badge": "Üçgen, Yamuk, P",
+              "description": "",
+              "learningOutcomes": [],
+              "activities": [
+                {
+                  "id": "act-6-5-4-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "geometri",
                   "description": "",
@@ -1571,16 +1571,16 @@ export const ortaokulLevel: Level = {
           "colorTheme": "#f43f5e",
           "topics": [
             {
-              "id": "topic-7-9-1-eskenar-dortgen-ve-yamuk",
-              "title": "Eşkenar Dörtgen ve Yamuk",
-              "code": "MAT.7.9.1",
+              "id": "topic-7-9-2-daire-ve-daire-diliminin-alani",
+              "title": "Daire ve Daire Diliminin Alanı",
+              "code": "MAT.7.9.2",
               "category": "geometri",
-              "badge": "Eşkenar Dörtgen",
+              "badge": "Daire ve Daire ",
               "description": "",
               "learningOutcomes": [],
               "activities": [
                 {
-                  "id": "act-7-9-1-ornek",
+                  "id": "act-7-9-2-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "geometri",
                   "description": "",
@@ -1594,16 +1594,16 @@ export const ortaokulLevel: Level = {
               ]
             },
             {
-              "id": "topic-7-9-2-daire-ve-daire-diliminin-alani",
-              "title": "Daire ve Daire Diliminin Alanı",
-              "code": "MAT.7.9.2",
+              "id": "topic-7-9-1-eskenar-dortgen-ve-yamuk",
+              "title": "Eşkenar Dörtgen ve Yamuk",
+              "code": "MAT.7.9.1",
               "category": "geometri",
-              "badge": "Daire ve Daire ",
+              "badge": "Eşkenar Dörtgen",
               "description": "",
               "learningOutcomes": [],
               "activities": [
                 {
-                  "id": "act-7-9-2-ornek",
+                  "id": "act-7-9-1-ornek",
                   "title": "Örnek Görev Kartı",
                   "category": "geometri",
                   "description": "",
