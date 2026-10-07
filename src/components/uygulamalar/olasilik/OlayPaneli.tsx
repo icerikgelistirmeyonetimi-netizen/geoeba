@@ -219,7 +219,7 @@ function ZarAyari({ sablon, onSablon, kilitli }: { sablon: Extract<Sablon, { tur
             onSablon({ ...sablon, ikiZar, istenen: yeniKosul });
           }}
         />
-        İki zar (toplam)
+        İki sayı küpü (toplam)
       </label>
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Koşul türü">
         {(

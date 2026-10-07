@@ -72,6 +72,15 @@ describe('sınıf paneli: tema etiketleri (alan uzmanları, 2. tur)', () => {
     }
   });
 
+  it('tema satırındaki sayı içerik sayısıdır (konu/çerçeve sayısı değil); liste yüklenmeden konu sayısı yazılır', () => {
+    const tema = curriculumData.levels.ilkokul.grades.find((g) => g.gradeNumber === 1)!.themes[0];
+    expect(temaBilgisi(tema, 11)).toBe('11 öğrenme çıktısı');
+    expect(temaBilgisi(tema, 0)).toBe('0 öğrenme çıktısı');
+    expect(temaBilgisi(tema, undefined)).toBe(`${tema.topics.length} öğrenme çıktısı`);
+    const kaynak = readFileSync(path.resolve(__dirname, '../AdaEkrani.tsx'), 'utf8');
+    expect(kaynak).toContain('temaBilgisi(unite, temaIcerikSayisi(unite.topics, kazanimlar))');
+  });
+
   it('ada ekranında görünen ya da okunan metinlerde "ünite" ve "ders saati" geçmez', () => {
     const kaynak = readFileSync(path.resolve(__dirname, '../AdaEkrani.tsx'), 'utf8');
     // Yorum satırları ekranda görünmez; kod ve JSX satırları denetlenir

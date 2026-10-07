@@ -30,7 +30,7 @@ export const GORUNEN_SABLON_TURLERI: SablonTuru[] = ['para', 'zar', 'cark', 'tor
 
 export const SABLON_ADLARI: Record<SablonTuru, string> = {
   para: 'Madeni Para',
-  zar: 'Zar',
+  zar: 'Sayı Küpü',
   cark: 'Renkli Çark',
   torba: 'Torba',
   kart: 'Kart Destesi',

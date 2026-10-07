@@ -113,6 +113,15 @@ function konuSayfalari(kayit: KazanimIcerigi | undefined): IcerikSayfasi[] {
   return kayit.icerikler?.length ? kayit.icerikler : [kayit];
 }
 
+/** Temadaki içerik sayısı (konuların içerik sayfaları toplamı); liste henüz yüklenmediyse `undefined`. */
+function temaIcerikSayisi(
+  konular: readonly { code?: string }[],
+  kazanimlar: Record<string, KazanimIcerigi>,
+): number | undefined {
+  if (!Object.keys(kazanimlar).length) return undefined;
+  return konular.reduce((top, k) => top + (k.code ? konuSayfalari(kazanimlar[k.code]).length : 0), 0);
+}
+
 const KAZANIM_KLASORU = `${VARLIK_ONEKI}/kazanim-icerikleri`;
 let kazanimListesiSozu: Promise<Record<string, KazanimIcerigi>> | null = null;
 
@@ -889,7 +898,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
                         <span className={s['unite-metin']}>
                           <span className={s['unite-ad']}>{uniteAdi(unite.themeName || unite.fullTitle)}</span>
                           <span className={s['unite-bilgi']}>
-                            {temaBilgisi(unite)}
+                            {temaBilgisi(unite, temaIcerikSayisi(unite.topics, kazanimlar))}
                           </span>
                         </span>
                         <span className={s['unite-ok']}>{ikon.ok}</span>

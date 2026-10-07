@@ -63,12 +63,14 @@ export function sinifAdi(sinif: GradeId): string {
 export const temaSayisiMetni = (n: number): string => `${n} tema`;
 
 /**
- * Tema satırının alt yazısı: temadaki öğrenme çıktısı sayısı ("4 öğrenme çıktısı"). Uzmanlar "konu" ifadesinin
- * "çıktı" olmasını (10. sınıf) ve ders saatinin öğrenciye gösterilmemesini (7. sınıf) istedi. Temanın her konusu
- * programın bir öğrenme çıktısıdır (MAT.x.y.z kodu); veride `outcomeCount` da tutulur ve konu sayısına eşittir.
+ * Tema satırının alt yazısı: "4 öğrenme çıktısı". Uzmanlar "konu" ifadesinin "çıktı" olmasını (10. sınıf) ve ders
+ * saatinin öğrenciye gösterilmemesini (7. sınıf) istedi. Sayı temadaki İÇERİK sayısıdır (konuların içerik
+ * sayfalarının toplamı; bir konunun birden çok içeriği olabilir), çerçeve/konu sayısı değil — açılan listedeki
+ * "N içerik" rozetleriyle tutarlı olsun diye. İçerik listesi henüz yüklenmediyse (`icerikSayisi` yok) konu sayısı
+ * yazılır.
  */
-export function temaBilgisi(tema: { topics: readonly unknown[]; outcomeCount?: number }): string {
-  const n = tema.outcomeCount ?? tema.topics.length;
+export function temaBilgisi(tema: { topics: readonly unknown[]; outcomeCount?: number }, icerikSayisi?: number): string {
+  const n = icerikSayisi ?? tema.outcomeCount ?? tema.topics.length;
   return `${n} öğrenme çıktısı`;
 }
 
