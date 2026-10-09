@@ -4,16 +4,16 @@ import type {
 } from '@/types/math';
 import { worldToScreen } from '@/math/coordinates';
 import { anchoredLabelPosition } from '@/math/labelAnchors';
-import { labelFontScale, labelLayoutViewport, projectLabelPoint } from '@/math/labelViewport';
+import { labelFontScale, labelLayoutViewport, labelZoomScale, projectLabelPoint } from '@/math/labelViewport';
 import {
   calculateArcLength, calculateCircleArea, calculateCircleCircumference, calculateDistance,
   calculateEllipseArea, calculateEllipsePerimeter, calculatePolygonArea, calculatePolygonPerimeter,
   calculateSectorArea, getArcGeometry,
 } from '@/math/geometry';
 import {
-  type Adli, type Baslik, type Dugum, type Olcu, type Secenek, type YayUclari, type YazimAyari,
-  aci, aciklama, alan, cemberBasligi, cemberCevresi, cevre, daireAlani, dilimAlani, dilimCevresi,
-  elipsAlani, elipsCevresi, kiris, kullanilabilirAd, merkezAci, olcuDugumleri, sayi, sesli, trigDegeri, trigOrani,
+  type Adli, type Dugum, type Olcu, type Secenek, type YayUclari, type YazimAyari,
+  aci, aciklama, alan, cemberCevresi, cevre, daireAlani, dilimAlani, dilimCevresi, duzMetin,
+  elipsAlani, elipsCevresi, kiris, kullanilabilirAd, merkezAci, metinDugumleri, olcuDugumleri, sayi, sesli, trigDegeri, trigOrani,
   uzunluk, yaricap, yayOlcusu, yayUzunlugu,
 } from '@/math/matematikYazimi';
 import { type Kutu, type KutuOlcusu, type Nokta, kutuOlcusu } from '@/math/yazimDuzeni';
@@ -271,16 +271,17 @@ export function yayOlcumuYazimi(
 // ------------------------------------------------------------------------------------------------ ölçüm kartları
 
 export type KartTuru = 'cokgen' | 'cember' | 'elips';
-export type KartSatiri = 'baslik' | 'yaricap' | 'alan' | 'cevre';
+export type KartSatiri = 'yaricap' | 'alan' | 'cevre';
 /**
  * Her ölçü AYRI bir etikettir (2026-09-24, kullanıcı: "çevre, alan, yarıçap … ayrı labeller içinde,
- * birleşik olmamalı"). Anahtar etiketin labelOffsets / labelAnchors / gizleme anahtarıdır; eski tek
- * kartın 'area' (alan yoksa 'perimeter') kayıklığı aynı adlı etikete geçer.
+ * birleşik olmamalı"). Anahtar etiketin labelOffsets / labelAnchors / labelTexts / gizleme anahtarıdır;
+ * eski tek kartın 'area' (alan yoksa 'perimeter') kayıklığı aynı adlı etikete geçer.
+ * Çemberin "Ç(M, r)" başlık kartı 8 Ekim 2026'da kaldırıldı (kullanıcı: "alakasını anlayamadım").
  */
-export type KartAnahtari = 'title' | 'radius' | 'area' | 'perimeter';
+export type KartAnahtari = 'radius' | 'area' | 'perimeter';
 
 export const KART_ANAHTARLARI: Record<KartSatiri, KartAnahtari> = {
-  baslik: 'title', yaricap: 'radius', alan: 'area', cevre: 'perimeter',
+  yaricap: 'radius', alan: 'area', cevre: 'perimeter',
 };
 
 /** Çemberin yarıçap etiketi: açıkça açılıp kapatılmadıysa alan/çevre etiketleriyle birlikte görünür. */
@@ -295,6 +296,8 @@ export interface OlcumKarti {
   satir: KartSatiri;
   /** Tek satır: bir etikette yalnızca bir ölçü yazılır */
   satirlar: Dugum[][];
+  /** Etiketin düz metni (sağ tık > Etiketi düzenle diyaloğunun başlangıç değeri) */
+  duz: string;
   /** Ekran okuyucu metni */
   sesli: string;
   /** Fare ipucu (<title>): seslendirme metni görsel arayüze sızmasın */
@@ -312,17 +315,24 @@ export interface KartGirdisi {
   yazim: YazimAyari;
   /** Canvas'ın fs(temel, 'measure') işlevi */
   px: (temel: number) => number;
+  /**
+   * Yazı ölçeği (Canvas.yaziOlcegi: labelFontScale(viewport, yaziAltSiniri)). Verilmezse labelFontScale(viewport).
+   * Yazı alt sınırı (StyleSettings.yaziAltSiniri) devredeyken uzaklaşınca yerleşim ölçeğini aşar: yazı şekle göre
+   * büyük kalır ve yerleşim uzayındaki kutular (yığın aralığı, kenar etiketi payı, çakışma kutusu) o oranda büyür.
+   * Yerleşim görünümüyle (zoom 44) çakışma kutuları için çağrılırken Canvas buraya max(1, yaziOrani) verir.
+   */
+  yaziOlcegi?: number;
 }
 
-const kartSesli = (satirlar: (Olcu | Baslik)[], ayar?: YazimAyari): string =>
-  satirlar.map((s) => ('tur' in s ? sesli(s, ayar) : s.sesli)).join('. ');
+const kartSesli = (satirlar: Olcu[], ayar?: YazimAyari): string =>
+  satirlar.map((s) => sesli(s, ayar)).join('. ');
 
 /** Fare ipucu: ekran okuyucu metni DEĞİL okunur açıklama ('ABC üçgeninin alanı: 6 br²'). */
-const kartIpucu = (satirlar: (Olcu | Baslik)[], ayar?: YazimAyari): string =>
-  satirlar.map((s) => ('tur' in s ? aciklama(s, ayar) : s.duz)).join(' · ');
+const kartIpucu = (satirlar: Olcu[], ayar?: YazimAyari): string =>
+  satirlar.map((s) => aciklama(s, ayar)).join(' · ');
 
-const kartDugumleri = (satirlar: (Olcu | Baslik)[], ayar: YazimAyari): Dugum[][] =>
-  satirlar.map((s) => ('tur' in s ? olcuDugumleri(s, ayar) : s.dugumler));
+const kartDugumleri = (satirlar: Olcu[], ayar: YazimAyari): Dugum[][] =>
+  satirlar.map((s) => olcuDugumleri(s, ayar));
 
 /**
  * Görünen tam sayılardan hesaplanmış türetilmiş değeri ölçüye yazar: '≈' yalnız şeklin gerçek değerinden
@@ -363,18 +373,16 @@ export function cokgenKartSatirlari(
 }
 
 /**
- * Çemberin etiketleri: başlık Ç(O, r), yarıçap r = |OT|, Alan = πr², Çevre = 2πr.
- * Başlık yalnızca en az bir ölçü etiketi varken yazılır.
+ * Çemberin etiketleri: yarıçap r = |OT|, Alan = πr², Çevre = 2πr (başlık kartı yok; çemberin adı
+ * zaten merkez noktasının adında okunur).
  */
 export function cemberKartSatirlari(
   merkez: PointObject | null, yaricapNoktasi: PointObject | null, r: number, alanVar: boolean, cevreVar: boolean,
   yaricapVar = true, tamSayi = false,
-): { satirlar: (Olcu | Baslik)[]; turler: KartSatiri[] } {
-  const satirlar: (Olcu | Baslik)[] = [];
+): { satirlar: Olcu[]; turler: KartSatiri[] } {
+  const satirlar: Olcu[] = [];
   const turler: KartSatiri[] = [];
   if (!yaricapVar && !alanVar && !cevreVar) return { satirlar, turler };
-  const baslik = cemberBasligi(merkez);
-  if (baslik) { satirlar.push(baslik); turler.push('baslik'); }
   if (yaricapVar) { satirlar.push(yaricap(merkez, yaricapNoktasi, r)); turler.push('yaricap'); }
   // Tam sayı: alan ve çevre GÖRÜNEN (tam sayıya yuvarlanmış) yarıçapla hesaplanır
   if (alanVar) { satirlar.push(daireAlani(tamSayi ? tamSayiDaireAlani(r).deger : calculateCircleArea(r))); turler.push('alan'); }
@@ -420,6 +428,8 @@ const KENAR_ETIKET_PAYI = 12;
  */
 function cokgenKartUstu(
   ekran: Nokta[], edgeLabels: readonly number[] | undefined, kenarKutuYuksekligi: number, taban: number,
+  /** Kenar etiketinin kenardan payı (Canvas kenarAraligi'ndaki 12 px; yazı/yerleşim oranıyla ölçekli gelir) */
+  kenarPayi = KENAR_ETIKET_PAYI,
 ): number {
   const altY = Math.max(...ekran.map((p) => p.y));
   let en = altY + taban;
@@ -435,7 +445,7 @@ function cokgenKartUstu(
     const boy = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     let ny = (b.x - a.x) / boy;
     if ((ox - cx) * (-(b.y - a.y) / boy) + (oy - cy) * ny < 0) ny = -ny;
-    const alt = oy + ny * (kenarKutuYuksekligi / 2 + KENAR_ETIKET_PAYI) + kenarKutuYuksekligi / 2;
+    const alt = oy + ny * (kenarKutuYuksekligi / 2 + kenarPayi) + kenarKutuYuksekligi / 2;
     en = Math.max(en, alt + 4);
   }
   return en;
@@ -453,26 +463,36 @@ const ETIKET_ARALIGI = 6;
 export function olcumKartKutulari(g: KartGirdisi): OlcumKarti[] {
   const { objects, viewport, yazim, px } = g;
   const z = viewport.zoom || 1;
-  const fontScale = labelFontScale(viewport);
+  // Ekran kutusu yazı ölçeğiyle ölçülür. Yerleşim uzayındaki kutu boyları `oran` ile çarpılır: yazı alt sınırı
+  // devredeyken (uzaklaşınca fontScale > zoomScale) yığın açılır; yakınlaşınca (fontScale tavanı 1,05 < zoomScale)
+  // yerleşim eskisi gibi yazıdan bağımsız kalır ki kartın dünya merkezi korunsun (oran ≥ 1).
+  const fontScale = g.yaziOlcegi ?? labelFontScale(viewport);
+  const oran = Math.max(1, fontScale / (labelZoomScale(viewport) || 1));
   const layoutViewport = labelLayoutViewport(viewport);
   const out: OlcumKarti[] = [];
   /** Şeklin etiketlerini üst kenarı `ust` olan dikey bir yığına dizer; her satır ayrı bir etikettir. */
   const ekle = (
-    o: MathObject, tur: KartTuru, satirlar: (Olcu | Baslik)[], turler: KartSatiri[],
+    o: MathObject, tur: KartTuru, satirlar: Olcu[], turler: KartSatiri[],
     cx: number, ust: number, boy: number,
   ) => {
     let y = ust;
     satirlar.forEach((s, i) => {
       const satir = turler[i];
       const anahtar = KART_ANAHTARLARI[satir];
-      const dugumler = kartDugumleri([s], yazim);
+      // Kullanıcının elle yazdığı etiket metni (sağ tık > Etiketi düzenle) hesaplanan yazının yerine geçer
+      const ozel = o.labelTexts?.[anahtar];
+      const dugumler = ozel !== undefined ? [metinDugumleri(ozel)] : kartDugumleri([s], yazim);
       const olcu = kutuOlcusu(dugumler, boy);
       // Doğal merkez referans ölçekte yerleşir ve dünya konumunu korur.
       // Referans ölçü değişmez; gerçek çakışma kutusu çizilen yazıyla aynı ölçekte kalır.
+      // Yerleşim uzayındaki kutu: yazı yerleşimden büyük kalıyorsa (oran > 1) yığındaki etiketler o kadar açılır
+      // ki ekranda üst üste binmesinler (yazı alt sınırı).
+      const yerlesimOlcu: KutuOlcusu = { ...olcu, genislik: olcu.genislik * oran, yukseklik: olcu.yukseklik * oran };
       const width = olcu.genislik * fontScale, height = olcu.yukseklik * fontScale;
-      const merkez = projectLabelPoint(kartMerkezi(cx, y, olcu), viewport);
-      y += olcu.yukseklik + ETIKET_ARALIGI;
+      const merkez = projectLabelPoint(kartMerkezi(cx, y, yerlesimOlcu), viewport);
+      y += yerlesimOlcu.yukseklik + ETIKET_ARALIGI * oran; // aralık da yazıyla ölçeklenir (mesafe oranlaması)
       const anchor = o.labelAnchors?.[anahtar];
+      // Kayıklık ve çapa DÜNYA biriminde: uzaklaşınca etiket şekille birlikte yerinde kalır (Canvas.etiketKaymasi ile aynı)
       const fixed = anchor ? anchoredLabelPosition(anchor, objects, width / z) : null;
       const screen = fixed ? worldToScreen(fixed, viewport) : null;
       const kayiklik = o.labelOffsets?.[anahtar];
@@ -481,8 +501,9 @@ export function olcumKartKutulari(g: KartGirdisi): OlcumKarti[] {
       out.push({
         id: o.id, tur, anahtar, satir,
         satirlar: dugumler,
-        sesli: kartSesli([s], yazim),
-        ipucu: kartIpucu([s], yazim),
+        duz: ozel ?? duzMetin(dugumler[0]),
+        sesli: ozel ?? kartSesli([s], yazim),
+        ipucu: ozel ?? kartIpucu([s], yazim),
         olcu,
         merkez,
         kutu: {
@@ -512,8 +533,9 @@ export function olcumKartKutulari(g: KartGirdisi): OlcumKarti[] {
       const { olculer, turler } = cokgenKartSatirlari(koseler, alanVar, cevreVar, yazim.tamSayi);
       // İlk etiketin üst kenarı: en alt köşenin 22 px altı.
       // Kenar etiketleri açıksa etiketler onların da ALTINA iner (yoksa alt kenarın etiketini örtüyordu).
-      const kenarBoyu = kutuOlcusu([[sayi(0)]], px(11)).yukseklik;
-      const ust = cokgenKartUstu(ekran, poly.edgeLabels, kenarBoyu, 22);
+      const kenarBoyu = kutuOlcusu([[sayi(0)]], px(11)).yukseklik * oran;
+      // Paylar (taban 22, kenar payı 12) yazı/yerleşim oranıyla ölçeklenir: kart kenar etiketine değmesin
+      const ust = cokgenKartUstu(ekran, poly.edgeLabels, kenarBoyu, 22 * oran, KENAR_ETIKET_PAYI * oran);
       ekle(poly, 'cokgen', olculer, turler, cx, ust, px(11));
       continue;
     }
@@ -522,7 +544,7 @@ export function olcumKartKutulari(g: KartGirdisi): OlcumKarti[] {
       if (!c) continue;
       const ekran = worldToScreen(c.merkez, layoutViewport);
       const { satirlar, turler } = cemberKartSatirlari(c.merkezNoktasi, c.yaricapNoktasi, c.radius, alanVar, cevreVar, yaricapVar, yazim.tamSayi);
-      ekle(o, 'cember', satirlar, turler, ekran.x, ekran.y + c.radius * layoutViewport.zoom + 14, px(11));
+      ekle(o, 'cember', satirlar, turler, ekran.x, ekran.y + c.radius * layoutViewport.zoom + 14 * oran, px(11));
       continue;
     }
     if (o.type === 'ellipse') {
@@ -532,7 +554,7 @@ export function olcumKartKutulari(g: KartGirdisi): OlcumKarti[] {
       const ekran = worldToScreen(merkez, layoutViewport);
       const ryPx = Math.abs(elp.radiusY) * layoutViewport.zoom;
       const { olculer, turler } = elipsKartSatirlari(elp.radiusX, elp.radiusY, alanVar, cevreVar);
-      ekle(elp, 'elips', olculer, turler, ekran.x, ekran.y + ryPx + 14, px(11));
+      ekle(elp, 'elips', olculer, turler, ekran.x, ekran.y + ryPx + 14 * oran, px(11));
     }
   }
   return out;

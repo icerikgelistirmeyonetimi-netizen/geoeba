@@ -304,7 +304,6 @@ const CASES: Case[] = [
   { text: 'K merkezli AB doğrusuna teğet çember çiz', scene: S.tangentLine, exp: made({ circle: 1 }) },
   { text: 'a be ce üçgeninin çevrel çemberini çiz', scene: S.tri, spoken: true, exp: made({ circle: 1 }) },
   { text: 'A(0;0), B(4;0) ve C(0;3) noktalarından üçgen çiz sonra iç teğet çemberini çiz', scene: S.empty, exp: made({ polygon: 1, circle: 1 }) },
-  { text: 'üçgenin dış teğet çemberini çiz', scene: S.tri, exp: fail(/dış teğet|desteklen/) },
   { text: 'üçgenin çevrel çemberini çizelim', scene: S.tri, exp: made({ circle: 1 }) },
   { text: 'çevrel çember çiz', scene: S.collinear, exp: fail() },
   { text: 'K merkezli ve AB ye teğet bir çember çiz', scene: S.tangentLine, exp: made({ circle: 1 }) },
@@ -319,7 +318,8 @@ const CASES: Case[] = [
   { text: 'M noktasından çembere teğet çiz', scene: S.circle, exp: fail(/içinde/) },
   { text: 'çembere teğet çiz', scene: S.circle, exp: fail(/hangi noktadan/i) },
   { text: 'pe noktasından çembere teğet çiz', scene: S.circle, spoken: true, exp: made({ line: 2 }) },
-  { text: 'iki çemberin ortak teğetini çiz', scene: S.twoCircles, exp: fail(/ortak teğet/) },
+  // Ortak teğetler artık teoremler ailesince çizilir (teoremler.ortakTeget): kesişen iki çemberin iki dış ortak teğeti vardır.
+  { text: 'iki çemberin ortak teğetini çiz', scene: S.twoCircles, exp: made({ line: 2 }) },
   { text: 'P noktasından c1 çemberine teğet doğru çizer misin', scene: S.circle, exp: made({ line: 2 }) },
   { text: 'Q dan teğetleri çiz', scene: S.circle, exp: made({ line: 2 }) },
   { text: '(0; 4) noktasından çembere teğet çiz', scene: S.circle, exp: made({ line: 2, pt: 1 }) },

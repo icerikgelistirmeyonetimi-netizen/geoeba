@@ -3,8 +3,13 @@ import type { MathObject, MeasurementObject, SegmentObject } from '@/types/math'
 import { collectDependentIds, objectDependencies } from '@/state/WorkspaceContext';
 import { copyObjects, pasteObjects } from '@/math/objectClipboard';
 import {
+  arasindaEngelVar,
   collinearSegmentChain,
+  distanceLabelLayouts,
   distanceLabelLevel,
+  kenarEtiketiYani,
+  olcuCizgisiGerekli,
+  tasiyiciCizgiVar,
   isLengthShown,
   lengthOptionsAtPoint,
   orderedPointsOnStraight,
@@ -240,5 +245,220 @@ describe('Silme, kopyalama, yerleşim', () => {
       yap({ id: 'm-pb', type: 'measurement', kind: 'distance', pointIds: ['P', 'B'], showValue: true }),
     ];
     expect(distanceLabelLevel(o, 'm-aq')).not.toBe(distanceLabelLevel(o, 'm-pb'));
+  });
+});
+
+describe('Kesikli ölçü çizgisi yalnız arada engel varken', () => {
+  const olcum = (id: string, a: string, b: string, extra: Record<string, unknown> = {}) =>
+    yap({ id, type: 'measurement', kind: 'distance', pointIds: [a, b], showValue: true, ...extra });
+  /** Ekran görüntüsündeki sahne: [AC] üzerinde D ve E; |AE| = 11, |DE| = 6, |EC| = 4 */
+  const acUzerindeDE = (): MathObject[] => [
+    nokta('A', 0, 0), nokta('C', 15, 0),
+    yap({ id: 'ac', type: 'segment', label: '[AC]', startPointId: 'A', endPointId: 'C' }),
+    nokta('D', 5, 0, { onObjectId: 'ac' }), nokta('E', 11, 0, { onObjectId: 'ac' }),
+    olcum('m-ae', 'A', 'E'), olcum('m-de', 'D', 'E'), olcum('m-ec', 'E', 'C'),
+  ];
+
+  it('[AC] üzerinde D, E: yalnız |AE| kesikli (arada D var), |DE| ve |EC| yalın', () => {
+    const o = acUzerindeDE();
+    expect(arasindaEngelVar(o, 'm-ae')).toBe(true);
+    expect(arasindaEngelVar(o, 'm-de')).toBe(false);
+    expect(arasindaEngelVar(o, 'm-ec')).toBe(false);
+    const y = distanceLabelLayouts(o);
+    expect(y.get('m-de')).toEqual({ kesikli: false, kat: 0 });
+    expect(y.get('m-ec')).toEqual({ kesikli: false, kat: 0 });
+    // |AE| yakın bantta duran |DE| ile örtüşür: kesikli çizgi bandın dışından (1. kat) başlar
+    expect(y.get('m-ae')).toEqual({ kesikli: true, kat: 1 });
+  });
+
+  it('eğik parçada da aynı sonuç', () => {
+    const [ax, ay, cx, cy] = [1.7946, 1.7312, -3.273, 3.8317];
+    const ara = (k: number): [number, number] => [ax + (cx - ax) * k, ay + (cy - ay) * k];
+    const o: MathObject[] = [
+      nokta('A', ax, ay), nokta('C', cx, cy),
+      yap({ id: 'ac', type: 'segment', label: '[AC]', startPointId: 'A', endPointId: 'C' }),
+      nokta('D', ...ara(1 / 3), { onObjectId: 'ac' }), nokta('E', ...ara(11 / 15), { onObjectId: 'ac' }),
+      olcum('m-ae', 'A', 'E'), olcum('m-de', 'D', 'E'), olcum('m-ec', 'E', 'C'),
+    ];
+    expect(arasindaEngelVar(o, 'm-ae')).toBe(true);
+    expect(arasindaEngelVar(o, 'm-de')).toBe(false);
+    expect(arasindaEngelVar(o, 'm-ec')).toBe(false);
+  });
+
+  it('yalnız ölçülen iki nokta varken engel yoktur; üzerinde durduğu parça ve bölünmüş zincir kesmez', () => {
+    expect(arasindaEngelVar([...parcaUzerindeNokta(), olcum('m', 'A', 'P')], 'm')).toBe(false);
+    expect(arasindaEngelVar([...bolunmus(), olcum('m', 'A', 'P')], 'm')).toBe(false);
+    // Bölünmüş zincirin tamamı: P arada
+    expect(arasindaEngelVar([...bolunmus(), olcum('m', 'A', 'B')], 'm')).toBe(true);
+  });
+
+  it('gizli nokta, doğrunun dışındaki nokta ve uzantıdaki nokta engel değildir', () => {
+    const taban = [nokta('A', 0, 0), nokta('B', 10, 0), olcum('m', 'A', 'B')];
+    expect(arasindaEngelVar([...taban, nokta('G', 4, 0, { visible: false })], 'm')).toBe(false);
+    expect(arasindaEngelVar([...taban, nokta('Y', 4, 0.05)], 'm')).toBe(false);
+    expect(arasindaEngelVar([...taban, nokta('U', 12, 0)], 'm')).toBe(false);
+    expect(arasindaEngelVar([...taban, nokta('K', 4, 0.0004)], 'm')).toBe(true);
+  });
+
+  it('aralığı iç noktada kesen doğru parçası, doğru, ışın ve çokgen kenarı engeldir', () => {
+    const taban = [nokta('A', 0, 0), nokta('B', 10, 0), olcum('m', 'A', 'B'), nokta('P', 5, -2), nokta('Q', 5, 3)];
+    const ile = (...eklenen: MathObject[]) => arasindaEngelVar([...taban, ...eklenen], 'm');
+    expect(ile(yap({ id: 's', type: 'segment', startPointId: 'P', endPointId: 'Q' }))).toBe(true);
+    expect(ile(yap({ id: 'd', type: 'line', point1Id: 'P', point2Id: 'Q' }))).toBe(true);
+    expect(ile(yap({ id: 'r', type: 'ray', startPointId: 'P', throughPointId: 'Q' }))).toBe(true);
+    expect(ile(yap({ id: 'r2', type: 'ray', startPointId: 'Q', throughPointId: 'P' }))).toBe(true);
+    // Aralıktan uzağa bakan ışın ve aralığa ulaşmayan parça kesmez
+    expect(ile(nokta('R', 5, 5), yap({ id: 'r3', type: 'ray', startPointId: 'Q', throughPointId: 'R' }))).toBe(false);
+    expect(ile(nokta('R', 5, 5), yap({ id: 's2', type: 'segment', startPointId: 'Q', endPointId: 'R' }))).toBe(false);
+    // Çokgen kenarı keser
+    expect(ile(nokta('R', 8, 3), yap({ id: 'poly', type: 'polygon', pointIds: ['P', 'R', 'Q'] }))).toBe(true);
+    // Gizli kesen parça sayılmaz
+    expect(ile(yap({ id: 's', type: 'segment', startPointId: 'P', endPointId: 'Q', visible: false }))).toBe(false);
+  });
+
+  it('uçlardan çıkan çizgiler ve kenarı ölçülen çokgen engel değildir', () => {
+    const taban = [nokta('A', 0, 0), nokta('B', 10, 0), nokta('X', 3, 6), olcum('m', 'A', 'B')];
+    const ile = (...eklenen: MathObject[]) => arasindaEngelVar([...taban, ...eklenen], 'm');
+    expect(ile(yap({ id: 's', type: 'segment', startPointId: 'A', endPointId: 'X' }))).toBe(false);
+    expect(ile(yap({ id: 'd', type: 'line', point1Id: 'X', point2Id: 'B' }))).toBe(false);
+    expect(ile(yap({ id: 'r', type: 'ray', startPointId: 'X', throughPointId: 'A' }))).toBe(false);
+    expect(ile(yap({ id: 'poly', type: 'polygon', pointIds: ['A', 'B', 'X'] }))).toBe(false);
+    // Aynı doğrultudaki (üst üste binen) doğru da kesmez
+    expect(ile(nokta('Z', 20, 0), yap({ id: 'd2', type: 'line', point1Id: 'A', point2Id: 'Z' }))).toBe(false);
+  });
+
+  it('ucu aralığın içinde duran (T biçimli) parça, ucu gizli olsa da engeldir', () => {
+    const o = [
+      nokta('A', 0, 0), nokta('B', 10, 0), olcum('m', 'A', 'B'),
+      nokta('T', 4, 0, { visible: false }), nokta('U', 4, 5),
+      yap({ id: 's', type: 'segment', startPointId: 'T', endPointId: 'U' }),
+    ];
+    expect(arasindaEngelVar(o, 'm')).toBe(true);
+  });
+
+  it('yalın etiketle örtüşmeyen kesikli çizgi en yakın katta (0) kalır', () => {
+    const o: MathObject[] = [
+      nokta('A', 0, 0), nokta('P', 4, 0), nokta('B', 10, 0),
+      yap({ id: 'ab', type: 'segment', label: '[AB]', startPointId: 'A', endPointId: 'B' }),
+      olcum('m-ab', 'A', 'B'),
+    ];
+    expect(distanceLabelLayouts(o).get('m-ab')).toEqual({ kesikli: true, kat: 0 });
+    // Aynı doğrudaki |PB| yalın etiketi yakın bandı tutar: |AB| bir kat dışarı çıkar
+    const o2 = [...o, olcum('m-pb', 'P', 'B')];
+    expect(distanceLabelLayouts(o2).get('m-pb')).toEqual({ kesikli: false, kat: 0 });
+    expect(distanceLabelLayouts(o2).get('m-ab')).toEqual({ kesikli: true, kat: 1 });
+    expect(distanceLabelLevel(o2, 'm-ab')).toBe(1);
+  });
+
+  it('başka doğrudaki yalın etiket kat hesabını etkilemez; gizli ölçüm yer tutmaz', () => {
+    const o: MathObject[] = [
+      nokta('A', 0, 0), nokta('P', 4, 0), nokta('B', 10, 0), nokta('K', 0, 5),
+      yap({ id: 'ak', type: 'segment', label: '[AK]', startPointId: 'A', endPointId: 'K' }),
+      olcum('m-ab', 'A', 'B'), olcum('m-ak', 'A', 'K'), olcum('m-pb', 'P', 'B', { showValue: false }),
+    ];
+    const y = distanceLabelLayouts(o);
+    expect(y.get('m-ab')).toEqual({ kesikli: true, kat: 0 });
+    expect(y.get('m-ak')).toEqual({ kesikli: false, kat: 0 });
+    expect(y.has('m-pb')).toBe(false);
+  });
+});
+
+describe('Taşıyıcı çizgisi olmayan aralıkta kesikli ölçü çizgisi kalır', () => {
+  const olcum = (id: string, a: string, b: string, extra: Record<string, unknown> = {}) =>
+    yap({ id, type: 'measurement', kind: 'distance', pointIds: [a, b], showValue: true, ...extra });
+  const parca = (id: string, a: string, b: string, extra: Record<string, unknown> = {}) =>
+    yap({ id, type: 'segment', label: id, startPointId: a, endPointId: b, ...extra });
+
+  it('kullanıcının sahnesi değişmez: [AC] üzerinde |DE| ve |EC| yalın, |AE| kesikli', () => {
+    const o: MathObject[] = [
+      nokta('A', 0, 0), nokta('C', 15, 0), parca('ac', 'A', 'C'),
+      nokta('D', 5, 0, { onObjectId: 'ac' }), nokta('E', 11, 0, { onObjectId: 'ac' }),
+      olcum('m-ae', 'A', 'E'), olcum('m-de', 'D', 'E'), olcum('m-ec', 'E', 'C'),
+    ];
+    for (const id of ['m-ae', 'm-de', 'm-ec']) expect(tasiyiciCizgiVar(o, id)).toBe(true);
+    expect(olcuCizgisiGerekli(o, 'm-ae')).toBe(true);
+    expect(olcuCizgisiGerekli(o, 'm-de')).toBe(false);
+    expect(olcuCizgisiGerekli(o, 'm-ec')).toBe(false);
+  });
+
+  it('iki serbest nokta arasında (çizgi yok) ölçü kesikli çizgiyle gösterilir', () => {
+    const o = [nokta('K', 0, 0), nokta('L', 14, 0), olcum('m', 'K', 'L')];
+    expect(arasindaEngelVar(o, 'm')).toBe(false);
+    expect(tasiyiciCizgiVar(o, 'm')).toBe(false);
+    expect(olcuCizgisiGerekli(o, 'm')).toBe(true);
+    expect(distanceLabelLayouts(o).get('m')).toEqual({ kesikli: true, kat: 0 });
+  });
+
+  it('gizli taşıyıcı sayılmaz: [AC] gizliyken |DE| ve |EC| kesikli', () => {
+    const o: MathObject[] = [
+      nokta('A', 0, 0), nokta('C', 15, 0), parca('ac', 'A', 'C', { visible: false }),
+      nokta('D', 5, 0, { onObjectId: 'ac' }), nokta('E', 11, 0, { onObjectId: 'ac' }),
+      olcum('m-de', 'D', 'E'), olcum('m-ec', 'E', 'C'),
+    ];
+    expect(olcuCizgisiGerekli(o, 'm-de')).toBe(true);
+    expect(olcuCizgisiGerekli(o, 'm-ec')).toBe(true);
+  });
+
+  it('çizgiden çekilen nokta: |FH| artık [FG] üzerinde değil, kesikli', () => {
+    const taban = [nokta('F', 0, 0), nokta('G', 12, 0), parca('fg', 'F', 'G'), olcum('m', 'F', 'H')];
+    expect(olcuCizgisiGerekli([...taban, nokta('H', 7, 0)], 'm')).toBe(false);
+    expect(olcuCizgisiGerekli([...taban, nokta('H', 7, 1.5)], 'm')).toBe(true);
+    // Parçanın uzantısındaki nokta da taşınmaz: [FG] H'ye kadar uzanmıyor
+    expect(olcuCizgisiGerekli([...taban, nokta('H', 14, 0)], 'm')).toBe(true);
+  });
+
+  it('bölünmüş zincirin parçaları birlikte taşır; aradaki boşluk taşımaz', () => {
+    const o: MathObject[] = [
+      nokta('A', 0, 0), nokta('P', 4, 0), nokta('B', 10, 0),
+      parca('ap', 'A', 'P'), parca('pb', 'P', 'B'),
+      olcum('m-ab', 'A', 'B'), olcum('m-ap', 'A', 'P'),
+    ];
+    expect(tasiyiciCizgiVar(o, 'm-ab')).toBe(true);
+    expect(tasiyiciCizgiVar(o, 'm-ap')).toBe(true);
+    // [PB] yoksa [AB] boyunca 4..10 boş kalır
+    expect(tasiyiciCizgiVar(o.filter((x) => x.id !== 'pb'), 'm-ab')).toBe(false);
+  });
+
+  it('doğru, ışın ve çokgen kenarı da taşıyıcıdır; ışının öbür yanı taşınmaz', () => {
+    const taban = [nokta('A', 0, 0), nokta('B', 10, 0), nokta('C', 4, 0), olcum('m', 'A', 'C')];
+    const ile = (...eklenen: MathObject[]) => tasiyiciCizgiVar([...taban, ...eklenen], 'm');
+    expect(ile(yap({ id: 'd', type: 'line', point1Id: 'A', point2Id: 'B' }))).toBe(true);
+    expect(ile(yap({ id: 'r', type: 'ray', startPointId: 'A', throughPointId: 'B' }))).toBe(true);
+    expect(ile(yap({ id: 'r2', type: 'ray', startPointId: 'C', throughPointId: 'B' }))).toBe(false);
+    expect(ile(nokta('X', 5, 5), yap({ id: 'poly', type: 'polygon', pointIds: ['A', 'B', 'X'] }))).toBe(true);
+    expect(ile(nokta('X', 5, 5), yap({ id: 'poly', type: 'polygon', pointIds: ['A', 'X', 'B'] }))).toBe(true);
+    // Dik doğrultudaki parça taşımaz
+    expect(ile(nokta('Y', 0, 5), parca('ay', 'A', 'Y'))).toBe(false);
+  });
+});
+
+describe('kenarEtiketiYani: uzunluğu gösterilen çokgen kenarındaki ölçüm', () => {
+  const olcum = (id: string, a: string, b: string) =>
+    yap({ id, type: 'measurement', kind: 'distance', pointIds: [a, b], showValue: true });
+  const ucgen = (edgeLabels?: number[]): MathObject[] => [
+    nokta('A', -8, 4), nokta('B', 0, 4), nokta('C', -4, -1), nokta('D', -1.5, 4),
+    yap({ id: 'u', type: 'polygon', pointIds: ['A', 'B', 'C'], ...(edgeLabels ? { edgeLabels } : {}) }),
+    olcum('m-ad', 'A', 'D'), olcum('m-db', 'D', 'B'), olcum('m-ac', 'A', 'C'),
+  ];
+
+  it('üst kenarın etiketi çokgenin dışında, yukarıda: yan (0, 1)', () => {
+    const o = ucgen([0, 1, 2]);
+    for (const id of ['m-ad', 'm-db']) {
+      const yan = kenarEtiketiYani(o, id)!;
+      expect(yan.x).toBeCloseTo(0, 9);
+      expect(yan.y).toBeCloseTo(1, 9);
+    }
+    // Eğik kenar AC (2. kenar: C → A): dışa bakan normal sola ve aşağı
+    const yan = kenarEtiketiYani(o, 'm-ac')!;
+    expect(yan.x).toBeLessThan(0);
+  });
+
+  it('kenarın uzunluğu gösterilmiyorsa, çokgen gizliyse ya da ölçüm kenarda değilse null', () => {
+    expect(kenarEtiketiYani(ucgen(), 'm-ad')).toBeNull();
+    expect(kenarEtiketiYani(ucgen([1, 2]), 'm-ad')).toBeNull();
+    const gizli = ucgen([0]).map((x) => (x.id === 'u' ? { ...x, visible: false } : x)) as MathObject[];
+    expect(kenarEtiketiYani(gizli, 'm-ad')).toBeNull();
+    const disarida = [...ucgen([0]), nokta('K', 3, 4), nokta('L', 6, 4), olcum('m-kl', 'K', 'L')];
+    expect(kenarEtiketiYani(disarida, 'm-kl')).toBeNull();
   });
 });

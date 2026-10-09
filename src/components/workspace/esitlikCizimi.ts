@@ -77,7 +77,7 @@ export function centikKaydirmasi(
     yer = (o) => ({ cx: mx + dx * o, cy: my + dy * o, dx, dy, nx: -dy, ny: dx });
     enCok = L / 2 - gw - 6;
   } else {
-    // AÇI: yay yarıçapı yakınlaştırmayla büyümez (Canvas 22·etiketOlcegi px çizer), dışarıdan gelir.
+    // AÇI: yay yarıçapı dünya birimi değildir; Canvas açının KENDİ yayınınkini verir (aciYayYaricapi · etiketOlcegi px).
     if (!m.merkez || m.baslangic === undefined || m.tarama === undefined) return 0;
     if (m.tur !== 'aci' && m.yaricap === undefined) return 0;
     const cS = worldToScreen(m.merkez, viewport);
@@ -138,9 +138,13 @@ export function centikYolu(
   if (m.tur !== 'aci' && m.yaricap === undefined) return null;
   const cS = worldToScreen(m.merkez, viewport);
   const rPx = m.tur === 'aci' ? (aciYaricapiPx ?? 0) : m.yaricap! * viewport.zoom;
-  // Açının yayı sabit yarıçapta ve kısadır; ölçüt yalnız çentiklerin sığacağı yay boyudur.
-  const enAz = m.tur === 'aci' ? (k - 1) * ARALIK + 10 : gerekli;
-  if (!(rPx >= EN_KUCUK_YARICAP) || !(rPx * Math.abs(m.tarama) >= enAz)) return null;
+  // Açının yayı kısadır; ölçüt yalnız çentiklerin sığacağı yay boyudur: öbek ((k − 1) · ARALIK) ve iki yanında
+  // 3 px yay, en az 10 px. Rahat yay boyunu aciYayYaricapi verir ((k − 1) · ARALIK + 16); bu sınır yalnız kısa kollu açıda
+  // (yay kolun ortasındaki çentiğin altında kalmak zorunda) devreye girer, eşlik bilgisi orada da kaybolmasın.
+  // Küçük pay: yarıçap acos, tarama atan2 ile hesaplandığı için yay boyu sınırda 17,999… ya da 18,000… çıkıyor,
+  // eş açılardan biri yöne göre çentiksiz kalıyordu (doğrulama, 2026-09-25).
+  const enAz = m.tur === 'aci' ? Math.max(10, (k - 1) * ARALIK + 6) : gerekli;
+  if (!(rPx >= EN_KUCUK_YARICAP) || !(rPx * Math.abs(m.tarama) >= enAz - 1e-6)) return null;
   const orta = m.baslangic + m.tarama / 2 + kaydirma / rPx;
   const ic = Math.max(0, rPx - yari), dis = rPx + yari;
   for (let j = 0; j < k; j++) {

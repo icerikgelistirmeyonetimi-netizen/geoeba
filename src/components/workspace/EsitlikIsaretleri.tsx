@@ -24,17 +24,24 @@ const EMPTY: readonly PointObject[] = [];
  * Çentik katmanı. Geçiş (transition) ve sınıf YOK: kaydırırken yol `d` her karede yeniden hesaplanır, geride kalmaz.
  * Tıklamayı engellemez (pointerEvents none). Sade görünümde de çizilir (ölçü rozeti değil, geometrik gösterim).
  */
-export function EsitlikIsaretleriKatmani({ isaretler, viewport, seciliIdler, cizgiOlcegi, noktalar, noktaYaricapi = 5, aciYaricapiPx }: {
+export function EsitlikIsaretleriKatmani({ isaretler, viewport, seciliIdler, cizgiOlcegi, noktalar, noktaYaricapi = 5, aciYaricapiPx, aciYaricaplariPx }: {
   isaretler: EsitlikIsareti[];
   viewport: ViewportTransform;
   seciliIdler: string[];
   cizgiOlcegi: number;
   /**
    * Açı yayının EKRAN yarıçapı (px). Açının yayı yakınlaştırmayla büyümediği için dünya birimiyle
-   * ifade edilemez; Canvas kendi çizdiği yarıçapı (22·etiketOlcegi) buraya verir. Dik açıda kare
-   * işaretinin köşegen ortasına düşsün diye yarısı geçilir.
+   * ifade edilemez; Canvas kendi çizdiği yarıçapı buraya verir. Dik açıda kare işaretinin köşegen
+   * ortasına düşsün diye yarısı geçilir. Açıya özel yarıçap (aciYaricaplariPx) yoksa kullanılır.
    */
   aciYaricapiPx?: number;
+  /**
+   * Açı başına EKRAN yarıçapı (px), açının kimliğiyle (öğenin sahibi). Dar açıda yay büyüdüğü için
+   * (olcuEtiketi.aciYayYaricapi) çentik her açının KENDİ yayının üstüne oturur. Değer OLDUĞU GİBİ kullanılır:
+   * dik açıda Canvas kare çizdiği için yarıçapın yarısını (karenin köşegen ortası) kendisi verir; kare kararı
+   * tek yerde (Canvas: Math.round(derece) === 90) verilsin, 89,7° gibi açıda çentik karenin dışına taşmasın.
+   */
+  aciYaricaplariPx?: ReadonlyMap<string, number>;
   /**
    * Görünür noktalar: öğenin ortasında duran nokta çentiği örtmesin diye çentik yana kaydırılır.
    * DİZİ olmalı, yineleyici (Map.values()) DEĞİL: React StrictMode aynı props ile render'ı iki kez çağırır;
@@ -60,8 +67,10 @@ export function EsitlikIsaretleriKatmani({ isaretler, viewport, seciliIdler, ciz
     <g data-esitlik-isaretleri={isaretler.length} pointerEvents="none" aria-hidden="true">
       {isaretler.map((m) => {
         // Dik açıda Canvas yay yerine KARE çizer; çentik karenin köşegen ortasına oturur (yarıçapın yarısı).
+        // Açıya özel yarıçap bunu zaten içerir; yalnız tek sabit yarıçapla çağrılınca burada yarıya indirilir.
+        const ozel = m.tur === 'aci' ? aciYaricaplariPx?.get(m.sahipId) : undefined;
         const dikAci = m.tur === 'aci' && Math.abs(Math.abs(m.tarama ?? 0) - Math.PI / 2) < 1e-3;
-        const rPx = m.tur === 'aci' ? (aciYaricapiPx ?? 0) * (dikAci ? 0.5 : 1) : undefined;
+        const rPx = m.tur === 'aci' ? ozel ?? (aciYaricapiPx ?? 0) * (dikAci ? 0.5 : 1) : undefined;
         const kaydirma = centikKaydirmasi(m, viewport, cizgiOlcegi, engeller, rPx);
         const d = centikYolu(m, viewport, cizgiOlcegi, kaydirma, rPx);
         if (!d) return null;

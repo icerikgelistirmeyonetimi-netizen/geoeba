@@ -13,8 +13,8 @@
 - Tarayıcı birden çok olası metin verdiğinde motorun gerçekten anladığı seçilir; yarım kalmış görünen cümle (ör. `üçgen`) kısa bir süre beklenir ve sonraki parçayla birleştirilir.
 - Mikrofon açıkken düğmenin üstündeki balon dalga göstergesini, o an söyleneni ve son anlaşılan komutları gösterir.
 - **Ses ayarları** (kutunun başlığındaki simge):
-  - *Otomatik* (varsayılan): tarayıcının ses tanıması (Chrome/Edge) kullanılır; tarayıcı cihaz üstü Türkçe tanıma sunuyorsa önce o. Tarayıcı desteklemiyorsa, internet yoksa ya da hizmet hata verirse çevrimdışı modele geçilir. Tarayıcının çevrimiçi hizmeti sesi Google/Microsoft sunucusuna gönderir.
-  - *Yalnızca çevrimdışı*: ses bilgisayardan çıkmaz; tarayıcının cihaz üstü tanıması hazır değilse Whisper base (yaklaşık 80 MB, `public/speech/`) tarayıcıda çalışır.
+  - Yalnızca tarayıcının ses tanıması (Chrome/Edge) kullanılır; tarayıcı cihaz üstü Türkçe tanıma sunuyorsa önce o. Tarayıcı desteklemiyorsa ya da internet yoksa mikrofon açıklamayla kapalı kalır; sayfaya model yüklenmez. Tarayıcının çevrimiçi hizmeti sesi Google/Microsoft sunucusuna gönderir.
+  - Çevrimdışı Whisper modeli (eski "Yalnızca çevrimdışı" seçeneği, `public/speech/`) 7 Ekim 2026'da kaldırıldı: ~80 MB model ve ayrı iş parçacığı gerektiriyordu, gerekli görülmedi.
   - *Söyleyince hemen uygula*: kapatılırsa anlaşılan metin yalnızca kutuya yazılır, Enter ile uygulanır.
 
 ## Kullanım
@@ -177,7 +177,7 @@ Saf yardımcılar `src/math/commands/viewActions.ts` içindedir: `zoomViewport`,
 
 ### Anlam modeli (`public/semantic/*`, `src/math/semanticCommands.ts`)
 
-- `worker.js` yerel çok dilli cümle modelini (paraphrase-multilingual-MiniLM-L12-v2, q8) yükler ve `intents.json` içindeki örnek cümleleri açılışta gömer. Ağ bağlantısı gerekmez.
+- `worker.js` yerel çok dilli cümle modelini (paraphrase-multilingual-MiniLM-L12-v2, q8) yükler. `intents.json` içindeki örnek cümlelerin gömmeleri DERLEME zamanında hesaplanır (`scripts/prepare-semantic.mjs` → `intents-embeddings.json`, parmak izi `niyet-ozeti.mjs`); worker açılışta yalnızca bu dosyayı okur, kullanıcı cümlesini gömer. Dosya eskiyse (intents.json değişmiş, betik çalışmamış) worker gömmeleri kendisi hesaplar; `semanticEmbeddings.test.ts` eskimeyi yakalar. Ölçüm (7 Ekim 2026, model önbellekte): hazır dosyayla ısınma 1,2 s, dosyasız 4,4 s. Model dosyaları tarayıcının Cache API'sinde saklanır, bir kez iner. İş parçacığı sayısı sayfa cross-origin isolated ise (COOP/COEP) otomatik artar; GitHub Pages'te 1'dir. Ağ bağlantısı gerekmez.
 - `intents.json`: 45 niyet, her birinde 3–4 farklı Türkçe ifade.
 - `SEMANTIC_ANCHORS`: ayırt edici terimler özelden genele sıralıdır (ör. `çevrel` → çevrel çember, `çevre`'den önce). İlk eşleşen niyet +0,25, diğerleri −0,15 alır. Her niyetin bir deseni vardır ve hiçbir eğitim cümlesi başka bir niyete bağlanmaz (testle denetlenir).
 - `interpretSemanticMatch` yalnızca motorun anladığı kanonik bir cümle üretir. Parametreler modelden tahmin edilmez: ad, sayı, koordinat, renk ve tırnak içi yazı cümleden, eksik hedef seçimden ya da sahnedeki tek adaydan alınır; eksik bilgi için açıklama istenir.

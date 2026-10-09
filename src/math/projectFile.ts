@@ -72,7 +72,15 @@ export function validateProjectObjects(input: unknown): MathObject[] {
     if (o.labelOffsets !== undefined) for (const v of Object.values(row(o.labelOffsets))) {
       const k = row(v);
       numbers(k, ['x', 'y']);
-      for (const alan of ['eksenBoyunca', 'eksenDik']) if (k[alan] !== undefined && !Number.isFinite(k[alan])) fail('etiket kayıklığı geçersiz');
+      for (const alan of ['eksenBoyunca', 'eksenDik', 'eksenDikTaban']) if (k[alan] !== undefined && !Number.isFinite(k[alan])) fail('etiket kayıklığı geçersiz');
+    }
+    // Elle yazılmış etiket metinleri: anahtar → düz metin (boş metin saklanmaz)
+    if (o.labelTexts !== undefined) {
+      const girdiler = Object.entries(row(o.labelTexts));
+      if (girdiler.some(([k, v]) => !str(k) || typeof v !== 'string')) fail('etiket metni geçersiz');
+      const metinler = girdiler.filter(([, v]) => str(v));
+      if (metinler.length) o.labelTexts = Object.fromEntries(metinler);
+      else delete o.labelTexts;
     }
     if (o.labelAnchors !== undefined) {
       o.labelAnchors = Object.fromEntries(Object.entries(row(o.labelAnchors)).map(([kind, value]) => {
@@ -291,6 +299,8 @@ export function parseProjectFile(input: unknown): ProjectFile {
   if (data.styleSettings !== undefined) {
     const s = row(data.styleSettings); numbers(s, ['strokeScale', 'fontScale', 'pointRadius', 'pointLabelScale', 'measurementScale', 'axisScale'], true);
     if (typeof s.hideFills !== 'boolean' || (s.showLabelBoxes !== undefined && typeof s.showLabelBoxes !== 'boolean')) fail('stil ayarları geçersiz');
+    // Uzaklaşınca yazı alt sınırı bir orandır (0 = sınırsız küçülür, 1 = hiç küçülmez)
+    if (s.yaziAltSiniri !== undefined && !(finite(s.yaziAltSiniri) && s.yaziAltSiniri >= 0 && s.yaziAltSiniri <= 1)) fail('stil ayarları geçersiz');
     // Eski dosyalardaki hideLabelBoxes tanınmayan anahtar olarak düşer: kutular artık varsayılan olarak kapalı.
     for (const [k, allowed] of Object.entries(STYLE_SECENEKLERI)) if (s[k] !== undefined && !(allowed as readonly string[]).includes(s[k])) fail('stil ayarları geçersiz');
     // Bilinen alanlar tek tek doğrulanır: tanınmayan anahtarlar düşer, eksik olanlar varsayılandan tamamlanır

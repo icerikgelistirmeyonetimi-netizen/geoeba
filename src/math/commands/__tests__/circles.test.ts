@@ -222,7 +222,10 @@ describe('circles: through points', () => {
     const scene = S3();
     const r = ok(text, scene);
     const c = onlyOne(r.objects, 'circle');
-    expect(c).toMatchObject({ centerPointId: point(scene, 'A').id, radiusPointId: point(scene, 'B').id, fillOpacity: 0.1, showArea: true, showPerimeter: true, label: 'A Merkezli Çember' });
+    expect(c).toMatchObject({ centerPointId: point(scene, 'A').id, radiusPointId: point(scene, 'B').id, fillOpacity: 0.1, label: 'A Merkezli Çember' });
+    // Ölçüler hazır gelmez: alan/çevre etiketleri ayrıca istenir (8 Ekim 2026)
+    expect(c.showArea).toBeFalsy();
+    expect(c.showPerimeter).toBeFalsy();
     expect(c.fixedRadius).toBeUndefined();
     expect(r.objects).toHaveLength(scene.length + 1);
     expect(r.message).toBe('Merkezi A olan ve B noktasından geçen çember çizildi.');

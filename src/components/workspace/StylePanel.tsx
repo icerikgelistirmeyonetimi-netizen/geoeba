@@ -15,19 +15,22 @@ interface AyarKaydiriciProps {
   min: number;
   max: number;
   adim: number;
-  /** Değeri kullanıcıya nasıl göstereceğiz: çarpan (1,2×) mı, piksel (6 px) mi? */
-  birim: 'carpan' | 'px';
+  /** Değeri kullanıcıya nasıl göstereceğiz: çarpan (1,2×) mı, piksel (6 px) mi, yüzde (%70) mi? */
+  birim: 'carpan' | 'px' | 'yuzde';
+  /** Belirli bir değerin yerine yazılacak açıklama (ör. 0 → "sınırsız") */
+  ozelDeger?: { deger: number; yazi: string };
   onChange: (v: number) => void;
 }
 
-function AyarKaydirici({ etiket, ipucu, deger, min, max, adim, birim, onChange }: AyarKaydiriciProps) {
+function AyarKaydirici({ etiket, ipucu, deger, min, max, adim, birim, ozelDeger, onChange }: AyarKaydiriciProps) {
+  const degerYazisi = ozelDeger && ozelDeger.deger === deger
+    ? ozelDeger.yazi
+    : birim === 'carpan' ? `${formatTurkishNumber(deger)}×` : birim === 'yuzde' ? `%${Math.round(deger * 100)}` : `${formatTurkishNumber(deger)} px`;
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between gap-2">
         <span className="text-[11px] font-bold text-foreground">{etiket}</span>
-        <span className="text-[11px] font-black text-primary tabular-nums">
-          {birim === 'carpan' ? `${formatTurkishNumber(deger)}×` : `${formatTurkishNumber(deger)} px`}
-        </span>
+        <span className="text-[11px] font-black text-primary tabular-nums">{degerYazisi}</span>
       </div>
       <input
         type="range"
@@ -211,6 +214,17 @@ export function StylePanel() {
             adim={0.05}
             birim="carpan"
             onChange={(v) => guncelle('fontScale', v)}
+          />
+          <AyarKaydirici
+            etiket="Uzaklaşınca yazılar en az"
+            ipucu="Tuval uzaklaştırılınca yazılar şekille birlikte küçülür ama bu orandan aşağı inmez; uzaktan da okunur kalır."
+            deger={styleSettings.yaziAltSiniri}
+            min={0}
+            max={1}
+            adim={0.05}
+            birim="yuzde"
+            ozelDeger={{ deger: 0, yazi: 'sınırsız küçülür' }}
+            onChange={(v) => guncelle('yaziAltSiniri', v)}
           />
 
           {/* AKORDİYON: gruplara özel ince ayar */}

@@ -444,6 +444,11 @@ describe('app: style settings', () => {
     ['çizgi kalınlığını 2 yap', { strokeScale: 2 }],
     ['çizgileri 2 kat kalınlaştır', { strokeScale: 2 }],
     ['nokta adlarını büyüt', { pointLabelScale: 1.25 }],
+    // Uzaklaşınca yazı alt sınırı (varsayılan 0,7): "uzak" / "en az" sözleri genel yazı ölçeğine karışmaz
+    ['uzaklaşınca yazılar en az 0,8 olsun', { yaziAltSiniri: 0.8 }],
+    ['uzaktaki yazıları büyüt', { yaziAltSiniri: 0.8 }],
+    ['uzaktaki yazıları çok küçült', { yaziAltSiniri: 0.5 }],
+    ['yazıların alt sınırını 0 yap', { yaziAltSiniri: 0 }],
     ['ölçüm yazılarını küçült', { measurementScale: 0.8 }],
     ['eksen sayılarını büyüt', { axisScale: 1.25 }],
     ['dolguları kaldır', { hideFills: true }],
@@ -454,6 +459,12 @@ describe('app: style settings', () => {
     ['stili sıfırla', { ...DEFAULT_STYLE_SETTINGS }],
   ])('%s', (text, patch) => {
     expect(stylePatch(text)).toEqual(patch);
+  });
+  it('uzaklaşınca yazı alt sınırı 0 iken (sınırsız küçülür) büyütme takılmaz: toplamsal adım, kat ise varsayılandan', () => {
+    expect(stylePatch('uzaktaki yazıları büyüt', withStyle({ yaziAltSiniri: 0 }))).toEqual({ yaziAltSiniri: 0.1 });
+    expect(stylePatch('uzaktaki yazıları 2 kat büyüt', withStyle({ yaziAltSiniri: 0 }))).toEqual({ yaziAltSiniri: 1 });
+    expect(stylePatch('uzaktaki yazıları 0,3 büyüt', withStyle({ yaziAltSiniri: 0.5 }))).toEqual({ yaziAltSiniri: 0.8 });
+    expect(stylePatch('uzaktaki yazıları küçült', withStyle({ yaziAltSiniri: 0.05 }))).toEqual({ yaziAltSiniri: 0 });
   });
   it('builds on the current style when the panel passes it', () => {
     expect(stylePatch('yazıları büyüt', withStyle({ fontScale: 1.2 }))).toEqual({ fontScale: 1.5 });
@@ -504,6 +515,7 @@ describe('app: help and unsupported requests', () => {
     expect(r.actions).toEqual([{ kind: 'help' }]);
     expect(r.message).toContain('Yazarak şunları yapabilirsiniz');
     expect(r.message).toContain('dönüşümler');
+    expect(r.message).toContain('teoremler ve klasik şekiller');
   });
   it.each([
     ['üçgen komutları neler', 'polygons'],
@@ -512,6 +524,10 @@ describe('app: help and unsupported requests', () => {
     ['ölçme için örnek komutlar', 'measure'],
     ['kaydırıcı komutları nelerdir', 'algebra'],
     ['görünüm komutları', 'app'],
+    ['Öklid için yardım', 'teoremler'],
+    ['teorem komutları neler', 'teoremler'],
+    ['çember teoremleri için örnek komutlar', 'teoremler'],
+    ['Tales komutları nelerdir', 'teoremler'],
   ])('%s → %s', (text, topic) => {
     const r = expectOk(handlers, text);
     expect(r.actions).toEqual([{ kind: 'help', topic }]);

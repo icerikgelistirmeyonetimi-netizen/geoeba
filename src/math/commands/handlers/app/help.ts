@@ -11,6 +11,8 @@ const TOPICS: { id: string; title: string; re: RegExp; examples: string[] }[] = 
   { id: 'basic', title: 'Nokta, doğru ve açı', re: /\bnokta\w*|\bdogru\w*|\bisin\w*|\baci(?!ortay)\w*/, examples: ['A(2;3) noktası oluştur', 'A ve B noktalarını birleştir', 'A noktasından geçen yatay doğru çiz', 'ABC açısını çiz'] },
   { id: 'circles', title: 'Çember, daire ve elips', re: /\bcember\w*|\bdaire\w*|\belips\w*|\byay\w*|\bdilim\w*/, examples: ['yarıçapı 3 olan çember çiz', 'A merkezli B’den geçen çember çiz', '(x-1)^2+(y-2)^2=9 çemberini çiz', 'yarıçapları 4 ve 2 olan elips çiz'] },
   { id: 'polygons', title: 'Üçgen ve çokgenler', re: /\bucgen\w*|\bkare\b|\bkareler\w*|\bdikdortgen\w*|\bcokgen\w*|\byamuk\w*|\bparalelkenar\w*|\bdeltoid\w*/, examples: ['kenarları 3, 4 ve 5 olan üçgen çiz', 'kenarı 4 olan kare çiz', 'düzgün altıgen çiz', 'tabanı 6 yüksekliği 4 olan üçgen çiz'] },
+  // Teorem ve şekil adları (Öklid, Tales, kiriş…) başka konuların genel sözcüklerinden daha belirgindir; topicOf önce buna bakar.
+  { id: 'teoremler', title: 'Teoremler ve klasik şekiller', re: /\b(?:oklid|oklit|euclid|pisagor|pitagor|tales|thales|teorem|baginti|euler|oyler|dokuz nokta|feuerbach|orta ?taban|kiris|kesen|kuvvet|cevre aci|dis ?teget|ortak teget|heron|stewart|ceva|menela|sinus (?:teorem|kural)|kosinus (?:teorem|kural)|ucgen esitsizli)\w*/, examples: ['Öklid üçgeni çiz', 'Pisagor şekli çiz', 'Tales teoremi şekli çiz', 'ABC üçgeninde Öklid teoremini uygula', 'kesenler teoremini göster'] },
   { id: 'constructions', title: 'İnşalar', re: /\borta (?:nokta|dikme)\w*|\baciortay\w*|\bparalel\w*|\bdikme\w*|\bkesisim\w*|\bteget\w*|\byukseklik\w*|\bkenarortay\w*|\bmerkez\w*|\binsa\w*/, examples: ['AB’nin orta noktasını bul', 'A’dan BC’ye dikme indir', 'ABC üçgeninin çevrel çemberini çiz', 'AB ile CD’nin kesişim noktasını bul'] },
   { id: 'transforms', title: 'Dönüşümler', re: /\byansi\w*|\bsimetri\w*|\bdondur\w*|\bdonme\w*|\botele\w*|\bhomotete\w*|\bdonusum\w*/, examples: ['ABC’yi y eksenine göre yansıt', 'ABC’yi A etrafında 90 derece döndür', 'ABC’yi 3 birim sağa ötele', 'ABC’yi O merkezli 2 kat büyüt'] },
   { id: 'measure', title: 'Ölçme ve sorular', re: /\bolc\w*|\balan\w*|\bcevre\w*|\buzunluk\w*|\begim\w*|\btrig\w*|\bmesafe\w*/, examples: ['ABC’nin alanı kaç?', 'AB uzunluğunu göster', 'ABC üçgeninin açılarını ölç', 'A ile B arasındaki mesafe nedir'] },
@@ -30,7 +32,9 @@ const UNSUPPORTED: { re: RegExp; message: string }[] = [
 
 function topicOf(c: Clause, text: string) {
   const stripped = text.replace(HELP, ' ');
-  return TOPICS.find(t => t.id !== 'app' && t.re.test(stripped)) ?? (TOPICS[TOPICS.length - 1].re.test(stripped) ? TOPICS[TOPICS.length - 1] : undefined);
+  // "çember teoremleri", "üçgen teoremleri": teorem adı geçiyorsa konu şekil adına değil teoremlere gider.
+  return TOPICS.find(t => t.id === 'teoremler' && t.re.test(stripped))
+    ?? TOPICS.find(t => t.id !== 'app' && t.re.test(stripped)) ?? (TOPICS[TOPICS.length - 1].re.test(stripped) ? TOPICS[TOPICS.length - 1] : undefined);
 }
 
 export const help: CommandHandler = {

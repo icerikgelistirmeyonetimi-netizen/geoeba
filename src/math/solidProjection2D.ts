@@ -114,14 +114,19 @@ export function projectSolidFor2D(
   solid: Solid3DObject,
   viewport: ViewportTransform,
   isSelected: boolean = false,
-  mode: SolidProjectionMode = 'top'
+  mode: SolidProjectionMode = 'top',
+  /**
+   * Etiket boşluklarının ölçeği (Canvas.kutuOlcegi = max(yazı ölçeği, yerleşim ölçeği)): yazı alt sınırı devredeyken
+   * uzaklaşınca etiket büyük kalır, boşluk da onunla ölçeklenir ki etiket cisme binmesin. Verilmezse yerleşim ölçeği.
+   */
+  payOlcegi?: number,
 ): ProjectedSolid2D {
   const color = solid.color || '#3b82f6';
   const strokeColor = isSelected ? '#ec4899' : color;
   const strokeWidth = isSelected ? 2.4 : 1.6;
   // Etiket boşlukları referans zoom 44'e aittir. Dünya noktası etrafında bu
   // ölçüleri ölçeklemek, referans yerleşimini gerçek görünüme projekte eder.
-  const labelScale = labelZoomScale(viewport);
+  const labelScale = payOlcegi ?? labelZoomScale(viewport);
 
   const w = solid.dimensions.width || 3;
   const h = solid.dimensions.height || 3;

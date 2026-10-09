@@ -5,7 +5,7 @@ import { type CommandScene, fail, skip, trNum } from '../../scene';
 import type { LabelRef } from '../../text';
 import type { Ctx } from './angles';
 import {
-  P, SLOPE_ANGLE, adli, alanOlcusu, areaOf, arcGeometry, br, cemberAdi, cevreOlcusu, coord, corner, distance, edgeIndex, esit, esitBr, esitDeg,
+  P, SLOPE_ANGLE, adli, alanOlcusu, areaOf, arcGeometry, br, cevreOlcusu, coord, corner, distance, edgeIndex, esit, esitBr, esitDeg,
   merkezAciOlcusu, nameOf, nounFilter, onlyPoint, perimeterOf, pick, setFlags, wantsMany, yaz, yayOlcumUclari, yayUclariOf,
 } from './common';
 import { resolveArc } from '@/math/arcMeasure';
@@ -61,10 +61,11 @@ export function areaPerimeter(x: Ctx) {
     setFlags(scene, o, patch);
     x.focus.push(o.id);
     // Yazım şeklin adını taşıyorsa (A(ABC), Ç(SMD dilimi)) ayrıca "ABC:" öneki yazılmaz;
-    // çember ve elipste ad başlıkta durur: "Ç(M, r): alan = πr² ≈ 28,27 br²".
+    // çember ve elipste nesnenin adı öne yazılır: "M Merkezli Çember: alan = πr² ≈ 28,27 br²"
+    // (eski "Ç(M, r)" başlığı kullanıcıya anlamsız geldi, 8 Ekim 2026).
     x.out.push(olculer.every(adli)
       ? `${olculer.map(m => yaz(m)).join(', ')}.`
-      : `${cemberAdi(scene, o) ?? nameOf(o)}: ${olculer.map(m => yaz(m, true)).join(', ')}.`);
+      : `${nameOf(o)}: ${olculer.map(m => yaz(m, true)).join(', ')}.`);
   }
 }
 
@@ -176,7 +177,7 @@ function lengthOf(x: Ctx, o: MathObject, plural: boolean) {
     case 'circle': case 'ellipse': {
       setFlags(scene, o, { showPerimeter: true });
       x.focus.push(o.id);
-      x.out.push(`${cemberAdi(scene, o) ?? nameOf(o)}: ${yaz(cevreOlcusu(scene, o), true)}.`);
+      x.out.push(`${nameOf(o)}: ${yaz(cevreOlcusu(scene, o), true)}.`);
       return;
     }
     case 'polygon': {
@@ -301,7 +302,7 @@ type ArcKind = 'radius' | 'diameter' | 'chord' | 'arcLength' | 'centralAngle';
 function arcPart(x: Ctx, o: MathObject, kind: ArcKind) {
   const { scene } = x;
   x.focus.push(o.id);
-  const say = (metin: string) => x.out.push(`${cemberAdi(scene, o) ?? nameOf(o)}: ${metin}.`);
+  const say = (metin: string) => x.out.push(`${nameOf(o)}: ${metin}.`);
   if (o.type === 'circle') {
     const g = scene.circleOf(o)!;
     const merkez = g.centerId ? scene.point(g.centerId) : null;

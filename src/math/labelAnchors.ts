@@ -125,7 +125,11 @@ export function ortakOteleme(
   return en && en.sayi * 2 > toplam ? en.vektor : { x: 0, y: 0 };
 }
 
-/** Etiketin seçilen yatay kenarı sabit kalırken güncel metin merkezini bulur. */
+/**
+ * Etiketin seçilen yatay kenarı sabit kalırken güncel metin merkezini bulur. Çapa DÜNYA birimindedir: uzaklaşınca
+ * etiket şekille birlikte yerinde kalır (yazı alt sınırıyla çapayı yazı ölçeğine göre büyütmek denendi ve geri
+ * alındı — etiketler şekilden kopup köşelere kaçıyordu; kullanıcı, 9 Ekim 2026).
+ */
 export function anchoredLabelPosition(
   anchor: MeasurementLabelAnchor,
   objects: readonly MathObject[],

@@ -22,6 +22,13 @@ export type ScreenPoint = {
 export interface LabelOffset extends Point2D {
   eksenBoyunca?: number;
   eksenDik?: number;
+  /**
+   * Sürükleme anında etiketin VARSAYILAN yerinin `eksenDik`i (dünya birimi, aynı işaretle). Varsayılan uzaklık
+   * sonradan değişirse (uzunluk ölçümü kesikli çizgili kattan çizgi yanındaki yalın banda geçer ya da tersi,
+   * eşitlik çentiği gelir) etiket aynı yanda kaldıkça bu farkla birlikte kayar; elle verilen kayıklık korunur,
+   * yerleşim değişimi etiketi "uzak" saymaz (2026-09-25).
+   */
+  eksenDikTaban?: number;
 }
 
 export interface MeasurementLabelAnchor {
@@ -96,6 +103,11 @@ export interface BaseMathObject {
   labelOffsets?: Record<string, LabelOffset>;
   /** Uzaklaştırılmış ölçüm yazılarının ortak şekil merkezine bağlı konumları. */
   labelAnchors?: Record<string, MeasurementLabelAnchor>;
+  /**
+   * Ölçü etiketinin ELLE YAZILMIŞ metni (sağ tık > Etiketi düzenle…); anahtar labelOffsets ile aynıdır
+   * ('area', 'length', 'edge0', 'angle'…). Varsa hesaplanan yazının yerine geçer; silinince hesaplanan yazı döner.
+   */
+  labelTexts?: Record<string, string>;
   /** Nesne hareket ettikçe ekranda kalıcı iz bırakır mı (GeoGebra Show Trace) */
   showTrace?: boolean;
   /**

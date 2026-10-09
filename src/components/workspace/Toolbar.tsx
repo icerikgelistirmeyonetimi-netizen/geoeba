@@ -139,6 +139,7 @@ export function Toolbar({
     activeTool,
     setActiveTool,
     objects,
+    kaynakNesneler,
     updateObject,
     deleteObject,
     addObject,
@@ -1139,7 +1140,8 @@ export function Toolbar({
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                updateObject(obj.id, { visible: obj.visible !== false ? false : true });
+                                // Gerçek bayrağı çevir (ilkokul görünümü çember merkezini gizlese de düğme ölü kalmasın)
+                                updateObject(obj.id, { visible: (kaynakNesneler.find((k) => k.id === obj.id) ?? obj).visible === false });
                               }}
                               className="text-muted-foreground hover:text-foreground shrink-0 cursor-pointer p-0.5"
                               title={obj.visible !== false ? 'Gizle' : 'Göster'}
@@ -1319,7 +1321,7 @@ export function Toolbar({
                           <button
                             onClick={() =>
                               updateObject(selectedObject.id, {
-                                visible: selectedObject.visible !== false ? false : true,
+                                visible: (kaynakNesneler.find((k) => k.id === selectedObject.id) ?? selectedObject).visible === false,
                               })
                             }
                             className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
@@ -1604,7 +1606,7 @@ export function Toolbar({
                         <div
                           className={`p-2 rounded-xl shrink-0 transition-transform ${
                             isCurrent
-                              ? 'bg-primary text-primary-foreground shadow-xs'
+                              ? 'bg-primary text-primary-foreground shadow-xs [&>svg]:!text-primary-foreground'
                               : 'bg-background border border-border group-hover:scale-105'
                           }`}
                         >

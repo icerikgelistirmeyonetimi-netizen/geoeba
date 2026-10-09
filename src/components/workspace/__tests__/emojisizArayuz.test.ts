@@ -14,11 +14,18 @@ const EMOJI = /\p{Extended_Pictographic}/u;
 const EMOJISIZ_DOSYALAR = [
   'WorkspaceMenuBar.tsx',
   'WorkspaceView.tsx',
-  'Properties3D.tsx',
   'PropertiesPanel.tsx',
   'RegularPolygonDialog.tsx',
   'RotateGizmo.tsx',
   'Canvas.tsx',
+  'EtiketMetniDiyalogu.tsx',
+  'etiketMetni.ts',
+  // 3B çalışma ortamı (Properties3D kaldırıldı; içeriği Toolbar3D'nin Bağlamlar sekmesinde)
+  'Toolbar3D.tsx',
+  'Canvas3D.tsx',
+  'ViewCube3D.tsx',
+  'treeToolDefinitions3D.tsx',
+  'kademeDuzeyleri3B.ts',
 ];
 
 /**

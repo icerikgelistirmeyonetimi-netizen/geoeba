@@ -13,13 +13,15 @@
  *  - Çokgen ve düzgün çokgen en çok 8 kenarlı (sekizgen).
  *  - Yansıtma yalnız şekil seçtirir: simetri doğrusu şeklin yanına dikey ya da yatay konur ("x ekseni" yok).
  *
- * Saf işlevler; React tarafı useIlkokulKipi (hooks/useKademeDuzeyi.ts).
+ * Saf işlevler + tek React kancası (useIlkokulKipindeMi: WorkspaceContext nesne görünümünü bununla türetir).
+ * Araç paneli ve menüler useIlkokulKipi (hooks/useKademeDuzeyi.ts) kullanır.
  */
 import type { CircleObject, MathObject, Point2D, PolygonObject, ViewportTransform } from '@/types/math';
 import type { ToolMode } from '@/types/workspace';
 import type { KademeDuzeyi } from './kademeDuzeyleri';
 import { TOOL_SHORTCUTS } from './toolShortcuts';
-import { kademeDuzeyiniOku } from '@/hooks/useKademeDuzeyi';
+import { useSyncExternalStore } from 'react';
+import { kademeDuzeyineAbone, kademeDuzeyiniOku } from '@/hooks/useKademeDuzeyi';
 
 export const ilkokulMu = (duzey: KademeDuzeyi): boolean => duzey === 'ilkokul';
 
@@ -28,6 +30,15 @@ export const ilkokulMu = (duzey: KademeDuzeyi): boolean => duzey === 'ilkokul';
  * araç davranışı kurallarını seçer; araç süzgecine (kademeDuzeyleri) ve yazılı / sesli komutlara karışmaz.
  */
 export const ilkokulKipindeMi = (): boolean => ilkokulMu(kademeDuzeyiniOku());
+
+/**
+ * İlkokul kipi (React): kademe deposuna abone olur, kademe değişince yeniden çizim tetikler. WorkspaceContext
+ * tüketicilere verdiği nesne görünümünü (ilkokulGorunumu) bununla türetir. Kanca burada durur: komut yolu testi
+ * (kademeSuzgeciBaglantisi) WorkspaceContext'in '@/hooks/useKademeDuzeyi' modülünü doğrudan bilmemesini ister.
+ */
+export function useIlkokulKipindeMi(): boolean {
+  return useSyncExternalStore(kademeDuzeyineAbone, ilkokulKipindeMi, () => false);
+}
 
 /**
  * Araç adının yanında (panel, arama, Araçlar menüsü, ipucu) gösterilen klavye kısayolu harfi. İlkokulda gösterilmez
@@ -106,42 +117,37 @@ export function ilkokulUzunlukMetni(deger: number, birim: 'cm' | 'br'): string {
 export const ilkokulAlanOkumasi = (sutun: number, satir: number): string => `${sutun * satir} birim kare`;
 
 /**
- * İlkokulda YENİ eklenen nesnelerin görünümü (WorkspaceContext.commit her adımda çağırır; eski nesnelere dokunmaz):
- *  - yeni nokta harf adı göstermez (showLabel: false);
- *  - yeni çokgen alan hesabı göstermez (showArea: false);
- *  - yeni çemberde alan, çevre ve yarıçap yazısı yok; merkezi ve yarıçap noktası (başka nesne kullanmıyorsa)
+ * İlkokulda nesnelerin GÖRÜNÜMÜ (saf türetme; nesne verisi DEĞİŞMEZ — WorkspaceContext ilkokulken tüketicilere bu
+ * türetilmiş diziyi verir, başka kademeye geçince gerçek nesneler olduğu gibi görünür):
+ *  - nokta harf adı göstermez (showLabel: false);
+ *  - çokgen alan hesabı göstermez (showArea: false);
+ *  - çemberde alan, çevre ve yarıçap yazısı yok; merkezi ve yarıçap noktası (başka nesne kullanmıyorsa)
  *    gizlenir ve adsızdır: merkez / yarıçap bilgisi görünmez, çember gövdesinden sürüklenir;
- *  - yeni açıda derece yazılmaz (showValue: false).
- * Değişiklik yoksa `sonraki` dizisinin kendisi döner.
+ *  - açıda derece yazılmaz (showValue: false).
+ * Kural eskiden yalnız YENİ eklenen nesneye oluşturma anında yazılıyordu; kademe değişince adlar ve ölçüler geri
+ * gelmiyordu (kullanıcı, 9 Ekim 2026: "|AB| = 2 br liseye geçtiğimde geri gelmiyor"). Değişiklik yoksa dizinin kendisi döner.
  */
-export function ilkokulYeniNesneleri(onceki: readonly MathObject[], sonraki: MathObject[]): MathObject[] {
-  if (sonraki === onceki) return sonraki;
-  const eski = new Set(onceki.map((o) => o.id));
-  const yeniler = sonraki.filter((o) => !eski.has(o.id));
-  if (!yeniler.length) return sonraki;
-
-  /** Yeni çemberlerin YALNIZ kendilerine ait (başka nesnenin kullanmadığı) noktaları */
+export function ilkokulGorunumu(nesneler: readonly MathObject[]): MathObject[] {
+  /** Çemberlerin YALNIZ kendilerine ait (başka nesnenin kullanmadığı) noktaları */
   const cemberNoktasi = new Set<string>();
-  for (const c of yeniler) {
+  for (const c of nesneler) {
     if (c.type !== 'circle') continue;
     const cember = c as CircleObject;
     for (const pid of [cember.centerPointId, cember.radiusPointId]) {
       if (!pid) continue;
-      const baskasi = sonraki.some((o) => o.id !== cember.id && o.id !== pid && nesneNoktayiKullanir(o, pid));
+      const baskasi = nesneler.some((o) => o.id !== cember.id && o.id !== pid && nesneNoktayiKullanir(o, pid));
       if (!baskasi) cemberNoktasi.add(pid);
     }
   }
 
   let degisti = false;
-  const sonuc = sonraki.map((o) => {
-    const yeni = !eski.has(o.id);
-    if (o.type === 'point' && (yeni || cemberNoktasi.has(o.id))) {
+  const sonuc = nesneler.map((o) => {
+    if (o.type === 'point') {
       const gizle = cemberNoktasi.has(o.id);
       if (o.showLabel === false && (!gizle || o.visible === false)) return o;
       degisti = true;
       return { ...o, showLabel: false, ...(gizle ? { visible: false } : {}) } as MathObject;
     }
-    if (!yeni) return o;
     if (o.type === 'polygon') {
       const p = o as PolygonObject;
       if (!p.showArea) return o;
@@ -161,7 +167,7 @@ export function ilkokulYeniNesneleri(onceki: readonly MathObject[], sonraki: Mat
     }
     return o;
   });
-  return degisti ? sonuc : sonraki;
+  return degisti ? sonuc : (nesneler as MathObject[]);
 }
 
 /** Nesne bu noktaya (kimliğiyle) başvuruyor mu? Nokta kimliği taşıyan bütün alanlara bakılır. */

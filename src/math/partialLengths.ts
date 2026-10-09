@@ -298,50 +298,276 @@ export function withLengthMeasurement(
   });
 }
 
+type DuzTur = 'parca' | 'dogru' | 'isin';
+type DuzParca = { p: PointObject; q: PointObject; tur: DuzTur };
+
+/** Görünür doğrusal nesnelerin parçaları: doğru parçası, doğru, ışın ve çokgen kenarları. */
+function gorunurDuzParcalar(scene: MathObject[], pts: Map<string, PointObject>): DuzParca[] {
+  const liste: DuzParca[] = [];
+  for (const o of scene) {
+    if (o.visible === false) continue;
+    if (isStraight(o)) {
+      const [i, j] = straightEnds(o);
+      const p = pts.get(i);
+      const q = pts.get(j);
+      if (p && q) liste.push({ p, q, tur: o.type === 'segment' ? 'parca' : o.type === 'line' ? 'dogru' : 'isin' });
+    } else if (o.type === 'polygon') {
+      const koseler = o.pointIds.map((id) => pts.get(id));
+      if (koseler.length < 2 || koseler.some((k) => !k)) continue;
+      for (let i = 0; i < koseler.length; i++) {
+        liste.push({ p: koseler[i]!, q: koseler[(i + 1) % koseler.length]!, tur: 'parca' });
+      }
+    }
+  }
+  return liste;
+}
+
 /**
- * Aynı doğru üzerindeki 'distance' etiketlerinin üst üste binmemesi için kat numarası.
- * Aralıkları ÖRTÜŞEN ölçümler (biri ötekini kapsamasa da) farklı katlara konur: kısa ölçüm önce
- * yerleşir ve örtüştüğü ölçümlerin kullanmadığı en alçak katı alır. Sıra uzunluk ve kimlikle
- * belirlendiğinden aynı doğrudaki her etiket için sonuç tutarlıdır.
+ * [ab] AÇIK aralığının içinde bir engel var mı: ab doğrusu üzerinde, uçlardan ESIK kadar içeride duran
+ * görünür bir nokta ya da ab'yi iç noktada kesen (ya da ona iç noktada değen) görünür bir doğrusal nesne.
+ * ab ile aynı doğrultudaki nesneler (ölçümün üzerinde durduğu parça, bölünmüş zincirin parçaları) kesmez;
+ * a ya da b'den çıkan nesneler de ab'ye yalnız uçta değdiği için sayılmaz.
  */
-export function distanceLabelLevel(scene: MathObject[], measurementId: string): number {
+function aralikEngelli(a: PointObject, b: PointObject, pts: Map<string, PointObject>, parcalar: DuzParca[]): boolean {
+  const ux = b.x - a.x;
+  const uy = b.y - a.y;
+  const boy = Math.hypot(ux, uy);
+  if (boy < 2 * ESIK) return false;
+  const ex = ux / boy;
+  const ey = uy / boy;
+  const icinde = (s: number) => s > ESIK && s < boy - ESIK;
+  for (const p of pts.values()) {
+    if (p.id === a.id || p.id === b.id || p.visible === false) continue;
+    const rx = p.x - a.x;
+    const ry = p.y - a.y;
+    if (Math.abs(rx * ey - ry * ex) <= ESIK && icinde(rx * ex + ry * ey)) return true;
+  }
+  for (const { p, q, tur } of parcalar) {
+    const dx = q.x - p.x;
+    const dy = q.y - p.y;
+    const dBoy = Math.hypot(dx, dy);
+    if (dBoy < 1e-12) continue;
+    // a + s·e = p + t·d; payda = e × d. Paralel (aynı doğrudaki dahil) nesne ölçüleni kesmez.
+    const payda = ex * dy - ey * dx;
+    if (Math.abs(payda) <= 1e-7 * dBoy) continue;
+    const wx = p.x - a.x;
+    const wy = p.y - a.y;
+    const s = (wx * dy - wy * dx) / payda;
+    const t = (wx * ey - wy * ex) / payda;
+    const pay = ESIK / dBoy;
+    if (tur !== 'dogru' && t < -pay) continue;
+    if (tur === 'parca' && t > 1 + pay) continue;
+    if (icinde(s)) return true;
+  }
+  return false;
+}
+
+/**
+ * [ab] boyunca uzanan görünür bir TAŞIYICI çizgi var mı: ab ile aynı doğrultudaki görünür doğru parçaları
+ * (bölünmüş zincirin parçaları birlikte), doğrular, ışınlar ve çokgen kenarları [a, b]'yi baştan sona örtüyor mu?
+ * Örtmüyorsa (iki serbest nokta, gizli taşıyıcı, çizgiden çekilmiş nokta) ölçülen aralık ekranda hiçbir çizgiyle
+ * belli değildir; yalın etiket boşlukta ya da başka bir çizginin yanında durup onun uzunluğu sanılırdı.
+ */
+function aralikTasiniyor(a: PointObject, b: PointObject, parcalar: DuzParca[]): boolean {
+  const ux = b.x - a.x;
+  const uy = b.y - a.y;
+  const boy = Math.hypot(ux, uy);
+  if (boy < 1e-9) return true;
+  const ex = ux / boy;
+  const ey = uy / boy;
+  const hat = (p: PointObject) => Math.abs((p.x - a.x) * ey - (p.y - a.y) * ex);
+  const t = (p: PointObject) => (p.x - a.x) * ex + (p.y - a.y) * ey;
+  const araliklar: [number, number][] = [];
+  for (const { p, q, tur } of parcalar) {
+    if (hat(p) > ESIK || hat(q) > ESIK) continue;
+    const tp = t(p);
+    const tq = t(q);
+    if (Math.abs(tq - tp) < 1e-12) continue;
+    if (tur === 'dogru') return true;
+    if (tur === 'isin') araliklar.push(tq > tp ? [tp, Infinity] : [-Infinity, tp]);
+    else araliklar.push([Math.min(tp, tq), Math.max(tp, tq)]);
+  }
+  araliklar.sort((x, y) => x[0] - y[0]);
+  // Soldan sağa örtülen uç: bir boşluk kalırsa (sıralı olduğu için sonrakiler de onu kapatamaz) taşınmıyor
+  let ortulen = 0;
+  for (const [lo, hi] of araliklar) {
+    if (lo > ortulen + ESIK) break;
+    ortulen = Math.max(ortulen, hi);
+    if (ortulen >= boy - ESIK) return true;
+  }
+  return false;
+}
+
+/**
+ * [ab] görünür bir çizginin üzerinde mi (bkz. aralikTasiniyor)? Taşıyıcısı olmayan ölçümün kesikli ölçü
+ * çizgisi, ölçülen aralığı gösteren tek çizgidir.
+ */
+export function tasiyiciCizgiVar(scene: MathObject[], measurementId: string): boolean {
+  const m = scene.find((o) => o.id === measurementId);
+  if (!m || m.type !== 'measurement' || m.kind !== 'distance') return false;
   const pts = pointsOf(scene);
+  const a = pts.get(m.pointIds[0]);
+  const b = pts.get(m.pointIds[1]);
+  if (!a || !b) return false;
+  return aralikTasiniyor(a, b, gorunurDuzParcalar(scene, pts));
+}
+
+/**
+ * KESİKLİ ÖLÇÜ ÇİZGİSİ GEREKLİ Mİ? (kullanıcı isteği, 2026-09-25: "araya doğru girmeyince kesikli çizgiye
+ * gerek yok"). 'distance' ölçümünün iki ucu arasında başka bir görünür nokta ya da onu kesen görünür bir
+ * doğrusal nesne varsa kesikli çizgi hangi aralığın ölçüldüğünü gösterir; yoksa etiket, parça uzunluğu gibi
+ * çizginin yanında yalın durur. Bu işlev yalnız ENGELE bakar; taşıyıcı çizgi için bkz. olcuCizgisiGerekli.
+ */
+export function arasindaEngelVar(scene: MathObject[], measurementId: string): boolean {
+  const m = scene.find((o) => o.id === measurementId);
+  if (!m || m.type !== 'measurement' || m.kind !== 'distance') return false;
+  const pts = pointsOf(scene);
+  const a = pts.get(m.pointIds[0]);
+  const b = pts.get(m.pointIds[1]);
+  if (!a || !b) return false;
+  return aralikEngelli(a, b, pts, gorunurDuzParcalar(scene, pts));
+}
+
+/** Kesikli ölçü çizgisi kuralı: arada engel var YA DA ölçülen aralığı taşıyan görünür bir çizgi yok. */
+function olcuCizgisiKarari(a: PointObject, b: PointObject, pts: Map<string, PointObject>, parcalar: DuzParca[]): boolean {
+  return aralikEngelli(a, b, pts, parcalar) || !aralikTasiniyor(a, b, parcalar);
+}
+
+/**
+ * 'distance' ölçümü kesikli ölçü çizgisiyle mi çizilir? Arada görünür bir nokta ya da kesen çizgi varsa
+ * (arasindaEngelVar) ya da [ab]'yi taşıyan görünür bir çizgi yoksa (tasiyiciCizgiVar) evet; ikisi de değilse
+ * ölçü, çizili bir doğrunun üzerindeki boş aralıktır ve etiket çizginin yanında yalın durur.
+ */
+export function olcuCizgisiGerekli(scene: MathObject[], measurementId: string): boolean {
+  const m = scene.find((o) => o.id === measurementId);
+  if (!m || m.type !== 'measurement' || m.kind !== 'distance') return false;
+  const pts = pointsOf(scene);
+  const a = pts.get(m.pointIds[0]);
+  const b = pts.get(m.pointIds[1]);
+  if (!a || !b) return false;
+  return olcuCizgisiKarari(a, b, pts, gorunurDuzParcalar(scene, pts));
+}
+
+export interface DistanceLabelLayout {
+  /** Kesikli ölçü çizgisi (uç çentikleriyle) çizilir mi (olcuCizgisiGerekli)? false: etiket çizginin yanında yalın durur. */
+  kesikli: boolean;
+  /** Kesikli ölçü çizgisinin katı (0 = çizgiye en yakın). Yalın etiketlerde her zaman 0 (yakın bant). */
+  kat: number;
+}
+
+/**
+ * Görünür bütün 'distance' ölçümlerinin yerleşimi. Aynı doğru üzerindeki etiketler üst üste binmesin:
+ * - yalın etiketler (arada engel yok, aralık çizili) çizginin hemen yanındaki YAKIN BANTTA durur; aralıkları birbirinin
+ *   içine giremez (girse öbürü engelli olurdu), bu yüzden hepsi 0. kattır,
+ * - kesikli ölçü çizgileri, aralıkları ÖRTÜŞEN ölçümlerin (yalın etiketler 0. katı tutar) kullanmadığı en
+ *   alçak katı alır: kısa ölçüm önce yerleşir, sıra uzunluk ve kimlikle belirlenir. Yakın bantta yalın bir
+ *   etiketle örtüşen kesikli çizgi böylece bandın dışından başlar.
+ */
+export function distanceLabelLayouts(scene: MathObject[]): Map<string, DistanceLabelLayout> {
+  const pts = pointsOf(scene);
+  const parcalar = gorunurDuzParcalar(scene, pts);
+  const sonuc = new Map<string, DistanceLabelLayout>();
   const olcumler = scene.filter(
     (o): o is MeasurementObject =>
       o.type === 'measurement' && o.kind === 'distance' && o.showValue !== false && o.visible !== false
   );
-  const m = olcumler.find((o) => o.id === measurementId);
-  const a = m && pts.get(m.pointIds[0]);
-  const b = m && pts.get(m.pointIds[1]);
-  if (!m || !a || !b) return 0;
-  const ux = b.x - a.x;
-  const uy = b.y - a.y;
-  const boy = Math.hypot(ux, uy);
-  if (boy < 1e-9) return 0;
-  const t = (p: PointObject) => ((p.x - a.x) * ux + (p.y - a.y) * uy) / boy;
-  const hat = (p: PointObject) => Math.abs((p.x - a.x) * uy - (p.y - a.y) * ux) / boy;
-
-  const araliklar = olcumler.flatMap((d) => {
-    const p = pts.get(d.pointIds[0]);
-    const q = pts.get(d.pointIds[1]);
-    if (!p || !q || hat(p) > ESIK || hat(q) > ESIK) return [];
-    return [{ id: d.id, lo: Math.min(t(p), t(q)), hi: Math.max(t(p), t(q)) }];
-  });
-  // Eşit uzunluklar ölçüldükleri yöne göre kayan noktada 1e-15 kadar farklı çıkabilir: toleransla karşılaştır
-  araliklar.sort((x, y) => {
-    const fark = x.hi - x.lo - (y.hi - y.lo);
-    return Math.abs(fark) > 1e-9 ? fark : x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
-  });
-  const katlar = new Map<string, number>();
-  for (const x of araliklar) {
-    const dolu = new Set(
-      araliklar
-        .filter((y) => katlar.has(y.id) && x.lo < y.hi - 1e-9 && y.lo < x.hi - 1e-9)
-        .map((y) => katlar.get(y.id)!)
-    );
-    let kat = 0;
-    while (dolu.has(kat)) kat++;
-    katlar.set(x.id, kat);
+  const kesikli = new Map<string, boolean>();
+  for (const m of olcumler) {
+    const a = pts.get(m.pointIds[0]);
+    const b = pts.get(m.pointIds[1]);
+    kesikli.set(m.id, !!a && !!b && olcuCizgisiKarari(a, b, pts, parcalar));
   }
-  return katlar.get(m.id) ?? 0;
+  for (const m of olcumler) {
+    if (sonuc.has(m.id)) continue;
+    const a = pts.get(m.pointIds[0]);
+    const b = pts.get(m.pointIds[1]);
+    const ux = a && b ? b.x - a.x : 0;
+    const uy = a && b ? b.y - a.y : 0;
+    const boy = Math.hypot(ux, uy);
+    if (!a || !b || boy < 1e-9) {
+      sonuc.set(m.id, { kesikli: kesikli.get(m.id) ?? false, kat: 0 });
+      continue;
+    }
+    const t = (p: PointObject) => ((p.x - a.x) * ux + (p.y - a.y) * uy) / boy;
+    const hat = (p: PointObject) => Math.abs((p.x - a.x) * uy - (p.y - a.y) * ux) / boy;
+    const araliklar = olcumler.flatMap((d) => {
+      if (sonuc.has(d.id)) return [];
+      const p = pts.get(d.pointIds[0]);
+      const q = pts.get(d.pointIds[1]);
+      if (!p || !q || hat(p) > ESIK || hat(q) > ESIK) return [];
+      return [{ id: d.id, lo: Math.min(t(p), t(q)), hi: Math.max(t(p), t(q)), kesikli: kesikli.get(d.id) ?? false }];
+    });
+    // Eşit uzunluklar ölçüldükleri yöne göre kayan noktada 1e-15 kadar farklı çıkabilir: toleransla karşılaştır
+    araliklar.sort((x, y) => {
+      const fark = x.hi - x.lo - (y.hi - y.lo);
+      return Math.abs(fark) > 1e-9 ? fark : x.id < y.id ? -1 : x.id > y.id ? 1 : 0;
+    });
+    const katlar = new Map<string, number>();
+    for (const x of araliklar) if (!x.kesikli) katlar.set(x.id, 0);
+    for (const x of araliklar) {
+      if (!x.kesikli) continue;
+      const dolu = new Set(
+        araliklar
+          .filter((y) => katlar.has(y.id) && x.lo < y.hi - 1e-9 && y.lo < x.hi - 1e-9)
+          .map((y) => katlar.get(y.id)!)
+      );
+      let kat = 0;
+      while (dolu.has(kat)) kat++;
+      katlar.set(x.id, kat);
+    }
+    for (const x of araliklar) sonuc.set(x.id, { kesikli: x.kesikli, kat: katlar.get(x.id) ?? 0 });
+    if (!sonuc.has(m.id)) sonuc.set(m.id, { kesikli: kesikli.get(m.id) ?? false, kat: 0 });
+  }
+  return sonuc;
+}
+
+/**
+ * [ab] UZUNLUĞU GÖSTERİLEN bir çokgen kenarının üzerinde mi? Öyleyse o kenarın uzunluk etiketinin durduğu yan:
+ * çokgenin DIŞINA bakan birim normal (dünya koordinatı; köşelerin ortalamasından uzaklaşan yön, Canvas'taki kenar
+ * etiketiyle aynı kural). Yoksa null. Canvas yalın mesafe etiketini bu yanın tersine koyar, kesikli ölçü çizgisini
+ * de kenar etiketinin dışından başlatır: üst kenardaki '7 br' ile kenarın '8 br'si yan yana tek yazı gibi okunuyordu.
+ */
+export function kenarEtiketiYani(scene: MathObject[], measurementId: string): { x: number; y: number } | null {
+  const m = scene.find((o) => o.id === measurementId);
+  if (!m || m.type !== 'measurement' || m.kind !== 'distance') return null;
+  const pts = pointsOf(scene);
+  const a = pts.get(m.pointIds[0]);
+  const b = pts.get(m.pointIds[1]);
+  if (!a || !b) return null;
+  for (const o of scene) {
+    if (o.type !== 'polygon' || o.visible === false || !o.edgeLabels?.length) continue;
+    const koseler = o.pointIds.map((id) => pts.get(id));
+    if (koseler.length < 3 || koseler.some((k) => !k)) continue;
+    const n = koseler.length;
+    const mx = koseler.reduce((t, k) => t + k!.x, 0) / n;
+    const my = koseler.reduce((t, k) => t + k!.y, 0) / n;
+    for (const i of o.edgeLabels) {
+      if (!Number.isInteger(i) || i < 0 || i >= n) continue;
+      const p = koseler[i]!;
+      const q = koseler[(i + 1) % n]!;
+      const boy = Math.hypot(q.x - p.x, q.y - p.y);
+      if (boy < 1e-9) continue;
+      const ex = (q.x - p.x) / boy;
+      const ey = (q.y - p.y) / boy;
+      const hat = (r: PointObject) => Math.abs((r.x - p.x) * ey - (r.y - p.y) * ex);
+      if (hat(a) > ESIK || hat(b) > ESIK) continue;
+      const ta = (a.x - p.x) * ex + (a.y - p.y) * ey;
+      const tb = (b.x - p.x) * ex + (b.y - p.y) * ey;
+      // Aralıklar örtüşmeli (yalnız uçta değmek yetmez): etiket kenarın ortasında, ölçü aralığı orada olmayabilir
+      if (Math.min(Math.max(ta, tb), boy) - Math.max(Math.min(ta, tb), 0) <= ESIK) continue;
+      let nx = -ey;
+      let ny = ex;
+      if (((p.x + q.x) / 2 - mx) * nx + ((p.y + q.y) / 2 - my) * ny < 0) {
+        nx = -nx;
+        ny = -ny;
+      }
+      return { x: nx, y: ny };
+    }
+  }
+  return null;
+}
+
+/** Tek ölçümün kesikli ölçü çizgisi katı (bkz. distanceLabelLayouts). */
+export function distanceLabelLevel(scene: MathObject[], measurementId: string): number {
+  return distanceLabelLayouts(scene).get(measurementId)?.kat ?? 0;
 }

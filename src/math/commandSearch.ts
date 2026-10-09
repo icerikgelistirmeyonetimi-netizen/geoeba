@@ -25,6 +25,10 @@ const COMMON_WORDS = [
   'ayrintili', 'duzlem', 'kareli', 'bos', 'ekran', 'sigdir', 'ortala', 'gorunum', 'ayni', 'buyuk', 'kucuk', 'kalin', 'ince', 'dolgu', 'etiket',
   'ad', 'adi', 'isim', 'kopyala', 'yapistir', 'kilitle', 'serbest', 'oynat', 'durdur', 'baslat', 'deger', 'aralik', 'adim', 'uzeri', 'uzerin',
   'hareket', 'saat', 'yon', 'ters', 'etraf', 'olcu', 'toplam', 'kaplad', 'ayri', 'son', 'ilk', 'once', 'sonra', 've', 'veya', 'ya', 'da',
+  // Teoremler ve klasik şekiller: adlar yazım yanlışı sanılıp başka sözcüğe çevrilmesin.
+  'oklid', 'oklit', 'pisagor', 'pitagor', 'tales', 'thales', 'teorem', 'baginti', 'euler', 'oyler', 'feuerbach', 'kiris', 'kesen', 'kuvvet',
+  'heron', 'stewart', 'ceva', 'menelaus', 'hipotenus', 'kelebek', 'dokuz', 'ortak', 'sinus', 'kosinus', 'formul', 'esitsizli', 'kural',
+  'dogrula', 'uygula', 'acikla', 'kur', 'sekil', 'sekli', 'orant', 'temel', 'cap', 'capli', 'yarisi', 'goren',
 ];
 const COMMON = new Set(COMMON_WORDS);
 

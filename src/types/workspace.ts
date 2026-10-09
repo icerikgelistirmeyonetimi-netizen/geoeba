@@ -130,6 +130,12 @@ export interface StyleSettings {
    * (kullanıcı isteği, 2026-09-25: "hesaplamalarda tam sayıya göre olmalı ki hatalı sonuç almayalım").
    */
   tamSayiOlcu: boolean;
+  /**
+   * Tuval UZAKLAŞTIRILINCA yazıların (nokta adı, ölçü etiketi, yazı notu) inebileceği EN KÜÇÜK ölçek (0–1).
+   * Yazılar şekille birlikte küçülür ama bu orandan aşağı inmez; böylece uzaktan da okunur kalır
+   * (kullanıcı isteği, 2026-10-09: "zoom out yapıldığında nokta isimleri okunamıyor"). 0 = sınırsız küçülür.
+   */
+  yaziAltSiniri: number;
 }
 
 export const DEFAULT_STYLE_SETTINGS: StyleSettings = {
@@ -144,6 +150,7 @@ export const DEFAULT_STYLE_SETTINGS: StyleSettings = {
   olcuYazimi: 'tam',
   aciYazimi: 'sapka',
   tamSayiOlcu: true,
+  yaziAltSiniri: 0.7,
 };
 
 /** Metin (seçenek) alanlarının kabul edilen değerleri; kayıttan okurken ve proje dosyasında denetlenir. */

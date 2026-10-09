@@ -15,7 +15,7 @@ import type { ToolMode } from '@/types/workspace';
  * - setup:    örneklerden önce çalıştırılan hazırlık komutu (örnek var olan nesneye ihtiyaç duyuyorsa)
  * - examples: çalışan örnek komutlar
  */
-export type CommandFamily = 'app' | 'basic' | 'circles' | 'polygons' | 'constructions' | 'transforms' | 'measure' | 'edit' | 'algebra';
+export type CommandFamily = 'app' | 'basic' | 'circles' | 'polygons' | 'constructions' | 'transforms' | 'measure' | 'edit' | 'algebra' | 'teoremler';
 
 export interface OperationEntry {
   tool: ToolMode | null;
@@ -220,6 +220,30 @@ export const EXTRA_OPERATIONS: OperationEntry[] = [
   { tool: null, name: 'Denklem, eşitsizlik ve parametrik şekiller', group: 'Cebir & Fonksiyon', family: 'circles', verbs: ['çiz', 'tara', 'göster'], nouns: ['çember denklemi', 'eşitsizlik', 'bölge', 'parametrik eğri'],
     params: ['(x−a)² + (y−b)² = r²', 'genel denklem', '≤ / < bölge', 'x = a + r·cos(t), y = b + r·sin(t)'],
     examples: ['x^2 + y^2 - 2x + 4y - 4 = 0', 'x^2 + y^2 <= 9', 'x^2/9 + y^2/4 <= 1', 'y >= 2x + 1', 'x = 3cos(t), y = 3sin(t)'] },
+  // Teoremler ve klasik şekiller (handlers/teoremler)
+  { tool: null, name: 'Öklid üçgeni, Öklid ve Pisagor bağıntıları', group: 'Teoremler ve klasik şekiller', family: 'teoremler', verbs: ['çiz', 'kur', 'uygula', 'göster', 'doğrula', 'yaz'], nouns: ['Öklid üçgeni', 'Öklid şekli', 'Öklid bağıntıları', 'Pisagor bağıntısı', 'hipotenüs'],
+    params: ['dik kenarlar', 'hipotenüs', 'p ve k', 'yükseklik', 'köşe adları', 'üçgen adı'], setup: 'Öklid üçgeni çiz',
+    examples: ['dik kenarları 6 ve 8 olan Öklid üçgeni çiz', 'ABC üçgeninde Öklid teoremini uygula', 'Öklid bağıntılarını göster', "Pisagor'a göre ABC dik mi", 'ABC üçgeninde Pisagor şeklini kur'] },
+  // Ölçülü Pisagor şekli yalnız boş tuvalde kurulur (var olan üçgene ölçü verilmez); bu yüzden hazırlık komutu yok.
+  { tool: null, name: 'Pisagor şekli', group: 'Teoremler ve klasik şekiller', family: 'teoremler', verbs: ['çiz', 'kur'], nouns: ['Pisagor şekli', 'Pisagor üçgeni', 'kenarları üzerine kareler çizilmiş dik üçgen'],
+    params: ['dik kenarlar', 'köşe adları'],
+    examples: ['Pisagor şekli çiz', 'dik kenarları 5 ve 12 olan Pisagor şekli çiz', 'kenarları üzerine kareler çizilmiş dik üçgen çiz'] },
+  { tool: null, name: 'Tales teoremi ve orta taban', group: 'Teoremler ve klasik şekiller', family: 'teoremler', verbs: ['çiz', 'kur', 'göster', 'uygula', 'doğrula'], nouns: ['Tales şekli', 'kelebek Tales', 'Tales çemberi', 'Tales oranları', 'orta taban'],
+    params: ['oran (m:n)', 'çap (AB)', 'üçgen ya da yamuk adı', 'kenar'], setup: 'A(0; 0), B(6; 0) ve C(2; 4) noktalarını oluştur, ABC üçgenini çiz',
+    examples: ['Tales teoremi şekli çiz', 'Tales çemberi çiz', 'ABC üçgeninde 2:1 oranında Tales şekli kur', 'ABC üçgeninin orta tabanını çiz'] },
+  { tool: null, name: 'Üçgen teoremleri', group: 'Teoremler ve klasik şekiller', family: 'teoremler', verbs: ['göster', 'uygula', 'doğrula', 'yaz', 'hesapla'], nouns: ['açıortay teoremi', 'kenarortay teoremi', 'Stewart', 'Ceva', 'Menelaus', 'sinüs teoremi', 'kosinüs teoremi', 'Heron formülü', 'üçgen eşitsizliği', 'açı-kenar ilişkisi'],
+    params: ['üçgen adı', 'köşe', 'nokta (Ceva)', 'doğru (Menelaus)', 'kenar uzunlukları'], setup: 'A(0; 0), B(6; 0) ve C(2; 4) noktalarını oluştur, ABC üçgenini çiz',
+    examples: ['açıortay teoremini göster', 'Stewart teoremini göster', 'sinüs teoremini göster', 'Heron formülüyle alanı hesapla', 'kenarları 2, 3 ve 7 olan üçgen çizilebilir mi'] },
+  { tool: null, name: 'Üçgenin çemberleri ve Euler doğrusu', group: 'Teoremler ve klasik şekiller', family: 'teoremler', verbs: ['çiz', 'oluştur', 'bul'], nouns: ['dış teğet çember', 'Euler doğrusu', 'dokuz nokta çemberi', 'Feuerbach çemberi'],
+    params: ['üçgen adı', 'köşe', 'merkeziyle'], setup: 'A(0; 0), B(6; 0) ve C(2; 4) noktalarını oluştur, ABC üçgenini çiz',
+    examples: ['ABC üçgeninin dış teğet çemberini çiz', 'ABC üçgeninin Euler doğrusunu çiz', 'dokuz nokta çemberini çiz'] },
+  { tool: null, name: 'Çember teoremleri', group: 'Teoremler ve klasik şekiller', family: 'teoremler', verbs: ['çiz', 'göster', 'hesapla', 'bul'], nouns: ['kiriş', 'çap', 'kesen', 'kuvvet', 'çevre açı', 'merkez açı', 'teğet-kiriş açısı', 'ortak teğet'],
+    params: ['çember', 'nokta (P)', 'iki nokta (AB)', 'yay'], setup: 'M(0; 0) ve P(6; 0) noktalarını oluştur, M merkezli yarıçapı 3 olan çember çiz',
+    examples: ['çembere bir kiriş çiz', 'P noktasından çembere kesen çiz', 'P noktasının çembere göre kuvvetini hesapla', 'çevre açı teoremini göster', 'teğet-kiriş açısını çiz'] },
+  { tool: null, name: 'İki çemberin ortak teğetleri', group: 'Teoremler ve klasik şekiller', family: 'teoremler', verbs: ['çiz', 'oluştur'], nouns: ['ortak teğet', 'iç ortak teğet', 'dış ortak teğet'],
+    params: ['iki çember (c1 ve c2)'], setup: 'M(0; 0) ve N(8; 0) noktalarını oluştur, M merkezli yarıçapı 3 olan çember çiz, N merkezli yarıçapı 2 olan çember çiz',
+    examples: ['iki çemberin ortak teğetlerini çiz', 'iç ortak teğetleri çiz'] },
+
   { tool: null, name: 'Geri al / yinele / temizle', group: 'Uygulama', family: 'app', verbs: ['geri al', 'yinele', 'temizle'], nouns: ['işlem', 'tuval'], params: ['adım sayısı'],
     examples: ['geri al', 'yinele', 'tuvali temizle'] },
   { tool: null, name: 'Görünüm', group: 'Uygulama', family: 'app', verbs: ['göster', 'gizle', 'yakınlaştır', 'uzaklaştır', 'sığdır'], nouns: ['ızgara', 'eksenler', 'koordinatlar', 'görünüm'],

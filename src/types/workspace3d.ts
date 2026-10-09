@@ -8,6 +8,13 @@ export type Tool3DMode =
   | 'pan'
   | 'inspect'
   | 'delete'
+  /** Dönüşüm araçları (3B): cismi döndür, büyüt / küçült, düzleme göre yansıt (kopya), vektörle ötele (kopya). Matematik: math/donusum3d.ts */
+  | 'rotate_3d'
+  | 'scale_3d'
+  | 'reflect_3d'
+  | 'translate_3d'
+  /** Ayrıt uzunluğu ölçme: bir ayrıta tıklanır, uzunluk etiketi görünür ("Uzunluk Ölçme", ilkokul raporu). */
+  | 'measure_edge'
   | 'create_cube'
   | 'create_sphere'
   | 'create_cylinder'

@@ -96,7 +96,7 @@ import { ObjectClipboard, copyObjects, pasteObjects } from '@/math/objectClipboa
 import { ProjectFile, parseProjectFile } from '@/math/projectFile';
 import type { WorkspaceScene } from '@/types/workspaceScene';
 import type { Solid3DObject } from '@/types/workspace3d';
-import { ILKOKUL_EN_COK_KENAR, ilkokulKipindeMi, ilkokulUzunlukMetni, ilkokulYeniNesneleri } from '@/components/workspace/ilkokulKipi';
+import { ILKOKUL_EN_COK_KENAR, ilkokulGorunumu, ilkokulKipindeMi, ilkokulUzunlukMetni, useIlkokulKipindeMi } from '@/components/workspace/ilkokulKipi';
 import { kesirAyariniOku, kesirAyariniSinirla, kesirEtiketi } from '@/components/workspace/kesirModeli';
 
 export { createId } from './ids';
@@ -121,7 +121,10 @@ interface WorkspaceContextType {
   canUndoWorkspace: boolean;
   canRedoWorkspace: boolean;
   constraintError: string | null;
+  /** Tüketicilerin GÖRDÜĞÜ nesneler: ilkokul kademesinde adları/ölçüleri gizlenmiş türetilmiş dizi (ilkokulKipi.ilkokulGorunumu) */
   objects: MathObject[];
+  /** Gerçek (kaydedilen) nesneler: komut motoru ve kopyalama gibi bütün diziyi geri yazan yollar bunu kullanır */
+  kaynakNesneler: MathObject[];
   selectedObjectId: string | null;
   selectedObjectIds: string[];
   activeTool: ToolMode;
@@ -1379,6 +1382,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const [doc, dispatch] = useReducer(docReducer, initialDocState);
   const { objects, history, historyIndex } = doc;
+  // Kademe bir GÖRÜNÜM tercihidir: ilkokulken tüketicilere adları / ölçüleri gizlenmiş TÜRETİLMİŞ dizi verilir
+  // (ilkokulKipi.ilkokulGorunumu); gerçek nesneler (kaynakNesneler, geçmiş, kayıt, proje dosyası) değişmez,
+  // başka kademeye geçince her şey geri gelir. Bütün diziyi geri yazan yollar (komut motoru, kopyalama) kaynakNesneler kullanır.
+  const ilkokul = useIlkokulKipindeMi();
+  const gorunenNesneler = useMemo(() => (ilkokul ? ilkokulGorunumu(objects) : objects), [ilkokul, objects]);
   const docRef = useRef(doc);
   docRef.current = doc;
   const [objectClipboard, setObjectClipboard] = useState<ObjectClipboard | null>(null);
@@ -1635,12 +1643,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // -------------------------------------------------------------------------
 
   const commit = useCallback((next: ObjectsUpdater, description: string) => {
-    // İlkokul kipinde yeni noktalar harf adı, yeni çemberler merkez / yarıçap, yeni açılar derece, yeni çokgenler alan
-    // hesabı göstermez (alan uzmanları, 2. tur; ilkokulKipi.ts). Bütün nesne eklemeleri bu yoldan geçer.
-    const sarili: ObjectsUpdater = ilkokulKipindeMi()
-      ? (prev) => ilkokulYeniNesneleri(prev, typeof next === 'function' ? next(prev) : next)
-      : next;
-    dispatch({ type: 'commit', next: sarili, description, now: Date.now() });
+    // İlkokul kuralları (ad, ölçü, derece gizleme) artık nesneye YAZILMAZ; görünüm katmanında uygulanır
+    // (gorunenNesneler / ilkokulGorunumu): kademe değişince adlar ve ölçüler geri gelir (kullanıcı, 9 Ekim 2026).
+    dispatch({ type: 'commit', next, description, now: Date.now() });
   }, []);
 
   // Geçmişe kaydetmeden nesneleri değiştirme (sürükleme, kaydırıcı gibi geçici işlemler)
@@ -3408,8 +3413,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               radiusPointId: nextPending[1],
               color: '#8b5cf6',
               visible: true,
-              showArea: true,
-              showPerimeter: true,
+              // Ölçüler (yarıçap, alan, çevre) hazır gelmez; sağ tık menüsü ya da komutla açılır (8 Ekim 2026).
               fillOpacity: 0.1,
               createdAt: Date.now(),
             };
@@ -4699,7 +4703,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       copySelection, cutSelection, pasteSelection, deleteSelection, selectAll, canPaste,
       undoWorkspace, redoWorkspace, canUndoWorkspace, canRedoWorkspace,
       constraintError: doc.constraintError ?? null,
-      objects,
+      objects: gorunenNesneler,
+      kaynakNesneler: objects,
       selectedObjectId,
       selectedObjectIds,
       activeTool,
@@ -4806,7 +4811,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       objectClipboard, sceneBridge, getProject, loadProject, copySelection, cutSelection, pasteSelection, deleteSelection, selectAll, canPaste,
       undoWorkspace, redoWorkspace, canUndoWorkspace, canRedoWorkspace,
       doc.constraintError,
-      objects,
+      objects, gorunenNesneler,
       selectedObjectId,
       selectedObjectIds,
       activeTool,

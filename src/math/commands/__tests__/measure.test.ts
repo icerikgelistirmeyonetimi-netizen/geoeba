@@ -148,7 +148,7 @@ describe('area and perimeter', () => {
     expect(byType(c.objects, 'circle')[0].showArea).toBe(true);
     expect(c.message).toContain('≈ 28,27 br²');
     const byName = expectOk(handlers, "c1'in alanı nedir", circle());
-    expect(byName.message).toContain('Ç(M, r): alan = πr² ≈ 28,27 br²');
+    expect(byName.message).toContain('c1: alan = πr² ≈ 28,27 br²');
     const centre = expectOk(handlers, "M merkezli çemberin çevresi ne kadar", circle());
     expect(centre.message).toContain('≈ 18,85 br');
     const e = expectOk(handlers, 'Elipsin alanını göster', ellipse());

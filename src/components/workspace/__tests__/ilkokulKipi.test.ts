@@ -8,7 +8,7 @@ import {
   ilkokulSimetriDogrusu,
   ilkokulUzunlukMetni,
   ilkokulUzunlugu,
-  ilkokulYeniNesneleri,
+  ilkokulGorunumu,
   ilkokulZemini,
   zeminAlanlari,
   zeminiGeriYukle,
@@ -144,58 +144,68 @@ describe('çokgen en çok sekizgen (not 7)', () => {
   });
 });
 
-describe('yeni nesneler ilkokulda (not 8, 11, 12, 13)', () => {
-  it('kare: köşe noktaları harf adı göstermez, alan hesabı yazılmaz; eski nesnelere dokunulmaz', () => {
-    const eski = [nokta('e', 9, 9)];
+describe('ilkokul görünümü (not 8, 11, 12, 13): nesne verisi değişmez, türetilmiş görünüm', () => {
+  it('kare: köşe noktaları harf adı göstermez, alan hesabı yazılmaz; gerçek nesnelere dokunulmaz', () => {
     const kare = [
-      ...eski,
+      nokta('e', 9, 9),
       nokta('a', 0, 0), nokta('b', 2, 0), nokta('c', 2, 2), nokta('d', 0, 2),
       { id: 'k', type: 'polygon', label: 'Kare', showLabel: true, pointIds: ['a', 'b', 'c', 'd'], color: '#f00', visible: true, createdAt: 0, showArea: true, showPerimeter: true } as MathObject,
     ];
-    const sonuc = ilkokulYeniNesneleri(eski, kare);
-    for (const id of ['a', 'b', 'c', 'd']) expect(sonuc.find((o) => o.id === id)!.showLabel, id).toBe(false);
-    expect(sonuc.find((o) => o.id === 'e')).toBe(eski[0]);
+    const kopya = JSON.stringify(kare);
+    const sonuc = ilkokulGorunumu(kare);
+    for (const id of ['a', 'b', 'c', 'd', 'e']) expect(sonuc.find((o) => o.id === id)!.showLabel, id).toBe(false);
     const k = sonuc.find((o) => o.id === 'k') as MathObject & { showArea?: boolean; showPerimeter?: boolean };
     expect(k.showArea).toBe(false);
     expect(k.showPerimeter).toBe(true);
+    // Gerçek veri olduğu gibi: başka kademeye geçince adlar ve alan geri gelir
+    expect(JSON.stringify(kare)).toBe(kopya);
+    expect(kare[1].showLabel).toBe(true);
   });
 
   it('çember: merkezi ve yarıçap noktası gizli ve adsız; alan, çevre ve yarıçap yazısı yok', () => {
     const merkez = nokta('o', 0, 0);
-    const sonuc = ilkokulYeniNesneleri([], [
+    const sonuc = ilkokulGorunumu([
       merkez,
       { id: 'c', type: 'circle', label: 'O Merkezli Çember', showLabel: true, centerPointId: 'o', fixedRadius: 2, color: '#00f', visible: true, createdAt: 0, showArea: true, showPerimeter: true } as MathObject,
     ]);
     const o = sonuc.find((x) => x.id === 'o')!;
     expect(o.showLabel).toBe(false);
     expect(o.visible).toBe(false);
+    expect(merkez.visible).toBe(true);
     expect(sonuc.find((x) => x.id === 'c')).toMatchObject({ showArea: false, showPerimeter: false, showRadius: false });
   });
 
-  it('çemberin merkezi başka bir nesnenin de noktasıysa görünür ve adıyla kalır (nesneye dokunulmaz)', () => {
+  it('çemberin merkezi başka bir nesnenin de noktasıysa görünür kalır (yalnız adı gizlenir)', () => {
     const merkez = nokta('o', 0, 0);
     const parca = { id: 's', type: 'segment', label: 's', showLabel: true, startPointId: 'o', endPointId: 'p', color: '#000', visible: true, createdAt: 0 } as MathObject;
-    const once = [merkez, nokta('p', 3, 0), parca];
-    const sonuc = ilkokulYeniNesneleri(once, [
-      ...once,
+    const sonuc = ilkokulGorunumu([
+      merkez, nokta('p', 3, 0), parca,
       { id: 'c', type: 'circle', label: 'Ç', showLabel: true, centerPointId: 'o', fixedRadius: 2, color: '#00f', visible: true, createdAt: 0 } as MathObject,
     ]);
-    expect(sonuc.find((x) => x.id === 'o')).toBe(merkez);
+    expect(sonuc.find((x) => x.id === 'o')).toMatchObject({ visible: true, showLabel: false });
+    expect(sonuc.find((x) => x.id === 's')).toBe(parca);
   });
 
   it('açı: derece yazılmaz (açıölçerle ölçme yok)', () => {
-    const once = [nokta('a', 1, 0), nokta('b', 0, 0), nokta('c', 0, 1)];
-    const sonuc = ilkokulYeniNesneleri(once, [
-      ...once,
+    const sonuc = ilkokulGorunumu([
+      nokta('a', 1, 0), nokta('b', 0, 0), nokta('c', 0, 1),
       { id: 'ang', type: 'angle', label: '∠ABC', showLabel: true, point1Id: 'a', vertexPointId: 'b', point3Id: 'c', color: '#f90', visible: true, createdAt: 0, showValue: true } as MathObject,
     ]);
     expect(sonuc.find((x) => x.id === 'ang')!).toMatchObject({ showValue: false });
   });
 
-  it('yeni nesne yoksa dizi aynen döner', () => {
-    const once = [nokta('a', 1, 0)];
-    const sonraki = [{ ...once[0], x: 2 } as MathObject];
-    expect(ilkokulYeniNesneleri(once, sonraki)).toBe(sonraki);
+  it("uzunluk yazımı: ilkokul görünümünde '2 br', gerçek nesnelerle '|AB| = 2 br' (kademe değişince ad geri gelir)", () => {
+    const A = nokta('a', 0, 0);
+    const B = nokta('b', 2, 0);
+    const [gA, gB] = ilkokulGorunumu([A, B]);
+    const ayar = yazimAyari({ tamSayiOlcu: true });
+    expect(olcuMetni(uzunluk(gA, gB, 2), ayar)).toBe('2 br');
+    expect(olcuMetni(uzunluk(A, B, 2), ayar)).toBe('|AB| = 2 br');
+  });
+
+  it('gizlenecek bir şey yoksa dizi aynen döner (gereksiz yeniden çizim yok)', () => {
+    const zatenGizli = [nokta('a', 1, 0, { showLabel: false }), { id: 'k', type: 'polygon', label: 'K', showLabel: true, pointIds: ['a'], color: '#f00', visible: true, createdAt: 0, showArea: false } as MathObject];
+    expect(ilkokulGorunumu(zatenGizli)).toBe(zatenGizli);
   });
 });
 

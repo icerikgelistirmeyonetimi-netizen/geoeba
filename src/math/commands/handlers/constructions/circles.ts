@@ -15,7 +15,6 @@ const TANGENT = /\bte[gy]et/;
 /** "teğet çember", "teğet olan bir çember", "teğet olan A merkezli çember" */
 const TANGENT_CIRCLE = /\bte[gy]et (?:olan |bir |(?:\$\d+|[a-z]+) merkezli )*(?:cember|daire)(?!\s*(?:e|ye|ne|sine)\b)/;
 const INCIRCLE = new RegExp(`(?:${INNER_TANGENT.source}) (?:olan |bir )*(?:cember|daire)`);
-const EXCIRCLE = /\bdis ?te[gy]et (?:olan |bir )*(?:cember|daire)/;
 const INCENTER = new RegExp(`(?:${INNER_TANGENT.source}) (?:cember(?:in)? |dairenin )?merkez(?:i|ini|inin)?\\b`);
 
 export const tangent: CommandHandler = {
@@ -142,17 +141,13 @@ export const incircle: CommandHandler = {
     'iç teğet çemberini çiz',
     'ABC üçgeninin iç teğet çemberini çiz',
   ],
-  match(c, scene) {
+  match(c) {
     if (foreignVerb(c) || c.has(MEASURE_NOUN)) return 0;
-    // "üçgenin dış teğet çemberi": henüz kurulamıyor; açıklamayla reddedilir.
-    if (c.has(EXCIRCLE) && (c.has(/\bucgen/) || scene.ofType('polygon').some(p => p.pointIds.length === 3))) return 73;
+    // "üçgenin dış teğet çemberi" teoremler ailesinde (teoremler.disTegetCember) çizilir.
     if (!c.has(INCIRCLE) || c.has(INCENTER)) return 0;
     return 73;
   },
   run(c, scene) {
-    if (c.has(EXCIRCLE)) {
-      fail('Üçgenin dış teğet çemberi (bir kenara dışarıdan, diğer iki kenarın uzantılarına teğet çember) henüz çizilemiyor. İç teğet çember için “iç teğet çemberini çiz”, köşelerden geçen çember için “çevrel çemberini çiz” yazın.');
-    }
     const refs = refsOf(c);
     const tri = triangleOf(c, scene, refs, { required: true })!;
     const names = newPointNames(scene, refs);

@@ -28,6 +28,11 @@ export type NoktaEngeli =
 export interface AdKutusu {
   genislik: number;
   yukseklik: number;
+  /**
+   * Nokta merkezi ile ad kutusu arasındaki köşe boşluğu (yerleşim px; varsayılan KOSE_BOSLUGU). Nokta işareti
+   * ekranda sabit piksel olduğundan uzaklaşınca Canvas bunu büyütür ki ad daireye girmesin.
+   */
+  bosluk?: number;
 }
 
 export type AdYonu = 'sağ-üst' | 'sol-üst' | 'sağ-alt' | 'sol-alt' | 'sağ' | 'üst' | 'sol' | 'alt';
@@ -41,7 +46,7 @@ export interface NoktaAdiYeri {
 }
 
 /** Noktanın merkezi ile ad kutusunun en yakın kenarı arasındaki boşluk (px). Köşelerde 10 (eski sabit konum). */
-const KOSE_BOSLUGU = 10;
+export const KOSE_BOSLUGU = 10;
 const KENAR_BOSLUGU = 13;
 /** Kutunun çevresine eklenen güvenlik payı (px): çizgi kalınlığı ve yazı tipi farkları için. */
 const PAY = 2;
@@ -75,15 +80,18 @@ function aday(yon: AdYonu, x: number, y: number, textAnchor: NoktaAdiYeri['textA
 /** Sekiz aday yer, tercih sırasıyla. İlk aday eski sabit konumdur (sağ üst, +10/−10). */
 export function adayYerler(p: EkranNoktasi, kutu: AdKutusu): Aday[] {
   const h = kutu.yukseklik;
+  // Köşe boşluğu büyütülmüşse kenar boşluğu da aynı farkla büyür (kenar adayları köşelerden 3 px dışarıdadır)
+  const kose = Math.max(KOSE_BOSLUGU, kutu.bosluk ?? KOSE_BOSLUGU);
+  const kenar = KENAR_BOSLUGU + (kose - KOSE_BOSLUGU);
   return [
-    aday('sağ-üst', p.x + KOSE_BOSLUGU, p.y - KOSE_BOSLUGU, 'start', kutu),
-    aday('sol-üst', p.x - KOSE_BOSLUGU, p.y - KOSE_BOSLUGU, 'end', kutu),
-    aday('sağ-alt', p.x + KOSE_BOSLUGU, p.y + KOSE_BOSLUGU + USTE * h, 'start', kutu),
-    aday('sol-alt', p.x - KOSE_BOSLUGU, p.y + KOSE_BOSLUGU + USTE * h, 'end', kutu),
-    aday('sağ', p.x + KENAR_BOSLUGU, p.y + (USTE - 0.5) * h, 'start', kutu),
-    aday('üst', p.x, p.y - KENAR_BOSLUGU - ALTA * h, 'middle', kutu),
-    aday('sol', p.x - KENAR_BOSLUGU, p.y + (USTE - 0.5) * h, 'end', kutu),
-    aday('alt', p.x, p.y + KENAR_BOSLUGU + USTE * h, 'middle', kutu),
+    aday('sağ-üst', p.x + kose, p.y - kose, 'start', kutu),
+    aday('sol-üst', p.x - kose, p.y - kose, 'end', kutu),
+    aday('sağ-alt', p.x + kose, p.y + kose + USTE * h, 'start', kutu),
+    aday('sol-alt', p.x - kose, p.y + kose + USTE * h, 'end', kutu),
+    aday('sağ', p.x + kenar, p.y + (USTE - 0.5) * h, 'start', kutu),
+    aday('üst', p.x, p.y - kenar - ALTA * h, 'middle', kutu),
+    aday('sol', p.x - kenar, p.y + (USTE - 0.5) * h, 'end', kutu),
+    aday('alt', p.x, p.y + kenar + USTE * h, 'middle', kutu),
   ];
 }
 

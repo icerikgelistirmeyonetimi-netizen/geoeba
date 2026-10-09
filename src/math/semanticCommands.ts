@@ -10,6 +10,21 @@ export type SemanticInterpretation = { command?: string; clarification?: string 
  * eşleştiğinde diğer tüm niyetler −0,15 alır; bu yüzden intents.json'daki her niyetin burada bir deseni olmalıdır.
  */
 export const SEMANTIC_ANCHORS: [RegExp, string][] = [
+  // Teoremler ve klasik şekiller: adlı kalıplar genel sözcüklerden (teğet, çember, açı, orta…) önce gelir.
+  [/oklid|oklit|euclid|euklid/, 'oklid'],
+  [/pisagor|pitagor|pythagor|kenarlar\w* uzerine kare/, 'pisagor'],
+  [/tales|thales|temel oranti|capi goren cevre aci/, 'tales'],
+  [/orta ?taban/, 'orta_taban'],
+  [/dokuz nokta|9 nokta|feuerbach|euler cember/, 'dokuz_nokta'],
+  [/euler|oyler/, 'euler'],
+  [/dis ?te[gy]et cember|dis ?te[gy]et(?:i|in|leri)? (?:ciz|olustur|bul)|uc dis ?te[gy]et/, 'dis_teget'],
+  [/ortak te[gy]et/, 'ortak_teget'],
+  [/te[gy]et[- ]?kiris|te[gy]et ile .*kiris\w* arasindaki/, 'teget_kiris'],
+  [/\bkesen(?:ler)?(?:i|in|ini)? (?:teorem|ciz|olustur)|cember\w* (?:bir |iki |uc )?kesen|kiris(?:ler)? teorem|te[gy]et[- ]kesen|iki kesen/, 'kesen'],
+  [/kuvvet/, 'kuvvet'],
+  [/cevre aci/, 'cevre_aci'],
+  [/kiris|cember\w* cap(?:i|ini)\b(?! olan)|\bcap(?:i|ini) ciz/, 'kiris'],
+  [/aciortay (?:teorem|baginti|uzunlug)|kenarortay (?:teorem|baginti|uzunlug)|stewart|stuart|\bceva|menela|sinus (?:teorem|baginti|kural)|kosinus (?:teorem|baginti|kural)|heron|ucgen esitsizli|cizilebilir mi|ucgen (?:olur|olusturur) mu|ucgen var mi|aci[- ]kenar (?:iliski|baginti)|buyuk aci\w* karsisinda/, 'ucgen_teoremi'],
   [/^(?!.*(?:kenar|uzunluk|bagla)).*(?:kaydirici|surgu|parametre).*(?:olustur|ekle|koy|tanimla|yap|iste|lazim)/, 'slider'],
   [/kaydirici|surgu|surguler|kaydirarak|surukle.*(?:kenar|uzunluk)|(?:kenar|uzunluk).*surukle/, 'bind'],
   [/geri al|geri don|onceki adima|son yaptigim|yinele|ileri al|vazgec/, 'undo'],
@@ -550,6 +565,134 @@ function interpretFamilyIntent(raw: string, intent: string, scene: SceneReader, 
       const singles = scene.refs.filter(r => r.points.length === 1 && !r.objects.length);
       if (singles.length >= 3) return { command: `${singles.map(r => r.points[0].label).join('')} çokgenini çiz` };
       return { clarification: 'Köşe noktalarını sırayla yazın (ör. ABCD çokgeni) ya da düzgün çokgen için kenar sayısını belirtin.' };
+    }
+    default: return interpretTheoremIntent(raw, intent, scene, folded);
+  }
+}
+
+const NEED_TRIANGLE = { clarification: 'Hangi üçgen için? Üçgenin adını yazın (ör. ABC) veya üçgeni seçin.' };
+const NEED_CIRCLE = { clarification: 'Önce bir çember çizin (ör. “yarıçapı 3 olan çember çiz”) ya da çemberin adını yazın.' };
+
+/** Üçgen teoremlerinin kanonik adları: cümledeki anahtar sözcükten işleyicinin beklediği ada. */
+const TRIANGLE_THEOREMS: [RegExp, string][] = [
+  [/aciortay/, 'açıortay teoremini'], [/kenarortay/, 'kenarortay teoremini'], [/stewart|stuart/, 'Stewart teoremini'], [/\bceva/, 'Ceva teoremini'],
+  [/menela/, 'Menelaus teoremini'], [/sinus/, 'sinüs teoremini'], [/kosinus/, 'kosinüs teoremini'], [/heron/, 'Heron formülünü'],
+  [/esitsizli|cizilebilir|olur mu|olusturur mu|var mi/, 'üçgen eşitsizliğini'], [/aci[- ]kenar|buyuk aci|kucuk aci/, 'açı kenar ilişkisini'],
+];
+
+/** Teoremler ve klasik şekiller: komutlar işleyici örnekleriyle aynı kalıptadır (handlers/teoremler). */
+function interpretTheoremIntent(raw: string, intent: string, scene: SceneReader, folded: string): SemanticInterpretation {
+  const nums = scene.numbers;
+  const triangle = scene.triangle();
+  const pair = scene.refs.find(r => r.points.length === 2 && !r.objects.length);
+  const three = scene.refs.find(r => r.points.length === 3);
+  const named = scene.refs.some(r => r.points.length === 3 || r.objects.some(o => o.type === 'polygon'));
+  const circles = scene.objects.filter(o => o.type === 'circle');
+  const theorem = /baginti|teorem|dogrula|uygula|acikla|kural|formul/.test(folded);
+  switch (intent) {
+    case 'oklid': case 'pisagor': {
+      const oklid = intent === 'oklid';
+      const figure = oklid ? 'Öklid üçgeni' : 'Pisagor şekli';
+      if (nums.length === 2) return { command: `dik kenarları ${fmt(nums[0])} ve ${fmt(nums[1])} olan ${figure} çiz` };
+      if (oklid && nums.length === 1 && /hipotenus/.test(folded)) return { command: `hipotenüsü ${fmt(nums[0])} olan Öklid üçgeni çiz` };
+      if (!oklid && triangle && /dik mi/.test(folded)) return { command: `Pisagor'a göre ${triangle} dik mi` };
+      if (theorem || /dik mi|hipotenus\w* kac/.test(folded)) {
+        if (!triangle) return { clarification: `Hangi üçgen için? Üçgenin adını yazın (ör. ABC) ya da önce “${figure} çiz” deyin.` };
+        return { command: oklid ? `${triangle} üçgeninde Öklid teoremini uygula` : `${triangle} üçgeninde Pisagor bağıntısını yaz` };
+      }
+      if (triangle && named) return { command: `${triangle} üçgeninde ${oklid ? 'Öklid' : 'Pisagor'} şeklini kur` };
+      return { command: `${figure} çiz` };
+    }
+    case 'tales': {
+      if (/cember|\bcap/.test(folded)) return { command: pair ? `${scene.refLabel(pair)} çaplı Tales çemberi çiz` : 'Tales çemberi çiz' };
+      if (/kelebek/.test(folded)) return { command: 'kelebek Tales şekli çiz' };
+      const ratio = raw.match(/(\d+)\s*:\s*(\d+)/);
+      if (triangle && ratio) return { command: `${triangle} üçgeninde ${ratio[1]}:${ratio[2]} oranında Tales şekli kur` };
+      if (triangle && (named || theorem || /oran/.test(folded))) return { command: `${triangle} üçgeninde Tales şekli kur` };
+      return { command: 'Tales teoremi şekli çiz' };
+    }
+    case 'orta_taban': {
+      if (triangle) return { command: /tabanlar/.test(folded) ? `${triangle} üçgeninin orta tabanlarını çiz` : `${triangle} üçgeninin orta tabanını çiz` };
+      const quads = scene.objects.filter(o => o.type === 'polygon' && o.pointIds.length === 4 && scene.describe(o));
+      const quad = scene.refs.flatMap(r => r.objects).find(o => quads.includes(o)) ?? (quads.length === 1 ? quads[0] : undefined);
+      if (quad) return { command: `${scene.describe(quad)} yamuğunun orta tabanını çiz` };
+      return { clarification: 'Hangi üçgenin ya da yamuğun orta tabanı? Adını yazın (ör. ABC) veya şekli seçin.' };
+    }
+    case 'euler': {
+      return triangle ? { command: `${triangle} üçgeninin Euler doğrusunu çiz` } : NEED_TRIANGLE;
+    }
+    case 'dokuz_nokta': {
+      return triangle ? { command: `${triangle} üçgeninin dokuz nokta çemberini${/merkez/.test(folded) ? ' merkeziyle' : ''} çiz` } : NEED_TRIANGLE;
+    }
+    case 'dis_teget': {
+      if (!triangle) return NEED_TRIANGLE;
+      if (/\buc\b|\btum|hepsi|butun|cemberler/.test(folded)) return { command: `${triangle} üçgeninin üç dış teğet çemberini çiz` };
+      const vertex = scene.point();
+      if (vertex && triangle.includes(vertex)) return { command: `${triangle} üçgeninin ${vertex} köşesine ait dış teğet çemberini çiz` };
+      return { command: `${triangle} üçgeninin dış teğet çemberini çiz` };
+    }
+    case 'kiris': case 'kesen': case 'kuvvet': case 'cevre_aci': case 'teget_kiris': {
+      if (!circles.length) return NEED_CIRCLE;
+      // Birden fazla çemberde motor çemberi merkeziyle ister ("M merkezli çembere …"); cümlede ya da seçimde çember yoksa sorulur.
+      const centerRef = scene.refs.find(r => r.points.length === 1 && !r.objects.length && circles.some(o => o.type === 'circle' && o.centerPointId === r.points[0].id) && /merkez/.test(folded));
+      const chosen = scene.refs.flatMap(r => r.objects).find(o => o.type === 'circle')
+        ?? (centerRef ? circles.find(o => o.type === 'circle' && o.centerPointId === centerRef.points[0].id) : undefined)
+        ?? (scene.selected.filter(o => o.type === 'circle').length === 1 ? scene.selected.find(o => o.type === 'circle') : undefined);
+      const center = chosen?.type === 'circle' && chosen.centerPointId ? scene.byId.get(chosen.centerPointId) : undefined;
+      const name = circles.length === 1 ? undefined : center?.type === 'point' ? center.label : null;
+      if (name === null) return { clarification: 'Birden fazla çember var; hangisi olduğunu merkeziyle yazın (ör. “M merkezli çembere …”) ya da çemberi seçin.' };
+      const dative = name ? `${name} merkezli çembere` : 'çembere';
+      const locative = name ? `${name} merkezli çemberde ` : '';
+      const exclude = centerRef ? [centerRef] : [];
+      if (intent === 'kiris') {
+        if (/\bcap/.test(folded)) return { command: pair && !name ? `${scene.refLabel(pair)} çapını çiz` : `${name ? `${name} merkezli çemberin` : 'çemberin'} çapını çiz` };
+        if (/orta dikme/.test(folded)) return { command: `${locative}kirişin orta dikmesini çiz` };
+        if (/dikme|\bdik\b/.test(folded)) return { command: `${locative}merkezden kirişe dikme indir` };
+        return { command: pair ? `${name ? `${dative} ` : ''}${scene.refLabel(pair)} kirişini çiz` : `${dative} bir kiriş çiz` };
+      }
+      if (intent === 'kesen' || intent === 'kuvvet') {
+        const point = scene.point(exclude);
+        if (intent === 'kuvvet' && !theorem) {
+          return point ? { command: `${point} noktasının ${dative} göre kuvvetini hesapla` } : { clarification: 'Hangi noktanın kuvveti? Noktanın adını yazın (ör. P) veya noktayı seçin.' };
+        }
+        if (intent === 'kuvvet' || theorem) {
+          if (name) return { clarification: 'Birden fazla çember varken teorem şekli kurulamıyor; diğer çemberleri gizleyin ya da yeni bir çizimde deneyin.' };
+          if (/kiris(?:ler)? teorem/.test(folded)) return { command: 'kirişler teoremini göster' };
+          if (/te[gy]et[- ]kesen/.test(folded)) return { command: 'teğet-kesen teoremini göster' };
+          return { command: intent === 'kuvvet' ? 'kuvvet teoremini göster' : 'kesenler teoremini göster' };
+        }
+        if (point) return { command: `${point} noktasından ${dative} ${/\biki\b/.test(folded) ? 'iki ' : ''}kesen çiz` };
+        return { command: `${dative} kesen çiz` };
+      }
+      if (intent === 'cevre_aci') {
+        if (theorem || /iliski|yarisi|esit/.test(folded)) return { command: `${locative}çevre açı teoremini göster` };
+        if (three) return { command: `${locative}${scene.refLabel(three)} çevre açısını çiz` };
+        if (pair) return { command: `${locative}${scene.refLabel(pair)} yayını gören çevre açıyı çiz` };
+        return { command: `${locative}çevre açı çiz` };
+      }
+      if (theorem || /yarisi/.test(folded)) return { command: `${locative}teğet kiriş açısı teoremini göster` };
+      const at = scene.point(exclude);
+      if (at) return { command: `${locative}${at} noktasındaki teğet-kiriş açısını çiz` };
+      return { command: `${locative}teğet-kiriş açısını çiz` };
+    }
+    case 'ortak_teget': {
+      if (circles.length < 2) return { clarification: 'Ortak teğet için iki çember gerekir; önce iki çember çizin ya da adlarını yazın (ör. c1 ve c2).' };
+      if (/\bic\b/.test(folded)) return { command: 'iç ortak teğetleri çiz' };
+      if (/\bdis\b/.test(folded)) return { command: 'dış ortak teğetleri çiz' };
+      return { command: 'iki çemberin ortak teğetlerini çiz' };
+    }
+    case 'ucgen_teoremi': {
+      const name = TRIANGLE_THEOREMS.find(([re]) => re.test(folded))?.[1];
+      if (!name) return { clarification: 'Hangi teorem? Örneğin “açıortay teoremini göster” ya da “Heron formülünü uygula” yazın.' };
+      if (name === 'üçgen eşitsizliğini' && nums.length === 3) {
+        return { command: `kenarları ${fmt(nums[0])}, ${fmt(nums[1])} ve ${fmt(nums[2])} olan üçgen çizilebilir mi` };
+      }
+      if (!triangle) return NEED_TRIANGLE;
+      const vertex = scene.point();
+      if (vertex && /aciortay|kenarortay/.test(folded) && triangle.includes(vertex)) return { command: `${vertex} köşesi için ${name} uygula` };
+      if (vertex && /kosinus/.test(folded) && triangle.includes(vertex)) return { command: `${vertex} açısı için kosinüs teoremini uygula` };
+      if (vertex && /\bceva/.test(folded) && !triangle.includes(vertex)) return { command: `${vertex} noktası için Ceva teoremini uygula` };
+      return { command: `${triangle} üçgeninde ${name} uygula` };
     }
     default: return {};
   }

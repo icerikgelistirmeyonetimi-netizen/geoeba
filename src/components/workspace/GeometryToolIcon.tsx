@@ -24,6 +24,12 @@ const glyphs = {
   sphere: <><circle cx="12" cy="12" r="9" /><ellipse cx="12" cy="12" rx="4" ry="9" /><path d="M3 12c4 4 14 4 18 0" /></>,
   prism: <><path d="m3 8 6-5 12 3v11l-6 4-12-3ZM3 8l12 3 6-5M15 11v10" /><path d="M9 3v11l12 3M3 18l6-4" strokeDasharray="2 3" /></>,
   triangularPrism: <><path d="m3 18 5-12 6 12ZM8 6l8-3 5 12-7 3M16 3l-3 10" /><path d="m3 18 10-5 8 2" strokeDasharray="2 3" /></>,
+  // 3B katı cisimler (Toolbar3D): ön yüz düz, arka ayrıtlar kesikli
+  cube: <><path d="M4 8h11v11H4ZM4 8l5-4h11v11l-5 4M15 8l5-4M15 19l5-4" /><path d="M9 4v11H4M9 15l11 0" strokeDasharray="2 3" /></>,
+  squarePrism: <><path d="M6 7h8v14H6ZM6 7l4-3h8v14l-4 3M14 7l4-3M14 21l4-3" /><path d="M10 4v14H6M10 18h8" strokeDasharray="2 3" /></>,
+  cylinder: <><ellipse cx="12" cy="6" rx="7" ry="3" /><path d="M5 6v12a7 3 0 0 0 14 0V6" /><path d="M5 18a7 3 0 0 1 14 0" strokeDasharray="2 3" /></>,
+  cone: <><path d="M4 18 12 3l8 15" /><path d="M4 18a8 3 0 0 0 16 0" /><path d="M4 18a8 3 0 0 1 16 0" strokeDasharray="2 3" /></>,
+  pyramid: <><path d="M12 3 3 15l9 6 9-6ZM12 3v18" /><path d="M3 15l9-3 9 3M12 3v9" strokeDasharray="2 3" /></>,
 };
 
 export function GeometryToolIcon({ kind, className = 'w-5 h-5' }: {

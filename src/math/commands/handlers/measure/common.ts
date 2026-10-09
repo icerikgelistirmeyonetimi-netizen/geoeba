@@ -4,7 +4,7 @@ import {
 } from '../../../geometry';
 import { TAU, type ArcSpec, type ResolvedArc, yayIcNoktasi } from '@/math/arcMeasure';
 import {
-  type Olcu, type YayUclari, VARSAYILAN_YAZIM, alan, cemberBasligi, cemberCevresi, cevre, daireAlani, dilimAlani, dilimCevresi,
+  type Olcu, type YayUclari, VARSAYILAN_YAZIM, alan, cemberCevresi, cevre, daireAlani, dilimAlani, dilimCevresi,
   elipsAlani, elipsCevresi, kullanilabilirAd, merkezAci, olcuMetni, sayiMetni, yayOlcusu, yuvarlandiMi,
 } from '@/math/matematikYazimi';
 import { type Clause, type LabelRef, fold, labelKey } from '../../text';
@@ -215,14 +215,6 @@ export const adli = (o: Olcu) => !!o.adlar && o.adlar.length > 0;
 export const esit = (v: number, basamak = 2) => `${yuvarlandiMi(v, basamak) ? '≈' : '='} ${sayiMetni(v, basamak)}`;
 export const esitBr = (v: number) => `${esit(v)} br`;
 export const esitDeg = (v: number) => `${esit(v)}°`;
-
-/** Çember başlığı "Ç(M, r)" — merkezi adlı çemberlerde; üç noktadan geçen çemberde null. */
-export function cemberAdi(scene: CommandScene, o: MathObject): string | null {
-  if (o.type !== 'circle') return null;
-  const id = scene.circleOf(o)?.centerId;
-  const c = id ? scene.get(id) : undefined;
-  return c && c.type === 'point' ? cemberBasligi(c)?.duz ?? null : null;
-}
 
 /** Şeklin alan ölçüsü: çokgen köşeleriyle A(ABC), daire dilimi A(AOB dilimi), çember/elips sözcükle. */
 export function alanOlcusu(scene: CommandScene, o: MathObject): Olcu {

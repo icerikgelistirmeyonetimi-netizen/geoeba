@@ -1,3 +1,5 @@
+import { ARALIK } from './esitlikCizimi';
+
 /**
  * Düz bir çizgiyi ölçen etiketler (doğru parçası uzunluğu, çokgen kenarı, iki nokta arası mesafe,
  * doğru/ışın üzerindeki |AB|) ölçtükleri çizgiye PARALEL yazılır; teknik resimdeki ölçü yazıları gibi.
@@ -146,4 +148,125 @@ export function kenarEkseninden(o: { boyunca: number; dik: number }, c: CizgiCer
   const t = o.boyunca * c.boy;
   const n = o.dik * (zoom || 1);
   return { x: c.ox + c.ex * t + c.nx * n, y: c.oy + c.ey * t + c.ny * n };
+}
+
+/**
+ * Saklanan `eksenDik`in bugünkü karşılığı. `taban`, sürükleme anında VARSAYILAN yerin dik uzaklığıdır; `simdi`
+ * bugünkü varsayılanınki (ikisi de çizgiye göre işaretli, aynı birimde). Varsayılan çizgiye yaklaşıp uzaklaştıysa
+ * (uzunluk ölçümü kesikli çizgili kattan yalın banda geçti ya da tersi, eşitlik çentiği geldi) etiket AYNI YANDA
+ * durdukça bu farkla kayar: elle verilen kayıklık korunur, yerleşim değişimi etiketi "uzak" yapmaz. Doğal yan
+ * dönünce (parça dikeyden geçti: |simdi| = |taban|) ya da etiket çizginin öbür yanına taşınmışsa dik uzaklık
+ * değişmez; kayma etiketi öbür yana geçiremez (en çok çizginin üstüne, 0'a iner). Taban yoksa (eski kayıt) aynen.
+ */
+export function tabanaGoreDik(dik: number, taban: number | undefined, simdi: number): number {
+  if (taban === undefined || !Number.isFinite(taban) || !Number.isFinite(simdi) || Math.abs(taban) < 1e-9) return dik;
+  if (Math.sign(dik) !== Math.sign(taban)) return dik;
+  const sonuc = dik + Math.sign(taban) * (Math.abs(simdi) - Math.abs(taban));
+  return Math.sign(sonuc) === Math.sign(taban) ? sonuc : 0;
+}
+
+/** Açı yayının temel yarıçapı (etiket yerleşim pikseli; ekranda etiketOlcegi ile çarpılır). */
+export const ACI_YAYI_YARICAPI = 22;
+/**
+ * Dar açıda yay en çok bu kadar büyür. 55'te 10° açının yayı ~10 px kalıyor, kollardaki eş uzunluk çentiği gibi
+ * kısa bir çizgi görünüyordu (doğrulama, 2026-09-25); kol sınırı (aşağıda) kısa kollu açıyı zaten frenler.
+ */
+export const ACI_YAYI_EN_BUYUK = 90;
+/** Dar açıda hedeflenen en kısa yay boyu (px): r · θ bu değerin altına düşmesin diye yarıçap büyür. */
+const ACI_YAYI_HEDEF_BOY = 18;
+/**
+ * Kol sınırı: yay, kısa kolun ORTASINDAKİ eş uzunluk çentiğinin ve uzunluk etiketinin altında kalır
+ * (r ≤ kol/2 − 11: tek çentikten 11 px, üçlü öbeğin ucundan 7 px içeride). %70 sınırında yay, kol boyu ≈ 2r
+ * olan yaygın üçgenlerde (25°'de ~2 br kol) çentiğin tam üstüne düşüp onunla '+' ya da tek çubuk oluşturuyordu.
+ */
+const ACI_YAYI_KOL_PAYI = 11;
+
+/**
+ * Açı yayının yarıçapı (etiket yerleşim pikseli). 60° ve üstünde (dış açı dahil) sabit 22; dar açıda yay
+ * okunur kalsın diye büyür (kullanıcı, 2026-09-25: "dar açılarda açı dairesi çok küçük kalıyor"):
+ * r = max(22, hedef / θ), en çok 90 ve kısa kolun yarısından 11 px içeride; hiçbir durumda 22'nin altına inmez.
+ * Hedef yay boyu 18 px'tir; eş açı çentiği taşıyan açıda çentik sayısıyla uzar (düz öğedeki kural:
+ * (k − 1) · ARALIK + 16), böylece üçlü çentik yayı baştan sona kaplayan sıkışık bir blok olmaz ve
+ * yay boyu çentiğin alt sınırının hep üstünde kalır (yöne göre görünüp kaybolmaz).
+ * Yay çizimi, eş açı çentikleri ve açı rozetinin yerleşimi AYNI değeri kullanır.
+ */
+export function aciYayYaricapi(derece: number, kisaKolPx?: number, centikSayisi = 0): number {
+  if (!Number.isFinite(derece) || derece <= 0 || derece >= 60) return ACI_YAYI_YARICAPI;
+  const k = Number.isFinite(centikSayisi) ? Math.max(0, Math.round(centikSayisi)) : 0;
+  const hedef = Math.max(ACI_YAYI_HEDEF_BOY, k > 0 ? (k - 1) * ARALIK + 16 : 0);
+  let r = Math.min(ACI_YAYI_EN_BUYUK, hedef / ((derece * Math.PI) / 180));
+  if (kisaKolPx !== undefined && Number.isFinite(kisaKolPx)) r = Math.min(r, kisaKolPx / 2 - ACI_YAYI_KOL_PAYI);
+  return Math.max(ACI_YAYI_YARICAPI, r);
+}
+
+/** Aynı köşedeki iç içe açıların yayları arasındaki en az aralık (etiket yerleşim pikseli). */
+export const ACI_YAYI_ARALIK = 8;
+
+/** Bir köşedeki açı: yön açıları (radyan, işaretli tarama) ve aciYayYaricapi'nin verdiği yarıçap. */
+export interface KoseAcisi {
+  id: string;
+  /** Köşe noktasının kimliği: yalnız aynı köşedeki açılar karşılaştırılır. */
+  kose: string;
+  baslangic: number;
+  tarama: number;
+  r: number;
+  /** Yarıçapı değişmez (dik açı karesi bugünkü boyutta kalır); yine de içteki açı olarak sayılır. */
+  sabit?: boolean;
+}
+
+/**
+ * AYNI KÖŞEDEKİ AÇILAR (ders kitabı düzeni): kapsayan açının yayı, kapsadığı açıların yaylarının DIŞINDA durur.
+ * Dar açıda yay büyüdüğü için 20° + 30° = 50° gibi iç içe açılarda kapsayan 50°'nin 22'lik yayı en içte kalıyor,
+ * '50°' rozeti de başka bir açının yayıyla ışın arasına düşüyordu (doğrulama, 2026-09-25). Kapsayan açı,
+ * kapsadığı her açının yayından en az ACI_YAYI_ARALIK dışarı alınır. Aynı kollu iç ve dış açı (tümler) da
+ * birbirinden bu kadar ayrılır; 3-4 px arayla çift çizgi gibi durmaz. Dönen harita her açının son yarıçapıdır.
+ */
+export function koseAcilariniAyir(acilar: readonly KoseAcisi[]): Map<string, number> {
+  const TUR = 2 * Math.PI;
+  const EPS = 1e-6;
+  const sonuc = new Map<string, number>();
+  const aralik = (a: KoseAcisi) => {
+    const boy = Math.min(TUR, Math.abs(a.tarama));
+    const bas = a.tarama < 0 ? a.baslangic + a.tarama : a.baslangic;
+    return { bas: ((bas % TUR) + TUR) % TUR, boy };
+  };
+  const fark = (x: number, y: number) => ((((y - x) % TUR) + TUR) % TUR);
+  // İçteki (Y) açının taraması dıştakinin (X) içinde mi (kollar ortak olabilir)?
+  const kapsar = (x: { bas: number; boy: number }, y: { bas: number; boy: number }) => {
+    if (!(x.boy > y.boy + EPS)) return false;
+    let d = fark(x.bas, y.bas);
+    if (d > TUR - EPS) d = 0;
+    return d + y.boy <= x.boy + EPS;
+  };
+  // Aynı iki kolu paylaşan iç ve dış açı: taramalar tam turu tamamlar, biri ötekinin bittiği yerden başlar
+  const tumler = (x: { bas: number; boy: number }, y: { bas: number; boy: number }) => {
+    if (Math.abs(x.boy + y.boy - TUR) > EPS) return false;
+    const d = fark(x.bas + x.boy, y.bas);
+    return d < EPS || d > TUR - EPS;
+  };
+  const koseler = new Map<string, KoseAcisi[]>();
+  for (const a of acilar) {
+    sonuc.set(a.id, a.r);
+    const liste = koseler.get(a.kose);
+    if (liste) liste.push(a);
+    else koseler.set(a.kose, [a]);
+  }
+  for (const liste of koseler.values()) {
+    if (liste.length < 2) continue;
+    // Küçük taramadan büyüğe: içteki açıların son yarıçapı, onları kapsayanınkinden önce bellidir
+    const sirali = liste.map((a) => ({ a, ar: aralik(a) })).sort((x, y) => x.ar.boy - y.ar.boy || (x.a.id < y.a.id ? -1 : 1));
+    for (let i = 0; i < sirali.length; i++) {
+      const { a, ar } = sirali[i];
+      if (a.sabit) continue;
+      let r = sonuc.get(a.id)!;
+      for (let j = 0; j < i; j++) {
+        const ic = sirali[j];
+        if (kapsar(ar, ic.ar) || (tumler(ar, ic.ar) && ar.boy > ic.ar.boy + EPS)) {
+          r = Math.max(r, sonuc.get(ic.a.id)! + ACI_YAYI_ARALIK);
+        }
+      }
+      sonuc.set(a.id, r);
+    }
+  }
+  return sonuc;
 }

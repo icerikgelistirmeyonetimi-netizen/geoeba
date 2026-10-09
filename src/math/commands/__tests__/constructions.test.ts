@@ -860,8 +860,7 @@ describe('phrase sweep regressions (family only)', () => {
     expect(byType(created(S.lines(), both.objects), 'line').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('refuses the excircle and slider binding without a triangle clearly', () => {
-    expect(bad('üçgenin dış teğet çemberini çiz', S.tri())).toContain('dış teğet');
+  it('refuses slider binding without a triangle clearly (the excircle is now drawn by the teoremler family)', () => {
     expect(bad('kaydırıcıya bağla', S.seg())).toContain('üçgen');
   });
 });

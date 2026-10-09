@@ -895,6 +895,8 @@ function seslendirHam(metin: string): string {
     .replace(/(\d)\s*°/g, '$1 derece')
     .replace(/(^|[\s(=:])[-−](?=\d)/g, '$1eksi ')
     .replace(/\s[-−]\s/g, ' eksi ').replace(/\s\+\s/g, ' artı ')
+    // çarpma: "1,8 × 3,2" → "bir virgül sekiz çarpı üç virgül iki" (teorem bağıntıları)
+    .replace(/\s*×\s*/g, ' çarpı ')
     .replace(/\s*\/\s*/g, ' bölü ')
     .replace(/\d+(?:,\d+)?/g, (s) => sayiOku(s))
     // eşitlik: zincirde hep "eşittir"; tek eşitlikte İM'li özneden sonra DÜŞER, yoksa "eşittir"

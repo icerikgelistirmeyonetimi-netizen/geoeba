@@ -535,7 +535,8 @@ export class CommandScene {
       return this.add({ ...base, label: o.label ?? `${center.label} Çemberi (r = ${trNum(spec.radius)})`, centerPointId: center.id, fixedRadius: tidy(spec.radius), fillOpacity: o.fillOpacity ?? 0 } as CircleObject);
     }
     if (spec.radiusPointId === spec.centerId) fail('Merkez ve çember üzerindeki nokta farklı olmalı.');
-    return this.add({ ...base, label: o.label ?? `${center.label} Merkezli Çember`, centerPointId: center.id, radiusPointId: spec.radiusPointId, fillOpacity: o.fillOpacity ?? 0.1, showArea: o.showArea ?? true, showPerimeter: o.showPerimeter ?? true } as CircleObject);
+    // Ölçüler istenmedikçe açılmaz (tuvaldeki çember aracıyla aynı): "alanını göster" komutu ayrıca açar.
+    return this.add({ ...base, label: o.label ?? `${center.label} Merkezli Çember`, centerPointId: center.id, radiusPointId: spec.radiusPointId, fillOpacity: o.fillOpacity ?? 0.1 } as CircleObject);
   }
   addEllipse(centerId: string, radiusX: number, radiusY: number, o: { label?: string; color?: string; rotation?: number } = {}): EllipseObject {
     if (!(radiusX > 0 && radiusY > 0)) fail('Elipsin iki yarıçapı da 0’dan büyük olmalı.');

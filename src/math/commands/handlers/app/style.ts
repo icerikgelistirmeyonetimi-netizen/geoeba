@@ -4,10 +4,12 @@ import type { Clause } from '../../text';
 import type { CommandHandler } from '../../types';
 import { OFF, ON, clamp, plainOf, refersToObjects, styleOf } from './shared';
 
-type NumKey = 'fontScale' | 'pointRadius' | 'strokeScale' | 'pointLabelScale' | 'measurementScale' | 'axisScale';
+type NumKey = 'fontScale' | 'pointRadius' | 'strokeScale' | 'pointLabelScale' | 'measurementScale' | 'axisScale' | 'yaziAltSiniri';
 
 /** Stil panelindeki kaydırıcıların sınırları ve adımları (StylePanel.tsx). */
 const NUMERIC: { key: NumKey; re: RegExp; name: string; min: number; max: number; step: number; unit: string; example: string }[] = [
+  // Önce gelir: "uzaklaşınca yazılar" / "yazı alt sınırı" sözleri genel yazı ölçeğine (fontScale) karışmasın
+  { key: 'yaziAltSiniri', re: /\buzak\w* (?:yazi|harf|etiket|nokta ad)\w*|\byazi(?:lar|larin|nin)? (?:alt sinir|en az|en kucuk|taban)\w*|\b(?:en kucuk|en az) yazi\w*/, name: 'Uzaklaşınca yazıların en küçük ölçeği', min: 0, max: 1, step: 0.05, unit: '', example: 'uzaklaşınca yazılar en az 0,8 olsun' },
   { key: 'pointLabelScale', re: /\bnokta (?:ad|isim|etiket|yazi)\w*|\bkoordinat yazi\w*|(?<!olcum )\betiket(?:ler|leri|lerini|lerin)\b/, name: 'Nokta adı ve koordinat yazılarının ölçeği', min: 0.6, max: 2, step: 0.05, unit: '', example: 'nokta adlarını 1,5 kat büyüt' },
   { key: 'measurementScale', re: /\bolcum (?:kutu|yazi|etiket)\w*/, name: 'Ölçüm kutularının ölçeği', min: 0.6, max: 2, step: 0.05, unit: '', example: 'ölçüm yazılarını büyüt' },
   { key: 'axisScale', re: /\beksen (?:sayi|yazi|rakam|numara)\w*/, name: 'Eksen yazılarının ölçeği', min: 0.6, max: 2, step: 0.05, unit: '', example: 'eksen sayılarını büyüt' },
@@ -87,10 +89,14 @@ function nextValue(c: Clause, scene: CommandScene, item: (typeof NUMERIC)[number
   const n = numberRef ? c.num(numberRef[0]) : undefined;
   const snap = (v: number) => tidy(clamp(Math.round(v / item.step) * item.step, item.min, item.max));
   if (RESET.test(text) && n === undefined) return DEFAULT_STYLE_SETTINGS[item.key];
+  // Uzaklaşınca yazı alt sınırı bir ORANDIR (0–1) ve 0 "sınırsız küçülür" demektir: çarpanla büyütme 0'da takılır,
+  // bu yüzden nokta yarıçapı gibi TOPLAMSAL adımlarla değişir (0,1; "çok" ile 0,2); kat ise 0'dan varsayılanı alır.
+  const toplamsal = item.key === 'pointRadius' || item.key === 'yaziAltSiniri';
   if (kat) {
     const k = c.num(`#${kat[1]}`);
     if (!(k > 0 && k <= 10)) fail(`Kat 0 ile 10 arasında olmalı (ör. “${item.example}”).`);
-    return snap(shrink ? current / k : current * k);
+    const taban = item.key === 'yaziAltSiniri' && current === 0 && !shrink ? DEFAULT_STYLE_SETTINGS.yaziAltSiniri : current;
+    return snap(shrink ? taban / k : taban * k);
   }
   if (n !== undefined && !grow && !shrink) {
     // "yazıların boyutunu 20 yap" gibi piksel değerleri yazı nesnesinin boyutudur; başka aileye bırak.
@@ -102,10 +108,12 @@ function nextValue(c: Clause, scene: CommandScene, item: (typeof NUMERIC)[number
   }
   if (n !== undefined) {
     if (!(n > 0 && n <= 100)) fail(`Değişim miktarı 0’dan büyük olmalı (ör. “${item.example}”).`);
-    if (item.key === 'pointRadius') return snap(current + (shrink ? -n : n));
+    if (item.key === 'yaziAltSiniri' && n > item.max) fail(`${item.name} 0 ile 1 arasında bir orandır; değişim miktarı en çok 1 olabilir (ör. “${item.example}”).`);
+    if (toplamsal) return snap(current + (shrink ? -n : n));
     return snap(shrink ? current / n : current * n);
   }
   if (item.key === 'pointRadius') return snap(current + (shrink ? -2 : 2));
+  if (item.key === 'yaziAltSiniri') return snap(current + (shrink ? -1 : 1) * (STRONG.test(text) ? 0.2 : 0.1));
   const factor = item.key === 'strokeScale' ? 1.5 : STRONG.test(text) ? 1.5 : 1.25;
   return snap(shrink ? current / factor : current * factor);
 }
@@ -113,7 +121,7 @@ function nextValue(c: Clause, scene: CommandScene, item: (typeof NUMERIC)[number
 export const style: CommandHandler = {
   id: 'app.style',
   examples: ['yazıları büyüt', 'tüm yazıları küçült', 'tüm yazıların boyutunu 1,5 yap', 'noktaları küçült', 'noktaların boyutunu 8 piksel yap', 'çizgileri kalınlaştır', 'çizgi kalınlığını 2 yap',
-    'dolguları kaldır', 'dolguları geri getir', 'etiket kutularını göster', 'stili sıfırla', 'nokta adlarını büyüt'],
+    'dolguları kaldır', 'dolguları geri getir', 'etiket kutularını göster', 'stili sıfırla', 'nokta adlarını büyüt', 'uzaklaşınca yazılar en az 0,8 olsun'],
   match(c) {
     const p = plan(c);
     if (!p) return 0;

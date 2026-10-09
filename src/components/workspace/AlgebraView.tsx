@@ -72,6 +72,7 @@ export function AlgebraView({
 }: AlgebraViewProps) {
   const {
     objects,
+    kaynakNesneler,
     selectedObjectId,
     selectedObjectIds,
     setSelectedObjectIds,
@@ -149,7 +150,8 @@ export function AlgebraView({
     const raw = cmdText.trim();
     if (!raw) return;
 
-    const plan = executeTurkishCommand(raw, objects, selectedObjectIds, { viewport, styleSettings });
+    // Komut motoru bütün diziyi yeniden yazar: ilkokul görünümü (gizli adlar) değil GERÇEK nesneler üzerinde çalışır
+    const plan = executeTurkishCommand(raw, kaynakNesneler, selectedObjectIds, { viewport, styleSettings });
     if (!plan.ok) {
       setCommandFeedback({ ok: false, message: plan.message });
       return;
@@ -462,7 +464,8 @@ export function AlgebraView({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  updateObject(obj.id, { visible: !isVisible } as Partial<MathObject>, true);
+                                  // Gerçek bayrağı çevir: ilkokul görünümünde gizlenen çember merkezi için düğme ölü kalmasın
+                                  updateObject(obj.id, { visible: (kaynakNesneler.find((k) => k.id === obj.id) ?? obj).visible === false } as Partial<MathObject>, true);
                                 }}
                                 className={`w-3.5 h-3.5 rounded-full shrink-0 border transition-all cursor-pointer ${
                                   isVisible

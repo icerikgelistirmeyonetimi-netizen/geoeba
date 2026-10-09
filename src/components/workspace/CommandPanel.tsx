@@ -40,7 +40,7 @@ interface CommandPanelProps {
 
 export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, incoming, onIncomingHandled, onClose, headerExtra }: CommandPanelProps) {
   const {
-    objects, selectedObjectIds, setSelectedObjectIds, setActiveTool, commit, viewport, setViewport, resetViewport, pendingPointIds,
+    objects, kaynakNesneler, selectedObjectIds, setSelectedObjectIds, setActiveTool, commit, viewport, setViewport, resetViewport, pendingPointIds,
     undo, redo, history, historyIndex, requestClearAll, styleSettings, setStyleSettings, openRegularPolygonDialog, openCircleRadiusDialog,
     constraintError,
   } = useWorkspace();
@@ -115,7 +115,8 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
     const raw = input.trim();
     if (!raw) return;
     // pendingPointIds: yarım kalmış çokgen/parça çiziminin tıklanmış noktaları komut yolunda da KULLANIMDA sayılır.
-    const plan = executeTurkishCommand(raw, objects, selectedObjectIds, { viewport, styleSettings, pendingPointIds });
+    // Komut motoru bütün diziyi yeniden yazar: ilkokul görünümü (gizli adlar) değil GERÇEK nesneler üzerinde çalışır
+    const plan = executeTurkishCommand(raw, kaynakNesneler, selectedObjectIds, { viewport, styleSettings, pendingPointIds });
     if (!plan.ok) {
       if (!preserveDraft) setText(raw);
       setResult({ ok: false, message: plan.message, suggestions: plan.suggestions?.length ? plan.suggestions : suggestions.map(s => s.text) });
@@ -225,7 +226,7 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
       </span>
     </div>
     {help && <div id={helpId} className={`${popoverClass} z-40 flex max-h-[24rem] flex-col rounded-xl border border-border bg-card p-3 shadow-xl`}>
-      <p className="text-xs text-muted-foreground mb-2">Ne istediğinizi kendi cümlenizle yazın ya da mikrofona söyleyin. Bir cümlede birden fazla işlem olabilir (“üçgen çiz ve alanını göster”). Nesnelere adıyla (ABC, [AB], A&apos;) ya da seçerek başvurun. Hedef belirsizse nasıl düzelteceğiniz söylenir; anlaşılmayan komut çizimi değiştirmez. Shift+Enter yeni satır açar.</p>
+      <p className="text-xs text-muted-foreground mb-2">Ne istediğinizi kendi cümlenizle yazın ya da mikrofona söyleyin. Bir cümlede birden fazla işlem olabilir (“üçgen çiz ve alanını göster”). Nesnelere adıyla (ABC, [AB], A&apos;) ya da seçerek başvurun. Teoremler de adıyla istenir (“Tales teoremi şekli çiz”, “ABC üçgeninde Öklid teoremini uygula”). Hedef belirsizse nasıl düzelteceğiniz söylenir; anlaşılmayan komut çizimi değiştirmez. Shift+Enter yeni satır açar.</p>
       <label className="relative mb-2 block">
         <Search aria-hidden className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <input type="search" aria-label="Komut örneklerinde ara" value={helpFilter} onChange={e => setHelpFilter(e.target.value)}
@@ -240,7 +241,7 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
         </section>)}
         {helpGroups.length === 0 && <p className="text-xs text-muted-foreground">“{helpFilter}” için örnek bulunamadı. Yine de cümlenizi yazıp deneyebilirsiniz.</p>}
       </div>
-      <p className="mt-2 text-[11px] text-muted-foreground">Araç kutusundaki işlerin hepsi yazarak ya da konuşarak da yapılabilir: çizim, inşa, dönüşüm, ölçüm, düzenleme, görünüm, kaydırıcı ve fonksiyonlar.</p>
+      <p className="mt-2 text-[11px] text-muted-foreground">Araç kutusundaki işlerin hepsi yazarak ya da konuşarak da yapılabilir: çizim, inşa, dönüşüm, ölçüm, düzenleme, görünüm, kaydırıcı ve fonksiyonlar; ayrıca teoremler: Öklid, Pisagor, Tales, üçgen ve çember teoremleri (“Öklid üçgeni çiz”, “kesenler teoremini göster”).</p>
     </div>}
     {showSuggestions && <div className={`${popoverClass} z-40 rounded-xl border border-border bg-card shadow-xl overflow-hidden`}>
       <p className="px-3 py-2 text-[11px] text-muted-foreground border-b border-border">Komut önerileri · ↑ ↓ ile gezin, Enter ile metne alın; tekrar Enter ile uygulayın.</p>

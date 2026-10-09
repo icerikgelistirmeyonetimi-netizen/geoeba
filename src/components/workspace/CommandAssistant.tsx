@@ -5,13 +5,13 @@ import { Keyboard, Loader2, Mic, MicOff, Settings2 } from 'lucide-react';
 import { ToolMode } from '@/types/workspace';
 import { workspaceOwnsKeyboard } from './toolShortcuts';
 import { CommandPanel, IncomingCommand } from './CommandPanel';
-import { loadSpeechMode, saveSpeechMode, SpeechEngine, SpeechMode, useSpeechInput } from '@/hooks/useSpeechInput';
+import { SpeechEngine, useSpeechInput } from '@/hooks/useSpeechInput';
 import { chooseSpokenCommand, looksIncomplete } from '@/math/commands/speechChoice';
 import { executeTurkishCommand } from '@/math/turkishCommands';
 import { useWorkspace } from '@/state/WorkspaceContext';
 
 const AUTO_RUN_KEY = 'geoeba_ses_otomatik_uygula_v1';
-const ENGINE_NAME: Record<SpeechEngine, string> = { browser: 'Tarayıcı ses tanıma', device: 'Cihaz üstü ses tanıma', whisper: 'Çevrimdışı model' };
+const ENGINE_NAME: Record<SpeechEngine, string> = { browser: 'Tarayıcı ses tanıma', device: 'Cihaz üstü ses tanıma' };
 
 /**
  * Tuvalin köşesinde duran klavye + mikrofon düğmesi.
@@ -23,7 +23,6 @@ export function CommandAssistant({ onSelectTool }: { onSelectTool: (tool: ToolMo
   const [open, setOpen] = useState(false);
   const [queue, setQueue] = useState<IncomingCommand[]>([]);
   const [heard, setHeard] = useState<string[]>([]);
-  const [mode, setMode] = useState<SpeechMode>('auto');
   const [autoRun, setAutoRun] = useState(true);
   const [settings, setSettings] = useState(false);
   const [micOn, setMicOn] = useState(false);
@@ -42,7 +41,6 @@ export function CommandAssistant({ onSelectTool }: { onSelectTool: (tool: ToolMo
   }, []);
 
   useEffect(() => {
-    setMode(loadSpeechMode());
     try { setAutoRun(localStorage.getItem(AUTO_RUN_KEY) !== 'false'); } catch { /* varsayılan: hemen uygula */ }
   }, []);
 
@@ -79,8 +77,8 @@ export function CommandAssistant({ onSelectTool }: { onSelectTool: (tool: ToolMo
     }
     enqueue(choice.text);
   }, [enqueue]);
-  const speech = useSpeechInput({ mode, onResult });
-  const { status, interim, level, error, engine, progress, pending } = speech.state;
+  const speech = useSpeechInput({ onResult });
+  const { status, interim, level, error, engine } = speech.state;
 
   // Tarayıcı hata verip dinlemeyi kapattıysa düğme de kapalı görünsün.
   useEffect(() => { if (status === 'error' || status === 'idle') setMicOn(false); }, [status]);
@@ -110,22 +108,18 @@ export function CommandAssistant({ onSelectTool }: { onSelectTool: (tool: ToolMo
   const settingsPanel = <span className="relative">
     <button type="button" onClick={() => setSettings(value => !value)} aria-expanded={settings} aria-label="Ses ayarları"
       className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"><Settings2 className="h-3.5 w-3.5" /></button>
-    {settings && <div role="dialog" aria-label="Ses ayarları" className="absolute right-0 top-full z-50 mt-1 w-64 rounded-xl border border-border bg-card p-3 text-xs shadow-xl">
-      <p className="mb-1.5 font-bold text-foreground">Ses tanıma</p>
-      {([['auto', 'Otomatik', 'Tarayıcının ses tanıması; yoksa ya da internet yoksa çevrimdışı model.'], ['offline', 'Yalnızca çevrimdışı', 'Ses bilgisayardan çıkmaz. İlk kullanımda ~80 MB model yüklenir.']] as const).map(([value, title, hint]) =>
-        <label key={value} className="mb-1.5 flex cursor-pointer gap-2">
-          <input type="radio" name="ses-modu" checked={mode === value} disabled={micOn} onChange={() => { setMode(value); saveSpeechMode(value); }} className="mt-0.5" />
-          <span><span className="font-semibold">{title}</span><span className="block text-[11px] text-muted-foreground">{hint}</span></span>
-        </label>)}
-      <label className="mt-2 flex cursor-pointer items-center gap-2 border-t border-border pt-2">
+    {/* Kutu tuvalin altında durduğu için pencere yukarı açılır; aşağı açılınca ekranın altında kesiliyordu. */}
+    {settings && <div role="dialog" aria-label="Ses ayarları" className="absolute right-0 bottom-full z-50 mb-1 w-64 rounded-xl border border-border bg-card p-3 text-xs shadow-xl">
+      <p className="mb-1.5 font-bold text-foreground">Sesli komut</p>
+      <label className="flex cursor-pointer items-center gap-2">
         <input type="checkbox" checked={autoRun} onChange={e => { setAutoRun(e.target.checked); try { localStorage.setItem(AUTO_RUN_KEY, String(e.target.checked)); } catch { /* yok say */ } }} />
         <span>Söyleyince hemen uygula</span>
       </label>
-      {micOn && <p className="mt-2 text-[11px] text-muted-foreground">Ses yöntemi mikrofon kapalıyken değiştirilebilir.</p>}
+      <p className="mt-2 text-[11px] text-muted-foreground">Ses, tarayıcının kendi ses tanımasıyla yazıya çevrilir; sayfaya model yüklenmez.</p>
     </div>}
   </span>;
 
-  const showBubble = micOn || status === 'transcribing' || status === 'error';
+  const showBubble = micOn || status === 'error';
   const bubble = showBubble && <div role="status" aria-live="polite"
     className={`pointer-events-auto mb-1 w-[min(20rem,calc(100vw-7rem))] rounded-2xl border px-3 py-2 text-xs shadow-xl backdrop-blur ${status === 'error' ? 'border-destructive/40 bg-destructive/10 text-destructive' : 'border-border bg-card/95 text-foreground'}`}>
     {status === 'error' ? <span>{error}</span> : <>
@@ -133,13 +127,12 @@ export function CommandAssistant({ onSelectTool }: { onSelectTool: (tool: ToolMo
         {status === 'listening'
           ? <span aria-hidden className="flex h-3 items-end gap-0.5">{[0.5, 1, 0.7].map((f, i) => <span key={i} className="w-1 rounded-full bg-destructive transition-all" style={{ height: `${Math.max(3, Math.min(12, 3 + level * 12 * f))}px` }} />)}</span>
           : <Loader2 aria-hidden className="h-3.5 w-3.5 animate-spin" />}
-        {status === 'starting' ? 'Mikrofon açılıyor…' : status === 'listening' ? 'Dinliyorum — komutlarınızı söyleyin' : 'Son söylenen yazıya çevriliyor…'}
+        {status === 'starting' ? 'Mikrofon açılıyor…' : 'Dinliyorum — komutlarınızı söyleyin'}
       </span>
-      {progress !== undefined && progress < 1 && <span className="mt-1 block text-muted-foreground">Çevrimdışı model yükleniyor: %{Math.round(progress * 100)}</span>}
       {interim && <span className="mt-1 block text-muted-foreground">“{interim}”</span>}
       {heard.map((text, i) => <span key={`${i}-${text}`} className={`mt-1 block truncate ${i === 0 ? 'text-foreground' : 'text-muted-foreground'}`}>✓ {text}</span>)}
       <span className="mt-1 block text-[10px] text-muted-foreground">
-        {engine ? ENGINE_NAME[engine] : ''}{pending > 0 ? ` · ${pending} cümle çevriliyor` : ''}{micOn ? ' · Kapatmak için mikrofona tekrar tıklayın' : ''}
+        {engine ? ENGINE_NAME[engine] : ''}{micOn ? ' · Kapatmak için mikrofona tekrar tıklayın' : ''}
       </span>
     </>}
   </div>;

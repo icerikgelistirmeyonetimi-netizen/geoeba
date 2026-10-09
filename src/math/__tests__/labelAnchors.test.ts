@@ -153,6 +153,17 @@ describe('anchoredLabelPosition', () => {
     expect({ x: after.x - before.x, y: after.y - before.y }).toEqual({ x: -5, y: 11 });
   });
 
+  it('bırakıldığı yer (base + ref) tek bir köşe oynayınca kıpırdamaz; çapa dünya biriminde kalır', () => {
+    const objects = triangle();
+    const sabit: MeasurementLabelAnchor = {
+      pointIds: ['A', 'B', 'C'], offset: { x: 8, y: 3 }, alignment: 'left', base: { x: 20, y: 9 },
+      ref: objects.filter(o => o.type === 'point').map(o => ({ id: o.id, x: (o as PointObject).x, y: (o as PointObject).y })),
+    };
+    expect(anchoredLabelPosition(sabit, objects, 4)).toEqual({ x: 20, y: 9 });
+    const bozuk = objects.map(o => o.id === 'A' && o.type === 'point' ? { ...o, x: o.x + 3 } : o);
+    expect(anchoredLabelPosition(sabit, bozuk, 4)).toEqual({ x: 20, y: 9 });
+  });
+
   it.each(['left', 'center', 'right'] as const)('%s hizalı değer uzadığında seçilen hizalama eksenini korur', alignment => {
     const anchor: MeasurementLabelAnchor = { pointIds: ['A', 'B', 'C'], offset: { x: 8, y: 3 }, alignment };
     const referenceX = 10;

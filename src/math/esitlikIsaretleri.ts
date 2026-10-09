@@ -539,8 +539,9 @@ export function esitlikIsaretleri(
   }
 
   // 6.5) AÇI öğeleri: aynı ölçüdeki açılar eş işaret alır (kullanıcı isteği, 2026-09-25).
-  // Açının çizilen yay yarıçapı EKRAN sabitidir (Canvas: 22·etiketOlcegi px), dünya birimi değil; bu yüzden
-  // `yaricap` verilmez ve çizim katmanı yarıçapı kendisi geçirir (esitlikCizimi.centikYolu, aciYaricapiPx).
+  // Açının çizilen yay yarıçapı EKRAN ölçüsüdür (Canvas: aciYayYaricapi · etiketOlcegi px; dar açıda büyür),
+  // dünya birimi değil; bu yüzden `yaricap` verilmez ve çizim katmanı yarıçapı kendisi geçirir
+  // (esitlikCizimi.centikYolu; EsitlikIsaretleriKatmani aciYaricaplariPx, açının kimliğiyle).
   // Açı bir BAĞLAYICI değildir: ayrı şekilleri birleştirmez, köşesinin bileşenine aittir.
   const aciListesi: HamOge[] = [];
   for (const o of objects) {

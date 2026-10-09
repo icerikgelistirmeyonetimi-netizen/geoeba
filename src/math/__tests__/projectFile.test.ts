@@ -153,6 +153,16 @@ describe('measurement label anchors', () => {
     expect(JSON.stringify(input)).toBe(before);
   });
 
+  it('elle yazılmış etiket metinlerini (labelTexts) taşır; boşları atar, metin olmayanı reddeder', () => {
+    const polygon = { ...base, labelTexts: { area: 'Alan = ?', edge0: 'taban', perimeter: '   ' } };
+    const loaded = parseProjectFile({ objects: [p('A'), p('B', 3), p('C', 0, 4), polygon] });
+    expect(loaded.objects[3].labelTexts).toEqual({ area: 'Alan = ?', edge0: 'taban' });
+    expect(parseProjectFile(JSON.parse(JSON.stringify(loaded)))).toEqual(loaded);
+    expect(parseProjectFile({ objects: [p('A'), p('B', 3), p('C', 0, 4), { ...base, labelTexts: { area: '  ' } }] }).objects[3]).not.toHaveProperty('labelTexts');
+    expect(() => parseProjectFile({ objects: [p('A'), p('B', 3), p('C', 0, 4), { ...base, labelTexts: { area: 5 } }] })).toThrow();
+    expect(() => parseProjectFile({ objects: [p('A'), p('B', 3), p('C', 0, 4), { ...base, labelTexts: 'Alan' }] })).toThrow();
+  });
+
   it('does not turn a decorative point anchor into a self dependency', () => {
     const loaded = parseProjectFile({ objects: [{ ...p('A'), labelAnchors: { pointLabel: anchor } }, p('B'), p('C')] });
     expect(loaded.objects[0].labelAnchors?.pointLabel).toEqual(anchor);
@@ -227,7 +237,7 @@ describe('project file validation', () => {
   it('preserves 3D scene, camera, styles and plane settings in a JSON round trip', () => {
     const file = { version: '2.0', objects: [], solids: [{ id: 'cube', type: 'cube', name: 'Küp', position: { x: 1, y: 2, z: 3 }, rotation: { x: 0, y: 30, z: 0 }, dimensions: { width: 3, height: 3, depth: 3 }, color: '#123456', opacity: 0.8, unfoldProgress: 0.5, showFaces: true, showWireframe: true, showVertices: false, selectedFaceIndex: null }],
       camera3D: { rotX: 25, rotY: -40, zoom: 55, panX: 0, panY: 30, perspective: 700, showAxes: true, showGrid: false, showCoordinates: false },
-      styleSettings: { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, showLabelBoxes: true, hideFills: false, olcuYazimi: 'kisa', aciYazimi: 'isaret', tamSayiOlcu: false },
+      styleSettings: { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, showLabelBoxes: true, hideFills: false, olcuYazimi: 'kisa', aciYazimi: 'isaret', tamSayiOlcu: false, yaziAltSiniri: 0.4 },
       layoutMode: '3d_only', viewport: { zoom: 88, panX: 42, panY: 0, showCoordinates: false } };
     expect(parseProjectFile(JSON.parse(JSON.stringify(file)))).toEqual(file);
   });
@@ -235,7 +245,15 @@ describe('project file validation', () => {
     const eski = { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideFills: false };
     // Eski dosyanın hideLabelBoxes: false değeri yalnızca eski varsayılandı: dosya kutusuz açılır.
     expect(parseProjectFile({ objects: [], styleSettings: { ...eski, hideLabelBoxes: false } }).styleSettings)
-      .toEqual({ ...eski, showLabelBoxes: false, olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayiOlcu: true });
+      .toEqual({ ...eski, showLabelBoxes: false, olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayiOlcu: true, yaziAltSiniri: 0.7 });
+  });
+  it('uzaklaşınca yazı alt sınırı 0–1 arası bir orandır; dışı reddedilir', () => {
+    const stil = { strokeScale: 1, fontScale: 1, pointRadius: 6, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideFills: false };
+    expect(parseProjectFile({ objects: [], styleSettings: { ...stil, yaziAltSiniri: 0 } }).styleSettings?.yaziAltSiniri).toBe(0);
+    expect(parseProjectFile({ objects: [], styleSettings: { ...stil, yaziAltSiniri: 1 } }).styleSettings?.yaziAltSiniri).toBe(1);
+    for (const kotu of [-0.1, 1.5, 'yarım', NaN]) {
+      expect(() => parseProjectFile({ objects: [], styleSettings: { ...stil, yaziAltSiniri: kotu } })).toThrow();
+    }
   });
   it('drops unknown style keys instead of copying them into the document', () => {
     const s = { strokeScale: 1, fontScale: 1, pointRadius: 6, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideLabelBoxes: false, hideFills: false, birSey: 'x' };

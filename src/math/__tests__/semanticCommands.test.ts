@@ -79,6 +79,12 @@ describe('semantic intents catalog', () => {
       'zoom', 'grid', 'undo', 'regular_polygon', 'ellipse', 'arc', 'sector', 'polygon']) expect(ids).toContain(id);
   });
 
+  it('covers the theorem family', () => {
+    const ids = intents.map(i => i.id);
+    for (const id of ['oklid', 'pisagor', 'tales', 'orta_taban', 'euler', 'dokuz_nokta', 'dis_teget', 'kiris', 'kesen', 'kuvvet', 'cevre_aci',
+      'teget_kiris', 'ucgen_teoremi', 'ortak_teget']) expect(ids).toContain(id);
+  });
+
   it('gives every intent a keyword anchor so none is penalised by default', () => {
     const anchored = new Set(SEMANTIC_ANCHORS.map(([, id]) => id));
     for (const intent of intents) expect(anchored.has(intent.id), intent.id).toBe(true);
@@ -376,5 +382,202 @@ describe('semantic canonical commands run on the real engine', () => {
     const result = executeTurkishCommand(command!, twoLines);
     if (!result.ok) throw new Error(`“${command}” motorda başarısız: ${result.message}`);
     expect(result.objects.length).toBeGreaterThan(twoLines.length);
+  });
+});
+
+// ------------------------------------------------------------------------------------------- teoremler ve klasik şekiller
+
+/** M merkezli r = 3 çember, üzerinde A(3; 0) ve B(0; 3), dışında P(6; 0); `ikiCember` ayrıca N merkezli r = 2 çemberi içerir. */
+const cemberKur = (ikinci: boolean) => build(s => {
+  const m = s.addPoint({ x: 0, y: 0 }, { label: 'M' });
+  s.addCircle({ centerId: m.id, radius: 3 });
+  s.addPoint({ x: 3, y: 0 }, { label: 'A' });
+  s.addPoint({ x: 0, y: 3 }, { label: 'B' });
+  s.addPoint({ x: 6, y: 0 }, { label: 'P' });
+  if (!ikinci) return;
+  const n = s.addPoint({ x: 8, y: 0 }, { label: 'N' });
+  s.addCircle({ centerId: n.id, radius: 2 });
+});
+const cemberli = cemberKur(false);
+const ikiCember = cemberKur(true);
+
+describe('semantic anchors for theorems and classical figures', () => {
+  it.each([
+    ['Öklid üçgeni çiz', 'oklid'],
+    ['ABC üçgeninde Öklid bağıntılarını uygula', 'oklid'],
+    ['Pisagor şekli çiz', 'pisagor'],
+    ['Dik üçgenin kenarları üzerine kareler çiz', 'pisagor'],
+    ['Tales teoremi şekli çiz', 'tales'],
+    ['Temel orantı teoremini göster', 'tales'],
+    ['Üçgenin orta tabanını çiz', 'orta_taban'],
+    ['Üçgenin Euler doğrusunu çiz', 'euler'],
+    ['Euler çemberi çiz', 'dokuz_nokta'],
+    ['Feuerbach çemberini çiz', 'dokuz_nokta'],
+    ['Üçgenin dış teğet çemberini çiz', 'dis_teget'],
+    ['AB kirişini çiz', 'kiris'],
+    ['Merkezden kirişe dikme indir', 'kiris'],
+    ['P noktasından çembere kesen çiz', 'kesen'],
+    ['Kirişler teoremini göster', 'kesen'],
+    ['Teğet-kesen teoremini göster', 'kesen'],
+    ['P noktasının çembere göre kuvvetini hesapla', 'kuvvet'],
+    ['Çevre açı merkez açının yarısıdır', 'cevre_aci'],
+    ['Teğet-kiriş açısını çiz', 'teget_kiris'],
+    ['Açıortay teoremini göster', 'ucgen_teoremi'],
+    ['Kosinüs teoremiyle kenarı hesapla', 'ucgen_teoremi'],
+    ['Kenarları 2, 3 ve 7 olan üçgen çizilebilir mi', 'ucgen_teoremi'],
+    ['İki çemberin ortak teğetlerini çiz', 'ortak_teget'],
+  ])('“%s” → %s', (text, intent) => {
+    expect(anchorIntent(text)).toBe(intent);
+  });
+
+  it('keeps the older constructions and functions apart from the theorem family', () => {
+    expect(anchorIntent('ABC açısının açıortayını çiz')).toBe('angle_bisector');
+    expect(anchorIntent('A köşesinden kenarortay çiz')).toBe('median');
+    expect(anchorIntent('Sinüs fonksiyonunun grafiğini göster')).toBe('function');
+    expect(anchorIntent('B noktasından çembere teğet çiz')).toBe('tangent');
+    expect(anchorIntent('Doğruya doksan derece açıyla kesen bir doğru oluştur')).toBe('perpendicular');
+    expect(anchorIntent('Şeklin çevresini ölç')).toBe('perimeter');
+  });
+});
+
+describe('semantic parameter extraction for theorems', () => {
+  it.each([
+    ['Öklid üçgeni istiyorum', 'oklid', 'Öklid üçgeni çiz'],
+    ['dik kenarları 6 ve 8 olan Öklid üçgeni', 'oklid', 'dik kenarları 6 ve 8 olan Öklid üçgeni çiz'],
+    ['hipotenüsü 10 olan Öklid üçgeni', 'oklid', 'hipotenüsü 10 olan Öklid üçgeni çiz'],
+    ['üçgende Öklid bağıntılarını göster', 'oklid', 'ABC üçgeninde Öklid teoremini uygula'],
+    ['ABC üçgeninde Öklid şeklini kur', 'oklid', 'ABC üçgeninde Öklid şeklini kur'],
+    ['Pisagor şekli yap', 'pisagor', 'Pisagor şekli çiz'],
+    ['dik kenarları 5 ve 12 olan Pisagor şekli', 'pisagor', 'dik kenarları 5 ve 12 olan Pisagor şekli çiz'],
+    ['Pisagor bağıntısını doğrula', 'pisagor', 'ABC üçgeninde Pisagor bağıntısını yaz'],
+    ["Pisagor'a göre üçgen dik mi", 'pisagor', "Pisagor'a göre ABC dik mi"],
+    ['Tales şekli çiz', 'tales', 'Tales teoremi şekli çiz'],
+    ['kelebek Tales şekli', 'tales', 'kelebek Tales şekli çiz'],
+    ['Tales çemberi çiz', 'tales', 'Tales çemberi çiz'],
+    ['AB çaplı Tales çemberi', 'tales', 'AB çaplı Tales çemberi çiz'],
+    ['ABC üçgeninde 2:1 oranında Tales şekli', 'tales', 'ABC üçgeninde 2:1 oranında Tales şekli kur'],
+    ['üçgende Tales oranlarını göster', 'tales', 'ABC üçgeninde Tales şekli kur'],
+    ['üçgenin orta tabanını çiz', 'orta_taban', 'ABC üçgeninin orta tabanını çiz'],
+    ['üçgenin orta tabanlarını çiz', 'orta_taban', 'ABC üçgeninin orta tabanlarını çiz'],
+    ['Euler doğrusu', 'euler', 'ABC üçgeninin Euler doğrusunu çiz'],
+    ['dokuz nokta çemberini çiz', 'dokuz_nokta', 'ABC üçgeninin dokuz nokta çemberini çiz'],
+    ['dokuz nokta çemberini merkeziyle çiz', 'dokuz_nokta', 'ABC üçgeninin dokuz nokta çemberini merkeziyle çiz'],
+    ['dış teğet çemberi çiz', 'dis_teget', 'ABC üçgeninin dış teğet çemberini çiz'],
+    ['A köşesine ait dış teğet çemberi', 'dis_teget', 'ABC üçgeninin A köşesine ait dış teğet çemberini çiz'],
+    ['üç dış teğet çemberi çiz', 'dis_teget', 'ABC üçgeninin üç dış teğet çemberini çiz'],
+    ['açıortay teoremini göster', 'ucgen_teoremi', 'ABC üçgeninde açıortay teoremini uygula'],
+    ['B köşesi için açıortay teoremi', 'ucgen_teoremi', 'B köşesi için açıortay teoremini uygula'],
+    ['kenarortay teoremini uygula', 'ucgen_teoremi', 'ABC üçgeninde kenarortay teoremini uygula'],
+    ['Stewart teoremini doğrula', 'ucgen_teoremi', 'ABC üçgeninde Stewart teoremini uygula'],
+    ['Ceva teoremini göster', 'ucgen_teoremi', 'ABC üçgeninde Ceva teoremini uygula'],
+    ['Menelaus teoremini uygula', 'ucgen_teoremi', 'ABC üçgeninde Menelaus teoremini uygula'],
+    ['sinüs teoremini yaz', 'ucgen_teoremi', 'ABC üçgeninde sinüs teoremini uygula'],
+    ['A açısı için kosinüs teoremi', 'ucgen_teoremi', 'A açısı için kosinüs teoremini uygula'],
+    ['Heron formülüyle alanı bul', 'ucgen_teoremi', 'ABC üçgeninde Heron formülünü uygula'],
+    ['üçgen eşitsizliğini doğrula', 'ucgen_teoremi', 'ABC üçgeninde üçgen eşitsizliğini uygula'],
+    ['kenarları 2, 3 ve 7 olan üçgen çizilebilir mi', 'ucgen_teoremi', 'kenarları 2, 3 ve 7 olan üçgen çizilebilir mi'],
+    ['büyük açı karşısında büyük kenar', 'ucgen_teoremi', 'ABC üçgeninde açı kenar ilişkisini uygula'],
+  ])('“%s” (%s) → %s', (text, intent, expected) => {
+    expect(say(text, intent)).toEqual({ command: expected });
+  });
+
+  it.each([
+    ['AB kirişini çiz', 'kiris', 'AB kirişini çiz'],
+    ['çembere bir kiriş çiz', 'kiris', 'çembere bir kiriş çiz'],
+    ['çemberin çapını çiz', 'kiris', 'çemberin çapını çiz'],
+    ['merkezden kirişe dikme indir', 'kiris', 'merkezden kirişe dikme indir'],
+    ['P noktasından çembere kesen çiz', 'kesen', 'P noktasından çembere kesen çiz'],
+    ["P'den iki kesen çiz", 'kesen', 'P noktasından çembere iki kesen çiz'],
+    ['kesenler teoremini göster', 'kesen', 'kesenler teoremini göster'],
+    ['kirişler teoremini göster', 'kesen', 'kirişler teoremini göster'],
+    ['teğet-kesen teoremini göster', 'kesen', 'teğet-kesen teoremini göster'],
+    ['P noktasının çembere göre kuvveti kaçtır', 'kuvvet', 'P noktasının çembere göre kuvvetini hesapla'],
+    ['kuvvet teoremini göster', 'kuvvet', 'kuvvet teoremini göster'],
+    ['çevre açı çiz', 'cevre_aci', 'çevre açı çiz'],
+    ['AB yayını gören çevre açıyı çiz', 'cevre_aci', 'AB yayını gören çevre açıyı çiz'],
+    ['çevre açı merkez açının yarısıdır', 'cevre_aci', 'çevre açı teoremini göster'],
+    ['teğet-kiriş açısını çiz', 'teget_kiris', 'teğet-kiriş açısını çiz'],
+    ['A noktasındaki teğet-kiriş açısı', 'teget_kiris', 'A noktasındaki teğet-kiriş açısını çiz'],
+    ['teğet kiriş açısı teoremini göster', 'teget_kiris', 'teğet kiriş açısı teoremini göster'],
+  ])('circle scene: “%s” (%s) → %s', (text, intent, expected) => {
+    expect(say(text, intent, [], cemberli)).toEqual({ command: expected });
+  });
+
+  it.each([
+    ['iki çemberin ortak teğetlerini çiz', 'ortak_teget', 'iki çemberin ortak teğetlerini çiz'],
+    ['iç ortak teğetleri çiz', 'ortak_teget', 'iç ortak teğetleri çiz'],
+    ['dış ortak teğetleri çiz', 'ortak_teget', 'dış ortak teğetleri çiz'],
+    ['M merkezli çembere bir kiriş çiz', 'kiris', 'M merkezli çembere bir kiriş çiz'],
+    ['M merkezli çembere AB kirişini çiz', 'kiris', 'M merkezli çembere AB kirişini çiz'],
+    ['M merkezli çemberin çapını çiz', 'kiris', 'M merkezli çemberin çapını çiz'],
+    ['P noktasından M merkezli çembere kesen çiz', 'kesen', 'P noktasından M merkezli çembere kesen çiz'],
+    ['P noktasının M merkezli çembere göre kuvveti', 'kuvvet', 'P noktasının M merkezli çembere göre kuvvetini hesapla'],
+    ['M merkezli çemberde çevre açı çiz', 'cevre_aci', 'M merkezli çemberde çevre açı çiz'],
+    ['M merkezli çemberde teğet-kiriş açısını çiz', 'teget_kiris', 'M merkezli çemberde teğet-kiriş açısını çiz'],
+  ])('two circles: “%s” (%s) → %s', (text, intent, expected) => {
+    expect(say(text, intent, [], ikiCember)).toEqual({ command: expected });
+  });
+
+  it('asks which circle when several exist and none is named', () => {
+    expect(say('çembere bir kiriş çiz', 'kiris', [], ikiCember).clarification).toMatch(/Birden fazla çember/);
+    expect(say('kesenler teoremini göster', 'kesen', [], ikiCember).clarification).toMatch(/Birden fazla çember/);
+    const [circle] = ikiCember.filter(o => o.type === 'circle');
+    expect(say('çembere bir kiriş çiz', 'kiris', [circle.id], ikiCember)).toEqual({ command: 'M merkezli çembere bir kiriş çiz' });
+  });
+
+  it.each([
+    ['Öklid bağıntılarını göster', 'oklid', /Hangi üçgen/],
+    ['Euler doğrusunu çiz', 'euler', /Hangi üçgen/],
+    ['dokuz nokta çemberi', 'dokuz_nokta', /Hangi üçgen/],
+    ['dış teğet çemberi çiz', 'dis_teget', /Hangi üçgen/],
+    ['Stewart teoremini göster', 'ucgen_teoremi', /Hangi üçgen/],
+    ['orta tabanı çiz', 'orta_taban', /Hangi üçgen/],
+    ['kiriş çiz', 'kiris', /çember/],
+    ['kesen çiz', 'kesen', /çember/],
+    ['noktanın kuvvetini bul', 'kuvvet', /çember/],
+  ])('asks instead of guessing without a figure: “%s” (%s)', (text, intent, pattern) => {
+    const result = say(text, intent, [], []);
+    expect(result.command).toBeUndefined();
+    expect(result.clarification).toMatch(pattern);
+  });
+
+  it('asks for the point of a power and for two circles', () => {
+    expect(say('çembere göre kuvveti hesapla', 'kuvvet', [], cemberli).clarification).toMatch(/Hangi noktanın/);
+    expect(say('ortak teğetleri çiz', 'ortak_teget', [], cemberli).clarification).toMatch(/iki çember/);
+  });
+});
+
+describe('semantic theorem commands run on the real engine', () => {
+  const triangleCases: [string, string][] = [
+    ['Öklid üçgeni istiyorum', 'oklid'], ['dik kenarları 6 ve 8 olan Öklid üçgeni', 'oklid'], ['üçgende Öklid bağıntılarını göster', 'oklid'],
+    ['ABC üçgeninde Öklid şeklini kur', 'oklid'], ['Pisagor şekli yap', 'pisagor'], ['Pisagor bağıntısını doğrula', 'pisagor'], ["Pisagor'a göre üçgen dik mi", 'pisagor'],
+    ['Tales şekli çiz', 'tales'], ['kelebek Tales şekli', 'tales'], ['Tales çemberi çiz', 'tales'], ['ABC üçgeninde 2:1 oranında Tales şekli', 'tales'], ['üçgende Tales oranlarını göster', 'tales'],
+    ['üçgenin orta tabanını çiz', 'orta_taban'], ['üçgenin orta tabanlarını çiz', 'orta_taban'], ['Euler doğrusu', 'euler'], ['dokuz nokta çemberini merkeziyle çiz', 'dokuz_nokta'],
+    ['dış teğet çemberi çiz', 'dis_teget'], ['A köşesine ait dış teğet çemberi', 'dis_teget'], ['üç dış teğet çemberi çiz', 'dis_teget'],
+    ['açıortay teoremini göster', 'ucgen_teoremi'], ['B köşesi için açıortay teoremi', 'ucgen_teoremi'], ['kenarortay teoremini uygula', 'ucgen_teoremi'],
+    ['Stewart teoremini doğrula', 'ucgen_teoremi'], ['Ceva teoremini göster', 'ucgen_teoremi'],
+    ['sinüs teoremini yaz', 'ucgen_teoremi'], ['A açısı için kosinüs teoremi', 'ucgen_teoremi'], ['Heron formülüyle alanı bul', 'ucgen_teoremi'],
+    ['üçgen eşitsizliğini doğrula', 'ucgen_teoremi'], ['kenarları 2, 3 ve 7 olan üçgen çizilebilir mi', 'ucgen_teoremi'], ['büyük açı karşısında büyük kenar', 'ucgen_teoremi'],
+  ];
+  const circleCases: [string, string][] = [
+    ['AB kirişini çiz', 'kiris'], ['çembere bir kiriş çiz', 'kiris'], ['çemberin çapını çiz', 'kiris'], ['merkezden kirişe dikme indir', 'kiris'],
+    ['P noktasından çembere kesen çiz', 'kesen'], ["P'den iki kesen çiz", 'kesen'], ['kesenler teoremini göster', 'kesen'], ['kirişler teoremini göster', 'kesen'], ['teğet-kesen teoremini göster', 'kesen'],
+    ['P noktasının çembere göre kuvveti kaçtır', 'kuvvet'], ['kuvvet teoremini göster', 'kuvvet'],
+    ['çevre açı çiz', 'cevre_aci'], ['AB yayını gören çevre açıyı çiz', 'cevre_aci'], ['çevre açı merkez açının yarısıdır', 'cevre_aci'],
+    ['teğet-kiriş açısını çiz', 'teget_kiris'], ['A noktasındaki teğet-kiriş açısı', 'teget_kiris'], ['teğet kiriş açısı teoremini göster', 'teget_kiris'],
+  ];
+  const twoCircleCases: [string, string][] = [
+    ['iki çemberin ortak teğetlerini çiz', 'ortak_teget'], ['iç ortak teğetleri çiz', 'ortak_teget'],
+    ['M merkezli çembere bir kiriş çiz', 'kiris'], ['M merkezli çembere AB kirişini çiz', 'kiris'], ['M merkezli çemberin çapını çiz', 'kiris'],
+    ['P noktasından M merkezli çembere kesen çiz', 'kesen'], ['P noktasının M merkezli çembere göre kuvveti', 'kuvvet'],
+    ['M merkezli çemberde çevre açı çiz', 'cevre_aci'], ['M merkezli çemberde teğet-kiriş açısını çiz', 'teget_kiris'],
+  ];
+  // Menelaus: kesen doğru üç kenar doğrusunu da kesmeli; `rich` sahnesindeki DE doğrusu AB'ye paralel olduğundan düz üçgen sahnesi kullanılır.
+  it.each([...triangleCases.map(c => [...c, rich] as const), ['Menelaus teoremini uygula', 'ucgen_teoremi', scene] as const,
+    ...circleCases.map(c => [...c, cemberli] as const), ...twoCircleCases.map(c => [...c, ikiCember] as const)])('“%s” (%s)', (text, intent, objects) => {
+    const { command } = say(text, intent, [], objects);
+    expect(command, 'komut üretilmedi').toBeTruthy();
+    const result = executeTurkishCommand(command!, objects);
+    if (!result.ok) throw new Error(`“${command}” motorda başarısız: ${result.message}`);
   });
 });

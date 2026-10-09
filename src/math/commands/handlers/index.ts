@@ -11,8 +11,9 @@ import * as algebra from './algebra';
 import * as conics from './conics';
 import * as esitlik from './esitlik';
 import * as birlestir from './birlestir';
+import * as teoremler from './teoremler';
 
-const MODULES = [app, edit, birlestir, transforms, constructions, measure, polygons, conics, circles, basic, algebra, esitlik];
+const MODULES = [app, edit, birlestir, teoremler, transforms, constructions, measure, polygons, conics, circles, basic, algebra, esitlik];
 
 /** Tüm komut aileleri. Eşit puanda bu sıra geçerlidir. */
 export const HANDLERS: CommandHandler[] = MODULES.flatMap(m => m.handlers);

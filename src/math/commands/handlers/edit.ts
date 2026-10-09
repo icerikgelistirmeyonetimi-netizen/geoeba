@@ -381,6 +381,12 @@ const NAME_WORDS = /\b(?:ad(?:i|ini|lari|larini)|isim\w*|ismi\w*|etiket\w*|harf(
 const VERTEX_PART = /\bkose(?:ler)?(?:i|ini|si|sini|leri|lerini)\b/;
 /** "ikisini de gizle", "üçünü de göster": önceki komutun nesneleri */
 const COUNT_PRONOUN = /\b(?:ikisini|ikisi|ucunu|ucu|dordunu|dordu)\b/;
+/**
+ * "Öklid bağıntılarını göster", "ABC üçgeninde Tales teoremini göster", "Euler doğrusunu göster", "açı kenar ilişkisini göster":
+ * bir bağıntıyı ya da adlı şekli KURMA isteğidir (teoremler ailesi), gizlenmiş nesneyi geri getirme değil. Gizleme ("Öklid
+ * üçgenini gizle") yine bu ailede kalır.
+ */
+const THEOREM_SHOW = /\b(?:teorem|baginti|formul|kural(?:i|ini|lari|larini)?\b|esitsizli|iliski|oran(?:i|ini|lari|larini)\b|oklid|oklit|euclid|pisagor|pitagor|tales|thales|euler|oyler|stewart|ceva\b|menela|heron|dokuz nokta|orta ?taban|kuvvet(?!li)|cevre aci|te[gy]et[ -]?kiris|dis ?te[gy]et|ortak te[gy]et)\w*/;
 
 const visibilityHandler: CommandHandler = {
   id: 'edit.visibility',
@@ -389,6 +395,7 @@ const visibilityHandler: CommandHandler = {
     const t = c.text;
     const hide = hides(t), show = SHOW.test(t);
     if (!hide && !show) return 0;
+    if (show && !hide && THEOREM_SHOW.test(t)) return 0;
     // Parça adları ("kenarortayları", "yüksekliği", "merkezini") ölçü sözcüğü değildir; "açıları gizle" açı nesnelerini gizler
     // (açıları göstermek ölçüm ailesinindir).
     const part = hasPartWord(c);
@@ -1384,6 +1391,8 @@ const reflexHandler: CommandHandler = {
     const t = c.text;
     if (!/\b(?:dis|ic|yansimali|buyuk|kucuk) aci\w*/.test(t)) return 0;
     if (c.hasVerb('question') || /\b(?:hesapla|olc|bul)\w*/.test(t) || STRONG_CREATE.test(t)) return 0;
+    // "dış açıortay teoremini göster", "büyük açının karşısında büyük kenar olduğunu göster": bağıntı gösterme (teoremler ailesi).
+    if (THEOREM_SHOW.test(t) || /\bkarsisinda/.test(t)) return 0;
     return SET_VERB.test(t) || /\bgoster\w*/.test(t) ? 89 : 0;
   },
   run(c, s) {

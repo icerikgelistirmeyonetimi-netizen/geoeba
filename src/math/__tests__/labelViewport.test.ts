@@ -97,6 +97,24 @@ describe('etiket yazılarının dar büyüme aralığı', () => {
     }
   });
 
+  it.each([[5, 0.7], [11, 0.7], [22, 0.7], [30.8, 0.7], [35.2, 0.8], [44, 1], [88, 1.05]])(
+    'alt sınır 0,7 iken zoom %s için yazı ölçeği %s olur (uzaklaşınca okunur kalır)', (zoom, expected) => {
+      expect(labelFontScale({ ...viewport, zoom }, 0.7)).toBeCloseTo(expected, 12);
+    },
+  );
+
+  it('alt sınır 0 eski davranıştır, 1 yazıyı hiç küçültmez; aralık dışı değerler kırpılır', () => {
+    const uzak = { ...viewport, zoom: 11 };
+    expect(labelFontScale(uzak, 0)).toBe(0.25);
+    expect(labelFontScale(uzak)).toBe(0.25);
+    expect(labelFontScale(uzak, 1)).toBe(1);
+    expect(labelFontScale(uzak, 3)).toBe(1);
+    expect(labelFontScale(uzak, -1)).toBe(0.25);
+    expect(labelFontScale(uzak, Number.NaN)).toBe(0.25);
+    // Yakınlaşınca alt sınır devreye girmez: tavan yine %5
+    expect(labelFontScale({ ...viewport, zoom: 300 }, 1)).toBe(1.05);
+  });
+
   it('yazı büyümesi sınırda süreklidir', () => {
     const zoom = LABEL_LAYOUT_ZOOM * 1.05;
     expect(labelFontScale({ ...viewport, zoom: zoom - 1e-8 })).toBeCloseTo(1.05, 8);

@@ -114,6 +114,15 @@ describe('normalizeSpokenCommand', () => {
     ['gün üçteki değeri nedir', 'gün üçteki değeri nedir'],
     ['hanın beşteki değeri kaç', "h'nin 5'teki değeri kaç"],
     ['fe noktasının adını ge yap', 'F noktasının adını G yap'],
+    // teoremler ve klasik şekiller
+    ['a be kirişini çiz', 'AB kirişini çiz'],
+    ['de e fe öklid üçgeni çiz', 'DEF öklid üçgeni çiz'],
+    ['a be ce üçgeninde öklid teoremini uygula', 'ABC üçgeninde öklid teoremini uygula'],
+    ['pe noktasından çembere kesen çiz', 'P noktasından çembere kesen çiz'],
+    ['pe noktasının çembere göre kuvvetini hesapla', 'P noktasının çembere göre kuvvetini hesapla'],
+    ['a be çaplı tales çemberi çiz', 'AB çaplı tales çemberi çiz'],
+    ['a be ce çevre açısını çiz', 'ABC çevre açısını çiz'],
+    ['a daki teğet kiriş açısını çiz', "A'daki teğet kiriş açısını çiz"],
   ])('%s', (spoken, expected) => {
     expect(normalizeSpokenCommand(spoken)).toBe(expected);
   });

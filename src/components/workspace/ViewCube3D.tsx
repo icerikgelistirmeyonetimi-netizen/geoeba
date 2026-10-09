@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { Camera3D } from '@/types/workspace3d';
-import { Home, RotateCcw, RotateCw } from 'lucide-react';
 
 interface ViewCube3DProps {
   camera: Camera3D;
@@ -210,33 +209,7 @@ export function ViewCube3D({ camera, setCamera }: ViewCube3DProps) {
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
-      {/* Üst Hızlı Kontrol Düğmeleri (Ev & Döndürme) */}
-      <div className="flex items-center gap-1 mb-1.5 p-1 rounded-xl bg-card/90 backdrop-blur-md border border-border/80 shadow-md">
-        <button
-          onClick={() => handleSetView({ rotX: 25, rotY: -40 })}
-          title="İzometrik Başlangıç Görünümü"
-          className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-all cursor-pointer"
-        >
-          <Home className="w-3.5 h-3.5" />
-        </button>
-
-        <button
-          onClick={() => setCamera((prev) => ({ ...prev, rotY: (prev.rotY + 45) % 360 }))}
-          title="45° Sola Döndür"
-          className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-all cursor-pointer"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-        </button>
-
-        <button
-          onClick={() => setCamera((prev) => ({ ...prev, rotY: (prev.rotY - 45) % 360 }))}
-          title="45° Sağa Döndür"
-          className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-all cursor-pointer"
-        >
-          <RotateCw className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
+      {/* Ev / 45° döndürme düğmeleri kaldırıldı (8 Ekim 2026): izometrik dönüş sağ çubukta, döndürme küple ve orta tuşla. */}
       {/* Tinkercad Stili 3D Navigasyon Küpü */}
       <div
         className="w-[90px] h-[90px] rounded-2xl bg-card/90 backdrop-blur-md border border-border shadow-lg p-0.5 cursor-grab active:cursor-grabbing flex items-center justify-center relative overflow-hidden"

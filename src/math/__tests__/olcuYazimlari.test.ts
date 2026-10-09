@@ -401,16 +401,17 @@ describe('ölçüm kartları', () => {
     expect(before.kutu.x0).toBeCloseTo(GORUNUM.width / 2 + (2 / 3 + 5) * GORUNUM.zoom, 5);
   });
 
-  it('çemberin başlığı, yarıçapı, alanı ve çevresi AYRI etiketlerdir', () => {
+  it('çemberin yarıçapı, alanı ve çevresi AYRI etiketlerdir; "Ç(M, r)" başlık kartı yoktur', () => {
     const M = nokta('M', 0, 0);
     const T = nokta('T', 2, 0);
     const circ = govde<CircleObject>({ id: 'c1', type: 'circle', centerPointId: M.id, radiusPointId: T.id, showArea: true, showPerimeter: true });
     const ks = kartlar([M, T, circ]);
     expect(metinler(ks)).toEqual([
-      'Ç(M, r)', 'r = |MT| = 2 br', 'Alan = πr² ≈ 12,57 br²', 'Çevre = 2πr ≈ 12,57 br',
+      'r = |MT| = 2 br', 'Alan = πr² ≈ 12,57 br²', 'Çevre = 2πr ≈ 12,57 br',
     ]);
-    expect(ks.map((k) => k.satir)).toEqual(['baslik', 'yaricap', 'alan', 'cevre']);
-    expect(ks.map((k) => k.anahtar)).toEqual(['title', 'radius', 'area', 'perimeter']);
+    expect(ks.map((k) => k.satir)).toEqual(['yaricap', 'alan', 'cevre']);
+    expect(ks.map((k) => k.anahtar)).toEqual(['radius', 'area', 'perimeter']);
+    expect(ks.map((k) => k.duz)).toEqual(metinler(ks));
     expect(ks.every((k) => k.satirlar.length === 1)).toBe(true);
     expect(ks[0].merkez.y).toBeCloseTo(GORUNUM.height / 2 + 2 * GORUNUM.zoom + (14 + ks[0].olcu.yukseklik / 2) * scale, 5);
     for (let i = 1; i < ks.length; i++) {
@@ -442,14 +443,30 @@ describe('ölçüm kartları', () => {
     const T = nokta('T', 2, 0);
     const temel = { id: 'c1', type: 'circle' as const, centerPointId: M.id, radiusPointId: T.id };
     const gizli = govde<CircleObject>({ ...temel, showArea: true, showRadius: false });
-    expect(kartlar([M, T, gizli]).map((k) => k.anahtar)).toEqual(['title', 'area']);
+    expect(kartlar([M, T, gizli]).map((k) => k.anahtar)).toEqual(['area']);
     const yalniz = govde<CircleObject>({ ...temel, showRadius: true });
-    expect(kartlar([M, T, yalniz]).map((k) => k.anahtar)).toEqual(['title', 'radius']);
-    // Hiçbir ölçü yoksa başlık da yazılmaz
+    expect(kartlar([M, T, yalniz]).map((k) => k.anahtar)).toEqual(['radius']);
+    // Hiçbir ölçü yoksa etiket de yazılmaz
     expect(kartlar([M, T, govde<CircleObject>({ ...temel, showRadius: false })])).toHaveLength(0);
     expect(cemberYaricapiGorunur(govde<CircleObject>({ ...temel }))).toBe(false);
     expect(cemberYaricapiGorunur(govde<CircleObject>({ ...temel, showPerimeter: true }))).toBe(true);
     expect(cemberYaricapiGorunur(govde<CircleObject>({ ...temel, showPerimeter: true, showRadius: false }))).toBe(false);
+  });
+
+  it('elle yazılmış etiket metni (labelTexts) hesaplanan yazının yerine geçer; kutu yeni metne göre ölçülür', () => {
+    const M = nokta('M', 0, 0);
+    const T = nokta('T', 2, 0);
+    const temel = { id: 'c1', type: 'circle' as const, centerPointId: M.id, radiusPointId: T.id, showArea: true, showPerimeter: true };
+    const hesaplanan = kartlar([M, T, govde<CircleObject>(temel)]);
+    const elle = kartlar([M, T, govde<CircleObject>({ ...temel, labelTexts: { area: 'Alan = ?' } })]);
+    expect(metinler(elle)).toEqual(['r = |MT| = 2 br', 'Alan = ?', 'Çevre = 2πr ≈ 12,57 br']);
+    const alan = elle.find((k) => k.anahtar === 'area')!;
+    expect(alan.duz).toBe('Alan = ?');
+    expect(alan.sesli).toBe('Alan = ?');
+    expect(alan.ipucu).toBe('Alan = ?');
+    expect(alan.olcu.genislik).toBeLessThan(hesaplanan.find((k) => k.anahtar === 'area')!.olcu.genislik);
+    // Öteki etiketler hesaplanmış kalır
+    expect(elle.find((k) => k.anahtar === 'perimeter')!.sesli).toBe(hesaplanan.find((k) => k.anahtar === 'perimeter')!.sesli);
   });
 
   it('her etiket kendi kayıklığıyla taşınır; öteki etiketler yerinde kalır', () => {
@@ -460,7 +477,7 @@ describe('ölçüm kartları', () => {
     const sonra = kartlar([M, T, govde<CircleObject>({ ...temel, labelOffsets: { perimeter: { x: 1, y: 0 } } })]);
     const etiket = (ks: typeof once, a: string) => ks.find((k) => k.anahtar === a)!;
     expect(etiket(sonra, 'perimeter').kutu.x0 - etiket(once, 'perimeter').kutu.x0).toBeCloseTo(GORUNUM.zoom, 5);
-    for (const a of ['title', 'radius', 'area']) expect(etiket(sonra, a).kutu).toEqual(etiket(once, a).kutu);
+    for (const a of ['radius', 'area']) expect(etiket(sonra, a).kutu).toEqual(etiket(once, a).kutu);
   });
 
   it('elipsin alanı ve çevresi ayrı etiketlerdir; çevresi her zaman yaklaşıktır', () => {
@@ -485,7 +502,7 @@ describe('ölçüm kartları', () => {
   it('kart satırları doğrudan da kurulabilir', () => {
     expect(cokgenKartSatirlari([A, B, C], true, false).turler).toEqual(['alan']);
     expect(cemberKartSatirlari(null, null, 2, false, true).turler).toEqual(['yaricap', 'cevre']);
-    expect(cemberKartSatirlari(nokta('O', 0, 0), null, 2, true, false, false).turler).toEqual(['baslik', 'alan']);
+    expect(cemberKartSatirlari(nokta('O', 0, 0), null, 2, true, false, false).turler).toEqual(['alan']);
     expect(cemberKartSatirlari(nokta('O', 0, 0), null, 2, false, false, false).turler).toEqual([]);
     expect(elipsKartSatirlari(3, 2, true, true).turler).toEqual(['alan', 'cevre']);
   });
@@ -569,6 +586,31 @@ describe('ölçüm kartları', () => {
       expectScreenSize(card, fontScale);
       expect(card.olcu).toEqual(initial.olcu);
     }
+  });
+
+  it('yazı alt sınırı (yaziOlcegi) verilince ekran kutusu büyür ve yığındaki etiketler üst üste binmez', () => {
+    const poly = govde<PolygonObject>({ id: 'altSinir', type: 'polygon', pointIds: [A.id, B.id, C.id], showArea: true, showPerimeter: true, edgeLabels: [0, 1, 2] });
+    const objects = [A, B, C, poly];
+    const uzak = { ...GORUNUM, zoom: 11 }; // yerleşim ölçeği 0,25; alt sınır 0,7 → oran 2,8
+    const serbest = olcumKartKutulari({ objects, viewport: uzak, yazim: VARSAYILAN_YAZIM, px });
+    const sinirli = olcumKartKutulari({ objects, viewport: uzak, yazim: VARSAYILAN_YAZIM, px, yaziOlcegi: 0.7 });
+    expect(sinirli).toHaveLength(serbest.length);
+    for (let i = 0; i < sinirli.length; i++) {
+      // Referans ölçü aynı; ekran kutusu yazı ölçeğiyle (0,7) ölçülür
+      expect(sinirli[i].olcu).toEqual(serbest[i].olcu);
+      expectScreenSize(sinirli[i], 0.7);
+      expectScreenSize(serbest[i], 0.25);
+      // Yığın: her etiket bir öncekinin altında; aralık (6 yerleşim px) da yazı/yerleşim oranıyla (2,8) ölçeklenir
+      if (i > 0) expect(sinirli[i].kutu.y0 - sinirli[i - 1].kutu.y1).toBeCloseTo(6 * 0.25 * 2.8, 6);
+    }
+    // İlk etiketin ÜST kenarı serbest yerleşimle aynı yerdedir (yığın yukarıdan başlar); kenar etiketi payı oranla büyür
+    expect(sinirli[0].kutu.y0).toBeGreaterThanOrEqual(serbest[0].kutu.y0 - 1e-6);
+    // Yazı ölçeği yerleşim ölçeğine eşitse (alt sınır kapalı) eski davranış
+    expect(olcumKartKutulari({ objects, viewport: uzak, yazim: VARSAYILAN_YAZIM, px, yaziOlcegi: 0.25 })).toEqual(serbest);
+    // Yakınlaşınca yazı tavanı (1,05) yerleşim ölçeğinin altındadır: yerleşim yazıdan bağımsız kalır (oran 1)
+    const yakin = { ...GORUNUM, zoom: 120 };
+    expect(olcumKartKutulari({ objects, viewport: yakin, yazim: VARSAYILAN_YAZIM, px, yaziOlcegi: 1.05 }))
+      .toEqual(olcumKartKutulari({ objects, viewport: yakin, yazim: VARSAYILAN_YAZIM, px }));
   });
 
   it('uzaklaştırmada kutu doğrusal küçülür; yakınlaştırmada normalin yüzde beş fazlasında durur', () => {

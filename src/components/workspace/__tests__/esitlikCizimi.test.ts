@@ -111,3 +111,24 @@ describe('eşitlik çentiği çizimi', () => {
     expect(etiketPayi(4, 3, 8)).toBeGreaterThan(5);
   });
 });
+
+describe('eş açı çentiği: yay boyu sınırda kayan nokta payı', () => {
+  // Dar açıda yay boyu tam sınırda durabiliyor (r = hedef / θ); r acos, tarama atan2 ile hesaplandığından çarpım
+  // 17,999… çıkınca eş açılardan biri yöne göre çentiksiz kalıyordu (doğrulama, 2026-09-25).
+  const aciOgesi = (tarama: number, sayi: CizgiSayisi, baslangic = 0) =>
+    ({ tur: 'aci' as const, sayi, kalinlik: 2, merkez: { x: 0, y: 0 }, baslangic, tarama });
+
+  it('üçlü çentik, yay boyu 14 px sınırının 1e-12 altında da çizilir; her yönde aynı', () => {
+    // Sınır: öbek ((3 − 1) · 4 px) ve iki yanında 3 px yay
+    const tarama = (35 * Math.PI) / 180;
+    const r = 14 / tarama - 1e-12;
+    for (let yon = 0; yon < 360; yon += 15) {
+      const bas = (yon * Math.PI) / 180;
+      expect(alt(centikYolu(aciOgesi(tarama, 3, bas), vp, 1, 0, r))).toHaveLength(3);
+      expect(alt(centikYolu(aciOgesi(-tarama, 3, bas), vp, 1, 0, r))).toHaveLength(3);
+    }
+    // Gerçekten kısa yay yine çentiksiz kalır
+    expect(centikYolu(aciOgesi(tarama, 3), vp, 1, 0, 13.5 / tarama)).toBeNull();
+    expect(alt(centikYolu(aciOgesi(tarama, 2), vp, 1, 0, 13.5 / tarama))).toHaveLength(2);
+  });
+});

@@ -1,7 +1,7 @@
 /**
  * Konuşma tanımadan gelen metni komut motorunun beklediği yazıma yaklaştırır.
  *
- * Tarayıcı ya da Whisper harfleri, sayıları ve ekleri farklı biçimlerde yazabilir:
+ * Tarayıcının ses tanıması harfleri, sayıları ve ekleri farklı biçimlerde yazabilir:
  *   "ee şey a be ce üçgeninin alanını hesapla"   → "ABC üçgeninin alanını hesapla"
  *   "a dan be ye doğru parçası çiz"               → "A'dan B'ye doğru parçası çiz"
  *   "a be cenin alanı kaç"                         → "ABC'nin alanı kaç"
@@ -21,7 +21,7 @@ const LETTER_NAMES: Record<string, string> = {
 };
 /** Tek başına anlamı olan, dizinin İLK harfi olamayan adlar ("de": bağlaç, "ne": soru, "o": zamir, "e": ünlem) — "o noktası" gibi iyelikli bağlam hariç. */
 const NOT_FIRST = new Set(['de', 'ne', 'o', 'e', 'ye', 'u', 'y']);
-const NOUN_AFTER = /^(?:nokta|köşe|kose|merkez|doğru|dogru|ışın|isin|üçgen|ucgen|kare|dikdörtgen|dikdortgen|çokgen|cokgen|dörtgen|dortgen|paralelkenar|yamuk|yamuğ|yamug|deltoid|kenar|parça|parca|yay|açı|aci|uzunluğ|uzunlug|orta|arası|arasi|arasındaki|vektör|vektor|çember|cember|(?:yarı|yari)?(?:çap|cap)(?!raz)|elips|daire|beşgen|besgen|altıgen|altigen|eğim|egim|mesafe|uzaklı|alan|çevre|cevre|kiriş|kiris|olarak|doğrultu)/i;
+const NOUN_AFTER = /^(?:nokta|köşe|kose|merkez|doğru|dogru|ışın|isin|üçgen|ucgen|kare|dikdörtgen|dikdortgen|çokgen|cokgen|dörtgen|dortgen|paralelkenar|yamuk|yamuğ|yamug|deltoid|kenar|parça|parca|yay|açı|aci|uzunluğ|uzunlug|orta|arası|arasi|arasındaki|vektör|vektor|çember|cember|(?:yarı|yari)?(?:çap|cap)(?!raz)|elips|daire|beşgen|besgen|altıgen|altigen|eğim|egim|mesafe|uzaklı|alan|çevre|cevre|kiriş|kiris|olarak|doğrultu|kesen|öklid|oklid|öklit|oklit|tales|pisagor)/i;
 const POSSESSIVE_POINT = /^(?:noktası|noktasını|noktasının|noktasından|noktasına|noktasında|köşesi|köşesini|köşesinden|merkezli|açısı|açısını|açısının)/i;
 const SUFFIX_WORDS = new Set(['nin', 'nın', 'nun', 'nün', 'in', 'ın', 'un', 'ün', 'yi', 'yı', 'yu', 'yü', 'ye', 'ya', 'den', 'dan', 'ten', 'tan',
   'de', 'da', 'te', 'ta', 'le', 'la', 'yle', 'yla', 'deki', 'daki', 'nde', 'nda', 'nden', 'ndan']);
@@ -94,7 +94,7 @@ function splitMergedSuffix(token: string): [string, string] | null {
 }
 
 /** Köşe adlarıyla çokgen adı arasında gelebilen sıfatlar: "de e fe ikizkenar üçgeni", "de e fe ge düzgün dörtgeni". */
-const POLYGON_ADJECTIVE = /^(?:ikizkenar|eşkenar|eskenar|dik|düzgün|duzgun|çeşitkenar|cesitkenar)$/i;
+const POLYGON_ADJECTIVE = /^(?:ikizkenar|eşkenar|eskenar|dik|düzgün|duzgun|çeşitkenar|cesitkenar|öklid|oklid|öklit|oklit|pisagor|tales)$/i;
 
 /**
  * tokens[start]'tan başlayan, tek başına anlamı da olan adla ("de", "e") açılan harf dizisi köşe adı mı?
@@ -229,7 +229,7 @@ function normalizeTokens(input: string): string {
     const low = lc(token);
 
     // Fonksiyon değeri soruları: "f parantez beş kaç" → "f(5) kaç", "ef in üçteki değeri nedir" → "f'nin 3'teki değeri nedir"
-    // Büyük harfle yazılmış tek harf ("F(2,3) noktası", Whisper çıktısı) nokta adıdır; fonksiyon adı sayılmaz.
+    // Büyük harfle yazılmış tek harf ("F(2,3) noktası", ses tanıma çıktısı) nokta adıdır; fonksiyon adı sayılmaz.
     const functionName = /^[A-ZÇĞİÖŞÜ]$/.test(token) ? undefined : FUNCTION_NAMES[low];
     const call = functionName ? readCallArgument(tokens, i + 1) : null;
     if (functionName && call) { out.push(`${functionName}(${call.text})`); i = call.end - 1; continue; }

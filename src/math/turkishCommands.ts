@@ -15,6 +15,7 @@ export const COMMAND_EXAMPLES = [
   'A (2; 3) noktası oluştur', 'AB doğru parçası çiz', 'AB orta noktasını oluştur',
   'Kenar uzunluğu 4 olan kare çiz', '3 5 dikdörtgen çiz', '6 kenarlı düzgün çokgen çiz',
   'f(x) = x^2', 'ab = 4', 'Geri al',
+  'Öklid üçgeni çiz', 'Pisagor şekli çiz', 'Tales teoremi şekli çiz', 'Tales çemberi çiz',
 ];
 
 /** Türkçe çizim komutunu çevrimdışı çalıştırır; sahneyi değiştirmez, yeni sahneyi döndürür. */

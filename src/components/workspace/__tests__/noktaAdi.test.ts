@@ -15,6 +15,17 @@ describe('noktaAdiYeri — ad çizgilerin üstüne gelmez', () => {
     expect(yer).toMatchObject({ x: 110, y: 90, textAnchor: 'start', yon: 'sağ-üst' });
   });
 
+  it('köşe boşluğu büyütülünce bütün adaylar noktadan o kadar uzaklaşır; küçültülemez', () => {
+    const genis = adayYerler(P, { ...KUTU, bosluk: 16 });
+    const sabit = adayYerler(P, KUTU);
+    expect(genis.map((a) => a.yon)).toEqual(sabit.map((a) => a.yon));
+    expect(genis[0]).toMatchObject({ x: 116, y: 84 }); // sağ üst: +16/−16
+    expect(genis[2].y - sabit[2].y).toBeCloseTo(6, 10); // sağ alt: taban 6 px aşağı
+    expect(genis[4].x - sabit[4].x).toBeCloseTo(6, 10); // sağ: kenar boşluğu da 6 px artar
+    expect(adayYerler(P, { ...KUTU, bosluk: 4 })).toEqual(sabit);
+    expect(noktaAdiYeri(P, [], { ...KUTU, bosluk: 16 })).toMatchObject({ x: 116, y: 84, yon: 'sağ-üst' });
+  });
+
   it('tek kol sağ üste gidiyorsa ad kolun UZANTISINA (karşı yöne) geçer', () => {
     // Eski kural sıradaki ilk boş yeri (sol üst) seçiyordu; ders kitabında uç noktanın adı
     // parçanın uzantısında durur.

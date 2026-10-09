@@ -35,8 +35,10 @@
  * programdan bağımsızdır ve her kademede açık kalır (HER_KADEMEDE_ACIK_ARACLAR). El (kaydırma) aracı panelde değil
  * tuval şeridindedir; geri al / yinele de panel aracı değildir.
  *
- * Kapsam: yalnız 2B araç paneli ve menü çubuğundaki Araçlar menüsü süzülür. 3B Cisimler paneli (Toolbar3D,
- * AddObjectModal) ve raporun ızgara / arka plan seçenekleri bu modülün dışındadır.
+ * Kapsam: bu modülün listeleri yalnız 2B araç panelini ve menü çubuğundaki Araçlar menüsünü süzer. 3B araç
+ * paneli (Toolbar3D) aynı KademeDuzeyi'ni ve buradaki genel yardımcıları (araclariSuz / gruplariSuz /
+ * grupAcikliklari) kullanarak kendi listesiyle süzülür: kademeDuzeyleri3B.ts (ilkokulda koni, piramit, yansıtma ve
+ * öteleme yok). Raporun ızgara / arka plan seçenekleri her iki modülün de dışındadır.
  */
 import type { LevelId } from '@/types/curriculum';
 import type { ToolMode } from '@/types/workspace';

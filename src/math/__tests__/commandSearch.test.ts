@@ -86,6 +86,15 @@ describe('Turkish command suggestions: protected words and stronger evidence', (
     expect(corrections("P'nın koordinatlarını göster")).toEqual([]);
   });
 
+  it('suggests theorem commands and does not miscorrect theorem names', () => {
+    expect(searchCommands('öklid üçg')[0].text).toBe('Öklid üçgeni çiz');
+    expect(searchCommands('pisagor').some(s => s.text === 'Pisagor şekli çiz')).toBe(true);
+    expect(searchCommands('tales çem').some(s => s.text === 'Tales çemberi çiz')).toBe(true);
+    for (const raw of ['Öklid bağıntılarını göster', 'kesenler teoremini göster', 'Heron formülünü uygula', 'Stewart teoremini doğrula', 'Euler doğrusunu çiz', 'kuvvet teoremini göster', 'hipotenüsü 10 olan Öklid üçgeni çiz']) {
+      expect(corrections(raw), raw).toEqual([]);
+    }
+  });
+
   it('treats words from history as known vocabulary', () => {
     expect(corrections('gönye aracını aç', { history: ['gönye aracını aç'] })).toEqual([]);
   });

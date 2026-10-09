@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { aciEtiketiUzakta, cizgiEtiketiUzakta, etiketAcisi, etiketDondurme, yayEtiketiYerlesimi, type YayEtiketGeometrisi, cizgiCercevesi, kenarEksenine, kenarEkseninden } from '../olcuEtiketi';
+import { ACI_YAYI_ARALIK, ACI_YAYI_EN_BUYUK, ACI_YAYI_YARICAPI, aciYayYaricapi, koseAcilariniAyir, tabanaGoreDik, type KoseAcisi, aciEtiketiUzakta, cizgiEtiketiUzakta, etiketAcisi, etiketDondurme, yayEtiketiYerlesimi, type YayEtiketGeometrisi, cizgiCercevesi, kenarEksenine, kenarEkseninden } from '../olcuEtiketi';
 
 describe('etiketAcisi — ölçü etiketi çizgiye paralel', () => {
   it('yatay çizgide yön ne olursa olsun 0°', () => {
@@ -265,5 +265,149 @@ describe('kenar ekseni: etiket çizgiye göre saklanır (kullanıcı, 2026-09-25
 
   it('noktaya dönüşmüş kenarın çerçevesi yoktur (eski x/y kullanılır)', () => {
     expect(cizgiCercevesi(A, { x: 0, y: 0 })).toBeNull();
+  });
+});
+
+describe('aciYayYaricapi — dar açıda yay okunur kalır', () => {
+  const rad = (d: number) => (d * Math.PI) / 180;
+
+  it('60° ve üstünde (dik, geniş, dış açı) bugünkü 22 aynen kalır; çentik sayısı da değiştirmez', () => {
+    for (const d of [60, 75, 90, 120, 179, 180, 200, 300, 350]) expect(aciYayYaricapi(d)).toBe(ACI_YAYI_YARICAPI);
+    expect(aciYayYaricapi(90, 10)).toBe(22);
+    expect(aciYayYaricapi(60, undefined, 3)).toBe(22);
+  });
+
+  it('dar açıda r = max(22, 18/θ): yay boyu ~18 px olur', () => {
+    const r = (d: number) => aciYayYaricapi(d);
+    expect(r(45)).toBeCloseTo(18 / rad(45), 6);
+    expect(r(25)).toBeCloseTo(18 / rad(25), 6);
+    expect(r(25) * rad(25)).toBeCloseTo(18, 6);
+    // 46,9° civarından 60°'ye kadar zaten 22: geçiş sıçramasız
+    expect(r(50)).toBe(22);
+    expect(r(59.9)).toBe(22);
+  });
+
+  it("çok dar açıda üst sınır 90: 10°'de yay ~16 px, 55'teki ~10 px değil", () => {
+    expect(ACI_YAYI_EN_BUYUK).toBe(90);
+    expect(aciYayYaricapi(10)).toBe(90);
+    expect(aciYayYaricapi(10) * rad(10)).toBeGreaterThan(15);
+    expect(aciYayYaricapi(1)).toBe(90);
+    // Tek çentiğin alt sınırı (10 px yay) 10°'de de sağlanır
+    expect(aciYayYaricapi(10, 1000, 1) * rad(10)).toBeGreaterThanOrEqual(10);
+  });
+
+  it('açı küçüldükçe yay büyür (azalmayan), 22 ile 90 arasında kalır', () => {
+    let onceki = aciYayYaricapi(60);
+    for (let d = 59; d >= 1; d -= 1) {
+      const r = aciYayYaricapi(d);
+      expect(r).toBeGreaterThanOrEqual(onceki - 1e-12);
+      expect(r).toBeGreaterThanOrEqual(22);
+      expect(r).toBeLessThanOrEqual(90);
+      onceki = r;
+    }
+  });
+
+  it("kolun ortasındaki eş uzunluk çentiğinin altında kalır (r ≤ kol/2 − 11) ama 22'nin altına inmez", () => {
+    expect(aciYayYaricapi(20, 105.6)).toBeCloseTo(105.6 / 2 - 11, 9);
+    // 2 br kolda üçlü eş açı çentiği (en az 14 px yay) 25°'de yine sığar
+    expect(aciYayYaricapi(25, 88, 3) * rad(25)).toBeGreaterThanOrEqual(14);
+    expect(aciYayYaricapi(20, 20)).toBe(22);
+    expect(aciYayYaricapi(20, 1000)).toBeCloseTo(18 / rad(20), 6);
+    // Doğrulama bulgusu: 2 br (88 px) kollu 25° açıda yay çentiğin (44 px) tam üstüne düşüyordu
+    for (const kol of [44, 66, 80.1, 82, 88, 103, 105.6, 176]) {
+      const r = aciYayYaricapi(25, kol);
+      if (r > 22) expect(r).toBeLessThan(kol / 2 - 10);
+    }
+  });
+
+  it('eş açı çentiği taşıyan açıda hedef yay boyu çentik sayısıyla uzar: üçlü çentik 18 px yaya sıkışmaz', () => {
+    // 1 ve 2 çentik: 18 / 20 px; 3 çentik: (3 − 1) · 4 + 16 = 24 px
+    expect(aciYayYaricapi(40, undefined, 1) * rad(40)).toBeCloseTo(18, 6);
+    expect(aciYayYaricapi(40, undefined, 2) * rad(40)).toBeCloseTo(20, 6);
+    expect(aciYayYaricapi(40, undefined, 3) * rad(40)).toBeCloseTo(24, 6);
+    // Üçlü çentiğin alt sınırı (k − 1) · 4 + 10 = 18 px: sınıra değil, 6 px üstüne oturur (yöne göre kaybolmaz)
+    for (let d = 5; d < 60; d += 0.5) {
+      const r = aciYayYaricapi(d, undefined, 3);
+      if (r > 22 && r < 90) expect(r * rad(d)).toBeGreaterThanOrEqual(24 - 1e-9);
+    }
+  });
+
+  it('geçersiz girdide temel yarıçap', () => {
+    expect(aciYayYaricapi(NaN)).toBe(22);
+    expect(aciYayYaricapi(0)).toBe(22);
+    expect(aciYayYaricapi(-5)).toBe(22);
+    expect(aciYayYaricapi(20, NaN)).toBeCloseTo(18 / rad(20), 6);
+    expect(aciYayYaricapi(20, undefined, NaN)).toBeCloseTo(18 / rad(20), 6);
+  });
+});
+
+describe('koseAcilariniAyir — aynı köşede kapsayan açının yayı dışta', () => {
+  const rad = (d: number) => (d * Math.PI) / 180;
+  const aci = (id: string, bas: number, tarama: number, r: number, ek: Partial<KoseAcisi> = {}): KoseAcisi =>
+    ({ id, kose: 'O', baslangic: rad(bas), tarama: rad(tarama), r, ...ek });
+
+  it('20° + 30° = 50°: kapsayan 50° açının yayı ikisinin de dışına alınır', () => {
+    const r = koseAcilariniAyir([
+      aci('a20', 0, 20, aciYayYaricapi(20)), aci('a30', 20, 30, aciYayYaricapi(30)), aci('a50', 0, 50, aciYayYaricapi(50)),
+    ]);
+    expect(r.get('a20')).toBeCloseTo(aciYayYaricapi(20), 9);
+    expect(r.get('a30')).toBeCloseTo(aciYayYaricapi(30), 9);
+    expect(r.get('a50')).toBeCloseTo(aciYayYaricapi(20) + ACI_YAYI_ARALIK, 9);
+  });
+
+  it('yön (işaretli tarama) ve ±180° sınırı fark etmez', () => {
+    const r = koseAcilariniAyir([aci('ic', 170, -20, 51.6), aci('dis', 175, -40, 25.8)]);
+    expect(r.get('dis')).toBeCloseTo(51.6 + ACI_YAYI_ARALIK, 9);
+    const r2 = koseAcilariniAyir([aci('ic', 175, 10, 90), aci('dis', 170, 30, 34.4)]);
+    expect(r2.get('dis')).toBeCloseTo(98, 9);
+  });
+
+  it('aynı kollu iç ve dış açı (tümler) 3-4 px arayla çift çizgi gibi durmaz', () => {
+    const r = koseAcilariniAyir([aci('ic', 0, 40, 25.8), aci('dis', 0, -320, 22)]);
+    expect(r.get('ic')).toBeCloseTo(25.8, 9);
+    expect(r.get('dis')).toBeCloseTo(25.8 + ACI_YAYI_ARALIK, 9);
+  });
+
+  it('komşu açılar, başka köşeler ve özdeş açılar birbirini itmez', () => {
+    const r = koseAcilariniAyir([
+      aci('k1', 0, 20, 51.6), aci('k2', 20, 30, 34.4), aci('b', 0, 50, 22, { kose: 'P' }), aci('e1', 0, 40, 25.8, { kose: 'Q' }), aci('e2', 0, 40, 25.8, { kose: 'Q' }),
+    ]);
+    expect(r.get('k2')).toBeCloseTo(34.4, 9);
+    expect(r.get('b')).toBe(22);
+    expect(r.get('e1')).toBeCloseTo(25.8, 9);
+    expect(r.get('e2')).toBeCloseTo(25.8, 9);
+  });
+
+  it('dik açı karesi büyümez ama içindeki açı olarak kapsayanı dışa iter', () => {
+    const r = koseAcilariniAyir([aci('d', 0, 90, 22, { sabit: true }), aci('k', 0, 30, 34.4), aci('g', 0, 120, 22)]);
+    expect(r.get('d')).toBe(22);
+    expect(r.get('g')).toBeCloseTo(34.4 + ACI_YAYI_ARALIK, 9);
+  });
+});
+
+describe('tabanaGoreDik: elle kaydırılmış etiket varsayılan yeriyle birlikte kayar', () => {
+  it('kesikli kattan (1,23) yalın banda (0,5) geçince 6 px boyunca kaydırılmış etiket de banda iner, geri döner', () => {
+    // Doğrulama bulgusu: kayıklık mutlak saklandığı için etiket eski katta kalıyor, "uzak" sayılıp çapaya çevriliyordu
+    expect(tabanaGoreDik(-1.2331, -1.2331, -0.5)).toBeCloseTo(-0.5, 9);
+    // Kayıt değişmez; varsayılan geri gelince etiket de eski katına döner
+    expect(tabanaGoreDik(-1.2331, -1.2331, -1.2331)).toBeCloseTo(-1.2331, 9);
+    // Elle verilen dik kayıklık (0,2 dışarı) korunur
+    expect(tabanaGoreDik(1.4, 1.2, 0.5)).toBeCloseTo(0.7, 9);
+  });
+
+  it('doğal yan dönünce (aynı büyüklük, ters işaret) etiket çizgiye göre yerinde kalır', () => {
+    expect(tabanaGoreDik(1.2, 1.2, -1.2)).toBeCloseTo(1.2, 9);
+  });
+
+  it('öbür yana taşınmış etiket kıpırdamaz; kayma etiketi öbür yana geçiremez', () => {
+    expect(tabanaGoreDik(-0.7, 1.2, 0.5)).toBe(-0.7);
+    expect(tabanaGoreDik(0.3, 1.2, 0.5)).toBe(0);
+  });
+
+  it('tabanı olmayan eski kayıt ve geçersiz girdi aynen kalır', () => {
+    expect(tabanaGoreDik(1.4, undefined, 0.5)).toBe(1.4);
+    expect(tabanaGoreDik(1.4, 0, 0.5)).toBe(1.4);
+    expect(tabanaGoreDik(1.4, NaN, 0.5)).toBe(1.4);
+    expect(tabanaGoreDik(1.4, 1.2, NaN)).toBe(1.4);
   });
 });
