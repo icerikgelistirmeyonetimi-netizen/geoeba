@@ -284,6 +284,12 @@ export function WorkspaceView() {
 
   // Sol panelin seçili sekmesi: 2B ile 3B araç paneli arasında geçişte (ör. "3D + Cebir" seçilince) korunur
   const [solSekme, setSolSekme] = useState<SolSekme>('araclar');
+  // Bağlamlar > "Fonksiyon Formülünü Düzenle": pencere bu fonksiyonla dolu açılır ve onu günceller (alan uzmanı, 4. tur)
+  const [duzenlenecekFonksiyonId, setDuzenlenecekFonksiyonId] = useState<string | null>(null);
+  const fonksiyonPenceresiniAc = useCallback((duzenlenecekId?: string) => {
+    setDuzenlenecekFonksiyonId(duzenlenecekId ?? null);
+    setIsFunctionDialogOpen(true);
+  }, [setIsFunctionDialogOpen]);
 
   // Adlı fonksiyonlar (f, g …) tuval çizilmeden önce ayrıştırıcıya bildirilir
   syncUserFunctions(objects);
@@ -885,7 +891,7 @@ export function WorkspaceView() {
             ) : (
               <Toolbar
                 onSelectTool={activateTool}
-                onOpenFunctionDialog={() => setIsFunctionDialogOpen(true)}
+                onOpenFunctionDialog={fonksiyonPenceresiniAc}
                 onOpenSliderDialog={() => setIsSliderDialogOpen(true)}
                 onOpenAddObjectDialog={() => setIsAddObjectDialogOpen(true)}
                 layoutMode={layoutMode}
@@ -988,7 +994,14 @@ export function WorkspaceView() {
         is3D={show3DToolbar}
         onAddSolid3D={handleAddSolid}
       />
-      <FunctionDialog isOpen={isFunctionDialogOpen} onClose={() => setIsFunctionDialogOpen(false)} />
+      <FunctionDialog
+        isOpen={isFunctionDialogOpen}
+        duzenlenecekId={duzenlenecekFonksiyonId}
+        onClose={() => {
+          setIsFunctionDialogOpen(false);
+          setDuzenlenecekFonksiyonId(null);
+        }}
+      />
       <SliderDialog isOpen={isSliderDialogOpen} onClose={() => setIsSliderDialogOpen(false)} />
       <SliderSettingsDialog sliderId={sliderSettingsId} onClose={() => setSliderSettingsId(null)} />
       <RegularPolygonDialog

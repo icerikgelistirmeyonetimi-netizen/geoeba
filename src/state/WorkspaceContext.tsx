@@ -70,7 +70,7 @@ import {
   projectOntoHost,
   getArcGeometry,
 } from '@/math/geometry';
-import { snapToVisibleGrid, formatTurkishNumber, getVisibleWorldBounds } from '@/math/coordinates';
+import { snapToVisibleGrid, formatTurkishNumber } from '@/math/coordinates';
 import { functionLabel, nextFunctionName, relabelFunction } from '@/math/functionNames';
 import { extractVariableNames,
   validateMathExpression,
@@ -99,6 +99,7 @@ import type { Solid3DObject } from '@/types/workspace3d';
 import { ILKOKUL_EN_COK_KENAR, ilkokulGorunumu, ilkokulKipindeMi, ilkokulUzunlukMetni, useIlkokulKipindeMi } from '@/components/workspace/ilkokulKipi';
 import { kesirAyariniOku, kesirAyariniSinirla, kesirEtiketi } from '@/components/workspace/kesirModeli';
 import { tamSayiOlcuSimdi, uzunlukOlcuBirimiSimdi } from '@/components/workspace/olcuYuvarlama';
+import { surguUzunlugu, yeniSurguYerleri } from '@/components/workspace/surguYerlesimi';
 import { ayniKonumdakiNokta, goruntuNoktaAdlari, kareKoseleri } from '@/math/insaYardimcilari';
 
 export { createId } from './ids';
@@ -204,6 +205,8 @@ interface WorkspaceContextType {
   /** Oynatma döngüsü için: birden çok kaydırıcı veya noktanın değerini TEK adımda, geçmişe yazmadan günceller. */
   setSliderValues: (values: Record<string, number>, pointUpdates?: Record<string, PointAnimUpdate>) => void;
   addFunction: (expression: string, label?: string) => void;
+  /** Var olan fonksiyonun formülünü ve etiketini değiştirir (Bağlamlar > "Fonksiyon Formülünü Düzenle"); eksik parametrelere sürgü açar. */
+  updateFunction: (id: string, expression: string, label?: string) => void;
   addSlider: (name: string, min: number, max: number, step: number, initialValue: number, sliderType?: 'number' | 'angle' | 'integer', animSpeed?: number, animMode?: 'oscillating' | 'increasing' | 'decreasing' | 'increasing_once') => void;
   /** "a = 2" gibi bir atamayı uygular: kaydırıcı varsa değerini yazar, yoksa oluşturur. */
   assignSliderValue: (name: string, value: number) => void;
@@ -358,6 +361,40 @@ const TYPE_NAMES: Record<MathObject['type'], string> = {
   input_box: 'Girdi Kutusu',
   measurement: 'Ölçüm Etiketi',
 };
+
+/**
+ * Fonksiyon ifadesindeki kaydırıcısı olmayan parametreler ("a*x^2 + b" → a, b) için yeni kaydırıcılar (GeoGebra'nın
+ * davranışı). Sürgüler tuvalde boş yerlere konur (surguYerlesimi.ts; alan uzmanı, 4. tur).
+ */
+function parametreKaydiricilari(
+  mevcut: readonly MathObject[],
+  vp: ViewportTransform,
+  expression: string
+): { eksikler: string[]; yeniKaydiricilar: SliderObject[] } {
+  const varolanAdlar = new Set(mevcut.filter((o) => o.type === 'slider').map((o) => (o as SliderObject).variableName));
+  const eksikler = extractVariableNames(expression).filter((ad) => !varolanAdlar.has(ad));
+  if (eksikler.length === 0) return { eksikler, yeniKaydiricilar: [] };
+  const uzunluk = surguUzunlugu(vp);
+  const yerler = yeniSurguYerleri(vp, mevcut, uzunluk, eksikler.length);
+  const yeniKaydiricilar: SliderObject[] = eksikler.map((ad, i) => ({
+    id: createId('slider'),
+    type: 'slider',
+    label: `${ad} Parametresi`,
+    showLabel: true,
+    variableName: ad,
+    min: -5,
+    max: 5,
+    step: 0.1,
+    value: 1,
+    x: yerler[i].x,
+    y: yerler[i].y,
+    length: uzunluk,
+    color: '#8b5cf6',
+    visible: true,
+    createdAt: Date.now(),
+  }));
+  return { eksikler, yeniKaydiricilar };
+}
 
 /** Geçmiş açıklamalarında kullanılacak okunabilir nesne adı (kimlik değil, etiket). */
 function describeObject(obj: MathObject | undefined): string {
@@ -1969,38 +2006,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       // PARAMETRELİ FONKSİYON: "a*x^2 + b" gibi ifadelerde a ve b için kaydırıcı yoksa
       // ifade sessizce NaN üretir ve eğri hiç çizilmez. Bu yüzden eksik parametreler için
       // kaydırıcıları KENDİLİĞİNDEN oluşturuyoruz (GeoGebra'nın davranışı).
-      const varolanAdlar = new Set(
-        mevcut.filter((o) => o.type === 'slider').map((o) => (o as SliderObject).variableName)
-      );
-      const eksikler = extractVariableNames(expression).filter((ad) => !varolanAdlar.has(ad));
-
-      const bounds = getVisibleWorldBounds(vp);
-      const genislik = bounds.maxX - bounds.minX;
-      const yukseklik = bounds.maxY - bounds.minY;
-      const uzunluk = Math.max(2, Math.min(6, genislik * 0.22));
-      let sayac = mevcut.filter((o) => o.type === 'slider').length;
-
-      const yeniKaydiricilar: SliderObject[] = eksikler.map((ad) => {
-        const k: SliderObject = {
-          id: createId('slider'),
-          type: 'slider',
-          label: `${ad} Parametresi`,
-          showLabel: true,
-          variableName: ad,
-          min: -5,
-          max: 5,
-          step: 0.1,
-          value: 1,
-          x: Number((bounds.minX + genislik * 0.06).toFixed(2)),
-          y: Number((bounds.maxY - yukseklik * (0.1 + sayac * 0.07)).toFixed(2)),
-          length: Number(uzunluk.toFixed(2)),
-          color: '#8b5cf6',
-          visible: true,
-          createdAt: Date.now(),
-        };
-        sayac += 1;
-        return k;
-      });
+      const { eksikler, yeniKaydiricilar } = parametreKaydiricilari(mevcut, vp, expression);
 
       const newFn: FunctionObject = {
         id: createId('fn'),
@@ -2032,6 +2038,28 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [commit]
   );
 
+  // Fonksiyon düzenleme: AYNI nesnenin formülü ve etiketi değişir (alan uzmanı, 4. tur: "Formülü Düzenle" eskiden
+  // yeni fonksiyon ekleme penceresini açıyordu). Yeni formüldeki eksik parametrelere eklemedeki gibi sürgü açılır.
+  const updateFunction = useCallback(
+    (id: string, expression: string, label?: string) => {
+      const { objects: mevcut, viewport: vp } = latest.current;
+      const hedef = mevcut.find((o) => o.id === id && o.type === 'function') as FunctionObject | undefined;
+      if (!hedef) return;
+      const { eksikler, yeniKaydiricilar } = parametreKaydiricilari(mevcut, vp, expression);
+      const etiket = label ?? relabelFunction(hedef, expression, mevcut);
+      commit(
+        (prev) => [
+          ...prev.map((o) => (o.id === id ? ({ ...o, expression, label: etiket } as MathObject) : o)),
+          ...yeniKaydiricilar,
+        ],
+        yeniKaydiricilar.length > 0
+          ? `${etiket} olarak güncellendi (${eksikler.join(', ')} kaydırıcısı oluşturuldu)`
+          : `Fonksiyon güncellendi: ${etiket}`
+      );
+    },
+    [commit]
+  );
+
   // Kaydırıcı ekleme
   const addSlider = useCallback(
     (
@@ -2044,13 +2072,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       animSpeed?: number,
       animMode?: 'oscillating' | 'increasing' | 'decreasing' | 'increasing_once'
     ) => {
-      // Tuval üzerinde sol üstten başlayarak, var olan kaydırıcı sayısınca aşağı kayan yerleşim
+      // Tuvalde boş bir yer: araç satırının, üstteki yüzen çubukların (Kesir Göster, ipucu) ve var olan nesnelerin
+      // dışında (alan uzmanı, 4. tur; surguYerlesimi.ts). Eskiden sol üste, araç çubuğunun altına konuyordu.
       const { viewport: vp, objects: mevcut } = latest.current;
-      const bounds = getVisibleWorldBounds(vp);
-      const sayac = mevcut.filter((o) => o.type === 'slider').length;
-      const genislik = bounds.maxX - bounds.minX;
-      const yukseklik = bounds.maxY - bounds.minY;
-      const uzunluk = Math.max(2, Math.min(6, genislik * 0.22));
+      const uzunluk = surguUzunlugu(vp);
+      const [yer] = yeniSurguYerleri(vp, mevcut, uzunluk);
 
       const newSlider: SliderObject = {
         id: createId('slider'),
@@ -2065,9 +2091,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         sliderType,
         animSpeed: animSpeed ?? 1,
         animMode: animMode ?? 'oscillating',
-        x: Number((bounds.minX + genislik * 0.06).toFixed(2)),
-        y: Number((bounds.maxY - yukseklik * (0.1 + sayac * 0.07)).toFixed(2)),
-        length: Number(uzunluk.toFixed(2)),
+        x: yer.x,
+        y: yer.y,
+        length: uzunluk,
         color: '#8b5cf6',
         visible: true,
         createdAt: Date.now(),
@@ -4856,6 +4882,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       handleSliderChange,
       setSliderValues,
       addFunction,
+      updateFunction,
       addSlider,
       assignSliderValue,
       undo,
@@ -4958,6 +4985,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       handleSliderChange,
       setSliderValues,
       addFunction,
+      updateFunction,
       addSlider,
       undo,
       redo,

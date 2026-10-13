@@ -160,6 +160,9 @@ import {
 import { EksenSimgesi, IzgaraSimgesi } from './GrafikMenuSimgeleri';
 import { temaZemini, zeminTonu } from './zeminTonu';
 import { eksenSayilariniYerlestir, tuvalEngelleri, type EksenCentigi } from './eksenSayilari';
+import { fonksiyonParcalari, parcalardanYol } from '@/math/fonksiyonCizimi';
+import { fonksiyonEtiketiYazimi } from '@/math/fonksiyonYazimi';
+import { fonksiyonEtiketYeri, type FonksiyonEtiketYeri } from './fonksiyonEtiketi';
 import { useTheme } from '@/state/ThemeContext';
 import { KayanCubuk, CubukMetni, CubukAyirici, CubukDugmesi } from './KayanCubuk';
 import { aracYonergesi } from './aracYonergeleri';
@@ -1191,6 +1194,8 @@ export function Canvas({
     startClient: Point2D;
     startPosition: Point2D;
     moved: boolean;
+    /** Kısa basışta (sürüklenmeden bırakınca): ayarları aç (dişli, bağsız sürgü) ya da yalnız seç (bağlı sürgü) */
+    kisaBasis?: 'ayarlar' | 'sec';
   } | null>(null);
   // Pencere dinleyicileri her zaman güncel nesne/görünüm değerlerini görsün
   const latestObjectsRef = useRef(objects);
@@ -1248,6 +1253,7 @@ export function Canvas({
       const slider = latestObjectsRef.current.find(o => o.id === drag.id);
       if (slider?.type !== 'slider') return;
       if (drag.moved) recordHistory(`${slider.variableName} kaydırıcısı taşındı`);
+      else if (e.type === 'pointerup' && drag.kisaBasis === 'sec') setSelectedObjectId(drag.id);
       else if (e.type === 'pointerup') setSliderSettingsId(drag.id);
     };
     window.addEventListener('pointermove', onMove);
@@ -1258,7 +1264,7 @@ export function Canvas({
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [updateObject, recordHistory, setSliderSettingsId]);
+  }, [updateObject, recordHistory, setSliderSettingsId, setSelectedObjectId]);
 
   /**
    * Dünya kayıklığına, doğrusal ölçüde kenarın KENDİ EKSENİNE göre karşılığını da ekler (boyunca + dik).
@@ -1975,6 +1981,63 @@ export function Canvas({
 
   // Görünür dünya sınırları ve ızgara çizgileri
   const worldBounds = useMemo(() => getVisibleWorldBounds(viewport), [viewport]);
+
+  // FONKSİYON GRAFİKLERİ ÖN GEÇİŞİ (alan uzmanı, 4. tur, satır 157): süreksizlikte (1/x'te x = 0) yol kesilir
+  // (fonksiyonCizimi.ts) ve her grafiğin üstüne okunur ad/denklem etiketi konur ("f(x) = 2x + 1"); etiketler
+  // birbirine, tuvalin düğmelerine ve grafik çizgilerine değmez (fonksiyonEtiketi.ts).
+  const fonksiyonCizimleri = useMemo(() => {
+    const sonuc = new Map<string, { d: string; etiket: (FonksiyonEtiketYeri & { metin: string; px: number }) | null }>();
+    const pointsCount = Math.min(800, Math.max(200, Math.floor(viewport.width / 2)));
+    const ekranParcalari: { fn: FunctionObject; parcalar: Point2D[][] }[] = [];
+    for (const o of objects) {
+      if (o.type !== 'function' || !o.visible) continue;
+      const fn = o as FunctionObject;
+      const compiled = getCompiledExpression(fn.expression);
+      if (!compiled) continue;
+      const safeEval = (x: number): number => {
+        try {
+          const y = compiled(x, sliderScope);
+          return typeof y === 'number' ? y : NaN;
+        } catch (e) {
+          return NaN;
+        }
+      };
+      const dunya = fonksiyonParcalari(safeEval, worldBounds, pointsCount);
+      const ekran = dunya.map((parca) => parca.map((p) => worldToScreen(p, viewport)));
+      sonuc.set(fn.id, { d: parcalardanYol(ekran, (p) => p), etiket: null });
+      ekranParcalari.push({ fn, parcalar: ekran });
+    }
+    if (isSade) return sonuc;
+    const cizgiler = ekranParcalari.flatMap((e) => e.parcalar.flat());
+    const engeller = [...tuvalEngelleri(viewport.width, viewport.height, { cisimSecici: solids.length > 0 })];
+    // Eksen çizgileri ve sayıları da engeldir: yazı eksenin üstüne binmesin (harfler çizgilerin üstüne gelmez kuralı)
+    if (viewport.showAxes !== false) {
+      const o = worldToScreen({ x: 0, y: 0 }, viewport);
+      engeller.push({ x: 0, y: o.y - 5, w: viewport.width, h: 24 }, { x: o.x - 30, y: 0, w: 35, h: viewport.height });
+    }
+    // Noktalar ve adları (çevresindeki ~40 × 36 px)
+    for (const o of objects) {
+      if (o.type !== 'point' || o.visible === false) continue;
+      const p = worldToScreen(o, viewport);
+      engeller.push({ x: p.x - 14, y: p.y - 26, w: 44, h: 38 });
+    }
+    const px = fs(13, 'label');
+    for (const { fn, parcalar } of ekranParcalari) {
+      if (fn.showLabel === false) continue;
+      const metin = fonksiyonEtiketiYazimi(fn);
+      const yer = fonksiyonEtiketYeri(
+        parcalar,
+        { genislik: viewport.width, yukseklik: viewport.height },
+        { w: metin.length * px * 0.56 + 4, h: px },
+        engeller,
+        cizgiler
+      );
+      if (!yer) continue;
+      engeller.push(yer.kutu);
+      sonuc.set(fn.id, { ...(sonuc.get(fn.id) as { d: string }), etiket: { ...yer, metin, px } });
+    }
+    return sonuc;
+  }, [objects, viewport, worldBounds, sliderScope, isSade, fs, solids.length]);
   // Çizilen ızgara adımı: Ayarlar > Izgara aralığı "Otomatik" ise yakınlaştırmaya göre, değilse girilen sabit aralık
   const gridInfo = useMemo(
     () => visibleGridStep(viewport),
@@ -5119,73 +5182,10 @@ export function Canvas({
             const fn = obj as FunctionObject;
             // Seçili grafik doğru parçası gibi pembe ve kalın çizilir; eskiden seçim hiç görünmüyordu.
             const isSelected = selectedObjectIds.includes(fn.id);
-            const compiled = getCompiledExpression(fn.expression);
-            if (!compiled) return null;
-
-            const safeEval = (x: number): number => {
-              try {
-                const y = compiled(x, sliderScope);
-                return typeof y === 'number' ? y : NaN;
-              } catch (e) {
-                return NaN;
-              }
-            };
-
-            const pointsCount = Math.min(800, Math.max(200, Math.floor(viewport.width / 2)));
-            const dx = (worldBounds.maxX - worldBounds.minX) / pointsCount;
-            const rangeH = Math.max(worldBounds.maxY - worldBounds.minY, 1e-6);
-            // Görünür alanın çok dışına taşan değerler kırpılır (kesikli çizgi değil, ekran dışına çıkış)
-            const clampLimit = rangeH * 3;
-            const clampY = (y: number) =>
-              Math.max(worldBounds.minY - clampLimit, Math.min(worldBounds.maxY + clampLimit, y));
-
-            let pathD = '';
-            let isDrawing = false;
-            let prevX = 0;
-            let prevY: number | null = null;
-
-            for (let i = 0; i <= pointsCount; i++) {
-              const xVal = worldBounds.minX + i * dx;
-              const yVal = safeEval(xVal);
-
-              // Tanımsız / sonsuz örnek: yol burada kesilir (yeni parça 'M' ile başlar)
-              if (!Number.isFinite(yVal)) {
-                isDrawing = false;
-                prevY = null;
-                continue;
-              }
-
-              // Süreksizlik tespiti (tan x, 1/x gibi): işaret değişimi + görünür aralığa göre büyük sıçrama
-              if (prevY !== null && isDrawing) {
-                const signChanged = Math.sign(prevY) !== Math.sign(yVal) && prevY !== 0 && yVal !== 0;
-                const bigJump = Math.abs(yVal - prevY) > rangeH * 0.5;
-                if (signChanged && bigJump) {
-                  // Kutup (dikey asimptot) doğrulaması: iki örneğin ortasına bak.
-                  // Orta değer, KENDİ tarafındaki uç örnekten daha da büyümüşse
-                  // arada sonsuza kaçan bir kutup vardır -> kop.
-                  // Dik ama sürekli bir sıfır geçişinde (ör. 1000x) orta değer
-                  // her zaman iki uç değerin arasında kalır -> kopma olmaz.
-                  const midY = safeEval((prevX + xVal) / 2);
-                  const sameSideRef =
-                    Math.sign(midY) === Math.sign(prevY) ? Math.abs(prevY) : Math.abs(yVal);
-                  const isPole = !Number.isFinite(midY) || Math.abs(midY) >= sameSideRef;
-                  if (isPole) {
-                    isDrawing = false;
-                  }
-                }
-              }
-
-              const sPoint = worldToScreen({ x: xVal, y: clampY(yVal) }, viewport);
-
-              if (!isDrawing) {
-                pathD += `M ${sPoint.x} ${sPoint.y} `;
-                isDrawing = true;
-              } else {
-                pathD += `L ${sPoint.x} ${sPoint.y} `;
-              }
-              prevX = xVal;
-              prevY = yVal;
-            }
+            const cizim = fonksiyonCizimleri.get(fn.id);
+            if (!cizim) return null;
+            const pathD = cizim.d;
+            const etiket = cizim.etiket;
 
             return (
               <g key={fn.id} className={`function-plot ${imlecSinifi(activeTool, 'nesne')}`} data-object-id={fn.id} onContextMenu={(e) => openContextMenu(e, fn)} onPointerDown={(e) => handleObjectMouseDown(e, fn)} onTouchStart={(e) => handleTouchStartOnObject(e, fn)} onTouchMove={cancelLongPress} onTouchEnd={() => cancelLongPress()} onTouchCancel={() => cancelLongPress()}>
@@ -5198,6 +5198,24 @@ export function Canvas({
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
+                {/* Ad/denklem etiketi: grafiğin rengiyle, zemin halesiyle; tıklanınca grafik seçilir */}
+                {etiket && (
+                  <text
+                    data-fonksiyon-etiketi={fn.id}
+                    x={etiket.x}
+                    y={etiket.y}
+                    textAnchor={etiket.anchor}
+                    fontSize={etiket.px * yaziOlcegi}
+                    fill={isSelected ? '#ec4899' : fn.color || '#2563eb'}
+                    stroke={tuvalZemini || 'hsl(var(--background))'}
+                    strokeWidth={3}
+                    strokeLinejoin="round"
+                    paintOrder="stroke"
+                    className="font-bold select-none"
+                  >
+                    {etiket.metin}
+                  </text>
+                )}
               </g>
             );
           })}
@@ -5911,9 +5929,19 @@ export function Canvas({
                 className="select-none"
                 onPointerDown={(e) => {
                   if (!nesneBasisiIslenmeli(activeTool, e) || e.button !== 0) return;
-                  if (activeTool === 'select' && !bagli) {
+                  // Seç ve Taşı'da sürgü gövdesinden (başlık, çubuk) sürüklenerek taşınır (alan uzmanı, 4. tur);
+                  // kısa basış eskisi gibi: bağsız sürgüde ayarlar açılır, bağlı sürgü seçilir. Shift/Ctrl çoklu seçimdir.
+                  if (activeTool === 'select' && !e.shiftKey && !e.ctrlKey) {
                     e.stopPropagation();
-                    ayarlariAc();
+                    e.preventDefault();
+                    setSelectedObjectIds([s.id]);
+                    sliderPositionDragRef.current = {
+                      id: s.id, pointerId: e.pointerId,
+                      startClient: { x: e.clientX, y: e.clientY },
+                      startPosition: { x: s.x as number, y: s.y as number }, moved: false,
+                      kisaBasis: bagli ? 'sec' : 'ayarlar',
+                    };
+                    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* Pencere dinleyicileri sürüklemeyi sürdürür. */ }
                   } else {
                     handleObjectMouseDown(e, s);
                   }
@@ -5923,7 +5951,10 @@ export function Canvas({
                   x={sol.x - 10} y={ust}
                   width={Math.max(sag.x - sol.x, baslikOlcu.genislik) + 20}
                   height={sol.y + 24 - ust} fill="transparent"
-                />
+                  className={imlecSinifi(activeTool, 'nesne')}
+                >
+                  <title>Taşımak için sürükleyin; ayarlar için tıklayın</title>
+                </rect>
                 {/* Taşıyıcı çizgi */}
                 <line
                   x1={sol.x}
@@ -8308,6 +8339,9 @@ export function Canvas({
         isOpen={isTextDialogOpen}
         onClose={() => {
           setIsTextDialogOpen(false);
+          // Yeni yazı penceresi kapanınca (Vazgeç) araç Seç ve Taşı'ya döner: sonraki tuval tıklaması (ör. menü
+          // kapatırken) pencereyi yeniden açmaz; yazı aracı düğmeyle ya da T kısayoluyla yeniden seçilir (alan uzmanı, 4. tur)
+          if (!editingTextObj && activeTool === 'text') setActiveTool('select');
           setEditingTextObj(null);
         }}
         initialText={editingTextObj?.text || ''}
@@ -8331,6 +8365,8 @@ export function Canvas({
               createdAt: Date.now(),
             };
             addObject(newTextObj, `"${text}" notu eklendi`);
+            // Metin eklendi: araç Seç ve Taşı'ya döner (alan uzmanı, 4. tur)
+            if (activeTool === 'text') setActiveTool('select');
           }
           setIsTextDialogOpen(false);
           setEditingTextObj(null);

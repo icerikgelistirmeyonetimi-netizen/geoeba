@@ -4,39 +4,52 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useWorkspace } from '@/state/WorkspaceContext';
 import { validateMathExpression } from '@/math/parser';
 import { functionNameOf, functionNameOwner, nextFunctionName, undefinedFunctionCalls } from '@/math/functionNames';
+import { fonksiyonAdiYazimi } from '@/math/fonksiyonYazimi';
+import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
+import type { FunctionObject, MathObject } from '@/types/math';
 import { Modal } from '@/components/ui/Modal';
 import { TrendingUp, X, Check, AlertCircle } from 'lucide-react';
+import { fonksiyonSablonlari, trigonometriIpucuGosterilir } from './fonksiyonSablonlari';
 
 interface FunctionDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Düzenlenecek fonksiyonun kimliği (Bağlamlar > "Fonksiyon Formülünü Düzenle"): pencere bu fonksiyonun formülü
+   * ve adıyla dolu açılır, "Güncelle" AYNI nesneyi değiştirir (alan uzmanı, 4. tur, satır 162). Yoksa yeni fonksiyon.
+   */
+  duzenlenecekId?: string | null;
 }
 
-const TEMPLATES = [
-  { label: 'Doğrusal: 2x + 1', expr: '2*x + 1' },
-  { label: 'Parabol: x² - 4', expr: 'x^2 - 4' },
-  { label: 'Sinüs: sin(x)', expr: 'sin(x)' },
-  { label: 'Kosinüs: cos(x)', expr: 'cos(x)' },
-  { label: 'Mutlak Değer: |x-2|', expr: '|x-2|' },
-  { label: 'Parametreli: a*x^2 + b', expr: 'a*x^2 + b' },
-  { label: 'Karekök: sqrt(x)', expr: 'sqrt(x)' },
-  { label: 'Derece: sind(x)', expr: 'sind(x)' },
-];
-
 const DEFAULT_EXPRESSION = '2*x + 1';
+
+/** Düzenlenen fonksiyonun ad kutusundaki adı: "f(x)"; "y = …" etiketlide "y"; adsızda sıradaki boş ad. */
+export function duzenlemeAdi(fn: FunctionObject, objects: readonly MathObject[]): string {
+  const ad = fonksiyonAdiYazimi(fn);
+  if (ad) return ad;
+  if (/^\s*y\s*=/i.test(fn.label ?? '')) return 'y';
+  return `${nextFunctionName(objects.filter((o) => o.id !== fn.id))}(x)`;
+}
 
 /** Yalnız harf yazılan ad ("g") çağrılabilir biçime getirilir: "g(x)". */
 const callableName = (typed: string) => (/^[a-zçğıöşü][a-zçğıöşü0-9]?$/i.test(typed) ? `${typed}(x)` : typed);
 
-export function FunctionDialog({ isOpen, onClose }: FunctionDialogProps) {
-  const { addFunction, objects } = useWorkspace();
+export function FunctionDialog({ isOpen, onClose, duzenlenecekId = null }: FunctionDialogProps) {
+  const { addFunction, updateFunction, objects } = useWorkspace();
   const [expression, setExpression] = useState(DEFAULT_EXPRESSION);
   const [label, setLabel] = useState('f(x)');
+  // Hızlı şablonlar kademeye göre: ortaokulda doğrusal, parabol, mutlak değer, karekök (fonksiyonSablonlari.ts)
+  const [kademe] = useKademeDuzeyi();
+  const sablonlar = fonksiyonSablonlari(kademe);
+  const duzenlenen = duzenlenecekId
+    ? (objects.find((o) => o.id === duzenlenecekId && o.type === 'function') as FunctionObject | undefined)
+    : undefined;
 
   const validation = validateMathExpression(expression);
   // Aynı adla ikinci fonksiyon eklenmez; tanımsız çağrı ("h(x)" yokken) kaydırıcıya dönüşmesin.
+  // Düzenlenen fonksiyonun kendi adı "kullanılıyor" sayılmaz.
   const typedName = functionNameOf({ label: `${callableName(label.trim())} = 0` });
-  const nameOwner = typedName ? functionNameOwner(objects, typedName) : undefined;
+  const nameOwner = typedName ? functionNameOwner(objects, typedName, duzenlenen?.id) : undefined;
   const missingCalls = validation.ok ? undefinedFunctionCalls(objects, expression, typedName) : [];
   const isValid = validation.ok && !nameOwner && missingCalls.length === 0;
 
@@ -47,9 +60,18 @@ export function FunctionDialog({ isOpen, onClose }: FunctionDialogProps) {
 
   useEffect(() => {
     if (!isOpen) return;
+    // Düzenlemede seçili fonksiyonun formülü ve adı yüklenir (eskiden varsayılan 2*x + 1 geliyordu)
+    const fn = duzenlenecekId
+      ? (objectsRef.current.find((o) => o.id === duzenlenecekId && o.type === 'function') as FunctionObject | undefined)
+      : undefined;
+    if (fn) {
+      setExpression(fn.expression);
+      setLabel(duzenlemeAdi(fn, objectsRef.current));
+      return;
+    }
     setExpression(DEFAULT_EXPRESSION);
     setLabel(`${nextFunctionName(objectsRef.current)}(x)`);
-  }, [isOpen]);
+  }, [isOpen, duzenlenecekId]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,8 +79,11 @@ export function FunctionDialog({ isOpen, onClose }: FunctionDialogProps) {
     if (!isValid || !expr) return;
 
     // Ad boş bırakılırsa " = 2*x + 1" gibi bozuk bir etiket oluşmasın.
-    const name = callableName(label.trim()) || `${nextFunctionName(objects)}(x)`;
-    addFunction(expr, `${name} = ${expr}`);
+    const digerleri = duzenlenen ? objects.filter((o) => o.id !== duzenlenen.id) : objects;
+    const yazilan = label.trim();
+    const name = duzenlenen && yazilan.toLowerCase() === 'y' ? 'y' : callableName(yazilan) || `${nextFunctionName(digerleri)}(x)`;
+    if (duzenlenen) updateFunction(duzenlenen.id, expr, `${name} = ${expr}`);
+    else addFunction(expr, `${name} = ${expr}`);
     onClose();
   };
 
@@ -74,7 +99,7 @@ export function FunctionDialog({ isOpen, onClose }: FunctionDialogProps) {
         <div className="flex items-center gap-2">
           <TrendingUp className="w-5 h-5 text-primary" />
           <h2 id="function-dialog-title" className="text-base font-bold text-foreground">
-            Fonksiyon Grafiği Ekle
+            {duzenlenen ? 'Fonksiyonu Düzenle' : 'Fonksiyon Grafiği Ekle'}
           </h2>
         </div>
         <button
@@ -130,9 +155,19 @@ export function FunctionDialog({ isOpen, onClose }: FunctionDialogProps) {
             </div>
           )}
           <p className="text-[11px] text-muted-foreground leading-snug pt-0.5">
-            İpuçları: <code className="font-mono">2x</code>, <code className="font-mono">x sin(x)</code> ve{' '}
-            <code className="font-mono">x²</code> yazımı desteklenir. Trigonometri:{' '}
-            <code className="font-mono">sin(x)</code> radyan, <code className="font-mono">sind(x)</code> derece. Mutlak değer: <code className="font-mono">|x-2|</code> veya <code className="font-mono">abs(x-2)</code>.
+            {trigonometriIpucuGosterilir(kademe) ? (
+              <>
+                İpuçları: <code className="font-mono">2x</code>, <code className="font-mono">x sin(x)</code> ve{' '}
+                <code className="font-mono">x²</code> yazımı desteklenir. Trigonometri:{' '}
+                <code className="font-mono">sin(x)</code> radyan, <code className="font-mono">sind(x)</code> derece.{' '}
+              </>
+            ) : (
+              <>
+                İpuçları: <code className="font-mono">2x</code> ve <code className="font-mono">x²</code> yazımı desteklenir.
+                Karekök: <code className="font-mono">sqrt(x)</code> ya da <code className="font-mono">√x</code>.{' '}
+              </>
+            )}
+            Mutlak değer: <code className="font-mono">|x-2|</code> veya <code className="font-mono">abs(x-2)</code>.
             Ondalık için <code className="font-mono">0,5</code> veya <code className="font-mono">0.5</code>.
           </p>
         </div>
@@ -143,7 +178,7 @@ export function FunctionDialog({ isOpen, onClose }: FunctionDialogProps) {
             Hızlı Şablonlar
           </div>
           <div className="grid grid-cols-2 gap-2">
-            {TEMPLATES.map((t) => (
+            {sablonlar.map((t) => (
               <button
                 type="button"
                 key={t.expr}
@@ -170,7 +205,7 @@ export function FunctionDialog({ isOpen, onClose }: FunctionDialogProps) {
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 disabled:opacity-40 transition-all"
           >
             <Check className="w-3.5 h-3.5" />
-            <span>Grafiği Çiz</span>
+            <span>{duzenlenen ? 'Güncelle' : 'Grafiği Çiz'}</span>
           </button>
         </div>
       </form>

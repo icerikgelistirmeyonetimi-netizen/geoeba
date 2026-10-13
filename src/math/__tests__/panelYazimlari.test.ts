@@ -217,7 +217,8 @@ describe('ölçüsü olmayan nesneler', () => {
     const A = nokta('A', 2, -3);
     expect(metinler(A, [A])).toEqual(['A(2; -3)']);
     const fn = govde<FunctionObject>({ id: 'f1', type: 'function', expression: 'x^2 + 1' } as Partial<FunctionObject> & { type: 'function'; id: string });
-    expect(metinler(fn, [fn])).toEqual(['y = x^2 + 1']);
+    // Okunur yazım (alan uzmanı, 4. tur, satır 157): ham x^2 değil x²
+    expect(metinler(fn, [fn])).toEqual(['y = x² + 1']);
   });
 
   it('nesneMetni satırları virgülle birleştirir (arama süzgeci)', () => {

@@ -14,6 +14,7 @@ import {
   PolygonObject,
   SliderObject,
   FractionObject,
+  FunctionObject,
 } from '@/types/math';
 import {
   calculateDistance,
@@ -26,6 +27,7 @@ import { sliderDisplay } from '@/math/sliderDisplay';
 import { metniCozumle, olcuDugumleri, yazimAyari } from '@/math/matematikYazimi';
 import { nesnedenNokta } from '@/math/olcuYazimlari';
 import { nesneSatirlari, panelYazimi } from '@/math/panelYazimlari';
+import { fonksiyonEtiketiYazimi } from '@/math/fonksiyonYazimi';
 import { MatematikMetni } from '@/components/workspace/MatematikMetni';
 import { PanelOlcusu } from '@/components/workspace/PanelOlcusu';
 import { YazimKopyala } from '@/components/workspace/YazimKopyala';
@@ -859,7 +861,10 @@ export function PropertiesPanel({
                     style={{ backgroundColor: selectedObject.color || '#2563eb' }}
                   />
                   <h3 className="font-bold text-sm text-foreground truncate">
-                    {selectedObject.label || 'Nesne Özellikleri'}
+                    {/* Fonksiyon başlığı okunur yazımla: "f(x) = 2x + 1" (alan uzmanı, 4. tur) */}
+                    {selectedObject.type === 'function'
+                      ? fonksiyonEtiketiYazimi(selectedObject as FunctionObject)
+                      : selectedObject.label || 'Nesne Özellikleri'}
                   </h3>
                 </div>
                 <button
