@@ -1529,7 +1529,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       try {
         const saved = loadSavedSandboxProject();
         dispatch({ type: 'reset', objects: saved?.objects ?? [], description: saved ? 'Kayıtlı çalışma açıldı' : 'Boş çalışma alanı', persist: true });
-        if (saved?.viewport) setViewport(prev => ({ ...prev, ...saved.viewport, width: prev.width, height: prev.height }));
+        // Kayıtlı görünüm ayarları (ızgara, eksen, zemin) geri gelir; bakış (yakınlık, kaydırma) her açılışta orijin
+        // merkezli varsayılandır: "Görünümü Sıfırla" ile aynı (alan uzmanı, 4. tur: grafik ilk bakışta görünmüyordu)
+        if (saved?.viewport) setViewport(prev => ({ ...prev, ...saved.viewport, zoom: DEFAULT_ZOOM, panX: 0, panY: 0, width: prev.width, height: prev.height }));
         if (saved?.styleSettings) setStyleSettings({ ...DEFAULT_STYLE_SETTINGS, ...saved.styleSettings });
         if (saved?.layoutMode) setLayoutMode(saved.layoutMode);
       } catch (error) {

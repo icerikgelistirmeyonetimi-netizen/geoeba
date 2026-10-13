@@ -7,7 +7,8 @@
  * birer bütündür.
  *
  * Yalnız PANEL süzülür. Yazılı / sesli komutlar ("Yazarak komut ver") ve klavye kısayolları her kademede
- * bütün araçlarla çalışmaya devam eder; bu modül yalnızca görünürlüğü söyler.
+ * bütün araçlarla çalışmaya devam eder; bu modül yalnızca görünürlüğü söyler. TEK AYRIK DURUM: ortaokulda
+ * kısayolla ve komutla araç SEÇİMİ de süzülür (ARAC_SECIMI_SUZULEN_KADEMELER, aracSecilebilirMi; alan uzmanı, 4. tur).
  *
  * Kaynaklar:
  *  - İlkokul: "Dinamik Matematik Yazılımı İlkokul Raporu" (23.07.2026). Geometri ve Ölçüm Araçları ekranındaki
@@ -291,6 +292,40 @@ export function gruplariSuz<G extends { tools: readonly { id: string }[] }>(grup
 /** Süzülmüş gruplardaki toplam araç sayısı */
 export function gorunenAracSayisi(gruplar: readonly { tools: readonly { id: string }[] }[], duzey: KademeDuzeyi): number {
   return gruplariSuz(gruplar, duzey).reduce((toplam, grup) => toplam + grup.tools.length, 0);
+}
+
+/**
+ * Klavye kısayoluyla ve yazılı / sesli komutla ARAÇ SEÇİMİ de süzgeçten geçen kademeler (alan uzmanı, atölye inceleme
+ * 4. tur, ortaokul: "Ortaokulda panelde olmayan araçlar klavye kısayoluyla hâlâ açılıyor; E tuşu Elips aracını
+ * etkinleştiriyor, panelde seçili araç görünmüyor"). Yalnız ortaokulda: ilkokul ve lisenin kısayolları değişmez.
+ * Komutla şekil KURMAK (ör. "merkezi A olan elips çiz") bu süzgece girmez; yalnız araç seçimi süzülür.
+ */
+export const ARAC_SECIMI_SUZULEN_KADEMELER: readonly KademeId[] = ['ortaokul'];
+
+/** Panelde değil tuval şeridinde duran araçlar: süzgeçten bağımsız her zaman seçilebilir (El / kaydırma). */
+const PANEL_DISI_ARACLAR: ReadonlySet<string> = new Set(['pan']);
+
+/**
+ * Araç kısayolla ya da komutla seçilebilir mi? Süzgeçli kademede (ARAC_SECIMI_SUZULEN_KADEMELER) yalnız panelde
+ * görünen araçlar; diğer kademelerde ve "Tüm araçlar"da hepsi.
+ */
+export function aracSecilebilirMi(duzey: KademeDuzeyi, arac: string): boolean {
+  if (duzey === 'tum' || !ARAC_SECIMI_SUZULEN_KADEMELER.includes(duzey)) return true;
+  return PANEL_DISI_ARACLAR.has(arac) || aracGorunurMu(duzey, arac);
+}
+
+/** "ortaokul" → "ortaokulda", "lise" → "lisede" (bulunma eki, ünlü uyumu ve sert ünsüz) */
+function bulunmaHali(sozcuk: string): string {
+  const unluler = [...sozcuk].filter((h) => 'aıoueiöü'.includes(h));
+  const ince = 'eiöü'.includes(unluler[unluler.length - 1] ?? 'a');
+  const sert = 'fstkçşhp'.includes(sozcuk[sozcuk.length - 1] ?? '');
+  return `${sozcuk}${sert ? 't' : 'd'}${ince ? 'e' : 'a'}`;
+}
+
+/** Süzgeç dışı araç seçilmek istenince gösterilen bildirim: "Elips aracı ortaokulda kapalı. …" */
+export function kapaliAracBildirimi(duzey: KademeId, aracAdi: string): string {
+  const yer = bulunmaHali(KADEME_DUZEYLERI[duzey].ad.toLocaleLowerCase('tr'));
+  return `${aracAdi} aracı ${yer} kapalı. Bütün araçlar için Kademe menüsünden «Tüm araçlar»ı seçin.`;
 }
 
 /**

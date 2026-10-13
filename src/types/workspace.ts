@@ -57,7 +57,8 @@ export type ToolMode =
   | 'delete'
   | 'pan';
 
-export type LayoutMode = 'default' | 'algebra_2d' | '2d_3d' | 'three_col' | 'algebra_3d' | '2d_only' | '3d_only';
+/** Çalışma alanı yerleşimi (liste: components/workspace/gorunumDuzenleri). 'default' eski üç bölmeli kayıtlar içindir. */
+export type LayoutMode = 'default' | 'algebra_only' | 'algebra_2d' | '2d_3d' | 'three_col' | 'algebra_3d' | '2d_only' | '3d_only';
 
 export interface ToolCategory {
   id: string;

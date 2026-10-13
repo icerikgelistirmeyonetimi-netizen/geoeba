@@ -245,3 +245,10 @@ export const TOOL_GROUPS: ToolGroup[] = [
   },
 ];
 
+
+const ARAC_ADLARI: ReadonlyMap<string, string> = new Map(TOOL_GROUPS.flatMap((g) => g.tools.map((t) => [t.id, t.name] as const)));
+
+/** Aracın paneldeki adı ("ellipse" → "Elips"); listede olmayan araç (ör. El) için 'pan' → "Görünümü Kaydır". */
+export function aracAdi(arac: string): string {
+  return ARAC_ADLARI.get(arac) ?? (arac === 'pan' ? 'Görünümü Kaydır' : arac);
+}

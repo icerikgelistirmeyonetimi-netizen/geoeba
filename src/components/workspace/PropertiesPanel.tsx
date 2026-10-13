@@ -51,7 +51,7 @@ import {
   Ruler,
 } from 'lucide-react';
 
-export type LayoutMode = 'default' | 'algebra_2d' | '2d_3d' | 'three_col' | 'algebra_3d' | '2d_only' | '3d_only';
+export type LayoutMode = 'default' | 'algebra_only' | 'algebra_2d' | '2d_3d' | 'three_col' | 'algebra_3d' | '2d_only' | '3d_only';
 export type PanelTab = 'ozellikler' | 'stil' | 'ayarlar';
 
 interface PropertiesPanelProps {

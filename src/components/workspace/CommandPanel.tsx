@@ -9,7 +9,9 @@ import { MAX_COMMAND_LENGTH } from '@/math/commands/engine';
 import {
   fitViewport, historyConflict, historySteps, sanitizeViewportPatch, shouldForceMeasurements, viewportCenter, zoomViewport,
 } from '@/math/commands/viewActions';
-import { TOOL_GROUPS } from './toolDefinitions';
+import { TOOL_GROUPS, aracAdi } from './toolDefinitions';
+import { aracSecilebilirMi, kapaliAracBildirimi } from './kademeDuzeyleri';
+import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { CommandSuggestion, searchCommands } from '@/math/commandSearch';
 import { interpretSemanticMatch } from '@/math/semanticCommands';
 import { useSemanticCommands } from '@/hooks/useSemanticCommands';
@@ -17,7 +19,9 @@ import { panelYazimi } from '@/math/panelYazimlari';
 import { MatematikMetni } from './MatematikMetni';
 import { YazimKopyala } from './YazimKopyala';
 
-const toolExamples = TOOL_GROUPS.flatMap(group => group.tools.map(tool => `${tool.name} aracını seç`));
+/** "Nokta aracını seç" önerileri; ortaokulda yalnız paneldeki araçlar (kademeDuzeyleri.aracSecilebilirMi) */
+const aracOrnekleri = (secilebilir: (arac: string) => boolean) =>
+  TOOL_GROUPS.flatMap(group => group.tools.filter(tool => secilebilir(tool.id)).map(tool => `${tool.name} aracını seç`));
 const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
 const MAX_INPUT_HEIGHT = 160;
 
@@ -57,13 +61,16 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
   const listId = useId();
   const helpId = useId();
   const drawer = variant === 'drawer';
+  // Ortaokulda panelde olmayan araç komutla da seçilmez ve önerilmez (alan uzmanı, 4. tur); komutla şekil kurmak serbest
+  const [kademeDuzeyi] = useKademeDuzeyi();
+  const toolExamples = useMemo(() => aracOrnekleri((arac) => aracSecilebilirMi(kademeDuzeyi, arac)), [kademeDuzeyi]);
   // Yanıtlar MEB yazımıyla gösterilir (şapkalı açı, mutlak değer çizgisi, yay imi).
   // Komut yanıtı HER ZAMAN tam yazımdadır; "Yalnızca değer" yalnızca tuval etiketlerini seyreltir.
   const yazim = useMemo(() => panelYazimi(styleSettings), [styleSettings]);
   const meaning = useSemanticCommands(text, visible && focused);
   const lexicalSuggestions = useMemo(() => searchCommands(text, {
     examples: toolExamples, history: lastCommands, labels: objects.map(o => o.label),
-  }), [text, lastCommands, objects]);
+  }), [text, lastCommands, objects, toolExamples]);
   const interpretations = meaning.matches.filter(m => m.score >= 0.55 && m.score >= meaning.matches[0].score - 0.1)
     .map(match => interpretSemanticMatch(text, match, objects, selectedObjectIds));
   const semanticSuggestions: CommandSuggestion[] = interpretations.flatMap(item => item.command ? [{ text: item.command, kind: 'semantic' as const }] : []);
@@ -121,6 +128,13 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
       if (!preserveDraft) setText(raw);
       setResult({ ok: false, message: plan.message, suggestions: plan.suggestions?.length ? plan.suggestions : suggestions.map(s => s.text) });
       return;
+    }
+    for (const action of plan.actions) {
+      if (action.kind === 'selectTool' && kademeDuzeyi !== 'tum' && !aracSecilebilirMi(kademeDuzeyi, action.tool)) {
+        if (!preserveDraft) setText(raw);
+        setResult({ ok: false, message: kapaliAracBildirimi(kademeDuzeyi, aracAdi(action.tool)) });
+        return;
+      }
     }
     const conflict = historyConflict(plan);
     if (conflict) { if (!preserveDraft) setText(raw); setResult({ ok: false, message: conflict }); return; }

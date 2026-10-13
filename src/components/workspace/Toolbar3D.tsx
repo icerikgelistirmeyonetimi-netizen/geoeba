@@ -17,6 +17,7 @@ import {
   type TreeTool3DItem,
 } from './treeToolDefinitions3D';
 import { gruplari3BSuz, grupAcikliklari3B } from './kademeDuzeyleri3B';
+import { GorunumDuzeniPaneli } from './gorunumDuzenleri';
 import {
   Box,
   Check,
@@ -24,20 +25,14 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
-  Columns2,
-  Columns3,
-  Calculator,
   Eye,
   EyeOff,
   Layers,
   LayoutGrid,
-  PanelLeft,
-  PanelRight,
   RotateCw,
   Ruler,
   Search,
   Sparkles,
-  Square,
   Trash2,
   X,
   BookOpen,
@@ -103,6 +98,8 @@ interface Toolbar3DProps {
   onUpdateSolidById?: (id: string, updates: Partial<Solid3DObject>) => void;
   /** Açılışta seçili sekme (varsayılan Araçlar). */
   initialTab?: SidebarTab;
+  /** Sekme değişince bildirilir: 2B ile 3B paneli arasında geçişte seçili sekme korunur (WorkspaceView) */
+  onTabChange?: (sekme: SidebarTab) => void;
 }
 
 /** Gizlenen cismin geri yüklenecek görünüm değerleri (göz simgesi) */
@@ -267,16 +264,6 @@ function BaglamKarti({ baslik, simge, sag, children }: { baslik: string; simge?:
   );
 }
 
-const LAYOUT_OPTIONS: Array<{ mode: LayoutMode; name: string; badge: string; description: string; icon: React.ReactNode }> = [
-  { mode: '2d_only', name: '2D Düzlem', badge: '2D', description: 'Yalnızca 2 boyutlu geometri çizim alanı', icon: <Square className="w-5 h-5 text-ada-deniz dark:text-ada-vurgu" /> },
-  { mode: '3d_only', name: '3D Uzay', badge: '3D', description: 'Yalnızca 3 boyutlu katı cisim ve uzay stüdyosu', icon: <Box className="w-5 h-5 text-ada-lavanta" /> },
-  { mode: '2d_3d', name: '2D + 3D', badge: '2D + 3D', description: 'Sol tarafta 2D çizim, sağ tarafta 3D uzay yan yana', icon: <Columns2 className="w-5 h-5 text-ada-vurgu" /> },
-  { mode: 'default', name: 'Cebir', badge: 'Cebir', description: 'Cebirsel ifadeler ve fonksiyonlar çalışma alanı', icon: <Calculator className="w-5 h-5 text-ada-deniz-koyu dark:text-ada-vurgu" /> },
-  { mode: 'algebra_2d', name: '2D + Cebir', badge: '2D + Cebir', description: '2D geometri düzlemi ile cebir giriş paneli', icon: <PanelLeft className="w-5 h-5 text-ada-altin dark:text-ada-fener" /> },
-  { mode: 'algebra_3d', name: '3D + Cebir', badge: '3D + Cebir', description: '3D uzay stüdyosu ile cebir giriş paneli', icon: <PanelRight className="w-5 h-5 text-ada-mercan" /> },
-  { mode: 'three_col', name: '2D + 3D + Cebir', badge: 'Üçü Bir Arada', description: 'Cebir listesi, 2D geometri ve 3D uzay üç sütun halinde', icon: <Columns3 className="w-5 h-5 text-ada-murekkep-2 dark:text-ada-kum" /> },
-];
-
 const EKSENLER: { key: 'x' | 'y' | 'z'; label: string; cls: string }[] = [
   { key: 'x', label: 'X', cls: 'text-ada-mercan' },
   { key: 'y', label: 'Y', cls: 'text-ada-vurgu' },
@@ -315,13 +302,18 @@ export function Toolbar3D({
   onAddSolidPreset,
   onUpdateSolidById,
   initialTab = 'araclar',
+  onTabChange,
 }: Toolbar3DProps) {
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>(initialTab);
+  const onTabChangeRef = useRef(onTabChange);
+  onTabChangeRef.current = onTabChange;
+  useEffect(() => {
+    onTabChangeRef.current?.(sidebarTab);
+  }, [sidebarTab]);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [creationMethod, setCreationMethod] = useState<CreationMethod>('instant');
   const [toolSearch, setToolSearch] = useState('');
   const [objectSearch, setObjectSearch] = useState('');
-  const [layoutTooltip, setLayoutTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const [adDuzenlenen, setAdDuzenlenen] = useState<{ id: string; taslak: string } | null>(null);
   const [gizliGorunumler, setGizliGorunumler] = useState<Record<string, GizliGorunum>>({});
 
@@ -1286,67 +1278,8 @@ export function Toolbar3D({
           </div>
         )}
 
-        {/* ================= D. GÖRÜNÜMLER ================= */}
-        {sidebarTab === 'gorunumler' && (
-          <div className="flex-1 flex flex-col min-h-0 bg-card">
-            <div className="p-3.5 border-b border-border/80 flex items-center justify-between gap-2 shrink-0">
-              <div className="flex items-center gap-2">
-                <LayoutGrid className="w-4 h-4 text-primary" aria-hidden="true" />
-                <h3 className="text-sm font-bold text-foreground tracking-tight">Çalışma Alanı Düzenleri</h3>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin">
-              {LAYOUT_OPTIONS.map((opt) => {
-                const isCurrent = layoutMode === opt.mode;
-                return (
-                  <button
-                    key={opt.mode}
-                    type="button"
-                    onClick={() => onLayoutModeChange?.(opt.mode)}
-                    onMouseEnter={(e) => setLayoutTooltip({ text: opt.description, x: e.clientX + 14, y: e.clientY + 10 })}
-                    onMouseMove={(e) => setLayoutTooltip({ text: opt.description, x: e.clientX + 14, y: e.clientY + 10 })}
-                    onMouseLeave={() => setLayoutTooltip(null)}
-                    title={opt.description}
-                    aria-label={opt.name}
-                    aria-pressed={isCurrent}
-                    className={`w-full p-2.5 rounded-2xl border text-left transition-all cursor-pointer select-none relative group ${
-                      isCurrent ? 'bg-primary/10 border-primary/50 shadow-sm ring-1 ring-primary/30' : 'bg-muted/30 border-border/70 hover:bg-muted/60 hover:border-primary/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-xl shrink-0 transition-transform ${isCurrent ? 'bg-primary text-primary-foreground shadow-xs [&>svg]:!text-primary-foreground' : 'bg-background border border-border group-hover:scale-105'}`}>
-                        {opt.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="font-bold text-[13px] text-foreground">{opt.name}</span>
-                          <span className={`text-[11px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${isCurrent ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                            {opt.badge}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    {isCurrent && (
-                      <div className="absolute top-2 right-2 flex items-center gap-1 text-[11px] font-bold text-primary">
-                        <Check className="w-3.5 h-3.5" aria-hidden="true" />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {layoutTooltip && (
-              <div
-                style={{ left: layoutTooltip.x, top: layoutTooltip.y }}
-                className="fixed z-[1000] pointer-events-none px-3 py-1.5 rounded-xl bg-ada-murekkep/95 text-ada-fildisi dark:bg-ada-fildisi/95 dark:text-ada-murekkep text-xs font-medium shadow-2xl border border-border/50 backdrop-blur-md max-w-xs animate-in fade-in-0 zoom-in-95 duration-100 select-none leading-tight"
-              >
-                {layoutTooltip.text}
-              </div>
-            )}
-          </div>
-        )}
+        {/* ================= D. GÖRÜNÜMLER: 2B panelle ortak liste ve düzen (gorunumDuzenleri.tsx) ================= */}
+        {sidebarTab === 'gorunumler' && <GorunumDuzeniPaneli layoutMode={layoutMode} onLayoutModeChange={onLayoutModeChange} />}
 
         {/* ================= E. ARA ================= */}
         {sidebarTab === 'ara' && (
