@@ -52,6 +52,7 @@ import { useWorkspace } from '@/state/WorkspaceContext';
 import { syncUserFunctions } from '@/math/functionNames';
 import { createId } from '@/state/ids';
 import { validateProjectSolids } from '@/math/projectFile';
+import { VARSAYILAN_CISIM_OLCULERI, VARSAYILAN_KAMERA_3B, bosKonumBul } from './cisimYerlesimi';
 
 const SCENE_STORAGE_KEY = 'matematik_3d_sahne_v1';
 const HISTORY_LIMIT = 80;
@@ -59,17 +60,8 @@ const COALESCE_MS = 700;
 
 export type LayoutMode = 'default' | 'algebra_2d' | '2d_3d' | 'three_col' | 'algebra_3d' | '2d_only' | '3d_only';
 
-const DEFAULT_CAMERA_3D: Camera3D = {
-  rotX: 25,
-  rotY: -40,
-  zoom: 55,
-  panX: 0,
-  panY: 30,
-  perspective: 700,
-  showGrid: true,
-  showAxes: true,
-  showCoordinates: true,
-};
+/** Açılış kamerası (Görünümü Sıfırla da buna döner: cisimYerlesimi.kamerayiSifirla) */
+const DEFAULT_CAMERA_3D: Camera3D = VARSAYILAN_KAMERA_3B;
 
 const SOLID_NAMES: Record<Solid3DType, string> = {
   cube: 'Küp',
@@ -424,7 +416,8 @@ export function WorkspaceView() {
     customDimensions?: { width?: number; height?: number; depth?: number; radius?: number },
     customPos?: Point3D
   ) => {
-    const base = { width: 3, height: 3, depth: 3, radius: 1.5 };
+    // Türün varsayılan ölçüsü: dikdörtgen prizma 4 × 3 × 2 (küp değil), ötekiler 3 br (cisimYerlesimi)
+    const base = VARSAYILAN_CISIM_OLCULERI[type];
     const dims = customDimensions
       ? {
           width: customDimensions.width ?? (customDimensions.radius ? customDimensions.radius * 2 : base.width),
@@ -432,7 +425,7 @@ export function WorkspaceView() {
           depth: customDimensions.depth ?? (customDimensions.radius ? customDimensions.radius * 2 : base.depth),
           radius: customDimensions.radius ?? (customDimensions.width ? customDimensions.width / 2 : base.radius),
         }
-      : base;
+      : { ...base };
     if (type === 'cube') {
       dims.height = dims.width;
       dims.depth = dims.width;
@@ -444,8 +437,9 @@ export function WorkspaceView() {
     setSolids((prev) => {
       const count = prev.filter((s) => s.type === type).length + 1;
       const color = SOLID_COLORS[prev.length % SOLID_COLORS.length];
-      const idx = prev.length;
-      const autoPos: Point3D = { x: ((idx % 4) - 1.5) * 4.5, y: -Math.floor(idx / 4) * 4.5, z: 0 };
+      // Kameranın baktığı noktanın yanındaki boş yer (eski kural sıra numarasıyla sola diziyordu: ilk cisim bile
+      // merkezin 6,75 br solunda, araç panelinin altında doğuyordu). Hâlâ görünmüyorsa Canvas3D kamerayı ona çevirir.
+      const autoPos: Point3D = bosKonumBul(prev, { type, dimensions: dims }, camera3D);
 
       const newSolid: Solid3DObject = {
         id: newId,

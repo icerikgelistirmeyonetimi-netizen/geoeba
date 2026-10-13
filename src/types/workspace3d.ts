@@ -62,7 +62,16 @@ export interface Solid3DObject {
   selectedFaceIndex: number | null;
   /** Yüz dizinine göre özel yüz renkleri (Yüzü renklendir aracı) */
   faceColors?: Record<number, string>;
+  /**
+   * Üçgen prizmanın taban üçgeni (yalnız triangular_prism). Yoksa ikizkenar (eski dosyalar). Dik: tepe sol taban
+   * köşesinin tam üstünde (dik açı solda). Eşkenar: tepe ortada ve yükseklik = genişlik · √3 / 2 (Bağlamlar paneli korur).
+   */
+  tabanUcgeni?: UcgenTabani;
 }
+
+/** Üçgen prizmanın taban üçgeni türü (uzman 4. tur [174]) */
+export type UcgenTabani = 'ikizkenar' | 'dik' | 'eskenar';
+export const UCGEN_TABANLARI: readonly UcgenTabani[] = ['ikizkenar', 'dik', 'eskenar'];
 
 export type Solid3D = Solid3DObject;
 

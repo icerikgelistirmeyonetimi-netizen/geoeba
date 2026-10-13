@@ -326,3 +326,31 @@ describe('Toolbar3D çizimi (2B tasarım sistemi)', () => {
     expect(html).not.toMatch(EMOJI);
   });
 });
+
+describe('Üçgen prizma taban türü ve 2B - 3B ayrımı (uzman 4. tur [172], [174], [175])', () => {
+  const ucgen: Solid3DObject = { ...kup, id: 'u-1', type: 'triangular_prism', name: 'Üçgen Prizma 1' };
+  const baglam = (s: Solid3DObject) => ciz({ initialTab: 'baglamlar', solids: [s], selectedSolidId: s.id, selectedSolidIds: [s.id], onUpdateSolid: vi.fn() });
+
+  it('ortaokulda Bağlamlar > Boyutlar taban üçgeni seçicisi: İkizkenar (seçili), Dik, Eşkenar', () => {
+    kademe.duzey = 'ortaokul';
+    const html = baglam(ucgen);
+    expect(html).toContain('aria-label="Taban üçgeni"');
+    for (const ad of ['İkizkenar', 'Dik', 'Eşkenar']) expect(html).toContain(`>${ad}</button>`);
+    expect(html).toMatch(/role="radio" aria-checked="true"[^>]*>İkizkenar</);
+  });
+
+  it('eşkenarda genişlik "Kenar (a)" olur, yükseklik a·√3/2 yazılır (ayrı kaydırıcı yok)', () => {
+    kademe.duzey = 'ortaokul';
+    const html = baglam({ ...ucgen, tabanUcgeni: 'eskenar', dimensions: { width: 4, height: (4 * Math.sqrt(3)) / 2, depth: 3, radius: 2 } });
+    expect(html).toContain('Kenar (a)');
+    expect(html).toContain('a · √3 / 2 ≈ 3,46 br');
+    expect(html).toMatch(/role="radio" aria-checked="true"[^>]*>Eşkenar</);
+  });
+
+  it('ilkokulda seçici yok (üçgen türleri ortaokul konusu); küpte de yok', () => {
+    kademe.duzey = 'ilkokul';
+    expect(baglam(ucgen)).not.toContain('Taban üçgeni');
+    kademe.duzey = 'ortaokul';
+    expect(baglam(kup)).not.toContain('Taban üçgeni');
+  });
+});

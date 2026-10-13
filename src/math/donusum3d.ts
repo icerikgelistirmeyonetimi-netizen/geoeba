@@ -159,6 +159,8 @@ function aynaMatrisi(duzlem: AynaDuzlemi): Mat {
 }
 /** Bütün cisim türlerinin paylaştığı yerel simetri: x → −x (küp, prizmalar, piramit, silindir, koni, küre). */
 const YEREL_AYNA: Mat = [[-1, 0, 0], [0, 1, 0], [0, 0, 1]];
+/** Dik üçgen tabanlı prizma x → −x'e göre simetrik değildir (dik açı solda); y → −y simetrisi kullanılır. */
+const YEREL_AYNA_Y: Mat = [[1, 0, 0], [0, -1, 0], [0, 0, 1]];
 
 /**
  * Düzleme göre yansıtılmış KOPYA (ayna görüntüsü). `seviye`: düzlemin konumu (yz → x = seviye, xz → y = seviye, xy → z = seviye).
@@ -166,7 +168,8 @@ const YEREL_AYNA: Mat = [[-1, 0, 0], [0, 1, 0], [0, 0, 1]];
  */
 export function cismiYansit(solid: Solid3DObject, duzlem: AynaDuzlemi, seviye = 0, o: { id?: string; name?: string } = {}): Solid3DObject {
   const S = aynaMatrisi(duzlem);
-  const rotation = matrisEuler(carp(carp(S, eulerMatrisi(solid.rotation)), YEREL_AYNA));
+  const yerel = solid.type === 'triangular_prism' && solid.tabanUcgeni === 'dik' ? YEREL_AYNA_Y : YEREL_AYNA;
+  const rotation = matrisEuler(carp(carp(S, eulerMatrisi(solid.rotation)), yerel));
   const p = { ...solid.position };
   if (duzlem === 'yz') p.x = 2 * seviye - p.x;
   else if (duzlem === 'xz') p.y = 2 * seviye - p.y;
