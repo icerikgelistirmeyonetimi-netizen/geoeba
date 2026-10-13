@@ -138,6 +138,25 @@ describe('uzman 4. tur: ünite metinleri', () => {
     }
   });
 
+  it('[116] denetçi: hiçbir ünite ve atölye metninde cümle küçük harfli bir sözcükle (değişken adı dahil) başlamaz', () => {
+    // Cümle başı: metnin başı ya da . ? ! + boşluk. Önünde sayı ya da tek harf varsa sıra sayısıdır ("6. kule", "i. kule");
+    // tek harfli değişkenler (n, i, x …) matematik yazımıdır, sayılmaz.
+    const cumleBasi = /(?:^|(?<!(?:^|[\s(])[a-zA-Z]|\d)[.?!]\s+)([a-zçğıöşü][\wçğıöşüÇĞİÖŞÜ]+)/;
+    const bulunan: string[] = [];
+    const bak = (yer: string, m?: string) => {
+      if (m && cumleBasi.test(m)) bulunan.push(`${yer}: ${m}`);
+    };
+    for (const u of UNITELER) {
+      bak(u.id, u.yeniKavram);
+      for (const g of u.gorevler) {
+        for (const m of [g.baslik, g.yonerge, ...g.ipuclari]) bak(g.id, m);
+        for (const s of [g.soru, g.tahmin]) if (s) for (const m of [s.metin, s.sonrasi, s.yonlendirme]) bak(g.id, m);
+      }
+    }
+    for (const a of ATOLYELER) for (const m of [a.aciklama, a.yonerge, a.ipucu, ...(a.ipuclari ?? [])]) bak(a.id, m);
+    expect(bulunan).toEqual([]);
+  });
+
   it('[122] 6. sınıf Genel terim 5/5: adım adım üç ipucu (ünite sınırı 3), terimle aynı toplama bloğuyla başlayan kod', () => {
     const g = gorev('s6-terim-5');
     expect(g.ipuclari.length).toBe(3);
