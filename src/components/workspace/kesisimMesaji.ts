@@ -90,9 +90,12 @@ const EGRI = new Set(['circle', 'arc', 'sector', 'ellipse']);
  */
 export function kesisimMesaji(
   o1: MathObject, o2: MathObject, noktalar: readonly KesisimNoktasi[], gorunmeyen: readonly string[] = [],
+  /** Kesişim şeklin kendisinde değil UZANTISINDA mı (parça, ışın, yay; Canvas cizgininUzerindeMi ile bakar) */
+  uzantilar: readonly [boolean, boolean] = [false, false],
 ): string {
-  const a1 = okunurAd(o1);
-  const a2 = okunurAd(o2);
+  const uzanti = (ad: string, var_: boolean) => (var_ ? `${tamlayan(ad)} uzantısı` : ad);
+  const a1 = uzanti(okunurAd(o1), uzantilar[0]);
+  const a2 = uzanti(okunurAd(o2), uzantilar[1]);
   const ikiDogru = o1.type === 'line' && o2.type === 'line' && / doğrusu$/u.test(a1) && / doğrusu$/u.test(a2);
   const ozne = ikiDogru
     ? `${a1.replace(/ doğrusu$/u, '')} ile ${a2.replace(/ doğrusu$/u, '')} doğrularının`

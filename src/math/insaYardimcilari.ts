@@ -76,3 +76,29 @@ export function kareKoseleri(kose: Point2D, kenar: number): [Point2D, Point2D, P
     { x: kose.x, y: kose.y + kenar },
   ];
 }
+
+/**
+ * Kesiştir aracı parça, ışın ve yayı UZANTISIYLA kesiştirir (dar açılı olmayan üçgende yükseklik ayağı kenarın
+ * uzantısındadır; bu davranış korunur). Bildirim yanlış söylemesin diye noktanın şeklin KENDİSİNDE mi yoksa
+ * uzantısında mı olduğuna bakılır (denetim, 4. tur: "[EF] doğru parçası ile AB doğrusunun kesişim noktası H(10; 5)"
+ * deniyordu, H parçanın dışındaydı).
+ *
+ * Doğrusal şekil: a → b doğrultusunda p'nin parametresi; parça [0, 1], ışın [0, ∞), doğru her yer.
+ */
+export function cizgininUzerindeMi(tur: 'parca' | 'isin' | 'dogru', a: Point2D, b: Point2D, p: Point2D, tol = 1e-6): boolean {
+  if (tur === 'dogru') return true;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const boy2 = dx * dx + dy * dy;
+  if (boy2 === 0) return true;
+  const t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / boy2;
+  return tur === 'isin' ? t >= -tol : t >= -tol && t <= 1 + tol;
+}
+
+/** Yay / dilim: p'nin merkezden açısı başlangıçtan saat yönünün tersine `tarama` içinde mi (getArcGeometry). */
+export function yayinUzerindeMi(merkez: Point2D, baslangicAcisi: number, tarama: number, p: Point2D, tol = 1e-6): boolean {
+  let fark = Math.atan2(p.y - merkez.y, p.x - merkez.x) - baslangicAcisi;
+  while (fark < -tol) fark += 2 * Math.PI;
+  while (fark >= 2 * Math.PI - tol) fark -= 2 * Math.PI;
+  return fark <= tarama + tol || fark >= 2 * Math.PI - tol;
+}

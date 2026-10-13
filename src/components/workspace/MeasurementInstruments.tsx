@@ -54,6 +54,8 @@ import {
   alanModeliMenusu,
   alanModeliniYerlestir,
   alanModeliEngelleri,
+  ekranKutusuDunyaya,
+  type DunyaKutusu,
   alanOkumasi,
   cetvelBoyuSuruklemeden,
   cetvelBoyunuDegistir,
@@ -310,6 +312,23 @@ export function MeasurementInstruments({
     setMenu({ x, y, hedef, yukari });
   };
 
+  /**
+   * Tuvalde çizilmiş ölçü etiketlerinin ([data-measurement]) ve yönerge çubuğunun dünya kutuları; ölçme aracının kendi
+   * yazıları sayılmaz.
+   */
+  const cizilmisEtiketler = (vp: ViewportTransform): DunyaKutusu[] => {
+    const kok = kokRef.current;
+    const svg = kok?.ownerSVGElement;
+    if (!kok || !svg) return [];
+    const tuval = svg.getBoundingClientRect();
+    // Tuvalin üstünde duran araç yönerge çubuğu da engeldir (ızgaranın alt satırı ve "4 × 3 = 12 br²" altında kalıyordu)
+    const cubuklar = Array.from(svg.parentElement?.querySelectorAll('[data-yonerge-cubugu]') ?? []);
+    return [...Array.from(svg.querySelectorAll('[data-measurement]')).filter((el) => !kok.contains(el)), ...cubuklar]
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.width > 0 && r.height > 0)
+      .map((r) => ekranKutusuDunyaya({ x0: r.left - tuval.left, y0: r.top - tuval.top, x1: r.right - tuval.left, y1: r.bottom - tuval.top }, vp));
+  };
+
   /** Aracı görünen tuvalin ortasına yerleştirir, boyunu yakınlaştırmaya sığdırır. */
   const ortala = (arac: OlcmeAraci, vp: ViewportTransform) => {
     const t = tercihRef.current;
@@ -326,8 +345,9 @@ export function MeasurementInstruments({
       setSetsquareSize(boy);
       setSetsquarePos(konum);
     } else {
-      // Şekillerin ve ölçü etiketlerinin üstüne konmaz (alan uzmanı, 4. tur: ızgara A(ABC) etiketini kapatıyordu)
-      const { konum, sutun, satir } = alanModeliniYerlestir(t.sutun, t.satir, vp, alanModeliEngelleri(objects));
+      // Şekillerin ve ölçü etiketlerinin üstüne konmaz (alan uzmanı, 4. tur: ızgara A(ABC) etiketini kapatıyordu).
+      // Etiketlerin çizildikleri gerçek yerler de engeldir (kaydırılmış dilim/yay etiketleri şeklin kutusunun dışında)
+      const { konum, sutun, satir } = alanModeliniYerlestir(t.sutun, t.satir, vp, [...alanModeliEngelleri(objects), ...cizilmisEtiketler(vp)]);
       setAreaCols(sutun);
       setAreaRows(satir);
       setAreaModelPos(konum);

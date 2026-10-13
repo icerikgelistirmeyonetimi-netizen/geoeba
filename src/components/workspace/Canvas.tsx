@@ -180,7 +180,7 @@ import {
 } from '@/math/yazimDuzeni';
 import {
   type OlcumKarti, TRIG_SATIRLARI, aciGrubu, aciOlcusu, cemberYaricapiGorunur, cokgenKartSatirlari, kenarUzunlugu, noktaBulucu, olcumKartKutulari, segmentUzunlugu,
-  trigEtiketAnahtari, trigSatirlari, yayGeometrisi, yayMerkezAcisi, yayOlcumuYazimi, yayOlculeri, yazimlar,
+  trigEtiketAnahtari, trigSatirlari, yayGeometrisi, yayMerkezAcisi, yayOlcumuYazimi, yayOlculeri, yazimlar, elipsKartSatirlari,
 } from '@/math/olcuYazimlari';
 import { aciAnahtari, esitlikIsaretleri, esitlikYamalariniUygula } from '@/math/esitlikIsaretleri';
 import { tamSayiCemberCevresi, tamSayiDaireAlani, toplamiKoruyarakYuvarla } from '@/math/tamSayiHesap';
@@ -190,7 +190,7 @@ import { imlecDegeri, imlecSinifi } from './imlecSiniflari';
 import { gorunumKaydirmaBasisiMi, kaydirmaDisiHedefMi, nesneBasisiIslenmeli } from './gorunumKaydirma';
 import { KOSE_BOSLUGU, noktaAdiYeri, noktaEngelleri, type AdYonu } from './noktaAdi';
 import { olcumParcasiMi } from '@/math/nesneAdlari';
-import { dogrultuNoktalari, goruntuNoktaAdlari } from '@/math/insaYardimcilari';
+import { cizgininUzerindeMi, dogrultuNoktalari, goruntuNoktaAdlari, yayinUzerindeMi } from '@/math/insaYardimcilari';
 import { kesisimMesaji, kesismiyorMesaji } from './kesisimMesaji';
 import { denklemEtiketiMerkezi, noktaAdiBolgesi, olcekliKutu, yiginKaymasi, yiginYeriSec } from './etiketCakismasi';
 import { Box, FlipHorizontal2, Info, Lightbulb, Pentagon, PencilLine, X as CarpiSimgesi } from 'lucide-react';
@@ -806,7 +806,21 @@ export function Canvas({
         return e.x < 0 || e.y < 0 || e.x > viewport.width || e.y > viewport.height;
       })
       .map((p) => p.label);
-    setHintMessage(kesisimMesaji(o1, o2, yeniler.map((p) => ({ ad: p.label, x: p.x, y: p.y })), disarida));
+    // Parça / ışın / yay uzantısıyla kesiştirilir (davranış aynı); nokta şeklin dışındaysa bildirim "uzantısı" der
+    const uzerinde = (o: MathObject, p: Point2D): boolean => {
+      const b = kesisimBicimi(o);
+      if (b?.tur === 'dogru') {
+        return cizgininUzerindeMi(o.type === 'segment' ? 'parca' : o.type === 'ray' ? 'isin' : 'dogru', b.a, b.b, p, 1e-4);
+      }
+      if (o.type === 'arc' || o.type === 'sector') {
+        const m = pointsById.get(o.centerPointId);
+        const g = yayGeometrisi(o, noktaBul);
+        return !m || !g || yayinUzerindeMi(m, g.startAngle, g.sweep, p, 1e-4);
+      }
+      return true;
+    };
+    const uzantilar: [boolean, boolean] = [yeniler.some((p) => !uzerinde(o1, p)), yeniler.some((p) => !uzerinde(o2, p))];
+    setHintMessage(kesisimMesaji(o1, o2, yeniler.map((p) => ({ ad: p.label, x: p.x, y: p.y })), disarida, uzantilar));
   };
 
   /** Pergelin O ANKİ durumu: tıklama işleyicileri eski kapanışa takılmasın */
@@ -3778,6 +3792,29 @@ export function Canvas({
     pendingPointIds,
   ]);
 
+  /**
+   * Daire dilimi / elipsin alan ya da çevre ölçüsü — tuvaldeki etiketle aynı hesap (yayOlculeri, elipsKartSatirlari).
+   * Alanı Bul / Çevre Hesapla bildirimi değeri yazsın diye (denetim, 4. tur: dilimde "alanı etiketle gösterildi"
+   * deniyor, sayı yazılmıyordu).
+   */
+  const egriOlcusu = (obj: MathObject, tur: 'area' | 'perimeter'): Olcu | null => {
+    if (obj.type === 'sector') {
+      const dilim = obj as SectorObject;
+      const g = yayGeometrisi(dilim, noktaBul);
+      if (!g) return null;
+      const yalniz: SectorObject = {
+        ...dilim, showArcLength: false, showRadius: false, showChordLength: false,
+        showArea: tur === 'area', showPerimeter: tur === 'perimeter',
+      };
+      return yayOlculeri(yalniz, noktaBul, objects, g).find((x) => x.kind === tur)?.olcu ?? null;
+    }
+    if (obj.type === 'ellipse') {
+      const elp = obj as EllipseObject;
+      return elipsKartSatirlari(elp.radiusX, elp.radiusY, tur === 'area', tur === 'perimeter').olculer[0] ?? null;
+    }
+    return null;
+  };
+
   const handleObjectMouseDown = (e: React.MouseEvent, obj: MathObject) => {
     // El aracı (orta tuş / Alt) görünümü kaydırır: basış yutulmaz, nesne seçilmez (gorunumKaydirma.ts)
     if (!nesneBasisiIslenmeli(activeTool, e)) return;
@@ -3818,7 +3855,9 @@ export function Canvas({
           // noktalarda düşer. Parçanın kendi `label` alanına '|AB|' YAZILMAZ; adlar her zaman
           // görünen nokta etiketlerinden okunur (yazım tasarımı, kural R1).
           const olcu = uzunluk(p1, p2, calculateDistance(p1, p2), { birim: unit });
-          const zaten = seg.showLength !== false && (seg.unit ?? 'br') === unit;
+          // Uzunluk yalnız showLength AÇIKSA çizilir (bağla/böl/kiriş parçalarında alan hiç yazılmaz): undefined
+          // "zaten görünüyor" sayılırsa ölçüm açılmaz ama bildirim "(etikette gösteriliyor)" der (denetim, 4. tur)
+          const zaten = seg.showLength === true && (seg.unit ?? 'br') === unit;
           if (!zaten) {
             commit(
               (prev) =>
@@ -3868,7 +3907,11 @@ export function Canvas({
       if (obj.type === 'sector' || obj.type === 'ellipse') {
         const zaten = !!(obj as EllipseObject).showPerimeter;
         measurePerimeter(obj.id);
-        setHintMessage(zaten ? `${obj.label || 'Şeklin'} çevresi etikette gösteriliyor.` : `${obj.label || 'Şeklin'} çevresi etiketle gösterildi.`);
+        // Bildirim değeri de yazar ("Ç(IHJ dilimi) ≈ 17,85 br"); hesap etiketle aynı (egriOlcusu)
+        const olcu = egriOlcusu(obj, 'perimeter');
+        setHintMessage(olcu
+          ? olcumBildirimi(olcuMetni(olcu, yazim), zaten)
+          : zaten ? `${obj.label || 'Şeklin'} çevresi etikette gösteriliyor.` : `${obj.label || 'Şeklin'} çevresi etiketle gösterildi.`);
         return;
       }
       if (obj.type === 'polygon') {
@@ -3903,7 +3946,11 @@ export function Canvas({
       if (obj.type === 'sector' || obj.type === 'ellipse') {
         const zaten = !!(obj as EllipseObject).showArea;
         measureArea(obj.id);
-        setHintMessage(zaten ? `${obj.label || 'Şeklin'} alanı etikette gösteriliyor.` : `${obj.label || 'Şeklin'} alanı etiketle gösterildi.`);
+        // Bildirim değeri de yazar ("A(IHJ dilimi) ≈ 9,82 br²"); hesap etiketle aynı (egriOlcusu)
+        const olcu = egriOlcusu(obj, 'area');
+        setHintMessage(olcu
+          ? olcumBildirimi(olcuMetni(olcu, yazim), zaten)
+          : zaten ? `${obj.label || 'Şeklin'} alanı etikette gösteriliyor.` : `${obj.label || 'Şeklin'} alanı etiketle gösterildi.`);
         return;
       }
       if (obj.type === 'polygon') {
@@ -3938,11 +3985,23 @@ export function Canvas({
     // tıklanınca doğru seçilmiyor, tıklanan yerde istenmeyen yeni bir nokta (I) oluşuyor"). Çizginin iki tanım
     // noktası doğrultuyu verir; çizginin üstüne dokunmak nokta üretmez. Önce nokta seçildiyse çizgi onu tamamlar.
     if ((activeTool === 'perpendicular' || activeTool === 'parallel') && pendingPointIds.length < 2) {
-      const dogrultu = dogrultuNoktalari(obj);
+      // Çokgenin kenarı da bir doğru parçasıdır (üçgende yükseklik: kenara, sonra karşı köşeye dokunulur). Kenar
+      // seçilmezse eskiden tıklanan yerde kenarın üstüne yeni nokta açılıyordu (denetim, 4. tur).
+      let dogrultu = dogrultuNoktalari(obj);
+      let kenarMi = false;
+      if (!dogrultu && obj.type === 'polygon' && svgRef.current) {
+        const poly = obj as PolygonObject;
+        const rect = svgRef.current.getBoundingClientRect();
+        const k = enYakinKenar(poly, { x: e.clientX - rect.left, y: e.clientY - rect.top });
+        if (k !== null) {
+          dogrultu = [poly.pointIds[k], poly.pointIds[(k + 1) % poly.pointIds.length]];
+          kenarMi = true;
+        }
+      }
       const p1 = dogrultu && pointsById.get(dogrultu[0]);
       const p2 = dogrultu && pointsById.get(dogrultu[1]);
       if (dogrultu && p1 && p2) {
-        const ad = obj.type === 'segment' ? `[${p1.label}${p2.label}]` : `${p1.label}${p2.label} ${obj.type === 'ray' ? 'ışını' : 'doğrusu'}`;
+        const ad = obj.type === 'segment' || kenarMi ? `[${p1.label}${p2.label}]` : `${p1.label}${p2.label} ${obj.type === 'ray' ? 'ışını' : 'doğrusu'}`;
         const tur = activeTool === 'perpendicular' ? 'dik' : 'paralel';
         const gecen = pendingPointIds.length === 1 ? pendingPointIds[0] : null;
         if (gecen && !dogrultu.includes(gecen)) {
@@ -4483,6 +4542,24 @@ export function Canvas({
   // Eksen sayıları, çentikler ve +x / +y / -y rozetlerinin yerleşimi (eksenSayilari.ts): eksen ekran dışındayken
   // kenara yapışan sayılar sol panelin, "<" tutamacının, araç düğmelerinin, alt bilginin ve yakınlaştırma
   // düğmelerinin altına girmez; köşede birbirini ezmez.
+  /**
+   * Eksen çizgisinin YANINDA (üstünde değil: 2–24 px) duran görünen noktaların gövde kutuları (ekran px). Eksen sayısı
+   * bunları örtmez. Tam eksen üstündeki noktalar sayılmaz: sayı çentiğin ötesinde durur, noktayı örtmez ve kaybolmasın.
+   */
+  const eksenYakiniNoktalar = useMemo(() => {
+    if (!viewport.showAxes) return [];
+    const kutular: { x: number; y: number; w: number; h: number }[] = [];
+    const yaninda = (d: number) => d > 2 && d <= 24;
+    for (const o of objects) {
+      if (o.type !== 'point' || o.visible === false) continue;
+      const pt = o as PointObject;
+      const e = worldToScreen(pt, viewport);
+      if (!yaninda(Math.abs(e.y - originScreen.y)) && !yaninda(Math.abs(e.x - originScreen.x))) continue;
+      const r = (pt.size || styleSettings.pointRadius) + 1;
+      kutular.push({ x: e.x - r, y: e.y - r, w: 2 * r, h: 2 * r });
+    }
+    return kutular;
+  }, [objects, viewport, originScreen, styleSettings.pointRadius]);
   const eksenYerlesimi = useMemo(() => {
     if (!viewport.showAxes) return null;
     const hazirla = (degerler: number[], ekran: (d: number) => number, uzunluk: number): EksenCentigi[] => {
@@ -4503,9 +4580,11 @@ export function Canvas({
       yCentikleri: hazirla(gridLines.yLines, (d) => worldToScreen({ x: 0, y: d }, viewport).y, viewport.height),
       adim: gridInfo.step,
       yaziBoyu: fs(11, 'axis'),
-      engeller: tuvalEngelleri(viewport.width, viewport.height, { cisimSecici: solids.length > 0 }),
+      // Eksenin hemen yanındaki görünen noktalar da engeldir: üstüne düşen sayı ("-3") noktayı örtmesin, yazılmaz
+      // (denetim, 4. tur: eksenin hemen altındaki kesişim noktası F sayının arkasında kalıyordu)
+      engeller: [...tuvalEngelleri(viewport.width, viewport.height, { cisimSecici: solids.length > 0 }), ...eksenYakiniNoktalar],
     });
-  }, [viewport, originScreen, gridLines, gridInfo.step, fs, solids.length]);
+  }, [viewport, originScreen, gridLines, gridInfo.step, fs, solids.length, eksenYakiniNoktalar]);
   // Sayıların zemin renginde halesi: ızgara çizgileri ve şekiller üstünde okunur kalır (özel zemin, koyu tema, zemin-acik)
   const eksenSayiHalesi = {
     stroke: tuvalZemini || 'hsl(var(--background))',

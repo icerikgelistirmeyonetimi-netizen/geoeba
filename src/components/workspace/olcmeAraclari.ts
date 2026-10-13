@@ -347,8 +347,12 @@ export function alanModeliniYerlestir(
   if (!engeller.length) return { sutun, satir, konum: ortada };
   const solAlt = screenToWorld({ x: 0, y: vp.height }, vp as ViewportTransform);
   const sagUst = screenToWorld({ x: vp.width, y: 0 }, vp as ViewportTransform);
-  const sigar = (k: Point2D) => k.x >= solAlt.x && k.y >= solAlt.y && k.x + sutun <= sagUst.x && k.y + satir <= sagUst.y;
-  const bos = (k: Point2D) => !engeller.some((e) => k.x < e.x1 && e.x0 < k.x + sutun && k.y < e.y1 && e.y0 < k.y + satir);
+  // Modelin kendi yazıları (üstte "4 br", solda "3 br", altta "4 × 3 = 12 br²") ızgaranın dışında durur: ~24 px pay
+  const pay = 24 / vp.zoom;
+  const sigar = (k: Point2D) =>
+    k.x - pay >= solAlt.x && k.y - pay >= solAlt.y && k.x + sutun <= sagUst.x && k.y + satir + pay <= sagUst.y;
+  const bos = (k: Point2D) =>
+    !engeller.some((e) => k.x - pay < e.x1 && e.x0 < k.x + sutun && k.y - pay < e.y1 && e.y0 < k.y + satir + pay);
   const enCok = Math.ceil(Math.max(sagUst.x - solAlt.x, sagUst.y - solAlt.y));
   for (let d = 0; d <= enCok; d++) {
     const halka: Point2D[] = [];
@@ -440,6 +444,18 @@ export function alanModeliEngelleri(objects: readonly MathObject[]): DunyaKutusu
     }
   }
   return out;
+}
+
+/**
+ * Tuvalde ÇİZİLMİŞ bir ölçü etiketinin ekran kutusu (px, tuvalin sol üstüne göre; y aşağı) → dünya kutusu. Alan
+ * modelinin kaçındığı yerlere etiketlerin GERÇEK yerleri de eklenir: çakışma önleyici dilim/yay etiketlerini
+ * şeklin dışına itebildiği için yalnız şekilden tahmin edilen kutu yetmiyordu (denetim, 4. tur: ızgara dilimin
+ * m(IĤJ) ve A(IHJ dilimi) etiketlerini kapatıyordu).
+ */
+export function ekranKutusuDunyaya(k: { x0: number; y0: number; x1: number; y1: number }, vp: Gorunum): DunyaKutusu {
+  const a = screenToWorld({ x: k.x0, y: k.y1 }, vp as ViewportTransform);
+  const b = screenToWorld({ x: k.x1, y: k.y0 }, vp as ViewportTransform);
+  return { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
 }
 
 /** Menüden boyut değişince: yeni model ekrana sığıyorsa sol alt köşe yerinde kalır, taşıyorsa merkez sabit tutulur. */

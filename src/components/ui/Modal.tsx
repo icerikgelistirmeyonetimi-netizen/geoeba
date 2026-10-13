@@ -151,7 +151,12 @@ export function Modal({
       onMouseDown={(e) => {
         const eylem = arkaPlanEylemi(e.target === e.currentTarget, closeOnBackdrop);
         if (eylem === 'kapat') onClose();
-        else if (eylem === 'uyar') onBackdropPress?.();
+        else if (eylem === 'uyar') {
+          // Basışın varsayılan odak değişimi engellenir: yoksa odak arkadaki pencereye (section) kaçıyor,
+          // onBackdropPress'in kutuya verdiği odak geri alınıyor ve öğrencinin yazdığı sayı hiçbir yere gitmiyordu
+          e.preventDefault();
+          onBackdropPress?.();
+        }
       }}
     >
       <div

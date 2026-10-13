@@ -1208,9 +1208,9 @@ function oteleSekil(
   }
 
   if (hedef.type === 'point') {
-    const yeni = noktaUret(hedef.x + vektor.x, hedef.y + vektor.y, '#9333ea');
-    yeni.label = `${hedef.label}'`;
-    return [yeni];
+    // Tek nokta da şekiller gibi: ad doluysa bir üs daha, türü Nesneler listesinde yazılır (denetim, 4. tur)
+    const k = kopyala([hedef.id]);
+    return k ? k.yeniler : null;
   }
 
   return null;
