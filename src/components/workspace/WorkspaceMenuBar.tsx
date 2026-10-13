@@ -945,18 +945,23 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   <AracKisayolu arac="text" />
                 </button>
 
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    fileInputRef.current?.click();
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <ImageIcon className="w-3.5 h-3.5 text-ada-murekkep-2 dark:text-ada-kum" />
-                    <span>Görsel</span>
-                  </div>
-                </button>
+                {/* Görsel Ekle aracını seçer (tuvale dokunulan yere görsel konur). Eskiden proje dosyası seçicisini (.geoeba)
+                    açıyordu. Araç panelde olmayan kademede (ortaokul) madde de gösterilmez. */}
+                {aracMenudeGorunur('image') && (
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      onSelectTool('image');
+                    }}
+                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="w-3.5 h-3.5 text-ada-murekkep-2 dark:text-ada-kum" />
+                      <span>Görsel</span>
+                    </div>
+                    <AracKisayolu arac="image" />
+                  </button>
+                )}
 
                 <button
                   onClick={() => {

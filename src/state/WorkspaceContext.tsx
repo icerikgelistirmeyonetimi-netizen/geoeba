@@ -294,6 +294,8 @@ export const VARSAYILAN_GORUNUM_AYARLARI = {
   backgroundColor: '#ffffff',
   rightAngleStyle: 'square',
   blackWhite: false,
+  // Ayarlar > "Eşit Uzunlukları İşaretle" (varsayılan açık): Varsayılana Sıfırla bunu da geri açar (alan uzmanı, 4. tur)
+  showEqualityMarks: true,
 } satisfies Partial<ViewportTransform>;
 
 const DEFAULT_VIEWPORT: ViewportTransform = {

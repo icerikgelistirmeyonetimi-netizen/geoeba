@@ -22,6 +22,12 @@ import { YazimKopyala } from './YazimKopyala';
 /** "Nokta aracını seç" önerileri; ortaokulda yalnız paneldeki araçlar (kademeDuzeyleri.aracSecilebilirMi) */
 const aracOrnekleri = (secilebilir: (arac: string) => boolean) =>
   TOOL_GROUPS.flatMap(group => group.tools.filter(tool => secilebilir(tool.id)).map(tool => `${tool.name} aracını seç`));
+/** Seçilemeyen araçların " <ad> aracı" kalıbı: kalıbı içeren öneri (ör. "elips aracına geç ve eksenleri gizle",
+ *  anlamsal "Elips aracını seç") listede gösterilmez; yazılırsa yine "ortaokulda kapalı" bildirimi çıkar. */
+export const kapaliAracKaliplari = (secilebilir: (arac: string) => boolean) =>
+  TOOL_GROUPS.flatMap(group => group.tools.filter(tool => !secilebilir(tool.id)).map(tool => ` ${normalizeCommand(`${tool.name} aracı`)}`));
+export const kapaliAraciOnerir = (oneri: string, kaliplar: readonly string[]) =>
+  kaliplar.length > 0 && kaliplar.some(k => ` ${normalizeCommand(oneri)}`.includes(k));
 const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
 const MAX_INPUT_HEIGHT = 160;
 
@@ -64,6 +70,7 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
   // Ortaokulda panelde olmayan araç komutla da seçilmez ve önerilmez (alan uzmanı, 4. tur); komutla şekil kurmak serbest
   const [kademeDuzeyi] = useKademeDuzeyi();
   const toolExamples = useMemo(() => aracOrnekleri((arac) => aracSecilebilirMi(kademeDuzeyi, arac)), [kademeDuzeyi]);
+  const kapaliKaliplar = useMemo(() => kapaliAracKaliplari((arac) => aracSecilebilirMi(kademeDuzeyi, arac)), [kademeDuzeyi]);
   // Yanıtlar MEB yazımıyla gösterilir (şapkalı açı, mutlak değer çizgisi, yay imi).
   // Komut yanıtı HER ZAMAN tam yazımdadır; "Yalnızca değer" yalnızca tuval etiketlerini seyreltir.
   const yazim = useMemo(() => panelYazimi(styleSettings), [styleSettings]);
@@ -74,7 +81,7 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
   const interpretations = meaning.matches.filter(m => m.score >= 0.55 && m.score >= meaning.matches[0].score - 0.1)
     .map(match => interpretSemanticMatch(text, match, objects, selectedObjectIds));
   const semanticSuggestions: CommandSuggestion[] = interpretations.flatMap(item => item.command ? [{ text: item.command, kind: 'semantic' as const }] : []);
-  const suggestions = [...semanticSuggestions, ...lexicalSuggestions].filter((item, index, all) =>
+  const suggestions = [...semanticSuggestions, ...lexicalSuggestions].filter(item => !kapaliAraciOnerir(item.text, kapaliKaliplar)).filter((item, index, all) =>
     all.findIndex(other => normalizeCommand(other.text) === normalizeCommand(item.text)) === index).slice(0, 6);
   const showSuggestions = focused && !dismissed && !help && suggestions.length > 0;
 
