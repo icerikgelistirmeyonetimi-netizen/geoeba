@@ -160,9 +160,10 @@ import {
 import { EksenSimgesi, IzgaraSimgesi } from './GrafikMenuSimgeleri';
 import { temaZemini, zeminTonu } from './zeminTonu';
 import { eksenSayilariniYerlestir, tuvalEngelleri, type EksenCentigi } from './eksenSayilari';
+import { surguEngelleri } from './surguYerlesimi';
 import { fonksiyonParcalari, parcalardanYol } from '@/math/fonksiyonCizimi';
 import { fonksiyonEtiketiYazimi } from '@/math/fonksiyonYazimi';
-import { fonksiyonEtiketYeri, type FonksiyonEtiketYeri } from './fonksiyonEtiketi';
+import { fonksiyonEtiketiEngelleri, fonksiyonEtiketYeri, type FonksiyonEtiketYeri } from './fonksiyonEtiketi';
 import { useTheme } from '@/state/ThemeContext';
 import { KayanCubuk, CubukMetni, CubukAyirici, CubukDugmesi } from './KayanCubuk';
 import { aracYonergesi } from './aracYonergeleri';
@@ -1983,12 +1984,11 @@ export function Canvas({
   const worldBounds = useMemo(() => getVisibleWorldBounds(viewport), [viewport]);
 
   // FONKSİYON GRAFİKLERİ ÖN GEÇİŞİ (alan uzmanı, 4. tur, satır 157): süreksizlikte (1/x'te x = 0) yol kesilir
-  // (fonksiyonCizimi.ts) ve her grafiğin üstüne okunur ad/denklem etiketi konur ("f(x) = 2x + 1"); etiketler
-  // birbirine, tuvalin düğmelerine ve grafik çizgilerine değmez (fonksiyonEtiketi.ts).
+  // (fonksiyonCizimi.ts). Her grafiğin okunur ad/denklem etiketinin ("f(x) = 2x + 1") yeri aşağıda,
+  // eksen yerleşiminden sonra hesaplanır (fonksiyonEtiketleri).
   const fonksiyonCizimleri = useMemo(() => {
-    const sonuc = new Map<string, { d: string; etiket: (FonksiyonEtiketYeri & { metin: string; px: number }) | null }>();
+    const sonuc = new Map<string, { d: string; fn: FunctionObject; parcalar: Point2D[][] }>();
     const pointsCount = Math.min(800, Math.max(200, Math.floor(viewport.width / 2)));
-    const ekranParcalari: { fn: FunctionObject; parcalar: Point2D[][] }[] = [];
     for (const o of objects) {
       if (o.type !== 'function' || !o.visible) continue;
       const fn = o as FunctionObject;
@@ -2004,40 +2004,10 @@ export function Canvas({
       };
       const dunya = fonksiyonParcalari(safeEval, worldBounds, pointsCount);
       const ekran = dunya.map((parca) => parca.map((p) => worldToScreen(p, viewport)));
-      sonuc.set(fn.id, { d: parcalardanYol(ekran, (p) => p), etiket: null });
-      ekranParcalari.push({ fn, parcalar: ekran });
-    }
-    if (isSade) return sonuc;
-    const cizgiler = ekranParcalari.flatMap((e) => e.parcalar.flat());
-    const engeller = [...tuvalEngelleri(viewport.width, viewport.height, { cisimSecici: solids.length > 0 })];
-    // Eksen çizgileri ve sayıları da engeldir: yazı eksenin üstüne binmesin (harfler çizgilerin üstüne gelmez kuralı)
-    if (viewport.showAxes !== false) {
-      const o = worldToScreen({ x: 0, y: 0 }, viewport);
-      engeller.push({ x: 0, y: o.y - 5, w: viewport.width, h: 24 }, { x: o.x - 30, y: 0, w: 35, h: viewport.height });
-    }
-    // Noktalar ve adları (çevresindeki ~40 × 36 px)
-    for (const o of objects) {
-      if (o.type !== 'point' || o.visible === false) continue;
-      const p = worldToScreen(o, viewport);
-      engeller.push({ x: p.x - 14, y: p.y - 26, w: 44, h: 38 });
-    }
-    const px = fs(13, 'label');
-    for (const { fn, parcalar } of ekranParcalari) {
-      if (fn.showLabel === false) continue;
-      const metin = fonksiyonEtiketiYazimi(fn);
-      const yer = fonksiyonEtiketYeri(
-        parcalar,
-        { genislik: viewport.width, yukseklik: viewport.height },
-        { w: metin.length * px * 0.56 + 4, h: px },
-        engeller,
-        cizgiler
-      );
-      if (!yer) continue;
-      engeller.push(yer.kutu);
-      sonuc.set(fn.id, { ...(sonuc.get(fn.id) as { d: string }), etiket: { ...yer, metin, px } });
+      sonuc.set(fn.id, { d: parcalardanYol(ekran, (p) => p), fn, parcalar: ekran });
     }
     return sonuc;
-  }, [objects, viewport, worldBounds, sliderScope, isSade, fs, solids.length]);
+  }, [objects, viewport, worldBounds, sliderScope]);
   // Çizilen ızgara adımı: Ayarlar > Izgara aralığı "Otomatik" ise yakınlaştırmaya göre, değilse girilen sabit aralık
   const gridInfo = useMemo(
     () => visibleGridStep(viewport),
@@ -4648,6 +4618,39 @@ export function Canvas({
       engeller: [...tuvalEngelleri(viewport.width, viewport.height, { cisimSecici: solids.length > 0 }), ...eksenYakiniNoktalar],
     });
   }, [viewport, originScreen, gridLines, gridInfo.step, fs, solids.length, eksenYakiniNoktalar]);
+
+  // FONKSİYON GRAFİĞİ ETİKETLERİ (alan uzmanı, 4. tur, satır 157: "f(x) = 2x + 1"): etiketler birbirine, tuvalin
+  // düğmelerine, eksen çizgisine ve sayılarına, +x / +y / -y ve (0; 0) rozetlerine, noktalara, sürgülere, yazılara
+  // ve grafik çizgilerine değmez (fonksiyonEtiketi.ts). Denetim: sağ kenardaki "+x" rozeti etiketin üstüne biniyordu.
+  const fonksiyonEtiketleri = useMemo(() => {
+    const sonuc = new Map<string, FonksiyonEtiketYeri & { metin: string; px: number }>();
+    if (isSade) return sonuc;
+    const cizimler = [...fonksiyonCizimleri.values()];
+    const cizgiler = cizimler.flatMap((c) => c.parcalar.flat());
+    // Düğmeler, eksen çizgisi / sayıları / rozetleri ve nesnelerin kutuları (noktalar adlarıyla, sürgüler, yazılar…)
+    const engeller = fonksiyonEtiketiEngelleri(
+      { genislik: viewport.width, yukseklik: viewport.height },
+      eksenYerlesimi,
+      tuvalEngelleri(viewport.width, viewport.height, { cisimSecici: solids.length > 0 }),
+      surguEngelleri(objects, viewport)
+    );
+    const px = fs(13, 'label') * yaziOlcegi;
+    for (const { fn, parcalar } of cizimler) {
+      if (fn.showLabel === false) continue;
+      const metin = fonksiyonEtiketiYazimi(fn);
+      const yer = fonksiyonEtiketYeri(
+        parcalar,
+        { genislik: viewport.width, yukseklik: viewport.height },
+        { w: metin.length * px * 0.56 + 4, h: px },
+        engeller,
+        cizgiler
+      );
+      if (!yer) continue;
+      engeller.push(yer.kutu);
+      sonuc.set(fn.id, { ...yer, metin, px });
+    }
+    return sonuc;
+  }, [fonksiyonCizimleri, objects, viewport, isSade, fs, yaziOlcegi, solids.length, eksenYerlesimi]);
   // Sayıların zemin renginde halesi: ızgara çizgileri ve şekiller üstünde okunur kalır (özel zemin, koyu tema, zemin-acik)
   const eksenSayiHalesi = {
     stroke: tuvalZemini || 'hsl(var(--background))',
@@ -5185,7 +5188,7 @@ export function Canvas({
             const cizim = fonksiyonCizimleri.get(fn.id);
             if (!cizim) return null;
             const pathD = cizim.d;
-            const etiket = cizim.etiket;
+            const etiket = fonksiyonEtiketleri.get(fn.id) ?? null;
 
             return (
               <g key={fn.id} className={`function-plot ${imlecSinifi(activeTool, 'nesne')}`} data-object-id={fn.id} onContextMenu={(e) => openContextMenu(e, fn)} onPointerDown={(e) => handleObjectMouseDown(e, fn)} onTouchStart={(e) => handleTouchStartOnObject(e, fn)} onTouchMove={cancelLongPress} onTouchEnd={() => cancelLongPress()} onTouchCancel={() => cancelLongPress()}>
@@ -5205,7 +5208,7 @@ export function Canvas({
                     x={etiket.x}
                     y={etiket.y}
                     textAnchor={etiket.anchor}
-                    fontSize={etiket.px * yaziOlcegi}
+                    fontSize={etiket.px}
                     fill={isSelected ? '#ec4899' : fn.color || '#2563eb'}
                     stroke={tuvalZemini || 'hsl(var(--background))'}
                     strokeWidth={3}

@@ -5,6 +5,8 @@
 // taşmaz, tuvalin sabit düğmelerine (tuvalEngelleri), önceki etiketlere ve herhangi bir grafik çizgisine değmez.
 // Yükselen eğride sol üste, alçalan eğride sağ üste yazılır (kutu eğrinin üst yanında); orası doluysa alt yana.
 
+import type { EksenSayilariSonucu } from './eksenSayilari';
+
 export interface Kutu { x: number; y: number; w: number; h: number }
 export interface EkranNoktasi { x: number; y: number }
 export interface FonksiyonEtiketYeri { x: number; y: number; anchor: 'start' | 'end'; kutu: Kutu }
@@ -73,4 +75,29 @@ export function fonksiyonEtiketYeri(
     }
   }
   return yedek;
+}
+
+/**
+ * Etiketin değmeyeceği sabit kutular (denetim, 4. tur: sağ kenardaki "+x" rozeti "h(x) = 1/x" etiketinin üstüne
+ * biniyordu): verilen kutu kümeleri (tuvalin düğmeleri, nesnelerin kutuları) + eksen çizgisi ve sayıları (eksen ekran
+ * dışındayken sayılar kenara yapışır: o satır / sütun) + görünen +x / +y / -y rozetleri ve (0; 0) rozeti.
+ */
+export function fonksiyonEtiketiEngelleri(
+  boyut: { genislik: number; yukseklik: number },
+  eksen: Pick<EksenSayilariSonucu, 'x' | 'y' | 'rozetler' | 'orijinRozeti'> | null,
+  ...kumeler: readonly (readonly Kutu[])[]
+): Kutu[] {
+  const { genislik: W, yukseklik: H } = boyut;
+  const engeller: Kutu[] = kumeler.flatMap((k) => [...k]);
+  if (!eksen) return engeller;
+  const { x: ex, y: ey, rozetler, orijinRozeti } = eksen;
+  engeller.push(
+    ex.sayiYonu === 'alt' ? { x: 0, y: ex.cizgiY - 5, w: W, h: 24 } : { x: 0, y: ex.cizgiY - 19, w: W, h: 24 },
+    ey.sayiYonu === 'sol' ? { x: ey.cizgiX - 30, y: 0, w: 35, h: H } : { x: ey.cizgiX - 5, y: 0, w: 35, h: H },
+  );
+  for (const r of [rozetler.artiX, rozetler.artiY, rozetler.eksiY]) {
+    if (r.gorunur) engeller.push({ x: r.x - 3, y: r.y - 3, w: r.w + 6, h: r.h + 6 });
+  }
+  if (orijinRozeti) engeller.push(orijinRozeti);
+  return engeller;
 }

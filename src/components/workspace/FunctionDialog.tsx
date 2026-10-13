@@ -3,7 +3,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useWorkspace } from '@/state/WorkspaceContext';
 import { validateMathExpression } from '@/math/parser';
-import { functionNameOf, functionNameOwner, nextFunctionName, undefinedFunctionCalls } from '@/math/functionNames';
+import {
+  calledNames, functionDefinitionCycle, functionNameOf, functionNameOwner, nextFunctionName, undefinedFunctionCalls,
+} from '@/math/functionNames';
 import { fonksiyonAdiYazimi } from '@/math/fonksiyonYazimi';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import type { FunctionObject, MathObject } from '@/types/math';
@@ -31,6 +33,28 @@ export function duzenlemeAdi(fn: FunctionObject, objects: readonly MathObject[])
   return `${nextFunctionName(objects.filter((o) => o.id !== fn.id))}(x)`;
 }
 
+/**
+ * Ad ve formülün öteki fonksiyonlarla bağı (denetim, 4. tur): döngü ("f(x) = g(x) − 1" iken g(x) = f(x) + 1) ve
+ * düzenlenen fonksiyonun adı değişirken onu çağıran fonksiyonlar ("g(x) = f(x) + 1" varken f → p) grafikleri
+ * uyarısız siliyordu; ikisi de Cebir girişindeki gibi engellenir. `ad`: yazılan çağrılabilir ad (küçük harf).
+ */
+export function bagimlilikEngelleri(
+  objects: readonly MathObject[],
+  ad: string | undefined,
+  ifade: string,
+  duzenlenen?: FunctionObject
+): { dongu: string[] | null; eskiAd: string | undefined; cagiranlar: FunctionObject[] } {
+  const dongu = ad ? functionDefinitionCycle(objects, ad, ifade) : null;
+  const eskiAd = duzenlenen ? functionNameOf(duzenlenen) : undefined;
+  const cagiranlar =
+    duzenlenen && eskiAd && eskiAd !== ad
+      ? (objects.filter(
+          (o) => o.type === 'function' && o.id !== duzenlenen.id && calledNames((o as FunctionObject).expression).includes(eskiAd)
+        ) as FunctionObject[])
+      : [];
+  return { dongu, eskiAd, cagiranlar };
+}
+
 /** Yalnız harf yazılan ad ("g") çağrılabilir biçime getirilir: "g(x)". */
 const callableName = (typed: string) => (/^[a-zçğıöşü][a-zçğıöşü0-9]?$/i.test(typed) ? `${typed}(x)` : typed);
 
@@ -51,7 +75,10 @@ export function FunctionDialog({ isOpen, onClose, duzenlenecekId = null }: Funct
   const typedName = functionNameOf({ label: `${callableName(label.trim())} = 0` });
   const nameOwner = typedName ? functionNameOwner(objects, typedName, duzenlenen?.id) : undefined;
   const missingCalls = validation.ok ? undefinedFunctionCalls(objects, expression, typedName) : [];
-  const isValid = validation.ok && !nameOwner && missingCalls.length === 0;
+  const { dongu, eskiAd, cagiranlar } = validation.ok
+    ? bagimlilikEngelleri(objects, typedName, expression, duzenlenen)
+    : { dongu: null, eskiAd: undefined, cagiranlar: [] };
+  const isValid = validation.ok && !nameOwner && missingCalls.length === 0 && !dongu && cagiranlar.length === 0;
 
   // Diyalog kalıcı olarak mount edilir; her açılışta ifadeyi ve adı sıfırla.
   // Ad, mevcut fonksiyon etiketleriyle çakışmayan sıradaki addır.
@@ -144,13 +171,17 @@ export function FunctionDialog({ isOpen, onClose, duzenlenecekId = null }: Funct
               <span>{validation.error}</span>
             </div>
           )}
-          {(nameOwner || missingCalls.length > 0) && (
+          {(nameOwner || missingCalls.length > 0 || dongu || cagiranlar.length > 0) && (
             <div className="flex items-start gap-1 text-[11px] text-destructive pt-1" role="alert">
               <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
               <span>
                 {nameOwner
                   ? `“${typedName}” adı zaten kullanılıyor. Başka bir ad yazın (örn. ${nextFunctionName(objects)}(x)).`
-                  : `${missingCalls[0]}(x) tanımlı değil. Önce onu tanımlayın; çarpma için ${missingCalls[0]}*(…) yazın.`}
+                  : missingCalls.length > 0
+                  ? `${missingCalls[0]}(x) tanımlı değil. Önce onu tanımlayın; çarpma için ${missingCalls[0]}*(…) yazın.`
+                  : dongu
+                  ? `${typedName}(x) kendisine bağlı olamaz: ${dongu.map((n) => `${n}(x)`).join(' → ')}.`
+                  : `${eskiAd}(x) adı ${cagiranlar.map((o) => fonksiyonAdiYazimi(o) ?? 'y').join(', ')} içinde kullanılıyor; adını değiştirmeden güncelleyin.`}
               </span>
             </div>
           )}
