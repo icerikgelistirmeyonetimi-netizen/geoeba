@@ -161,7 +161,7 @@ export interface SinifEkraniProps {
 
 export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
   const [d, gonder] = useReducer(akisIndirgeyici, BASLANGIC_DURUMU);
-  // İlkokul kademesinde Olasılık Laboratuvarı masaüstünde yok (alan uzmanları, 2. tur; uygulamalar.tsx)
+  // Kademeye göre masaüstü listesi (ilkokulda Olasılık «olay kartları» açıklaması ve simgesiyle; uygulamalar.tsx)
   const ilkokul = useIlkokulKipi();
   const gorunenUygulamalar = useMemo(() => kademeninUygulamalari(ilkokul), [ilkokul]);
   useEffect(() => {
@@ -614,7 +614,8 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
             {[...d.pencereler]
               .sort((a, b) => a.sira - b.sira)
               .map((p) => {
-                const u = uygulamaBul(p.id);
+                // Başlık çubuğu simgesi masaüstündekiyle aynı olsun (kademe uyarlaması: uygulamalar.tsx)
+                const u = gorunenUygulamalar.find((x) => x.id === p.id) ?? uygulamaBul(p.id);
                 if (!u) return null;
                 const { Bilesen, MenuCubugu } = u;
                 return (

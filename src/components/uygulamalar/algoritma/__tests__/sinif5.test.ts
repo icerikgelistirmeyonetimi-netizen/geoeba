@@ -114,8 +114,8 @@ describe('5. sınıf', () => {
     expect(oncekiIleti('s5-kural-2')).toBe('Dron inşaat alanının kenarına geldi; daha ileri gidemez.');
     expect(oncekiIleti('s5-kural-3')).toBe('Bu kule 3 küp olmalı; fazladan küp kondu.');
     // Genelleme: önceki kod değişmeden çalışır
-    expect(oncekiIleti('s5-sayac-2')).toBe('Program bu dünyada doğru çalıştı.');
-    expect(oncekiIleti('s5-toplam-2')).toBe('Program bu dünyada doğru çalıştı.');
+    expect(oncekiIleti('s5-sayac-2')).toBe('Program doğru çalıştı.');
+    expect(oncekiIleti('s5-toplam-2')).toBe('Program doğru çalıştı.');
   });
 
   it('dört sıralık tarla: blokları kopyalamak iş görür ama blok sınırını aşar', () => {

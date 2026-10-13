@@ -13,6 +13,7 @@ import React, { useState } from 'react';
 import { SIMGE } from './simgeler';
 import { KADEMELER, VITRIN, kademe, sinifGruplari } from './mufredat';
 import { sinifAtolyeleri } from './atolyeler';
+import { sahneAdi } from './sahneAdi';
 import { atolyeKaydi, ilkEksikGorev, uniteIlerlemesi, uniteKaydi, type LabKaydi } from './kayit';
 import type { Unite } from './gorev';
 
@@ -220,7 +221,7 @@ export function SinifSayfasi({ sinif, kayit, koyu, onUnite, onAtolye, onGeri }: 
           <section aria-label="Atölye" className="flex flex-col gap-3 pb-2">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 className="text-[13px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">Atölye · açık uçlu projeler</h2>
-              <span className="text-[13px] font-semibold text-muted-foreground">Amaç verilir, yolu sen bulursun. Kodun birkaç farklı dünyada sınanır.</span>
+              <span className="text-[13px] font-semibold text-muted-foreground">Amaç verilir, yolu sen bulursun. Kodun birkaç farklı sahnede sınanır.</span>
             </div>
             <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(236px, 1fr))' }}>
               {atolyeler.map((a) => {
@@ -231,7 +232,7 @@ export function SinifSayfasi({ sinif, kayit, koyu, onUnite, onAtolye, onGeri }: 
                       <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-card/95 px-2.5 py-1 text-[12px] font-extrabold text-foreground shadow-sm">
                         <SIMGE.deney className="h-3.5 w-3.5" /> Atölye
                       </span>
-                      {a.dunyalar.length > 1 && <span className="absolute bottom-2 right-2 rounded-full bg-card/95 px-2 py-0.5 text-[12px] font-bold text-foreground shadow-sm">{a.dunyalar.length} dünya</span>}
+                      {a.dunyalar.length > 1 && <span className="absolute bottom-2 right-2 rounded-full bg-card/95 px-2 py-0.5 text-[12px] font-bold text-foreground shadow-sm">{a.dunyalar.length} {sahneAdi(a).yalin}</span>}
                     </Kapak>
                     <div className="flex flex-1 flex-col gap-1 px-1">
                       <span className="text-[17px] font-extrabold leading-snug text-foreground">{a.ad}</span>

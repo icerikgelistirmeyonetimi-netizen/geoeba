@@ -34,6 +34,12 @@ export interface YazimAyari {
    * Eğim, trigonometrik oran ve koordinat yuvarlanmaz: tam sayıda anlamsızlaşırlar (0,99 → 1).
    */
   tamSayi?: boolean;
+  /**
+   * İlkokul (alan uzmanı, 4. tur [176]): tam sayı yazımında yuvarlanan değer GİZLENMEZ, '≈' yerine "yaklaşık"
+   * sözcüğüyle yazılır ('yaklaşık 4 br', 'Çevre yaklaşık 13 br'); bildirimdeki "yaklaşık" tuvaldeki etikette de görünür.
+   * Yalnız tamSayi ile birlikte etkilidir; ortaokul / lise yazımı değişmez.
+   */
+  yaklasikSozcukle?: boolean;
 }
 /** Motorun ve ayarsız çağrıların varsayılanı: tam sayı KAPALI (komut yanıtları kesin değer verir). */
 export const VARSAYILAN_YAZIM: YazimAyari = { olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: false };
@@ -105,6 +111,8 @@ export interface Olcu {
    * işareti de kullanılmamalı"). Bağlaç '=' olur, sesli okunuşta "yaklaşık" denmez.
    */
   yaklasikYok?: boolean;
+  /** Yuvarlanmış değer '≈' yerine "yaklaşık" sözcüğüyle yazılır (ilkokul; YazimAyari.yaklasikSozcukle). */
+  yaklasikSozcugu?: boolean;
   /** trig: fonksiyon ve oranı kuran kenarlar */
   trig?: { fn: TrigFn; pay: string[] | null; payda: string[] | null; payDeger: number; paydaDeger: number };
 }
@@ -123,6 +131,8 @@ const TAM_SAYI_TURLERI: ReadonlySet<OlcuTuru> = new Set<OlcuTuru>([
  */
 export function tamSayiUygula(o: Olcu, ayar?: YazimAyari): Olcu {
   if (!ayar?.tamSayi || !TAM_SAYI_TURLERI.has(o.tur)) return o;
+  // İlkokul: yuvarlanan değer "yaklaşık" der (gerçek değerden farklıysa — o.yaklasik ya da yuvarlama — yaklasikMi)
+  if (ayar.yaklasikSozcukle) return { ...o, basamak: o.sabitBasamak ? o.basamak : 0, yaklasikSozcugu: true };
   return { ...o, basamak: o.sabitBasamak ? o.basamak : 0, yaklasik: undefined, yaklasikYok: true };
 }
 
@@ -294,13 +304,14 @@ function degerDugumleri(o: Olcu, iliskisiz = false): Dugum[] {
   if (o.deger === null) return [kelime('tanımsız')];
   const b = birimOf(o);
   const out: Dugum[] = [];
-  if (iliskisiz && yaklasikMi(o)) out.push(sembol('≈ '));
+  if (iliskisiz && yaklasikMi(o)) out.push(o.yaklasikSozcugu ? kelime('yaklaşık ') : sembol('≈ '));
   out.push(sayi(o.deger, o.basamak));
   if (b) out.push({ t: 'birim', s: b });
   return out;
 }
 
-const iliski = (o: Olcu): Dugum => sembol(o.deger === null ? ' ' : yaklasikMi(o) ? ' ≈ ' : ' = ');
+const iliski = (o: Olcu): Dugum =>
+  o.deger !== null && o.yaklasikSozcugu && yaklasikMi(o) ? kelime(' yaklaşık ') : sembol(o.deger === null ? ' ' : yaklasikMi(o) ? ' ≈ ' : ' = ');
 
 /** Adsız TAM yazımın sözcüğü (null: yalnızca değer). */
 const SOZCUK: Record<OlcuTuru, string | null> = {
@@ -466,12 +477,18 @@ function latexAdi(s: string): string {
   const h = /[A-Z]/.test(harf) ? harf : `\\text{${harf}}`;
   return `\\mathrm{${h}}${alt ? `_{${alt}}` : ''}${us.replace(/′/g, "'")}`;
 }
-const LATEX_SEMBOL: [RegExp, string][] = [
+const USTTEN: Record<string, string> = {
+  '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁻': '-',
+};
+const LATEX_SEMBOL: [RegExp, string | ((m: string) => string)][] = [
   [/(?<!\p{L})(sin|cos|tan|cot)(?!\p{L})/gu, '\\$1 '],
   // 'A(' ve 'Ç(' işlev adıdır, değişken değil: dik yazılır ('m' zaten diktir).
   [/(?<![\p{L}\\{])([A-Z])(?=\()/gu, '\\mathrm{$1}'],
   [/≈/g, '\\approx '], [/π/g, '\\pi '], [/α/g, '\\alpha '], [/β/g, '\\beta '], [/γ/g, '\\gamma '],
   [/θ/g, '\\theta '], [/λ/g, '\\lambda '], [/μ/g, '\\mu '],
+  // Fonksiyon ifadesinin okunur yazımı (fonksiyonYazimi.ts): x⁻¹, x⁴, 2·3, √x
+  [/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]*[⁰¹⁴⁵⁶⁷⁸⁹⁻][⁰¹²³⁴⁵⁶⁷⁸⁹⁻]*/gu, (m: string) => `^{${[...m].map((c) => USTTEN[c] ?? c).join('')}}`],
+  [/·/g, '\\cdot '], [/√/g, '\\surd '],
   [/²/g, '^2'], [/³/g, '^3'], [/×/g, '\\times '], [/÷/g, '\\div '],
   [/Ç/g, '\\text{Ç}'], [/∠/g, '\\angle '], [/⊥/g, '\\perp '], [/∥/g, '\\parallel '], [/≅/g, '\\cong '],
   [/≠/g, '\\neq '], [/≤/g, '\\leq '], [/≥/g, '\\geq '], [/−/g, '-'], [/…/g, '\\dots '],
@@ -481,7 +498,7 @@ const LATEX_SEMBOL: [RegExp, string][] = [
 ];
 function latexSembol(s: string): string {
   let t = s;
-  for (const [re, r] of LATEX_SEMBOL) t = t.replace(re, r);
+  for (const [re, r] of LATEX_SEMBOL) t = typeof r === 'string' ? t.replace(re, r) : t.replace(re, r);
   return t;
 }
 const metinKacis = (s: string) => s.replace(/\\/g, '\\textbackslash ').replace(/([&%$#_{}])/g, '\\$1');
@@ -685,7 +702,7 @@ export function aciklama(girdi: Olcu, ayar?: YazimAyari): string {
   if (o.deger === null) return `${ilk} tanımsız`;
   if (o.tur === 'koordinat') return `${ilk}: (${sayiMetni(o.deger, o.basamak)}; ${sayiMetni(o.deger2 ?? 0, o.basamak)})`;
   const b = birimOf(o);
-  return `${ilk}: ${yaklasikMi(o) ? '≈ ' : ''}${sayiMetni(o.deger, o.basamak)}${b ? birimMetni(b) : ''}`;
+  return `${ilk}: ${yaklasikMi(o) ? (o.yaklasikSozcugu ? 'yaklaşık ' : '≈ ') : ''}${sayiMetni(o.deger, o.basamak)}${b ? birimMetni(b) : ''}`;
 }
 
 // ------------------------------------------------------------------------------------------------ düz metni okuma

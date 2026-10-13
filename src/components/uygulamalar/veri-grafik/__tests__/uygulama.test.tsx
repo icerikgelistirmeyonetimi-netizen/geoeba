@@ -283,10 +283,10 @@ describe('Karşılaştır: aynı birimli sayısal değişkenler ve kategorik gru
     expect(karsilastirmaTuru(iklim, kimlik(iklim, 'Erzurum (°C)'), kimlik(iklim, 'Erzurum (°C)'), 'nokta')).toBeNull();
   });
 
-  it('gruplara ayırma: sinav 7-A ve 7-B, 15\'er veri, başlık "7-A (15 veri)"; sıra verilirse o sıra; grubu boş satır panele girmez', () => {
+  it('gruplara ayırma: sinav 7-A ve 7-B, 15\'er veri, başlık "7-A" (veri sayısı yazılmaz); sıra verilirse o sıra; grubu boş satır panele girmez', () => {
     const sinav = ornekVeriOlustur('sinav');
     const g = grupPanelleri(sinav, indeks(sinav, 'Puan'), indeks(sinav, 'Sınıf'));
-    expect(g.map((p) => p.baslik)).toEqual(['7-A (15 veri)', '7-B (15 veri)']);
+    expect(g.map((p) => p.baslik)).toEqual(['7-A', '7-B']);
     expect(g.map((p) => p.satirlar.length)).toEqual([15, 15]);
     expect(grupPanelleri(sinav, indeks(sinav, 'Puan'), indeks(sinav, 'Sınıf'), ['7-B', '7-A']).map((p) => p.kategori)).toEqual(['7-B', '7-A']);
     const t = tabloOlustur(['Ad', 'Grup', 'Puan'], [['a', 'X', 5], ['b', '', 6], ['c', 'Y', ''], ['d', 'Y', 7]], [undefined, 'etiket', 'sayi']);

@@ -7,9 +7,12 @@ import { ToolMode } from '@/types/workspace';
 import { COMMAND_CATALOG, COMMAND_EXAMPLES, executeTurkishCommand, normalizeCommand } from '@/math/turkishCommands';
 import { MAX_COMMAND_LENGTH } from '@/math/commands/engine';
 import {
-  fitViewport, historyConflict, historySteps, sanitizeViewportPatch, shouldForceMeasurements, viewportCenter, zoomViewport,
+  KOMUT_KENAR_PAYI, fitViewport, historyConflict, historySteps, sanitizeViewportPatch, shouldForceMeasurements, viewportCenter,
+  yeniNesneleriGoster, zoomViewport,
 } from '@/math/commands/viewActions';
-import { TOOL_GROUPS } from './toolDefinitions';
+import { TOOL_GROUPS, aracAdi } from './toolDefinitions';
+import { aracSecilebilirMi, kapaliAracBildirimi } from './kademeDuzeyleri';
+import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { CommandSuggestion, searchCommands } from '@/math/commandSearch';
 import { interpretSemanticMatch } from '@/math/semanticCommands';
 import { useSemanticCommands } from '@/hooks/useSemanticCommands';
@@ -17,7 +20,29 @@ import { panelYazimi } from '@/math/panelYazimlari';
 import { MatematikMetni } from './MatematikMetni';
 import { YazimKopyala } from './YazimKopyala';
 
-const toolExamples = TOOL_GROUPS.flatMap(group => group.tools.map(tool => `${tool.name} aracını seç`));
+/** "Nokta aracını seç" önerileri; ortaokulda yalnız paneldeki araçlar (kademeDuzeyleri.aracSecilebilirMi) */
+const aracOrnekleri = (secilebilir: (arac: string) => boolean) =>
+  TOOL_GROUPS.flatMap(group => group.tools.filter(tool => secilebilir(tool.id)).map(tool => `${tool.name} aracını seç`));
+/** Seçilemeyen araçların " <ad> aracı" kalıbı: kalıbı içeren öneri (ör. "elips aracına geç ve eksenleri gizle",
+ *  anlamsal "Elips aracını seç") listede gösterilmez; yazılırsa yine "ortaokulda kapalı" bildirimi çıkar. */
+export const kapaliAracKaliplari = (secilebilir: (arac: string) => boolean) =>
+  TOOL_GROUPS.flatMap(group => group.tools.filter(tool => !secilebilir(tool.id)).map(tool => ` ${normalizeCommand(`${tool.name} aracı`)}`));
+export const kapaliAraciOnerir = (oneri: string, kaliplar: readonly string[]) =>
+  kaliplar.length > 0 && kaliplar.some(k => ` ${normalizeCommand(oneri)}`.includes(k));
+/** Komut kutusunun 2B tuvali örten kısmı (tuval pikseliyle); kutu tuvalin dışındaysa boş. */
+function kutununOrtusu(kutu: HTMLElement | null): { x: number; y: number; w: number; h: number }[] {
+  const svg = kutu?.closest('[data-calisma-alani]')?.querySelector('svg[data-workspace-canvas="2d"]');
+  if (!kutu || !svg) return [];
+  const k = kutu.getBoundingClientRect();
+  const t = svg.getBoundingClientRect();
+  const x1 = Math.max(k.left, t.left), y1 = Math.max(k.top, t.top);
+  const x2 = Math.min(k.right, t.right), y2 = Math.min(k.bottom, t.bottom);
+  if (x2 <= x1 || y2 <= y1) return [];
+  // Kutu alta yaslıdır ve komut uygulanınca yanıt satırı ile kopyala düğmeleri eklenir: üst kenar ~60 px yukarı çıkar.
+  // Öneri ve örnek listeleri komut uygulanınca kapanır, sayılmaz.
+  const BUYUME = 60;
+  return [{ x: x1 - t.left - 8, y: y1 - t.top - 8 - BUYUME, w: x2 - x1 + 16, h: y2 - y1 + 16 + BUYUME }];
+}
 const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((id, i) => id === b[i]);
 const MAX_INPUT_HEIGHT = 160;
 
@@ -53,21 +78,26 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
   const [dismissed, setDismissed] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
   const manuallyEdited = useRef(false);
   const listId = useId();
   const helpId = useId();
   const drawer = variant === 'drawer';
+  // Ortaokulda panelde olmayan araç komutla da seçilmez ve önerilmez (alan uzmanı, 4. tur); komutla şekil kurmak serbest
+  const [kademeDuzeyi] = useKademeDuzeyi();
+  const toolExamples = useMemo(() => aracOrnekleri((arac) => aracSecilebilirMi(kademeDuzeyi, arac)), [kademeDuzeyi]);
+  const kapaliKaliplar = useMemo(() => kapaliAracKaliplari((arac) => aracSecilebilirMi(kademeDuzeyi, arac)), [kademeDuzeyi]);
   // Yanıtlar MEB yazımıyla gösterilir (şapkalı açı, mutlak değer çizgisi, yay imi).
   // Komut yanıtı HER ZAMAN tam yazımdadır; "Yalnızca değer" yalnızca tuval etiketlerini seyreltir.
   const yazim = useMemo(() => panelYazimi(styleSettings), [styleSettings]);
   const meaning = useSemanticCommands(text, visible && focused);
   const lexicalSuggestions = useMemo(() => searchCommands(text, {
     examples: toolExamples, history: lastCommands, labels: objects.map(o => o.label),
-  }), [text, lastCommands, objects]);
+  }), [text, lastCommands, objects, toolExamples]);
   const interpretations = meaning.matches.filter(m => m.score >= 0.55 && m.score >= meaning.matches[0].score - 0.1)
     .map(match => interpretSemanticMatch(text, match, objects, selectedObjectIds));
   const semanticSuggestions: CommandSuggestion[] = interpretations.flatMap(item => item.command ? [{ text: item.command, kind: 'semantic' as const }] : []);
-  const suggestions = [...semanticSuggestions, ...lexicalSuggestions].filter((item, index, all) =>
+  const suggestions = [...semanticSuggestions, ...lexicalSuggestions].filter(item => !kapaliAraciOnerir(item.text, kapaliKaliplar)).filter((item, index, all) =>
     all.findIndex(other => normalizeCommand(other.text) === normalizeCommand(item.text)) === index).slice(0, 6);
   const showSuggestions = focused && !dismissed && !help && suggestions.length > 0;
 
@@ -122,12 +152,26 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
       setResult({ ok: false, message: plan.message, suggestions: plan.suggestions?.length ? plan.suggestions : suggestions.map(s => s.text) });
       return;
     }
+    for (const action of plan.actions) {
+      if (action.kind === 'selectTool' && kademeDuzeyi !== 'tum' && !aracSecilebilirMi(kademeDuzeyi, action.tool)) {
+        if (!preserveDraft) setText(raw);
+        setResult({ ok: false, message: kapaliAracBildirimi(kademeDuzeyi, aracAdi(action.tool)) });
+        return;
+      }
+    }
     const conflict = historyConflict(plan);
     if (conflict) { if (!preserveDraft) setText(raw); setResult({ ok: false, message: conflict }); return; }
 
     let message = plan.message;
     if (plan.sceneChanged) {
       commit(plan.objects, `Komut: ${raw}`);
+      // Komutla oluşan nesne görünür alanın dışında ya da bu kutunun altında kalmasın (alan uzmanı, 4. tur):
+      // görünmüyorsa görünüm kaydırılır, sığmıyorsa uzaklaştırılır. Komut görünümü kendisi değiştiriyorsa dokunulmaz.
+      if (!plan.actions.some(a => a.kind === 'viewport' || a.kind === 'zoom' || a.kind === 'fitView' || a.kind === 'resetView')) {
+        const ortuler = kutununOrtusu(sectionRef.current);
+        const onceki = kaynakNesneler;
+        setViewport(prev => yeniNesneleriGoster(prev, onceki, plan.objects, { kenar: KOMUT_KENAR_PAYI, ortuler }));
+      }
       // Aynı ölçüm görünümünü hem fare hem komut yolunda kullan; kullanıcı aynı komutta sade görünüm istediyse zorlama.
       if (shouldForceMeasurements(plan)) {
         setViewport(prev => ({ ...prev, showMeasurements: true }));
@@ -216,7 +260,7 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
     : 'relative shrink-0 border-t border-border bg-card px-3 py-2 sm:px-5';
   const popoverClass = drawer ? 'absolute bottom-full left-0 right-0 mb-2' : 'absolute bottom-full left-3 right-3 sm:left-5 sm:right-5 mb-2';
 
-  return <section aria-label="Türkçe çizim komutları" className={sectionClass}>
+  return <section ref={sectionRef} aria-label="Türkçe çizim komutları" className={sectionClass}>
     <div className="flex items-center justify-between mb-1.5 gap-2">
       <span className="flex min-w-0 items-center gap-2 text-xs font-bold text-foreground"><MessageSquareText className="w-4 h-4 shrink-0 text-ada-deniz" />Yazarak oluştur <span data-semantic-status={meaning.status} className="truncate text-[10px] font-normal text-muted-foreground">{meaning.status === 'loading' ? 'Anlam araması hazırlanıyor…' : meaning.status === 'ready' ? 'Anlamsal arama · Çevrimdışı' : meaning.status === 'error' ? 'Anlam modeli açılamadı · Kelime araması aktif' : 'Çevrimdışı'}</span></span>
       <span className="flex shrink-0 items-center gap-1.5">

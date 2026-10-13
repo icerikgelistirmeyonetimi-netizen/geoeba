@@ -13,10 +13,18 @@
  *  - Çokgen ve düzgün çokgen en çok 8 kenarlı (sekizgen).
  *  - Yansıtma yalnız şekil seçtirir: simetri doğrusu şeklin yanına dikey ya da yatay konur ("x ekseni" yok).
  *
+ * 4. tur (Umut IŞIK, geoeba (3).xlsx 176–180):
+ *  - Çevre GERÇEK kenarların toplamının yuvarlanmışıdır; tam sayı olmayan her ölçü tuvalde de "yaklaşık" der.
+ *    Kenarları zemin çizgilerine paralel olmayan (eğik kenarlı) şekilde çevre okuması yerine "cetvelle ölç" yönlendirmesi.
+ *  - Ekranda "cm" yok: bütün uzunluklar birim (br) ile; cetvel tam (ve yarım) birim çentikli.
+ *  - Döndürme derece değil çeyrek / yarım / tam dönüş ve yön ile; gönyede derece yazısı yok.
+ *  - Simetri Keşfet bir sınama aracıdır (simetriSinama.ts); 3B'de eksen, koordinat ve hacim / alan yok
+ *    (kademeDuzeyleri3B.ts, ilkokul3B.ts).
+ *
  * Saf işlevler + tek React kancası (useIlkokulKipindeMi: WorkspaceContext nesne görünümünü bununla türetir).
  * Araç paneli ve menüler useIlkokulKipi (hooks/useKademeDuzeyi.ts) kullanır.
  */
-import type { CircleObject, MathObject, Point2D, PolygonObject, ViewportTransform } from '@/types/math';
+import type { CircleObject, MathObject, Point2D, PointObject, PolygonObject, SegmentObject, ViewportTransform } from '@/types/math';
 import type { ToolMode } from '@/types/workspace';
 import type { KademeDuzeyi } from './kademeDuzeyleri';
 import { TOOL_SHORTCUTS } from './toolShortcuts';
@@ -123,7 +131,8 @@ export const ilkokulAlanOkumasi = (sutun: number, satir: number): string => `${s
  *  - çokgen alan hesabı göstermez (showArea: false);
  *  - çemberde alan, çevre ve yarıçap yazısı yok; merkezi ve yarıçap noktası (başka nesne kullanmıyorsa)
  *    gizlenir ve adsızdır: merkez / yarıçap bilgisi görünmez, çember gövdesinden sürüklenir;
- *  - açıda derece yazılmaz (showValue: false).
+ *  - açıda derece yazılmaz (showValue: false);
+ *  - doğru parçası santimetre değil birim (br) yazar (4. tur [177]).
  * Kural eskiden yalnız YENİ eklenen nesneye oluşturma anında yazılıyordu; kademe değişince adlar ve ölçüler geri
  * gelmiyordu (kullanıcı, 9 Ekim 2026: "|AB| = 2 br liseye geçtiğimde geri gelmiyor"). Değişiklik yoksa dizinin kendisi döner.
  */
@@ -165,6 +174,13 @@ export function ilkokulGorunumu(nesneler: readonly MathObject[]): MathObject[] {
       degisti = true;
       return { ...o, showValue: false } as MathObject;
     }
+    if (o.type === 'segment') {
+      // Ekranda "cm" yok (uzman 4. tur [177]): eski / başka kademede ölçülmüş cm parçası da br yazılır
+      const seg = o as SegmentObject;
+      if (seg.unit !== 'cm' && !(seg.unit === undefined && seg.label?.includes('cm'))) return o;
+      degisti = true;
+      return { ...seg, unit: 'br' } as MathObject;
+    }
     return o;
   });
   return degisti ? sonuc : (nesneler as MathObject[]);
@@ -201,4 +217,92 @@ export function ilkokulSimetriDogrusu(koseler: readonly Point2D[], yon: SimetriY
   }
   const y = yuvarla(y0, Math.floor);
   return { p1: { x: Math.floor(x0) - 1, y }, p2: { x: Math.ceil(x1) + 1, y } };
+}
+
+/* ------------------------------ 4. tur: çevre (176), birim (177), döndürme (179) ------------------------------ */
+
+export type ZeminBicimi = 'kareli' | 'noktali' | 'izometrik';
+
+/** Zemin çizgilerinin doğrultuları (derece, 0–180): kareli / noktalı zeminde yatay ve dikey; izometrikte dikey ve ±30°. */
+export function zeminDogrultulari(zemin?: string): number[] {
+  return zemin === 'izometrik' ? [90, 30, 150] : [0, 90];
+}
+
+/** Kenar zemin çizgilerine paralel mi (birimleri sayılabilir mi)? Açı payı 0,5°. */
+export function kenarZemineParalelMi(a: Point2D, b: Point2D, zemin?: string): boolean {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  if (Math.hypot(dx, dy) < 1e-9) return true;
+  const aci = ((((Math.atan2(dy, dx) * 180) / Math.PI) % 180) + 180) % 180;
+  return zeminDogrultulari(zemin).some((d) => {
+    const f = Math.abs(aci - d);
+    return Math.min(f, 180 - f) < 0.5;
+  });
+}
+
+/** Çokgenin bütün kenarları zemin çizgilerine paralel mi? Değilse (eğik kenar) çevre kareli zeminde sayılamaz. */
+export function kenarlarZemineParalelMi(koseler: readonly Point2D[], zemin?: string): boolean {
+  return koseler.every((p, i) => kenarZemineParalelMi(p, koseler[(i + 1) % koseler.length], zemin));
+}
+
+/**
+ * Eğik kenarlı şekilde çevre okuması yerine verilen yönlendirme (alan uzmanı, 4. tur [176]: "Bu şeklin kenarları
+ * kareli zemine paralel değil; cetvelle ölç"). Karar: uzmanın "daha sağlıklı" önerisi uygulandı — eğik kenarın kareli
+ * zeminde kaç birim olduğu sayılamaz, gerçek uzunlukların toplamı (≈ 12,94) öğrencinin doğrulayamayacağı bir sayıdır.
+ */
+export function egikCevreUyarisi(zemin?: string): string {
+  return zemin === 'izometrik'
+    ? 'Bu şeklin kenarları zemindeki çizgilere paralel değil; çevresini cetvelle ölç.'
+    : 'Bu şeklin kenarları kareli zemine paralel değil; çevresini cetvelle ölç.';
+}
+/** Tuvaldeki çevre etiketinin yerine yazılan kısa yönlendirme */
+export const ILKOKUL_EGIK_CEVRE_ETIKETI = 'Çevre: cetvelle ölç';
+
+/**
+ * Ölçü kartlarının ilkokul görünümü: çevresi gösterilen EĞİK kenarlı çokgende çevre okuması yerine yönlendirme etiketi
+ * ("Çevre: cetvelle ölç"). Kullanıcının elle yazdığı etiket metni korunur; nesne verisi değişmez, değişiklik yoksa
+ * dizinin kendisi döner.
+ */
+export function ilkokulCevreGorunumu(nesneler: readonly MathObject[], zemin?: string): MathObject[] {
+  const noktalar = new Map<string, PointObject>();
+  for (const o of nesneler) if (o.type === 'point') noktalar.set(o.id, o as PointObject);
+  let degisti = false;
+  const sonuc = nesneler.map((o) => {
+    if (o.type !== 'polygon') return o;
+    const p = o as PolygonObject;
+    if (!p.showPerimeter || p.labelTexts?.perimeter !== undefined) return o;
+    const koseler = p.pointIds.map((id) => noktalar.get(id)).filter((k): k is PointObject => !!k);
+    if (koseler.length < 3 || kenarlarZemineParalelMi(koseler, zemin)) return o;
+    degisti = true;
+    return { ...p, labelTexts: { ...p.labelTexts, perimeter: ILKOKUL_EGIK_CEVRE_ETIKETI } } as MathObject;
+  });
+  return degisti ? sonuc : (nesneler as MathObject[]);
+}
+
+/** Döndürme yönü: saat yönünde (matematikte negatif açı) ya da saat yönünün tersine */
+export type DonusYonu = 'saat' | 'ters';
+
+/** İlkokul döndürme seçenekleri (derece yok; TYMM MAT.4.3.5: açı bir dönme miktarıdır) */
+export const ILKOKUL_DONUSLERI = [
+  { ad: 'Çeyrek dönüş', ceyrek: 1 },
+  { ad: 'Yarım dönüş', ceyrek: 2 },
+  { ad: 'Tam dönüş', ceyrek: 4 },
+] as const;
+
+/** Çeyrek dönüş sayısı ve yön → döndürme açısı (derece; saat yönünün tersi pozitif) */
+export const ilkokulDonusAcisi = (ceyrek: number, yon: DonusYonu): number => (yon === 'saat' ? -90 : 90) * ceyrek;
+
+/** Serbest sürüklemede açı en yakın çeyrek dönüşe oturur (ilkokulda dönme miktarı çeyrek dönüşlerle) */
+export const ceyregeYuvarla = (derece: number): number => Math.round(derece / 90) * 90 || 0;
+
+/** "çeyrek dönüş saat yönünde", "yarım dönüş", "üç çeyrek dönüş saat yönünün tersine", "tam dönüş"; 0 → "" */
+export function ilkokulDonusAdi(derece: number): string {
+  const ceyrek = Math.round(derece / 90);
+  if (ceyrek === 0) return '';
+  const mutlak = Math.abs(ceyrek);
+  const yon = ceyrek < 0 ? 'saat yönünde' : 'saat yönünün tersine';
+  if (mutlak % 4 === 0) return mutlak === 4 ? 'tam dönüş' : `${mutlak / 4} tam dönüş`;
+  if (mutlak === 2) return 'yarım dönüş';
+  const ad = mutlak === 1 ? 'çeyrek dönüş' : mutlak === 3 ? 'üç çeyrek dönüş' : `${mutlak} çeyrek dönüş`;
+  return `${ad} ${yon}`;
 }

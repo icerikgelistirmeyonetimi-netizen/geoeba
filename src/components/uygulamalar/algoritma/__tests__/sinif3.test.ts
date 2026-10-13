@@ -102,8 +102,8 @@ describe('3. sınıf: hazır kodlar ve önceki kodlar', () => {
   it('bitene kadar: "kez" kodu uzun sırada eksik kalır; sulamasız yürüyüş kuru saksıları bırakır', () => {
     expect(baslangicIletisi(gorev('s3-kadar-1'))).toBe('Robot çıkışa varamadı; 5., 6. ve 7. saksıya hiç uğramadı.');
     expect(oncekiIletisi('s3-kadar-3')).toBe('1., 2., 3. ve 4. saksı susuz kaldı.');
-    expect(oncekiIletisi('s3-kadar-2')).toBe('Program bu dünyada doğru çalıştı.');
-    expect(oncekiIletisi('s3-kadar-5')).toBe('Program bu dünyada doğru çalıştı.');
+    expect(oncekiIletisi('s3-kadar-2')).toBe('Program doğru çalıştı.');
+    expect(oncekiIletisi('s3-kadar-5')).toBe('Program doğru çalıştı.');
   });
 });
 

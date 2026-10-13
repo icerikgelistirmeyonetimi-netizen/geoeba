@@ -1,9 +1,18 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Tool3DMode, Solid3DType, Solid3DObject } from '@/types/workspace3d';
+import { Tool3DMode, Solid3DType, Solid3DObject, UCGEN_TABANLARI, type UcgenTabani } from '@/types/workspace3d';
 import { LayoutMode } from '@/types/workspace';
-import { calculate3DVolume, calculate3DSurfaceArea, getSolidPropertyCounts, generateSolidMesh, computeFaceArea } from '@/math/geometry3d';
+import {
+  calculate3DVolume,
+  calculate3DSurfaceArea,
+  getSolidPropertyCounts,
+  generateSolidMesh,
+  computeFaceArea,
+  eskenarYuksekligi,
+  ucgenTabaniniBul,
+} from '@/math/geometry3d';
+import { ucgenTabaniGuncellemesi } from './cisimYerlesimi';
 import { formatTurkishNumber } from '@/math/coordinates';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { KademeAramaBosNotu, KademeSuzgeciSeridi } from './KademeSuzgeci';
@@ -17,6 +26,8 @@ import {
   type TreeTool3DItem,
 } from './treeToolDefinitions3D';
 import { gruplari3BSuz, grupAcikliklari3B } from './kademeDuzeyleri3B';
+import { ilkokulCisimOzellikleri } from './ilkokul3B';
+import { GorunumDuzeniPaneli } from './gorunumDuzenleri';
 import {
   Box,
   Check,
@@ -24,20 +35,14 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
-  Columns2,
-  Columns3,
-  Calculator,
   Eye,
   EyeOff,
   Layers,
   LayoutGrid,
-  PanelLeft,
-  PanelRight,
   RotateCw,
   Ruler,
   Search,
   Sparkles,
-  Square,
   Trash2,
   X,
   BookOpen,
@@ -103,6 +108,8 @@ interface Toolbar3DProps {
   onUpdateSolidById?: (id: string, updates: Partial<Solid3DObject>) => void;
   /** Açılışta seçili sekme (varsayılan Araçlar). */
   initialTab?: SidebarTab;
+  /** Sekme değişince bildirilir: 2B ile 3B paneli arasında geçişte seçili sekme korunur (WorkspaceView) */
+  onTabChange?: (sekme: SidebarTab) => void;
 }
 
 /** Gizlenen cismin geri yüklenecek görünüm değerleri (göz simgesi) */
@@ -112,6 +119,14 @@ interface GizliGorunum {
   showVertices: boolean;
   showWireframe: boolean;
 }
+
+/** Taban üçgeni seçicisinin düğme adları ve ipuçları (Bağlamlar > Boyutlar) */
+const UCGEN_TABANI_ADLARI: Record<UcgenTabani, string> = { ikizkenar: 'İkizkenar', dik: 'Dik', eskenar: 'Eşkenar' };
+const UCGEN_TABANI_ACIKLAMALARI: Record<UcgenTabani, string> = {
+  ikizkenar: 'İki kenarı eşit üçgen taban (tepe ortada)',
+  dik: 'Bir açısı 90° olan üçgen taban (dik açı solda)',
+  eskenar: 'Üç kenarı eşit üçgen taban (yükseklik = a · √3 / 2)',
+};
 
 /** Nesneler sekmesindeki göz: gizli cisim = opacity 0; yüz, köşe ve telkafes de kapanır (Canvas3D çizmez). */
 export const GIZLEME_GUNCELLEMESI: Readonly<GizliGorunum> = { opacity: 0, showFaces: false, showVertices: false, showWireframe: false };
@@ -267,16 +282,6 @@ function BaglamKarti({ baslik, simge, sag, children }: { baslik: string; simge?:
   );
 }
 
-const LAYOUT_OPTIONS: Array<{ mode: LayoutMode; name: string; badge: string; description: string; icon: React.ReactNode }> = [
-  { mode: '2d_only', name: '2D Düzlem', badge: '2D', description: 'Yalnızca 2 boyutlu geometri çizim alanı', icon: <Square className="w-5 h-5 text-ada-deniz dark:text-ada-vurgu" /> },
-  { mode: '3d_only', name: '3D Uzay', badge: '3D', description: 'Yalnızca 3 boyutlu katı cisim ve uzay stüdyosu', icon: <Box className="w-5 h-5 text-ada-lavanta" /> },
-  { mode: '2d_3d', name: '2D + 3D', badge: '2D + 3D', description: 'Sol tarafta 2D çizim, sağ tarafta 3D uzay yan yana', icon: <Columns2 className="w-5 h-5 text-ada-vurgu" /> },
-  { mode: 'default', name: 'Cebir', badge: 'Cebir', description: 'Cebirsel ifadeler ve fonksiyonlar çalışma alanı', icon: <Calculator className="w-5 h-5 text-ada-deniz-koyu dark:text-ada-vurgu" /> },
-  { mode: 'algebra_2d', name: '2D + Cebir', badge: '2D + Cebir', description: '2D geometri düzlemi ile cebir giriş paneli', icon: <PanelLeft className="w-5 h-5 text-ada-altin dark:text-ada-fener" /> },
-  { mode: 'algebra_3d', name: '3D + Cebir', badge: '3D + Cebir', description: '3D uzay stüdyosu ile cebir giriş paneli', icon: <PanelRight className="w-5 h-5 text-ada-mercan" /> },
-  { mode: 'three_col', name: '2D + 3D + Cebir', badge: 'Üçü Bir Arada', description: 'Cebir listesi, 2D geometri ve 3D uzay üç sütun halinde', icon: <Columns3 className="w-5 h-5 text-ada-murekkep-2 dark:text-ada-kum" /> },
-];
-
 const EKSENLER: { key: 'x' | 'y' | 'z'; label: string; cls: string }[] = [
   { key: 'x', label: 'X', cls: 'text-ada-mercan' },
   { key: 'y', label: 'Y', cls: 'text-ada-vurgu' },
@@ -315,13 +320,18 @@ export function Toolbar3D({
   onAddSolidPreset,
   onUpdateSolidById,
   initialTab = 'araclar',
+  onTabChange,
 }: Toolbar3DProps) {
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>(initialTab);
+  const onTabChangeRef = useRef(onTabChange);
+  onTabChangeRef.current = onTabChange;
+  useEffect(() => {
+    onTabChangeRef.current?.(sidebarTab);
+  }, [sidebarTab]);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [creationMethod, setCreationMethod] = useState<CreationMethod>('instant');
   const [toolSearch, setToolSearch] = useState('');
   const [objectSearch, setObjectSearch] = useState('');
-  const [layoutTooltip, setLayoutTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const [adDuzenlenen, setAdDuzenlenen] = useState<{ id: string; taslak: string } | null>(null);
   const [gizliGorunumler, setGizliGorunumler] = useState<Record<string, GizliGorunum>>({});
 
@@ -569,6 +579,15 @@ export function Toolbar3D({
     onUpdateSolid?.({ dimensions: { ...dims, ...patch } });
   };
   const kutuMu = selectedSolid ? selectedSolid.type === 'prism' || selectedSolid.type === 'pyramid' || selectedSolid.type === 'triangular_prism' : false;
+  // Üçgen prizmanın taban üçgeni (uzman 4. tur [174]): ikizkenar / dik / eşkenar. İlkokulda seçici yok (üçgen türleri
+  // ortaokul konusu); orada prizma eskisi gibi ikizkenar gelir.
+  const ucgenTabani: UcgenTabani | null =
+    selectedSolid?.type === 'triangular_prism' ? ucgenTabaniniBul(selectedSolid) : null;
+  const ucgenSecicisi = ucgenTabani !== null && kademeDuzeyi !== 'ilkokul';
+  // İlkokul (uzman 4. tur [180]): hacim, yüzey alanı, br² / br³, harfle kenar (a, r, h), konum koordinatları ve derece yok;
+  // cisim özellikleri yüz / köşe / ayrıt sayısı ve yüzlerin biçimiyle sınırlı (ilkokul3B.ts)
+  const ilkokul = kademeDuzeyi === 'ilkokul';
+  const eskenarMi = ucgenTabani === 'eskenar';
   const yuvarlakMi = selectedSolid ? selectedSolid.type === 'sphere' || selectedSolid.type === 'cylinder' || selectedSolid.type === 'cone' : false;
 
   return (
@@ -903,7 +922,8 @@ export function Toolbar3D({
                                 {s.name}
                               </span>
                               <span className="block text-[11px] text-muted-foreground truncate">
-                                {CISIM_ADLARI[s.type]} · ({formatTurkishNumber(s.position.x, 1)}; {formatTurkishNumber(s.position.y, 1)}; {formatTurkishNumber(s.position.z, 1)})
+                                {CISIM_ADLARI[s.type]}
+                                {!ilkokul && <> · ({formatTurkishNumber(s.position.x, 1)}; {formatTurkishNumber(s.position.y, 1)}; {formatTurkishNumber(s.position.z, 1)})</>}
                               </span>
                             </div>
                           )}
@@ -974,7 +994,8 @@ export function Toolbar3D({
                   <div>
                     <h4 className="font-bold text-foreground text-sm">Seçili Cisim Yok</h4>
                     <p className="mt-1 text-muted-foreground/80 leading-relaxed">
-                      Sahneden veya <strong>Nesneler</strong> sekmesinden bir cisim seçin. Hacmi, yüzey alanı, boyutları ve rengi burada görünür.
+                      Sahneden veya <strong>Nesneler</strong> sekmesinden bir cisim seçin.{' '}
+                      {ilkokul ? 'Yüz, köşe ve ayrıt sayısı, boyutları ve rengi burada görünür.' : 'Hacmi, yüzey alanı, boyutları ve rengi burada görünür.'}
                     </p>
                   </div>
                   <button
@@ -1009,7 +1030,33 @@ export function Toolbar3D({
                     </button>
                   </div>
 
+                  {/* İlkokul: cismin özellikleri — yüz, köşe, ayrıt sayısı ve yüzlerin biçimi */}
+                  {ilkokul && ((oz) => (
+                    <section className="p-3 rounded-2xl bg-gradient-to-br from-ada-deniz/10 via-ada-vurgu/5 to-ada-lavanta/10 border border-primary/20 space-y-2" aria-live="polite" data-ilkokul-cisim-ozellikleri>
+                      <h4 className="text-[13px] font-bold text-primary flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Cismin Özellikleri</span>
+                      </h4>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        {[
+                          { ad: 'Yüz', sayi: oz.yuz },
+                          { ad: 'Köşe', sayi: oz.kose },
+                          { ad: 'Ayrıt', sayi: oz.ayrit },
+                        ].map((x) => (
+                          <div key={x.ad} className="p-2 rounded-xl bg-card border border-border/80">
+                            <span className="text-[11px] font-semibold text-muted-foreground block">{x.ad}</span>
+                            <span className="font-bold text-foreground text-[15px]">{x.sayi}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="p-2 rounded-xl bg-card border border-border/80 text-[12px] text-muted-foreground">
+                        Yüzleri: <strong className="text-foreground">{oz.yuzler}</strong>
+                      </div>
+                    </section>
+                  ))(ilkokulCisimOzellikleri(selectedSolid))}
+
                   {/* Canlı ölçümler: V, A ve K - E + Y = 2 (MAT.8.4.3) */}
+                  {!ilkokul && (
                   <section className="p-3 rounded-2xl bg-gradient-to-br from-ada-deniz/10 via-ada-vurgu/5 to-ada-lavanta/10 border border-primary/20 space-y-2" aria-live="polite">
                     <h4 className="text-[13px] font-bold text-primary flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
@@ -1042,13 +1089,14 @@ export function Toolbar3D({
                       </div>
                     )}
                   </section>
+                  )}
 
                   {/* Seçili yüz: alanı ve rengi */}
                   {olcumler.seciliYuz && ((yuz) => (
                     <BaglamKarti
                       baslik={`Seçili Yüz: ${yuz.label}`}
                       simge={<Paintbrush className="w-3.5 h-3.5 text-ada-altin dark:text-ada-fener" aria-hidden="true" />}
-                      sag={<span className="font-mono text-[12px] text-muted-foreground">A = {formatTurkishNumber(yuz.area, 2)} br²</span>}
+                      sag={ilkokul ? undefined : <span className="font-mono text-[12px] text-muted-foreground">A = {formatTurkishNumber(yuz.area, 2)} br²</span>}
                     >
                       <div className="flex flex-wrap gap-1.5 items-center" role="group" aria-label="Yüz rengi">
                         {CISIM_RENKLERI.map((c) => (
@@ -1146,7 +1194,7 @@ export function Toolbar3D({
                   >
                     {selectedSolid.type === 'cube' && (
                       <KaydiriciSatiri
-                        label="Kenar (a)"
+                        label={ilkokul ? 'Kenar uzunluğu' : 'Kenar (a)'}
                         value={dims.width}
                         min={0.5}
                         max={10}
@@ -1154,16 +1202,58 @@ export function Toolbar3D({
                         onChange={(a) => onUpdateSolid?.({ dimensions: { width: a, height: a, depth: a, radius: a / 2 } })}
                       />
                     )}
+                    {ucgenSecicisi && (
+                      <div className="space-y-1">
+                        <span className="text-[11px] font-semibold text-muted-foreground block">Taban üçgeni</span>
+                        <div className="flex items-center gap-1" role="radiogroup" aria-label="Taban üçgeni">
+                          {UCGEN_TABANLARI.map((tur) => {
+                            const etkin = ucgenTabani === tur;
+                            return (
+                              <button
+                                key={tur}
+                                type="button"
+                                role="radio"
+                                aria-checked={etkin}
+                                title={UCGEN_TABANI_ACIKLAMALARI[tur]}
+                                onClick={() => {
+                                  if (!selectedSolid || etkin) return;
+                                  onUpdateSolid?.(ucgenTabaniGuncellemesi(selectedSolid, tur));
+                                }}
+                                className={`flex-1 px-2 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                                  etkin ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border hover:bg-muted'
+                                }`}
+                              >
+                                {UCGEN_TABANI_ADLARI[tur]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     {kutuMu && (
                       <>
-                        <KaydiriciSatiri label="Genişlik" value={dims.width} min={0.5} max={12} step={0.5} onChange={(v) => boyutGuncelle({ width: v })} />
-                        <KaydiriciSatiri label="Yükseklik" value={dims.height} min={0.5} max={12} step={0.5} onChange={(v) => boyutGuncelle({ height: v })} />
+                        <KaydiriciSatiri
+                          label={eskenarMi ? 'Kenar (a)' : 'Genişlik'}
+                          value={dims.width}
+                          min={0.5}
+                          max={12}
+                          step={0.5}
+                          // Eşkenar üçgende yükseklik kenara bağlıdır (a·√3/2): ikisi birlikte değişir, üçgen eşkenar kalır
+                          onChange={(v) => boyutGuncelle(eskenarMi ? { width: v, height: eskenarYuksekligi(v) } : { width: v })}
+                        />
+                        {eskenarMi ? (
+                          <div className="text-[11px] text-muted-foreground font-mono">
+                            Yükseklik = a · √3 / 2 ≈ {formatTurkishNumber(dims.height, 2)} br
+                          </div>
+                        ) : (
+                          <KaydiriciSatiri label="Yükseklik" value={dims.height} min={0.5} max={12} step={0.5} onChange={(v) => boyutGuncelle({ height: v })} />
+                        )}
                         <KaydiriciSatiri label="Derinlik" value={dims.depth} min={0.5} max={12} step={0.5} onChange={(v) => boyutGuncelle({ depth: v })} />
                       </>
                     )}
                     {yuvarlakMi && (
                       <KaydiriciSatiri
-                        label="Yarıçap (r)"
+                        label={ilkokul ? 'Büyüklük' : 'Yarıçap (r)'}
                         value={yaricap}
                         min={0.25}
                         max={8}
@@ -1172,11 +1262,12 @@ export function Toolbar3D({
                       />
                     )}
                     {(selectedSolid.type === 'cylinder' || selectedSolid.type === 'cone') && (
-                      <KaydiriciSatiri label="Yükseklik (h)" value={dims.height} min={0.5} max={12} step={0.5} onChange={(v) => boyutGuncelle({ height: v })} />
+                      <KaydiriciSatiri label={ilkokul ? 'Yükseklik' : 'Yükseklik (h)'} value={dims.height} min={0.5} max={12} step={0.5} onChange={(v) => boyutGuncelle({ height: v })} />
                     )}
                   </BaglamKarti>
 
-                  {/* Konum (taban merkezi) */}
+                  {/* Konum (taban merkezi). İlkokulda koordinat ve negatif sayı yok: kart gösterilmez (4. tur [180]) */}
+                  {!ilkokul && (
                   <BaglamKarti
                     baslik="Konum"
                     simge={<MapPin className="w-3.5 h-3.5 text-primary" aria-hidden="true" />}
@@ -1201,8 +1292,11 @@ export function Toolbar3D({
                       ))}
                     </div>
                   </BaglamKarti>
+                  )}
 
-                  {/* Cismi Döndür (derece; X → Y → Z sırası) */}
+                  {/* Cismi Döndür (derece; X → Y → Z sırası). İlkokulda derece ve eksen yok: döndürme Cismi Döndür aracının
+                      çeyrek dönüş düğmeleriyle (4. tur [179], [180]) */}
+                  {!ilkokul && (
                   <BaglamKarti
                     baslik="Cismi Döndür"
                     simge={<RotateCw className="w-3.5 h-3.5 text-ada-mercan" aria-hidden="true" />}
@@ -1230,6 +1324,7 @@ export function Toolbar3D({
                       />
                     ))}
                   </BaglamKarti>
+                  )}
 
                   {/* Renk, saydamlık, telkafes */}
                   <BaglamKarti baslik="Renk ve Görünüm" simge={<Paintbrush className="w-3.5 h-3.5 text-primary" aria-hidden="true" />}>
@@ -1286,67 +1381,8 @@ export function Toolbar3D({
           </div>
         )}
 
-        {/* ================= D. GÖRÜNÜMLER ================= */}
-        {sidebarTab === 'gorunumler' && (
-          <div className="flex-1 flex flex-col min-h-0 bg-card">
-            <div className="p-3.5 border-b border-border/80 flex items-center justify-between gap-2 shrink-0">
-              <div className="flex items-center gap-2">
-                <LayoutGrid className="w-4 h-4 text-primary" aria-hidden="true" />
-                <h3 className="text-sm font-bold text-foreground tracking-tight">Çalışma Alanı Düzenleri</h3>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin">
-              {LAYOUT_OPTIONS.map((opt) => {
-                const isCurrent = layoutMode === opt.mode;
-                return (
-                  <button
-                    key={opt.mode}
-                    type="button"
-                    onClick={() => onLayoutModeChange?.(opt.mode)}
-                    onMouseEnter={(e) => setLayoutTooltip({ text: opt.description, x: e.clientX + 14, y: e.clientY + 10 })}
-                    onMouseMove={(e) => setLayoutTooltip({ text: opt.description, x: e.clientX + 14, y: e.clientY + 10 })}
-                    onMouseLeave={() => setLayoutTooltip(null)}
-                    title={opt.description}
-                    aria-label={opt.name}
-                    aria-pressed={isCurrent}
-                    className={`w-full p-2.5 rounded-2xl border text-left transition-all cursor-pointer select-none relative group ${
-                      isCurrent ? 'bg-primary/10 border-primary/50 shadow-sm ring-1 ring-primary/30' : 'bg-muted/30 border-border/70 hover:bg-muted/60 hover:border-primary/40'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-xl shrink-0 transition-transform ${isCurrent ? 'bg-primary text-primary-foreground shadow-xs [&>svg]:!text-primary-foreground' : 'bg-background border border-border group-hover:scale-105'}`}>
-                        {opt.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="font-bold text-[13px] text-foreground">{opt.name}</span>
-                          <span className={`text-[11px] font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider ${isCurrent ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                            {opt.badge}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    {isCurrent && (
-                      <div className="absolute top-2 right-2 flex items-center gap-1 text-[11px] font-bold text-primary">
-                        <Check className="w-3.5 h-3.5" aria-hidden="true" />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-
-            {layoutTooltip && (
-              <div
-                style={{ left: layoutTooltip.x, top: layoutTooltip.y }}
-                className="fixed z-[1000] pointer-events-none px-3 py-1.5 rounded-xl bg-ada-murekkep/95 text-ada-fildisi dark:bg-ada-fildisi/95 dark:text-ada-murekkep text-xs font-medium shadow-2xl border border-border/50 backdrop-blur-md max-w-xs animate-in fade-in-0 zoom-in-95 duration-100 select-none leading-tight"
-              >
-                {layoutTooltip.text}
-              </div>
-            )}
-          </div>
-        )}
+        {/* ================= D. GÖRÜNÜMLER: 2B panelle ortak liste ve düzen (gorunumDuzenleri.tsx) ================= */}
+        {sidebarTab === 'gorunumler' && <GorunumDuzeniPaneli layoutMode={layoutMode} onLayoutModeChange={onLayoutModeChange} />}
 
         {/* ================= E. ARA ================= */}
         {sidebarTab === 'ara' && (

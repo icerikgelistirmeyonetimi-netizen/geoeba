@@ -53,7 +53,7 @@ describe('deneme', () => {
     }
   });
 
-  it('iki zar iki değer verir, tek zar bir değer', () => {
+  it('iki sayı küpü iki değer verir, tek küp bir değer', () => {
     const u = mulberry32(3);
     expect(tekDeneme({ tur: 'zar', ikiZar: true, istenen: { tip: 'cift' } }, u)).toMatchObject({ zarlar: expect.any(Array) });
     const s = tekDeneme({ tur: 'zar', ikiZar: true, istenen: { tip: 'cift' } }, u);
@@ -89,7 +89,7 @@ describe('deneme', () => {
     expect(durum.torbaKalan!.reduce((a, b) => a + b, 0)).toBe(4);
   });
 
-  it('büyük sayılar: 20000 zar atışında 6 oranı 1/6 civarı', () => {
+  it('büyük sayılar: 20000 sayı küpü atışında 6 oranı 1/6 civarı', () => {
     const s = varsayilanSablon('zar');
     const sonuclar = topluDeneme(s, 20000, mulberry32(2024));
     const oz = deneyOzeti(s, sonuclar);

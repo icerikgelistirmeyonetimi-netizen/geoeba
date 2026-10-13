@@ -592,7 +592,7 @@ const US_GOREVLERI: Gorev[] = [
     id: 's8-us-1',
     tur: 'yaz',
     baslik: 'İkiye katla',
-    yonerge: 'Kuleler 1, 2, 4, 8 küp: her kule bir öncekinin 2 katı. kat değişkeniyle kur: her kule kat kadar küp, sonra kat ikiye katlansın.',
+    yonerge: 'Kuleler 1, 2, 4, 8 küp: her kule bir öncekinin 2 katı. Kodu kat değişkeniyle kur: her kule kat kadar küp, sonra kat ikiye katlansın.',
     dunya: KULE_1248,
     hedef: YAPIYI_KUR,
     bitkiAdi: 'bitki',
@@ -624,7 +624,7 @@ const US_GOREVLERI: Gorev[] = [
     baslangic: 'onceki',
     cozum: katlaKodu(8, '÷', 2, 's8u2-'),
     degiskenler: ['kat'],
-    ipuclari: ['İlk kule kaç küp? kat hangi değerle başlamalı?', 'Her kuleden sonra kat yarıya inmeli: × yerine ÷ kullan.'],
+    ipuclari: ['İlk kule kaç küp? Değişken kat hangi değerle başlamalı?', 'Her kuleden sonra kat yarıya inmeli: × yerine ÷ kullan.'],
     basari: (iz) => {
       const h = kuleler(iz);
       const kat = deger(iz, 'kat');
@@ -645,7 +645,7 @@ const US_GOREVLERI: Gorev[] = [
     baslangic: katlaKodu(1, '+', 2, 's8u3h-'),
     cozum: katlaKodu(1, '×', 2, 's8u3-'),
     degiskenler: ['kat'],
-    ipuclari: ['kat değişkeni hangi değerleri alıyor: 1, 3, 5 …?', '2 eklemek ile 2 ile çarpmak farklıdır. Kuleler eklenerek değil, katlanarak büyümeli.'],
+    ipuclari: ['Değişken kat hangi değerleri alıyor: 1, 3, 5 …?', '2 eklemek ile 2 ile çarpmak farklıdır. Kuleler eklenerek değil, katlanarak büyümeli.'],
     basari: (iz) => `Buldun! kat + 2 ile kuleler 1, 3, 5, 7 olurdu: her kule 2 fazla (doğrusal artış). kat × 2 ile ${kuleler(iz).join(', ')}: her kule 2 katı (üslü artış).`,
     kazanimlar: ['MAT.8.1.1'],
   },
@@ -662,7 +662,7 @@ const US_GOREVLERI: Gorev[] = [
     baslangic: katlaKodu(1, '×', 2, 's8u4-', [['kez', 6, [['ata', 'kat', ['kat', '×', 2]]]]]),
     cozum: katlaKodu(1, '×', 2, 's8u4-', [['kez', 6, [['ata', 'kat', ['kat', '×', 2]]]]]),
     degiskenler: ['kat'],
-    ipuclari: ['Kuleler bitince kat kaç? Son kule 8 küp; ardından kat bir kez daha ikiye katlandı.', 'Sonra 6 kez daha ikiye katlanıyor: 16, 32 …', 'kat toplam kaç kez 2 ile çarpıldı? Cevap 2 üssü o sayı.'],
+    ipuclari: ['Kuleler bitince kat kaç? Son kule 8 küp; ardından kat bir kez daha ikiye katlandı.', 'Sonra 6 kez daha ikiye katlanıyor: 16, 32 …', 'Değişken kat toplamda kaç kez 2 ile çarpıldı? Cevap 2 üssü o sayı.'],
     tahmin: {
       metin: 'Program bitince kat kaç olur?',
       birim: '',

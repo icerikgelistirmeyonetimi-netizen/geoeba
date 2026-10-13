@@ -4,10 +4,14 @@
  * Kategorik (etiket türündeki) değişkenler için sütun grafiği ve istatistik paneli:
  * her kategori bir sıklık sütunu (sıklık ve %), sıklık tablosu (sıklık, göreli sıklık, merkez açı, tepe değer).
  * Daire grafiği için sıklıklardan türetilmiş tablo da buradan üretilir.
- * Renk anahtarı başka bir kategorik değişkense sütunlar onun kategorilerine göre yığılır ve istatistikte
- * anahtara göre sıklık tablosu (iki yönlü tablo) gösterilir.
+ * Renk anahtarı başka bir kategorik değişkense karşılaştırmalı sütun grafiği çizilir: her kategoride anahtarın
+ * kategorileri yan yana birer sütun (üst üste yığılmaz); istatistikte anahtara göre sıklık tablosu (iki yönlü tablo).
  * Yüzdeler ve merkez açıları en büyük kalan yöntemiyle yuvarlanır: toplamları her zaman %100 ve 360°.
- * Sütun tepesinde sıklık ve yüzde nokta grafiğindeki gibi tek satırda ("9 · %45"); dar sütunda iki satır.
+ * Sütun tepesinde sıklık ve yüzde nokta grafiğindeki gibi tek satırda ("9 · %45"); dar sütunda iki satır. Yan yana
+ * sütunlarda ve `yuzdeGoster` kapalıyken (5. sınıf) yalnız sıklık yazılır. Eksenlerin ucunda ok vardır.
+ * Sınıf düzeyi (sinifKurallari.ts) istatistikte tepe değeri, göreli sıklık ve merkez açı sütunlarını ve iki yönlü tablo
+ * varken tek yönlü tabloyu kapatabilir. İlkokulda (`cetele`) sıklık tablosu çeteleyle birlikte çizilir: tek yönlü tabloda
+ * çubuk yerine "Çetele" sütunu (sıklıktan önce), anahtara göre tabloda her hücrede çetele ve sayı.
  * Yazı ailesi uygulamanın geri kalanıyla aynı (Manrope); sayılar `sayiMetni` biçiminde.
  */
 import React, { useMemo } from 'react';
@@ -17,7 +21,6 @@ import {
   caprazSayim,
   frekanslar,
   kategoriRengi,
-  kategoriSayilari,
   kenarGerekir,
   mod,
   sutunMetinleri,
@@ -30,6 +33,8 @@ import { sayiMetni } from './istatistik';
 import type { VeriTablosu } from './veri';
 import { GECIS, RENK, RenkNoktasi } from './grafikOrtak';
 import { RenkLejanti } from './RenkLejanti';
+import { EksenOklari } from './EksenOklari';
+import { Cetele } from './toplama/Cetele';
 
 /** Renk anahtarı gösterilen değişkenden farklı bir kategorik sütunsa onu döndürür (aynıysa renkler zaten kategorilerin) */
 function farkliAnahtar(renkEslemi: RenkEslemesi | null | undefined, tablo: VeriTablosu, sutun: number): RenkEslemesi | null {
@@ -74,6 +79,8 @@ export interface KategorikSutunProps {
   yEnAz?: number;
   /** Veri yokken eksen çizilir ve ortasında bu ipucu yazar ("İlk cevapla …") */
   bosIpucu?: string;
+  /** Sütun tepesinde yüzde yazılsın mı (5. sınıfta yalnız sıklık; verilmezse yazılır) */
+  yuzdeGoster?: boolean;
 }
 
 const SOL = 56;
@@ -81,16 +88,24 @@ const SAG = 16;
 const UST = 30;
 const ALT = 56;
 
-export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik, azaltilmisHareket, renkEslemi = null, yEnAz, bosIpucu }: KategorikSutunProps) {
+export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik, azaltilmisHareket, renkEslemi = null, yEnAz, bosIpucu, yuzdeGoster = true }: KategorikSutunProps) {
   // Gerçek piksel: viewBox kabın ölçüsüdür, küçültme yok
   const W = Math.max(0, genislik);
   const H = Math.max(0, yukseklik);
   const alanG = Math.max(0, W - SOL - SAG);
   const f = useMemo(() => kategorikFrekanslar(tablo, sutun, sira), [tablo, sutun, sira]);
   const n = f.reduce((t, x) => t + x.sayi, 0);
-  const enCok = f.reduce((m, x) => Math.max(m, x.sayi), 0);
+  const anahtar = farkliAnahtar(renkEslemi, tablo, sutun);
+  const capraz = useMemo(() => (anahtar ? caprazSayim(tablo, sutun, anahtar, sira) : null), [anahtar, tablo, sutun, sira]);
+  /** Yan yana sütunların sayısı: anahtarın kategorileri (+ anahtarı boş satırlar varsa bir "(boş)" sütunu) */
+  const bosVar = capraz?.some((c) => c.bos > 0) ?? false;
+  const yanSayisi = anahtar ? anahtar.kategoriler.length + (bosVar ? 1 : 0) : 1;
+  // Ölçek: yan yana sütunlarda en uzun parça, tek sütunda en çok sıklık
+  const enCok = capraz ? capraz.reduce((m, c) => Math.max(m, ...c.sayilar, c.bos), 0) : f.reduce((m, x) => Math.max(m, x.sayi), 0);
   const hucreG = alanG / Math.max(f.length, 1);
   const sutunG = Math.max(8, Math.min(hucreG * 0.66, 96));
+  /** Yan yana sütunlardan her birinin genişliği (aralarında 2 px) */
+  const yanG = Math.max(4, Math.min((hucreG * 0.8 - (yanSayisi - 1) * 2) / yanSayisi, 64));
   const gecis = azaltilmisHareket ? 'none' : `transform 300ms ${GECIS}`;
   const sutunAdi = tablo.sutunlar[sutun]?.ad ?? '';
   // Kategori adları hücreye sığmıyorsa eğik yazılır; eğik etiket için alt boşluk büyür (en çok 96 px)
@@ -101,11 +116,11 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
   // Tam sayı çentikli sıklık ekseni; en yüksek sütunun üstünde sıklık ve yüzde etiketi için pay kalır
   const eksen = siklikEkseni(enCok > 0 ? Math.ceil(enCok * 1.15) : 0, Math.max(3, Math.floor((taban - UST) / 44)), yEnAz ?? 0);
   const olcek = dogrusalOlcek(0, eksen.max, taban, UST);
-  const anahtar = farkliAnahtar(renkEslemi, tablo, sutun);
-  const capraz = useMemo(() => (anahtar ? caprazSayim(tablo, sutun, anahtar, sira) : null), [anahtar, tablo, sutun, sira]);
   const { yuzdeler } = yuzdeVeAcilar(f.map((x) => x.sayi));
-  const baslik = `${sutunAdi} · sıklık (${n} veri)`;
+  // Eksen adının yanında veri sayısı yazılmaz (uzman incelemesi, 4. tur: eskiden "Aday · sıklık (20 veri)")
+  const baslik = `${sutunAdi} · sıklık`;
   const yuzdeSigar = hucreG >= 44;
+  const yuzdeli = yuzdeGoster && !anahtar;
 
   return (
     <svg
@@ -128,6 +143,7 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
       ))}
       <line x1={SOL} x2={SOL} y1={UST} y2={taban} stroke={RENK.metin} strokeWidth={1.5} />
       <line x1={SOL} x2={W - SAG} y1={taban} y2={taban} stroke={RENK.metin} strokeWidth={1.5} />
+      <EksenOklari x={SOL} ustY={UST} y={taban} sagX={W - SAG} />
       {/* Dikey eksenin adı */}
       <text
         x={15}
@@ -150,10 +166,6 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
           x={SOL + baslik.length * 7.4 + 24}
           y={16}
           sagSinir={W - SAG}
-          sayilar={kategoriSayilari(
-            anahtar,
-            sutunMetinleri(tablo, sutun).map((m) => m.satir),
-          )}
         />
       )}
       {n === 0 && (
@@ -165,44 +177,59 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
         const cx = SOL + hucreG * (i + 0.5);
         const yuk = Math.max(0, taban - olcek.ileri(x.sayi));
         const renk = kategoriRengi(x.kategori, i);
-        // Yığın: anahtarın kategorileri alttan üste anahtar sırasıyla, anahtarı boş satırlar en üstte gri
+        // Karşılaştırma: anahtarın kategorileri yan yana birer sütun (anahtar sırasıyla; anahtarı boş satırlar en sağda gri)
         const satir = capraz?.find((c) => c.kategori === x.kategori);
-        const parcalar: { ad: string; sayi: number; renk: string; alt: number }[] = [];
+        const parcalar: { ad: string; sayi: number; renk: string; j: number }[] = [];
         if (anahtar && satir) {
-          let birikim = 0;
           satir.sayilar.forEach((c, j) => {
-            if (c <= 0) return;
             const ad = anahtar.kategoriler[j];
-            parcalar.push({ ad, sayi: c, renk: anahtar.renkler.get(ad) ?? BOS_KATEGORI_RENGI, alt: birikim });
-            birikim += c;
+            parcalar.push({ ad, sayi: c, renk: anahtar.renkler.get(ad) ?? BOS_KATEGORI_RENGI, j });
           });
-          if (satir.bos > 0) parcalar.push({ ad: '(boş)', sayi: satir.bos, renk: BOS_KATEGORI_RENGI, alt: birikim });
+          if (bosVar) parcalar.push({ ad: '(boş)', sayi: satir.bos, renk: BOS_KATEGORI_RENGI, j: anahtar.kategoriler.length });
         }
         const dokum = parcalar.length > 0 ? ` · ${parcalar.map((p) => `${p.ad} ${p.sayi}`).join(', ')}` : '';
         const yuzde = yuzdeler[i] ?? 0;
-        const tekSatir = `${x.sayi} · %${sayiMetni(yuzde, 1)}`;
+        const tekSatir = yuzdeli ? `${x.sayi} · %${sayiMetni(yuzde, 1)}` : String(x.sayi);
         /** Sıklık ve yüzde: sığarsa tek satırda "9 · %45" (nokta grafiğindeki gibi), sığmazsa iki satır, çok darsa yalnız sıklık */
-        const etiketDuzeni: 'tek' | 'iki' | 'sayi' = tekSatir.length * 7.4 <= hucreG - 6 ? 'tek' : yuzdeSigar ? 'iki' : 'sayi';
+        const etiketDuzeni: 'tek' | 'iki' | 'sayi' = !yuzdeli ? 'sayi' : tekSatir.length * 7.4 <= hucreG - 6 ? 'tek' : yuzdeSigar ? 'iki' : 'sayi';
+        /** Yan yana sütunların ilkinin sol kenarı (grup kategorinin ortasına hizalı) */
+        const yanBas = cx - (yanSayisi * yanG + (yanSayisi - 1) * 2) / 2;
         return (
           <g key={x.kategori} data-siklik-sutunu={x.kategori} data-yukseklik={yuk.toFixed(2)}>
-            <title>{`${x.kategori}: ${x.sayi} (%${sayiMetni(yuzde, 1)})${dokum}`}</title>
+            <title>{`${x.kategori}: ${x.sayi}${yuzdeli ? ` (%${sayiMetni(yuzde, 1)})` : ''}${dokum}`}</title>
             {anahtar ? (
-              parcalar.map((p, k) => {
-                const altY = olcek.ileri(p.alt);
-                // Üstteki parçayla arasında ince kart rengi aralık kalır (parçalar ayırt edilsin)
-                const boy = Math.max(0.001, altY - olcek.ileri(p.alt + p.sayi) - (k < parcalar.length - 1 ? 1.5 : 0));
+              parcalar.map((p) => {
+                const px = yanBas + p.j * (yanG + 2);
+                const boy = Math.max(0.001, taban - olcek.ileri(p.sayi));
                 return (
-                  <g key={p.ad} style={{ transform: `translate(${cx - sutunG / 2}px, ${altY}px) scaleY(${-boy})`, transition: gecis }} data-yigin-parcasi={p.ad}>
-                    <rect
-                      x={0}
-                      y={0}
-                      width={sutunG}
-                      height={1}
-                      fill={p.renk}
-                      stroke={kenarGerekir(p.renk) ? RENK.metin : undefined}
-                      strokeWidth={kenarGerekir(p.renk) ? 1.5 : undefined}
-                      vectorEffect={kenarGerekir(p.renk) ? 'non-scaling-stroke' : undefined}
-                    />
+                  <g key={p.ad} data-yan-sutun={p.ad} data-sayi={p.sayi}>
+                    <title>{`${x.kategori} · ${anahtar.ad} ${p.ad}: ${p.sayi}`}</title>
+                    <g style={{ transform: `translate(${px}px, ${taban}px) scaleY(${-boy})`, transition: gecis }}>
+                      <rect
+                        x={0}
+                        y={0}
+                        width={yanG}
+                        height={1}
+                        fill={p.renk}
+                        stroke={kenarGerekir(p.renk) ? RENK.metin : undefined}
+                        strokeWidth={kenarGerekir(p.renk) ? 1.5 : undefined}
+                        vectorEffect={kenarGerekir(p.renk) ? 'non-scaling-stroke' : undefined}
+                      />
+                    </g>
+                    {n > 0 && p.sayi > 0 && yanG >= 12 && (
+                      <text
+                        x={px + yanG / 2}
+                        y={taban - boy - 6}
+                        fontSize={13}
+                        fontWeight={800}
+                        textAnchor="middle"
+                        fill={RENK.metin}
+                        style={{ paintOrder: 'stroke', stroke: RENK.kart, strokeWidth: 3, strokeLinejoin: 'round' }}
+                        data-yan-sutun-sayisi
+                      >
+                        {p.sayi}
+                      </text>
+                    )}
                   </g>
                 );
               })
@@ -221,12 +248,16 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
                 />
               </g>
             )}
-            {n > 0 && (
+            {n > 0 && !anahtar && (
               <g style={{ paintOrder: 'stroke', stroke: RENK.kart, strokeWidth: 3, strokeLinejoin: 'round' }}>
                 {etiketDuzeni === 'tek' ? (
                   <text x={cx} y={taban - yuk - 7} fontSize={13} fontWeight={800} textAnchor="middle" fill={RENK.metin} data-siklik-yazisi={tekSatir}>
                     {x.sayi}
                     <tspan fontWeight={600} fill={RENK.solukMetin}>{` · %${sayiMetni(yuzde, 1)}`}</tspan>
+                  </text>
+                ) : etiketDuzeni === 'sayi' ? (
+                  <text x={cx} y={taban - yuk - 7} fontSize={13} fontWeight={800} textAnchor="middle" fill={RENK.metin} data-siklik-yazisi={tekSatir}>
+                    {x.sayi}
                   </text>
                 ) : (
                   <>
@@ -268,7 +299,20 @@ export interface KategorikIstatistikProps {
   renkEslemi?: RenkEslemesi | null;
   /** Veri bir deneyden geliyor (atışlar, deney özeti): not teorik olasılık cümlesini de içerir */
   deneyVerisi?: boolean;
+  /** Tepe değer kartı (5. sınıfta merkezi eğilim ölçüsü yok); verilmezse var */
+  tepeDeger?: boolean;
+  /** Göreli sıklık ve merkez açı sütunları ile yüzde notu (5. sınıfta yok); verilmezse var */
+  oranlar?: boolean;
+  /** İki yönlü tablo varken tek yönlü sıklık tablosu da gösterilsin mi (5. sınıfta yalnız iki yönlü); verilmezse evet */
+  tekYonluIleBirlikte?: boolean;
+  /** Çetele ve sıklık tablosu birlikte (ilkokul): tek yönlü tabloda çubuk yerine çetele, iki yönlüde hücrelerde çetele */
+  cetele?: boolean;
+  /** Başlıktaki değişken türü (sayısal değişkenin değerlerinin sıklığında "sayısal değişken"); verilmezse kategorik */
+  turAdi?: string;
 }
+
+/** Sıklık tablosundaki çetelenin satır yüksekliği (px) */
+const CETELE_BOYU = 22;
 
 const KART = 'rounded-[calc(var(--radius)-4px)] border border-border bg-card px-4 py-3 shadow-[0_18px_40px_-18px_rgba(6,40,45,.35)]';
 const KART_BASLIGI = 'text-[13px] font-bold uppercase tracking-wide text-muted-foreground';
@@ -286,7 +330,18 @@ function merkezAciMetni(sayi: number, n: number, aci: number): string {
   return `${Math.abs(tam - Math.round(tam)) < 1e-9 ? '' : '≈ '}${aci}°`;
 }
 
-export function KategorikIstatistik({ tablo, sutun, sira, renkEslemi = null, deneyVerisi = false }: KategorikIstatistikProps) {
+export function KategorikIstatistik({
+  tablo,
+  sutun,
+  sira,
+  renkEslemi = null,
+  deneyVerisi = false,
+  tepeDeger = true,
+  oranlar = true,
+  tekYonluIleBirlikte = true,
+  cetele = false,
+  turAdi = 'kategorik değişken',
+}: KategorikIstatistikProps) {
   const metinler = useMemo(() => sutunMetinleri(tablo, sutun).map((m) => m.deger), [tablo, sutun]);
   const f = useMemo(() => frekanslar(metinler, sira), [metinler, sira]);
   const tepe = useMemo(() => mod(metinler, sira), [metinler, sira]);
@@ -297,22 +352,26 @@ export function KategorikIstatistik({ tablo, sutun, sira, renkEslemi = null, den
   const anahtar = farkliAnahtar(renkEslemi, tablo, sutun);
   const capraz = useMemo(() => (anahtar ? caprazSayim(tablo, sutun, anahtar, sira) : null), [anahtar, tablo, sutun, sira]);
   const bosVar = capraz?.some((c) => c.bos > 0) ?? false;
+  /** Tek yönlü sıklık tablosu: iki yönlü tablo varken sınıf düzeyi istemiyorsa (5. sınıf) çizilmez */
+  const tekYonlu = !(anahtar && capraz) || tekYonluIleBirlikte;
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-auto bg-background p-4" data-kategorik-istatistik>
       <h2 className="mb-3 text-lg font-bold text-foreground">
-        {sutunAdi} <span className="text-muted-foreground">{`· kategorik değişken · Veri sayısı: ${n}`}</span>
+        {sutunAdi} <span className="text-muted-foreground">{`· ${turAdi} · Veri sayısı: ${n}`}</span>
       </h2>
       {n === 0 ? (
         <p className="rounded-[calc(var(--radius)-4px)] border border-border bg-card p-4 text-[13px] text-muted-foreground">Bu değişkende değer yok.</p>
       ) : (
         <>
-          <div className="mb-3 grid grid-cols-2 gap-3 md:grid-cols-3">
-            <div className={KART} data-tepe-deger>
-              <div className={KART_BASLIGI}>Tepe değer</div>
-              <div className="mt-1 text-2xl font-extrabold text-foreground">{tepe.length > 0 ? tepe.join(' ve ') : 'yok'}</div>
-              <div className="mt-0.5 text-[13px] text-muted-foreground">{tepe.length > 0 ? `en sık görülen (${enCok} kez)` : TEPE_DEGER_YOK}</div>
-            </div>
+          <div className={`mb-3 grid grid-cols-2 gap-3 ${tepeDeger ? 'md:grid-cols-3' : ''}`}>
+            {tepeDeger && (
+              <div className={KART} data-tepe-deger>
+                <div className={KART_BASLIGI}>Tepe değer</div>
+                <div className="mt-1 text-2xl font-extrabold text-foreground">{tepe.length > 0 ? tepe.join(' ve ') : 'yok'}</div>
+                <div className="mt-0.5 text-[13px] text-muted-foreground">{tepe.length > 0 ? `en sık görülen (${enCok} kez)` : TEPE_DEGER_YOK}</div>
+              </div>
+            )}
             <div className={KART}>
               <div className={KART_BASLIGI}>Kategori sayısı</div>
               <div className="mt-1 text-2xl font-extrabold tabular-nums text-foreground">{f.filter((x) => x.sayi > 0).length}</div>
@@ -322,22 +381,24 @@ export function KategorikIstatistik({ tablo, sutun, sira, renkEslemi = null, den
               <div className="mt-1 text-2xl font-extrabold tabular-nums text-foreground">{n}</div>
             </div>
           </div>
+          {tekYonlu && (
           <section className="rounded-[calc(var(--radius)-4px)] border border-border bg-card p-4" data-siklik-tablosu>
-            <h3 className="mb-2 text-base font-bold text-foreground">Sıklık tablosu</h3>
+            <h3 className="mb-2 text-base font-bold text-foreground">{cetele ? 'Çetele ve sıklık tablosu' : 'Sıklık tablosu'}</h3>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[480px] max-w-[720px] text-[13px] tabular-nums text-foreground">
                 <thead>
                   <tr className="text-left text-muted-foreground">
                     <th className="h-9 pr-4 font-bold">{sutunAdi}</th>
+                    {cetele && <th className="pr-4 font-bold">Çetele</th>}
                     <th className="pr-4 text-right font-bold">Sıklık</th>
-                    <th className="pr-4 text-right font-bold">Göreli sıklık</th>
-                    <th className="pr-4 text-right font-bold">Merkez açı</th>
-                    <th className="w-[28%] font-bold" aria-label="Yüzde çubuğu" />
+                    {oranlar && <th className="pr-4 text-right font-bold">Göreli sıklık</th>}
+                    {oranlar && <th className="pr-4 text-right font-bold">Merkez açı</th>}
+                    {!cetele && <th className="w-[28%] font-bold" aria-label={oranlar ? 'Yüzde çubuğu' : 'Sıklık çubuğu'} />}
                   </tr>
                 </thead>
                 <tbody>
                   {f.map((x, i) => (
-                    <tr key={x.kategori} className={tepe.includes(x.kategori) ? 'bg-accent' : ''} data-tepe-satiri={tepe.includes(x.kategori) ? '' : undefined}>
+                    <tr key={x.kategori} className={tepeDeger && tepe.includes(x.kategori) ? 'bg-accent' : ''} data-tepe-satiri={tepeDeger && tepe.includes(x.kategori) ? '' : undefined}>
                       <td className="h-9 pr-4">
                         <span className="inline-flex items-center gap-2 font-semibold">
                           <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden="true">
@@ -346,33 +407,44 @@ export function KategorikIstatistik({ tablo, sutun, sira, renkEslemi = null, den
                           {x.kategori}
                         </span>
                       </td>
+                      {cetele && (
+                        <td className="pr-4 py-1" data-cetele-hucresi>
+                          <Cetele sayi={x.sayi} renk={kategoriRengi(x.kategori, i)} yukseklik={CETELE_BOYU} />
+                        </td>
+                      )}
                       <td className="pr-4 text-right">{x.sayi}</td>
-                      <td className="whitespace-nowrap pr-4 text-right">{goreliSiklikMetni(x.sayi, n, yuzdeler[i] ?? 0)}</td>
-                      <td className="whitespace-nowrap pr-4 text-right">{merkezAciMetni(x.sayi, n, acilar[i] ?? 0)}</td>
-                      <td>
-                        <div className="h-3 rounded-full bg-muted">
-                          <div className="h-3 rounded-full" style={{ width: `${x.oran * 100}%`, background: kategoriRengi(x.kategori, i) }} />
-                        </div>
-                      </td>
+                      {oranlar && <td className="whitespace-nowrap pr-4 text-right">{goreliSiklikMetni(x.sayi, n, yuzdeler[i] ?? 0)}</td>}
+                      {oranlar && <td className="whitespace-nowrap pr-4 text-right">{merkezAciMetni(x.sayi, n, acilar[i] ?? 0)}</td>}
+                      {!cetele && (
+                        <td>
+                          <div className="h-3 rounded-full bg-muted">
+                            <div className="h-3 rounded-full" style={{ width: `${x.oran * 100}%`, background: kategoriRengi(x.kategori, i) }} />
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                   <tr className="border-t border-border font-bold">
                     <td className="h-9 pr-4">Toplam</td>
+                    {cetele && <td />}
                     <td className="pr-4 text-right">{n}</td>
-                    <td className="whitespace-nowrap pr-4 text-right">{`${n}/${n} = 1 (%100)`}</td>
-                    <td className="pr-4 text-right">360°</td>
-                    <td />
+                    {oranlar && <td className="whitespace-nowrap pr-4 text-right">{`${n}/${n} = 1 (%100)`}</td>}
+                    {oranlar && <td className="pr-4 text-right">360°</td>}
+                    {!cetele && <td />}
                   </tr>
                 </tbody>
               </table>
             </div>
-            <p className="mt-3 text-[13px] text-muted-foreground" data-siklik-notu>
-              Yüzde = sıklık ÷ toplam × 100. Tüm yüzdelerin toplamı %100.
-              {deneyVerisi && ' Atış sayısı arttıkça göreli sıklıklar teorik olasılığa yaklaşır.'}
-            </p>
+            {oranlar && (
+              <p className="mt-3 text-[13px] text-muted-foreground" data-siklik-notu>
+                Yüzde = sıklık ÷ toplam × 100. Tüm yüzdelerin toplamı %100.
+                {deneyVerisi && ' Atış sayısı arttıkça göreli sıklıklar teorik olasılığa yaklaşır.'}
+              </p>
+            )}
           </section>
+          )}
           {anahtar && capraz && (
-            <section className="mt-4 rounded-[calc(var(--radius)-4px)] border border-border bg-card p-4" data-capraz-tablo>
+            <section className={`${tekYonlu ? 'mt-4 ' : ''}rounded-[calc(var(--radius)-4px)] border border-border bg-card p-4`} data-capraz-tablo>
               <h3 className="mb-2 text-base font-bold text-foreground" title={`İki yönlü tablo: ${sutunAdi} × ${anahtar.ad}`}>
                 {yonelmeEkli(anahtar.ad)} göre sıklık tablosu
               </h3>
@@ -404,7 +476,15 @@ export function KategorikIstatistik({ tablo, sutun, sira, renkEslemi = null, den
                         </td>
                         {c.sayilar.map((s, j) => (
                           <td key={anahtar.kategoriler[j]} className="pr-4 text-right">
-                            {s}
+                            {cetele ? (
+                              // İlkokul: hücrede çetele ve sayı (sayı sağda hizalı kalır)
+                              <span className="inline-flex items-center justify-end gap-2 py-1" data-cetele-hucresi>
+                                <Cetele sayi={s} renk={anahtar.renkler.get(anahtar.kategoriler[j])} yukseklik={CETELE_BOYU} />
+                                <span className="min-w-[1.5em]">{s}</span>
+                              </span>
+                            ) : (
+                              s
+                            )}
                           </td>
                         ))}
                         {bosVar && <td className="pr-4 text-right">{c.bos}</td>}

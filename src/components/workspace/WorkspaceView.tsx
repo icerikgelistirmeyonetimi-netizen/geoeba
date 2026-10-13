@@ -5,7 +5,12 @@ import { ToolMode } from '@/types/workspace';
 import { isAnyModalOpen } from '@/components/ui/modalState';
 import { workspaceOwnsKeyboard, toolForShortcut } from './toolShortcuts';
 import { ARAC_SECILDI_OLAYI } from './olcmeAraclari';
-import { Toolbar } from './Toolbar';
+import { Toolbar, type SolSekme } from './Toolbar';
+import { aracSecilebilirMi, kapaliAracBildirimi } from './kademeDuzeyleri';
+import { aracAdi } from './toolDefinitions';
+import { eskiDuzeniCevir } from './gorunumDuzenleri';
+import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
+import { useCurriculum } from '@/state/CurriculumContext';
 import { CommandAssistant } from './CommandAssistant';
 import { KesirAraciCubugu } from './KesirAraciCubugu';
 import { useIlkokulAtolyesi } from './useIlkokulAtolyesi';
@@ -52,24 +57,16 @@ import { useWorkspace } from '@/state/WorkspaceContext';
 import { syncUserFunctions } from '@/math/functionNames';
 import { createId } from '@/state/ids';
 import { validateProjectSolids } from '@/math/projectFile';
+import { VARSAYILAN_CISIM_OLCULERI, VARSAYILAN_KAMERA_3B, bosKonumBul } from './cisimYerlesimi';
 
 const SCENE_STORAGE_KEY = 'matematik_3d_sahne_v1';
 const HISTORY_LIMIT = 80;
 const COALESCE_MS = 700;
 
-export type LayoutMode = 'default' | 'algebra_2d' | '2d_3d' | 'three_col' | 'algebra_3d' | '2d_only' | '3d_only';
+export type LayoutMode = 'default' | 'algebra_only' | 'algebra_2d' | '2d_3d' | 'three_col' | 'algebra_3d' | '2d_only' | '3d_only';
 
-const DEFAULT_CAMERA_3D: Camera3D = {
-  rotX: 25,
-  rotY: -40,
-  zoom: 55,
-  panX: 0,
-  panY: 30,
-  perspective: 700,
-  showGrid: true,
-  showAxes: true,
-  showCoordinates: true,
-};
+/** Açılış kamerası (Görünümü Sıfırla da buna döner: cisimYerlesimi.kamerayiSifirla) */
+const DEFAULT_CAMERA_3D: Camera3D = VARSAYILAN_KAMERA_3B;
 
 const SOLID_NAMES: Record<Solid3DType, string> = {
   cube: 'Küp',
@@ -242,7 +239,7 @@ export function WorkspaceView() {
     resetViewport,
     viewport,
     setViewport,
-    layoutMode,
+    layoutMode: kayitliDuzen,
     setLayoutMode,
     isFunctionDialogOpen,
     setIsFunctionDialogOpen,
@@ -258,6 +255,33 @@ export function WorkspaceView() {
     canUndoWorkspace,
     canRedoWorkspace,
   } = useWorkspace();
+
+  // Eski kayıtlardaki üç bölmeli 'default' düzeni "2D + 3D + Cebir" olarak açılır (gorunumDuzenleri.eskiDuzeniCevir)
+  const layoutMode = eskiDuzeniCevir(kayitliDuzen);
+  useEffect(() => {
+    if (kayitliDuzen !== layoutMode) setLayoutMode(layoutMode);
+  }, [kayitliDuzen, layoutMode, setLayoutMode]);
+
+  // Açılışta (pencere her açıldığında) görünüm orijin merkezde, varsayılan yakınlıkta başlar: "Görünümü Sıfırla" ile
+  // aynı (alan uzmanı, 4. tur: kayıtlı kaydırmayla x≈-45…-31 aralığı açılıyor, çizilen grafik görünmüyordu).
+  // Etkinlik açılışı kendi başlangıç görünümünü (initialViewport) kullanır; ona dokunulmaz.
+  const { selectedActivity } = useCurriculum();
+  const acilisEtkinligiRef = useRef(selectedActivity);
+  useEffect(() => {
+    if (!acilisEtkinligiRef.current) resetViewport();
+  }, [resetViewport]);
+
+  // Kademe: ortaokulda kısayolla / komutla panel dışı araç seçilemez (kademeDuzeyleri.aracSecilebilirMi)
+  const [kademeDuzeyi] = useKademeDuzeyi();
+
+  // Sol panelin seçili sekmesi: 2B ile 3B araç paneli arasında geçişte (ör. "3D + Cebir" seçilince) korunur
+  const [solSekme, setSolSekme] = useState<SolSekme>('araclar');
+  // Bağlamlar > "Fonksiyon Formülünü Düzenle": pencere bu fonksiyonla dolu açılır ve onu günceller (alan uzmanı, 4. tur)
+  const [duzenlenecekFonksiyonId, setDuzenlenecekFonksiyonId] = useState<string | null>(null);
+  const fonksiyonPenceresiniAc = useCallback((duzenlenecekId?: string) => {
+    setDuzenlenecekFonksiyonId(duzenlenecekId ?? null);
+    setIsFunctionDialogOpen(true);
+  }, [setIsFunctionDialogOpen]);
 
   // Adlı fonksiyonlar (f, g …) tuval çizilmeden önce ayrıştırıcıya bildirilir
   syncUserFunctions(objects);
@@ -424,7 +448,8 @@ export function WorkspaceView() {
     customDimensions?: { width?: number; height?: number; depth?: number; radius?: number },
     customPos?: Point3D
   ) => {
-    const base = { width: 3, height: 3, depth: 3, radius: 1.5 };
+    // Türün varsayılan ölçüsü: dikdörtgen prizma 4 × 3 × 2 (küp değil), ötekiler 3 br (cisimYerlesimi)
+    const base = VARSAYILAN_CISIM_OLCULERI[type];
     const dims = customDimensions
       ? {
           width: customDimensions.width ?? (customDimensions.radius ? customDimensions.radius * 2 : base.width),
@@ -432,7 +457,7 @@ export function WorkspaceView() {
           depth: customDimensions.depth ?? (customDimensions.radius ? customDimensions.radius * 2 : base.depth),
           radius: customDimensions.radius ?? (customDimensions.width ? customDimensions.width / 2 : base.radius),
         }
-      : base;
+      : { ...base };
     if (type === 'cube') {
       dims.height = dims.width;
       dims.depth = dims.width;
@@ -444,8 +469,9 @@ export function WorkspaceView() {
     setSolids((prev) => {
       const count = prev.filter((s) => s.type === type).length + 1;
       const color = SOLID_COLORS[prev.length % SOLID_COLORS.length];
-      const idx = prev.length;
-      const autoPos: Point3D = { x: ((idx % 4) - 1.5) * 4.5, y: -Math.floor(idx / 4) * 4.5, z: 0 };
+      // Kameranın baktığı noktanın yanındaki boş yer (eski kural sıra numarasıyla sola diziyordu: ilk cisim bile
+      // merkezin 6,75 br solunda, araç panelinin altında doğuyordu). Hâlâ görünmüyorsa Canvas3D kamerayı ona çevirir.
+      const autoPos: Point3D = bosKonumBul(prev, { type, dimensions: dims }, camera3D);
 
       const newSolid: Solid3DObject = {
         id: newId,
@@ -603,6 +629,11 @@ export function WorkspaceView() {
   };
 
   const activateTool = (tool: ToolMode) => {
+    // Ortaokulda panelde olmayan araç (ör. E: Elips) kısayolla ya da komutla seçilmez; neden bildirilir
+    if (!aracSecilebilirMi(kademeDuzeyi, tool)) {
+      if (kademeDuzeyi !== 'tum') setHintMessage(kapaliAracBildirimi(kademeDuzeyi, aracAdi(tool)));
+      return;
+    }
     if (tool === 'function') {
       setIsFunctionDialogOpen(true);
       return;
@@ -640,7 +671,14 @@ export function WorkspaceView() {
     return () => window.removeEventListener('keydown', onKey);
   }, [setActiveTool, setSelectedObjectIds, selectAll]);
 
+  // Fonksiyon, Sürgü ya da Nesne Ekle penceresi açılınca önceki aracın yönergesi (ör. Öteleme) kapanır: pencere
+  // kapandıktan sonra tuvalde eski aracın ipucu kalmaz (alan uzmanı, 4. tur). Araç Seç ve Taşı'ya döner.
+  useEffect(() => {
+    if (isFunctionDialogOpen || isSliderDialogOpen || isAddObjectDialogOpen) setActiveTool('select');
+  }, [isFunctionDialogOpen, isSliderDialogOpen, isAddObjectDialogOpen, setActiveTool]);
+
   const is3DLayout = layoutMode === '3d_only' || layoutMode === 'algebra_3d';
+  // "Cebir" (algebra_only) yalnız cebir panelini gösterir; araç paneli son etkin boyutun (2B / 3B) panelidir
   const is2DLayout = layoutMode === '2d_only' || layoutMode === 'algebra_2d';
   const isMultiView = !is3DLayout && !is2DLayout;
   const show3DToolbar = is3DLayout || (isMultiView && studioDimension === '3D');
@@ -841,15 +879,19 @@ export function WorkspaceView() {
                 onDeleteSolidById={handleDeleteSolidById}
                 layoutMode={layoutMode}
                 onLayoutModeChange={setLayoutMode}
+                initialTab={solSekme}
+                onTabChange={setSolSekme}
               />
             ) : (
               <Toolbar
                 onSelectTool={activateTool}
-                onOpenFunctionDialog={() => setIsFunctionDialogOpen(true)}
+                onOpenFunctionDialog={fonksiyonPenceresiniAc}
                 onOpenSliderDialog={() => setIsSliderDialogOpen(true)}
                 onOpenAddObjectDialog={() => setIsAddObjectDialogOpen(true)}
                 layoutMode={layoutMode}
                 onLayoutModeChange={setLayoutMode}
+                initialTab={solSekme}
+                onTabChange={setSolSekme}
               />
             )}
           </div>
@@ -857,45 +899,9 @@ export function WorkspaceView() {
 
         {/* ÇOKLU GÖRÜNÜM MERKEZİ ALAN */}
         <div ref={containerRef} className="flex-1 min-w-0 min-h-0 relative flex flex-col overflow-hidden bg-background">
-          {layoutMode === 'default' && (
-            /* 1. VARSAYILAN DÜZEN: Üstte 2D Grafik, Altta (Cebir + 3D) */
-            <div className="flex flex-col h-full w-full overflow-hidden">
-              {/* Üst Panel: 2D GRAFİK */}
-              <div style={{ height: `${splitY}%` }} className="w-full min-h-[120px] overflow-hidden relative">
-                {render2DPanel}
-              </div>
-
-              {/* Yatay Bölücü Çizgisi (Mouse ile sürüklenebilir) */}
-              <div
-                onMouseDown={handleMouseDownSplitterY}
-                className="h-2 w-full bg-border/40 hover:bg-primary/40 active:bg-primary transition-colors cursor-row-resize flex items-center justify-center shrink-0 group z-30 select-none"
-                title="Yüksekliği ayarlamak için sürükleyin"
-              >
-                <div className="w-12 h-1 rounded-full bg-border group-hover:bg-primary/80 transition-colors" />
-              </div>
-
-              {/* Alt Panel: Cebir ve 3D Yan Yana */}
-              <div style={{ height: `${100 - splitY}%` }} className="w-full min-h-[120px] flex overflow-hidden relative">
-                {/* Alt-Sol: CEBİR */}
-                <div style={{ width: `${splitX}%` }} className="h-full min-w-[180px] overflow-hidden relative">
-                  {renderAlgebraPanel}
-                </div>
-
-                {/* Dikey Bölücü Çizgisi (Mouse ile sürüklenebilir) */}
-                <div
-                  onMouseDown={handleMouseDownSplitterX}
-                  className="w-2 h-full bg-border/40 hover:bg-primary/40 active:bg-primary transition-colors cursor-col-resize flex items-center justify-center shrink-0 group z-30 select-none"
-                  title="Genişliği ayarlamak için sürükleyin"
-                >
-                  <div className="h-12 w-1 rounded-full bg-border group-hover:bg-primary/80 transition-colors" />
-                </div>
-
-                {/* Alt-Sağ: 3D GRAFİK */}
-                <div style={{ width: `${100 - splitX}%` }} className="h-full min-w-[180px] overflow-hidden relative">
-                  {render3DPanel}
-                </div>
-              </div>
-            </div>
+          {layoutMode === 'algebra_only' && (
+            /* 1. YALNIZ CEBİR: cebir paneli tam alanda (üç bölmeli görünüm yalnız "2D + 3D + Cebir"dir) */
+            <div className="h-full w-full overflow-hidden" data-duzen="algebra_only">{renderAlgebraPanel}</div>
           )}
 
           {layoutMode === 'algebra_2d' && (
@@ -982,7 +988,14 @@ export function WorkspaceView() {
         is3D={show3DToolbar}
         onAddSolid3D={handleAddSolid}
       />
-      <FunctionDialog isOpen={isFunctionDialogOpen} onClose={() => setIsFunctionDialogOpen(false)} />
+      <FunctionDialog
+        isOpen={isFunctionDialogOpen}
+        duzenlenecekId={duzenlenecekFonksiyonId}
+        onClose={() => {
+          setIsFunctionDialogOpen(false);
+          setDuzenlenecekFonksiyonId(null);
+        }}
+      />
       <SliderDialog isOpen={isSliderDialogOpen} onClose={() => setIsSliderDialogOpen(false)} />
       <SliderSettingsDialog sliderId={sliderSettingsId} onClose={() => setSliderSettingsId(null)} />
       <RegularPolygonDialog

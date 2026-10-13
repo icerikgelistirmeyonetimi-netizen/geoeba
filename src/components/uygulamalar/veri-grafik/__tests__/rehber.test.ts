@@ -15,6 +15,7 @@ import {
 import { ORNEK_VERILER, TUM_OZELLIKLER, gecerliDegerler, ornekBul, sutunSil, type OrnekVeri, type Ozellik, type VeriTablosu } from '../veri';
 import { degiskenSutunlari } from '../kategorik';
 import { OZELLIKLER, SEKMELER, sekmeKullanilabilir } from '../durum';
+import { sekmeSinifta, sinifKurallari } from '../sinifKurallari';
 import { ozetHesapla } from '../istatistik';
 import { cizgiSiraNotuGerekli } from '../grafikKurallari';
 import { daireAdimi, daireDegerAyarla } from '../DaireGrafigi';
@@ -142,7 +143,8 @@ describe('rehber: Keşif şeridi metni', () => {
       const onerilen = onerilenSekme(o);
       const aciklamalar = [o.aciklama, o.aciklamaOzellikli?.metin].filter(Boolean);
       for (const s of SEKMELER) {
-        if (s.id === onerilen || !sekmeKullanilabilir(s.id, sayisal)) continue;
+        // Sınıfta görünmeyen sekme (5. sınıfta Çizgi, 6. sınıfta Saçılım, Kök-yaprak yalnız 6. sınıfta) ipucu istemez
+        if (s.id === onerilen || !sekmeKullanilabilir(s.id, sayisal) || !sekmeSinifta(s.id, sinifKurallari(o.sinif))) continue;
         // Her etkin sekmeye ipucu yazılmış (boş metin de bir karardır)
         expect(o.sekmeIpucu?.[s.id], `${o.id} ${s.id}`).toBeDefined();
         const metin = seritMetni(o, s.id, OZELLIKLER);
@@ -199,7 +201,7 @@ describe('rehber: adımlar', () => {
     expect(rehberAdimlari(kitap, HICBIRI)[2].eylem).toBeNull();
     expect(rehberAdimlari(kitap, new Set<Ozellik>(['ortanca']))[2].eylem).toMatchObject({ tur: 'secenek', ac: ['ortanca', 'ortalama'] });
     // boy: 3. adım özelliğe bağlı değil
-    expect(rehberAdimlari(ornek('boy'), HICBIRI)[2].eylem).toMatchObject({ tur: 'secenek', ac: ['ortalama', 'oms'], etiket: 'Ortalama ve sapmayı aç' });
+    expect(rehberAdimlari(ornek('boy'), HICBIRI)[2].eylem).toMatchObject({ tur: 'secenek', ac: ['ortalama', 'oms'], etiket: 'Aritmetik ortalama ve sapmayı aç' });
     // baskan: sayılar, sütunlara dönüştür, daireye geç
     expect(rehberAdimlari(ornek('baskan'), HICBIRI).map((a) => a.eylem?.tur ?? null)).toEqual([null, 'secenek', 'secenek', 'sekme']);
   });

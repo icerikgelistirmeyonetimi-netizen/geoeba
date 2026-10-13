@@ -22,7 +22,13 @@ export type NoktaEngeli =
   /** Noktadan çıkan ışın: birim yön ve piksel uzunluğu (doğru/ışın için Infinity). */
   | { tur: 'isin'; ux: number; uy: number; uzunluk: number }
   /** Noktadan geçen çember. */
-  | { tur: 'daire'; cx: number; cy: number; r: number };
+  | { tur: 'daire'; cx: number; cy: number; r: number }
+  /**
+   * Noktanın YAKININDAN geçen sonsuz çizgi (koordinat eksenleri): (ax, ay) noktasından (ux, uy) yönünde.
+   * Kesişim noktası eksenin hemen altında kalınca adı eksen çizgisinin ve sayılarının üstüne düşüyordu
+   * (alan uzmanı, 4. tur: "kesişim noktasının (L) harfi tuvalde görünmüyor").
+   */
+  | { tur: 'cizgi'; ax: number; ay: number; ux: number; uy: number };
 
 /** Ad yazısının yaklaşık kutusu (px). */
 export interface AdKutusu {
@@ -116,6 +122,19 @@ function isinKutuyuKesiyor(ox: number, oy: number, ux: number, uy: number, uzunl
     if (tMin > tMax) return false;
   }
   return true;
+}
+
+/** Kutunun köşelerinin sonsuz çizgiye işaretli uzaklıkları (px). */
+function cizgiyeUzakliklar(e: Extract<NoktaEngeli, { tur: 'cizgi' }>, k: Aday): number[] {
+  return [
+    [k.sol, k.ust], [k.sag, k.ust], [k.sol, k.alt], [k.sag, k.alt],
+  ].map(([x, y]) => (x - e.ax) * -e.uy + (y - e.ay) * e.ux);
+}
+
+/** Sonsuz çizgi dikdörtgeni kesiyor mu? (köşeler çizginin iki yanında ya da üstünde) */
+function cizgiKutuyuKesiyor(e: Extract<NoktaEngeli, { tur: 'cizgi' }>, k: Aday): boolean {
+  const d = cizgiyeUzakliklar(e, k);
+  return Math.min(...d) <= 0 && Math.max(...d) >= 0;
 }
 
 /** Çember çevresi dikdörtgeni kesiyor mu? (merkeze en yakın nokta ≤ r ≤ en uzak köşe) */
@@ -244,6 +263,9 @@ export function adayPuani(
     if (e.tur === 'isin') {
       if (isinKutuyuKesiyor(p.x, p.y, e.ux, e.uy, e.uzunluk, a)) { kesisme += 1; bosluk = 0; continue; }
       if (kesisme === 0) bosluk = Math.min(bosluk, isinKutuyaUzaklik(p, e, a));
+    } else if (e.tur === 'cizgi') {
+      if (cizgiKutuyuKesiyor(e, a)) { kesisme += 1; bosluk = 0; continue; }
+      if (kesisme === 0) bosluk = Math.min(bosluk, ...cizgiyeUzakliklar(e, a).map(Math.abs));
     } else {
       if (daireKutuyuKesiyor(e.cx, e.cy, e.r, a)) { kesisme += 1; bosluk = 0; continue; }
       if (kesisme === 0) bosluk = Math.min(bosluk, daireKutuyaUzaklik(e, a));
@@ -322,10 +344,18 @@ interface Cizgi {
  * Görünmez nesneler sayılmaz. Bir çizgiyi tanımlamayan ama üzerinde duran noktalar da (ör. AB
  * üzerine bağlanmış P) o çizgiyi engel olarak alır.
  */
+/** Eksen çizgisi bir noktanın adına bu kadar yakınsa (px, yerleşim uzayı) engel sayılır. */
+export const EKSEN_YAKINLIGI = 30;
+
 export function noktaEngelleri(
   objects: readonly MathObject[],
   pointsById: ReadonlyMap<string, PointObject>,
-  ekran: (p: Point2D) => EkranNoktasi
+  ekran: (p: Point2D) => EkranNoktasi,
+  /**
+   * Görünen koordinat eksenlerinin ekran konumu: `yatay` x ekseninin y'si, `dikey` y ekseninin x'i. Verilirse
+   * eksene EKSEN_YAKINLIGI px'ten yakın noktaların adı eksen çizgisinin üstüne konmaz (eksen yoksa verilmez).
+   */
+  eksenler?: { yatay?: number | null; dikey?: number | null },
 ): Map<string, NoktaEngeli[]> {
   const sonuc = new Map<string, NoktaEngeli[]>();
   const ekle = (id: string, e: NoktaEngeli) => {
@@ -421,6 +451,13 @@ export function noktaEngelleri(
     }
     for (const d of daireler) {
       if (Math.abs(Math.hypot(p.x - d.cx, p.y - d.cy) - d.r) <= UZERINDE_ESIGI) ekle(id, { tur: 'daire', ...d });
+    }
+    // Koordinat eksenleri: noktanın yakınından geçen eksen de bir çizgidir (ad üstüne binmesin)
+    if (eksenler?.yatay != null && Math.abs(p.y - eksenler.yatay) <= EKSEN_YAKINLIGI) {
+      ekle(id, { tur: 'cizgi', ax: p.x, ay: eksenler.yatay, ux: 1, uy: 0 });
+    }
+    if (eksenler?.dikey != null && Math.abs(p.x - eksenler.dikey) <= EKSEN_YAKINLIGI) {
+      ekle(id, { tur: 'cizgi', ax: eksenler.dikey, ay: p.y, ux: 0, uy: 1 });
     }
   }
 

@@ -24,22 +24,41 @@ function ilkokulYonergesi(arac: string, secilen: number): AracYonergesi | null {
       };
     case 'angle':
       return { baslik: 'Açı Oluştur', aciklama: `Sırayla 3 noktaya dokun: ortadaki nokta köşe olur${sayac(secilen, 3)}.` };
+    // 4. tur [177]: ekranda "cm" yok — ekrandaki bir kare gerçek bir santimetre değildir; bütün ölçmeler birimle (br)
     case 'measure_distance':
-      return { baslik: 'Uzunluk Ölç (cm)', aciklama: `İki köşeye ya da noktaya dokun; uzunluk tam santimetre yazılır${sayac(secilen, 2)}.` };
+      return { baslik: 'Uzunluk Ölç', aciklama: `İki köşeye ya da noktaya dokun; uzunluk birim (br) olarak yazılır, tam değilse «yaklaşık» denir${sayac(secilen, 2)}.` };
     case 'unit_measure':
       return { baslik: 'Birimle Ölç (br)', aciklama: `Kareli zeminde iki köşeye ya da noktaya dokun; uzunluk kaç kare kenarı olduğu (birim) yazılır${sayac(secilen, 2)}.` };
+    case 'measure_perimeter':
+      return { baslik: 'Çevre Hesapla', aciklama: 'Çevresini görmek istediğin şekle dokun. Kenarları kareli zemine paralel değilse çevresini cetvelle ölç.' };
+    // 4. tur [178]: iki araç ayrı işler — Yansıt simetrik TAMAMLAMA, Simetri Keşfet simetri doğrusunu SINAMA
     case 'reflect':
+      return {
+        baslik: 'Yansıt',
+        aciklama: 'Şekli simetriğiyle tamamla: şekle dokun; simetri doğrusu şeklin yanına çizilir, simetriği öbür yana konur. Üstteki düğmelerle dikey ya da yatay simetri doğrusunu seç.',
+      };
     case 'symmetry':
       return {
-        baslik: 'Simetri',
-        aciklama: 'Simetriğini çizmek istediğin şekle dokun. Simetri doğrusu şeklin yanına çizilir; üstteki düğmelerle dikey ya da yatay simetri doğrusunu seç.',
+        baslik: 'Simetri Keşfet',
+        aciklama: 'Şekle dokun, üzerine aday simetri doğrusunun iki ucunu işaretle ve «Katla»ya bas: iki yarı örtüşürse bu bir simetri doğrusudur.',
+      };
+    // 4. tur [179]: derece yok (TYMM MAT.4.3.5: açı bir dönme miktarıdır)
+    case 'rotate':
+      return {
+        baslik: 'Şekli Döndür',
+        aciklama: 'Önce bir şekil seç; altındaki düğmelerle şekli çeyrek dönüş, yarım dönüş ya da tam dönüş döndür. Yönü seç: saat yönünde ya da saat yönünün tersine.',
       };
     default:
       return null;
   }
 }
 
-export function aracYonergesi(arac: string, secilen: number, secenek: { ilkokul?: boolean } = {}): AracYonergesi | null {
+/**
+ * `uzunlukBirimi`: Uzunluk Ölç'ün o kademedeki birimi (ortaokulda 'br': başlıktaki "(cm)" düşer; olcuYuvarlama.ts).
+ */
+export function aracYonergesi(
+  arac: string, secilen: number, secenek: { ilkokul?: boolean; uzunlukBirimi?: 'cm' | 'br' } = {},
+): AracYonergesi | null {
   if (secenek.ilkokul) {
     const ozel = ilkokulYonergesi(arac, secilen);
     if (ozel) return ozel;
@@ -54,13 +73,21 @@ export function aracYonergesi(arac: string, secilen: number, secenek: { ilkokul?
     case 'angle':
       return { baslik: 'Açı Oluştur', aciklama: `3 nokta seçin${sayac(secilen, 3)}.` };
     case 'measure_distance':
-      return { baslik: 'Uzunluk Ölç (cm)', aciklama: `2 köşe/nokta ya da bir doğru parçası seçin${sayac(secilen, 2)}.` };
+      return {
+        baslik: secenek.uzunlukBirimi === 'br' ? 'Uzunluk Ölç' : 'Uzunluk Ölç (cm)',
+        aciklama: `2 köşe/nokta, bir doğru parçası ya da çokgenin bir kenarını seçin${sayac(secilen, 2)}.`,
+      };
     case 'measure_area':
       return { baslik: 'Alanı Bul', aciklama: 'Alanını görmek istediğiniz çokgene ya da şekle dokunun.' };
     case 'measure_perimeter':
       return { baslik: 'Çevre Hesapla', aciklama: 'Çevresini görmek istediğiniz çokgene dokunun.' };
     case 'unit_measure':
-      return { baslik: 'Birimle Ölç (br)', aciklama: `2 köşe/nokta ya da bir doğru parçası seçin${sayac(secilen, 2)}.` };
+      return { baslik: 'Birimle Ölç (br)', aciklama: `2 köşe/nokta, bir doğru parçası ya da çokgenin bir kenarını seçin${sayac(secilen, 2)}.` };
+    case 'square':
+      return {
+        baslik: 'Kare',
+        aciklama: 'Karenin sol alt köşesine dokunun ve kenar uzunluğunu yazın; ya da köşeden sürükleyerek çizin.',
+      };
     case 'area_model':
       return {
         baslik: 'Alanı Modelle',
@@ -117,9 +144,9 @@ export function aracYonergesi(arac: string, secilen: number, secenek: { ilkokul?
         aciklama: 'Sırayla bir kola, açının köşesine ve diğer kola tıklayın; açıyı iki eş parçaya bölen ışın çizilir.',
       };
     case 'perpendicular':
-      return { baslik: 'Dik Doğru', aciklama: 'İlk iki nokta doğrultuyu belirler, üçüncü nokta doğrunun geçtiği yerdir.' };
+      return { baslik: 'Dik Doğru', aciklama: 'Önce bir doğruya ya da doğru parçasına (veya doğrultuyu veren iki noktaya), sonra dik doğrunun geçeceği noktaya dokunun.' };
     case 'parallel':
-      return { baslik: 'Paralel Doğru', aciklama: 'İlk iki nokta doğrultuyu belirler, üçüncü nokta doğrunun geçtiği yerdir.' };
+      return { baslik: 'Paralel Doğru', aciklama: 'Önce bir doğruya ya da doğru parçasına (veya doğrultuyu veren iki noktaya), sonra paralel doğrunun geçeceği noktaya dokunun.' };
     case 'segment_length':
       return { baslik: 'Uzunluğu Verilen Doğru Parçası', aciklama: 'Başlangıç noktasına tıklayın, sonra uzunluğu girin.' };
     case 'compass':
@@ -173,5 +200,5 @@ export const YONERGELI_ARACLAR = [
   'measure_angle', 'angle', 'measure_distance', 'measure_area', 'measure_perimeter', 'unit_measure', 'area_model', 'ruler',
   'setsquare', 'rotate', 'reflect', 'symmetry', 'circle_radius', 'circle_3points', 'arc', 'sector', 'ellipse', 'midpoint',
   'divide_ratio', 'perp_bisector', 'angle_bisector', 'perpendicular', 'parallel', 'segment_length', 'compass', 'intersect',
-  'translate', 'measure_slope', 'trig_ratios', 'measure_arc', 'checkbox', 'button', 'input_box',
+  'translate', 'measure_slope', 'trig_ratios', 'measure_arc', 'checkbox', 'button', 'input_box', 'square',
 ] as const;

@@ -294,6 +294,32 @@ describe('Toolbar3D çizimi (2B tasarım sistemi)', () => {
     expect(ciz({ initialTab: 'baglamlar', solids: [{ ...kup, selectedFaceIndex: 99 }], selectedSolidId: kup.id })).not.toContain('Seçili Yüz');
   });
 
+  it('ilkokul Bağlamlar (SIL [180]): yüz, köşe, ayrıt ve yüz biçimleri; V, A, br², br³, harfle kenar, konum ve derece yok', () => {
+    kademe.duzey = 'ilkokul';
+    const html = ciz({ initialTab: 'baglamlar', solids: [{ ...kup, selectedFaceIndex: 0 }], selectedSolidId: kup.id, selectedSolidIds: [kup.id], onUpdateSolid: vi.fn() });
+    expect(html).toContain('data-ilkokul-cisim-ozellikleri');
+    expect(html).toContain('Cismin Özellikleri');
+    expect(html).toContain('6 kare');
+    for (const yok of ['br³', 'br²', 'V =', 'A =', 'K - E + Y', 'aria-label="Kenar (a)"', 'aria-label="Konum X"', 'aria-label="X ekseni"', '°']) {
+      expect(html, yok).not.toContain(yok);
+    }
+    expect(html).toContain('aria-label="Kenar uzunluğu"');
+    expect(html).toContain('Rengi Kaldır'); // seçili yüzün rengi yine değişir
+    const kure = ciz({ initialTab: 'baglamlar', solids: [{ ...kup, id: 'k', type: 'sphere', dimensions: { width: 4, height: 4, depth: 4, radius: 2 } }], selectedSolidId: 'k' });
+    expect(kure).toContain('aria-label="Büyüklük"');
+    expect(kure).toContain('1 eğri yüz');
+    expect(kure).not.toContain('Yarıçap (r)');
+    // Nesneler listesinde koordinat üçlüsü yok; Eksenler satırı ilkokulda yok
+    expect(ciz({ initialTab: 'nesneler', solids: [kup] })).not.toContain('(0; 0; 0)');
+    expect(ciz()).not.toContain('aria-label="Eksenler"');
+    // Ortaokulda eskisi gibi
+    kademe.duzey = 'ortaokul';
+    const orta = ciz({ initialTab: 'baglamlar', solids: [kup], selectedSolidId: kup.id, selectedSolidIds: [kup.id], onUpdateSolid: vi.fn() });
+    for (const var_ of ['V = 27 br³', 'K - E + Y = 2', 'aria-label="Kenar (a)"', 'aria-label="Konum X"']) expect(orta, var_).toContain(var_);
+    expect(orta).not.toContain('data-ilkokul-cisim-ozellikleri');
+    expect(ciz()).toContain('aria-label="Eksenler"');
+  });
+
   it('Türkçe sayı çözümü: virgül ondalık, binlik nokta, sınır kırpma, geçersiz metin', () => {
     expect(turkceSayiyiCoz('2,5')).toBe(2.5);
     expect(turkceSayiyiCoz(' -90 ')).toBe(-90);
@@ -324,5 +350,33 @@ describe('Toolbar3D çizimi (2B tasarım sistemi)', () => {
     const html = ciz({ solids: [kup], selectedSolidId: kup.id });
     expect(html).not.toMatch(SABIT_RENK);
     expect(html).not.toMatch(EMOJI);
+  });
+});
+
+describe('Üçgen prizma taban türü ve 2B - 3B ayrımı (uzman 4. tur [172], [174], [175])', () => {
+  const ucgen: Solid3DObject = { ...kup, id: 'u-1', type: 'triangular_prism', name: 'Üçgen Prizma 1' };
+  const baglam = (s: Solid3DObject) => ciz({ initialTab: 'baglamlar', solids: [s], selectedSolidId: s.id, selectedSolidIds: [s.id], onUpdateSolid: vi.fn() });
+
+  it('ortaokulda Bağlamlar > Boyutlar taban üçgeni seçicisi: İkizkenar (seçili), Dik, Eşkenar', () => {
+    kademe.duzey = 'ortaokul';
+    const html = baglam(ucgen);
+    expect(html).toContain('aria-label="Taban üçgeni"');
+    for (const ad of ['İkizkenar', 'Dik', 'Eşkenar']) expect(html).toContain(`>${ad}</button>`);
+    expect(html).toMatch(/role="radio" aria-checked="true"[^>]*>İkizkenar</);
+  });
+
+  it('eşkenarda genişlik "Kenar (a)" olur, yükseklik a·√3/2 yazılır (ayrı kaydırıcı yok)', () => {
+    kademe.duzey = 'ortaokul';
+    const html = baglam({ ...ucgen, tabanUcgeni: 'eskenar', dimensions: { width: 4, height: (4 * Math.sqrt(3)) / 2, depth: 3, radius: 2 } });
+    expect(html).toContain('Kenar (a)');
+    expect(html).toContain('a · √3 / 2 ≈ 3,46 br');
+    expect(html).toMatch(/role="radio" aria-checked="true"[^>]*>Eşkenar</);
+  });
+
+  it('ilkokulda seçici yok (üçgen türleri ortaokul konusu); küpte de yok', () => {
+    kademe.duzey = 'ilkokul';
+    expect(baglam(ucgen)).not.toContain('Taban üçgeni');
+    kademe.duzey = 'ortaokul';
+    expect(baglam(kup)).not.toContain('Taban üçgeni');
   });
 });

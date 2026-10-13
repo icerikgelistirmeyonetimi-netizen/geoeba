@@ -2,7 +2,8 @@
 
 /**
  * Atölye ekranı (ikinci etkinlik türü): açık uçlu proje. Görev ekranıyla aynı üç alan: üstte amaç ve
- * yıldız ölçütleri, solda tuval (dünya çipleriyle birkaç sınama dünyası), sağda kod.
+ * yıldız ölçütleri, solda tuval (dünya çipleriyle birkaç sınama dünyası), sağda kod. Ekranda sınama dünyaları
+ * atölyenin kendi sahne adıyla anılır (tarla, cadde, sera …; sahneAdi.ts, cümleler atolyeMetinleri.ts).
  * "Çalıştır" seçili dünyada canlandırır; "Hepsini sına" kodu bütün dünyalarda çalıştırır ve yıldız verir:
  * ★ ilk dünyada doğru · ★★ bütün dünyalarda doğru · ★★★ ayrıca en çok N blok.
  * Dünya başına kodlu atölyede (Atolye.dunyaBasinaKod, Ayna atölyesi) her sahanın kodu ayrıdır: saha değişince kod
@@ -21,6 +22,8 @@ import { atolyeGuncelle, atolyeKaydi, type LabKaydi } from './kayit';
 import { blokSayisi, bloklar, sayiMetni, type Program } from './program';
 import { calistir, type Iz } from './yorumlayici';
 import { sina, sinaAyri, sonucIletisi, type SinamaSonucu } from './degerlendirme';
+import { calismaBasariMetni, olcutMetinleri, sinamaMetni } from './atolyeMetinleri';
+import { sahneAdi } from './sahneAdi';
 import { ekranKonumu, useOynatici } from './useOynatici';
 import { adimAnlatimi, baslangicAnlatimi } from './anlatici';
 import { izgara, koordinatlar } from './dunya';
@@ -87,24 +90,19 @@ export function AtolyeEkrani({
   }, [kodAnahtari, atolye.id]);
   const [sonuc, setSonuc] = useState<{ basarili: boolean; metin: string } | null>(null);
   const [ipucuAcik, setIpucuAcik] = useState(false);
+  /** Açılan ipucu sayısı (en az 1): "Bir ipucu daha" sıradakini açar; başka atölyeye geçince başa döner */
+  const [acilanIpucu, setAcilanIpucu] = useState(1);
+  useEffect(() => setAcilanIpucu(1), [atolye.id]);
   const [gorunum, setGorunum] = useState<KodGorunumu>('bloklar');
 
   const sahneRef = useRef<SahneTutamaci>(null);
   const onBitti = useCallback(
     (z: Iz) => {
       if (z !== izRef.current) return;
-      if (z.sonuc.basarili)
-        setSonuc({
-          basarili: true,
-          metin: ayriKod
-            ? 'Bu sahada şekil tamam. Öbür sahalara geç: her sahada eksik yarıyı çizen kodu kur, sonra "Hepsini sına".'
-            : atolye.dunyalar.length > 1
-              ? 'Bu dünyada doğru çalıştı. Şimdi "Hepsini sına" ile öbür dünyalarda dene.'
-              : 'Doğru çalıştı. "Hepsini sına" ile yıldızını al.',
-        });
+      if (z.sonuc.basarili) setSonuc({ basarili: true, metin: calismaBasariMetni(atolye) });
       else setSonuc({ basarili: false, metin: sonucIletisi(z.sonuc, dunya, atolye.bitkiAdi) });
     },
-    [atolye, ayriKod, dunya]
+    [atolye, dunya]
   );
   const oynatici = useOynatici(sahneRef, 1, onBitti);
   // Kod çalışmaya başlayınca ipucu kartı kapanır: ileti şeridi (anlatım, sonuç) geri gelir
@@ -129,21 +127,9 @@ export function AtolyeEkrani({
     setKayit((k) => atolyeGuncelle(k, atolye.id, (a) => ({ ...a, yildiz: Math.max(a.yildiz, s.yildiz) })));
     const n = ayriKod ? s.blokSayisi : blokSayisi(program);
     const ilkHata = s.dunyalar.findIndex((d) => !d.basarili);
-    const birim = kart ? 'kart' : 'blok';
-    const tek = atolye.dunyalar.length === 1;
     /** Dünya başına kodda başarısız sahanın iletisi: kodu hiç kurulmadıysa bunu söyler */
     const sahaIletisi = (i: number) => (sahaKodlari[i].length ? s.dunyalar[i].ileti : 'Bu sahanın kodunu henüz kurmadın.');
-    let metin: string;
-    if (ayriKod) {
-      if (s.yildiz === 3) metin = `Üç yıldız! ${atolye.dunyalar.length} sahanın hepsinde eksik yarıyı çizdin; en uzun kodun ${n} ${birim}.`;
-      else if (s.yildiz === 2) metin = `İki yıldız: bütün sahalarda şekil tamam. Üçüncü yıldız için her sahada en çok ${atolye.enCokBlok} ${birim} (en uzun kodun ${n}).`;
-      else if (s.yildiz === 1) metin = `Bir yıldız: 1. sahada şekil tamam. ${ilkHata + 1}. sahada olmadı: ${sahaIletisi(ilkHata)}`;
-      else metin = `1. sahada olmadı: ${sahaIletisi(0)}`;
-    } else if (s.yildiz === 3) metin = `Üç yıldız! Kodun ${tek ? 'doğru çalışıyor' : 'bütün dünyalarda çalışıyor'} ve kısa: ${n} ${birim}.`;
-    else if (s.yildiz === 2) metin = `İki yıldız: ${tek ? 'doğru çalışıyor' : 'bütün dünyalarda çalışıyor'}. Üçüncü yıldız için en çok ${atolye.enCokBlok} ${birim} (şu an ${n}).`;
-    else if (s.yildiz === 1) metin = `Bir yıldız: 1. dünyada çalışıyor ama ${ilkHata + 1}. dünyada olmadı: ${s.dunyalar[ilkHata].ileti}`;
-    else metin = `${tek ? 'Olmadı' : '1. dünyada olmadı'}: ${s.dunyalar[0].ileti}`;
-    setSinamaIletisi({ basarili: s.yildiz >= 2, metin });
+    setSinamaIletisi({ basarili: s.yildiz >= 2, metin: sinamaMetni(atolye, s, n, sahaIletisi) });
     if (ilkHata > 0) setDunyaSira(ilkHata);
   };
 
@@ -166,7 +152,7 @@ export function AtolyeEkrani({
   const dunyaCipleri = (
     <div className="flex flex-wrap items-center gap-2">
       {atolye.dunyalar.length > 1 && (
-        <span className="inline-flex min-h-[44px] items-center gap-1 rounded-full bg-card/95 p-1 shadow-sm ring-1 ring-border backdrop-blur" role="tablist" aria-label="Sınama dünyaları" data-dunya-cipleri>
+        <span className="inline-flex min-h-[44px] items-center gap-1 rounded-full bg-card/95 p-1 shadow-sm ring-1 ring-border backdrop-blur" role="tablist" aria-label={`Sınanacak ${sahneAdi(atolye).cogul}`} data-dunya-cipleri>
           {atolye.dunyalar.map((d, i) => {
             const s = sinama?.dunyalar[i];
             return (
@@ -229,23 +215,10 @@ export function AtolyeEkrani({
   );
 
   const kalip = kalipBul(atolye.kalip);
-  // Tek dünyada ★ ile ★★ birlikte gelir (sına: ilk dünya aynı zamanda bütün dünyalar)
-  const olcutler = ayriKod
-    ? [
-        { n: 1, metin: '1. sahada şekli tamamla' },
-        { n: 2, metin: `${atolye.dunyalar.length} sahanın hepsinde tamamla` },
-        { n: 3, metin: `Her sahada en çok ${atolye.enCokBlok} blok` },
-      ]
-    : atolye.dunyalar.length > 1
-      ? [
-          { n: 1, metin: '1. dünyada çalışsın' },
-          { n: 2, metin: `${atolye.dunyalar.length} dünyanın hepsinde çalışsın` },
-          { n: 3, metin: `En çok ${atolye.enCokBlok} blok olsun` },
-        ]
-      : [
-          { n: 2, metin: 'Doğru çalışsın' },
-          { n: 3, metin: `En çok ${atolye.enCokBlok} ${kart ? 'kart' : 'blok'} olsun` },
-        ];
+  // Tek sahnede ★ ile ★★ birlikte gelir (sına: ilk sahne aynı zamanda bütün sahneler)
+  const olcutler = olcutMetinleri(atolye);
+  /** İpuçları: ilki genel (kalıp kartının adıyla), sonrakiler "Bir ipucu daha" ile sırayla daha somut */
+  const ipuclari = [kalip ? `${atolye.ipucu} (Kalıp: ${kalip.ad})` : atolye.ipucu, ...(atolye.ipuclari ?? [])];
 
   const yonerge = (
     <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-card px-4 py-3" data-atolye-yonergesi>
@@ -290,7 +263,16 @@ export function AtolyeEkrani({
     <section className={`flex min-w-0 flex-col ${dar ? '' : 'min-h-0 flex-1'} p-3`} aria-label="Tuval">
       <div className={dar ? 'h-[320px]' : 'min-h-0 flex-1'}>
         <SahneAlani ref={sahneRef} dunya={dunya} donanim={donanim} koyu={koyu} azHareket={azHareket} gizli={gizli} durum={durum} ustBilgi={dunyaCipleri}
-          ipucu={ipucuAcik ? <IpucuKarti ipuclari={[kalip ? `${atolye.ipucu} (Kalıp: ${kalip.ad})` : atolye.ipucu]} acilan={1} onKapat={() => setIpucuAcik(false)} /> : null}
+          ipucu={
+            ipucuAcik ? (
+              <IpucuKarti
+                ipuclari={ipuclari}
+                acilan={Math.min(acilanIpucu, ipuclari.length)}
+                onDaha={acilanIpucu < ipuclari.length ? () => setAcilanIpucu((a) => Math.min(ipuclari.length, a + 1)) : undefined}
+                onKapat={() => setIpucuAcik(false)}
+              />
+            ) : null
+          }
           altBilgi={altSatir}
         />
       </div>

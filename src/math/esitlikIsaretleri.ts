@@ -23,6 +23,7 @@ import type { MathObject, Point2D, PointObject, PolygonObject } from '@/types/ma
 import { getArcGeometry } from './geometry';
 import { commandCircleGeometry } from './commandBindings';
 import { isArcMeasurement, resolveArc } from './arcMeasure';
+import { yuvarlandiMi } from './matematikYazimi';
 
 // ------------------------------------------------------------------ sabitler
 /**
@@ -247,13 +248,24 @@ export function esitlikIsaretleri(
      * sayılır; açılar tam dereceye, yaylar tam yarıçap ve tam dereceye göre karşılaştırılır.
      */
     tamSayi?: boolean;
+    /**
+     * İlkokul (tamSayi ile; atölye 4. tur [176] denetimi): yuvarlanan uzunluk tuvalde "yaklaşık" sözcüğüyle yazılır
+     * (matematikYazimi.yaklasikSozcukle). "4 br" ile "yaklaşık 4 br" ekranda AYNI yazılmadığından eş sayılmaz:
+     * tabanı 4, yüksekliği 4 br ikizkenar üçgen (4; √20; √20) eşkenar gibi işaretlenmesin. İkisi de "yaklaşık 6 br"
+     * yazılan uzunluklar yine eştir (2026-09-25 kuralı).
+     */
+    yaklasikAyri?: boolean;
   } = {},
 ): EsitlikSonucu {
   const otomatik = secenek.otomatik !== false;
   const tamSayi = secenek.tamSayi === true;
+  const yaklasikAyri = tamSayi && secenek.yaklasikAyri === true;
   const DERECE = 180 / Math.PI;
-  /** Tam sayı yazımında görünen değer: uzunluk tam birim, açı tam derece */
-  const tamUzunluk = (x: number) => Math.round(x);
+  /**
+   * Tam sayı yazımında görünen değer: uzunluk tam birim, açı tam derece. `yaklasikAyri`: kesin ve "yaklaşık" yazılan
+   * aynı tam sayı ayrı anahtar alır (2n kesin, 2n + 1 yaklaşık; yaklaşıklık etiketteki kuralla, yuvarlandiMi).
+   */
+  const tamUzunluk = (x: number) => (yaklasikAyri ? Math.round(x) * 2 + (yuvarlandiMi(x, 0) ? 1 : 0) : Math.round(x));
   const tamDerece = (radyan: number) => Math.round(Math.abs(radyan) * DERECE);
   const tamEsit = (a: number, b: number) => a === b;
   // 0) dizin

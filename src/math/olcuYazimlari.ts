@@ -17,7 +17,7 @@ import {
   uzunluk, yaricap, yayOlcusu, yayUzunlugu,
 } from '@/math/matematikYazimi';
 import { type Kutu, type KutuOlcusu, type Nokta, kutuOlcusu } from '@/math/yazimDuzeni';
-import { tamSayiAlan, tamSayiCevre, tamSayiDaireAlani, tamSayiCemberCevresi, type TamSayiSonucu } from '@/math/tamSayiHesap';
+import { tamSayiAlan, tamSayiCevre, tamSayiDaireAlani, tamSayiCemberCevresi, toplamdanYuvarlananCevre, type TamSayiSonucu } from '@/math/tamSayiHesap';
 import { type ArcMeasurement, TAU, circleGeometryOf, resolveArc, yayIcNoktasi } from '@/math/arcMeasure';
 
 /**
@@ -351,9 +351,11 @@ export function tamSayiOlcusu(o: Olcu, r: TamSayiSonucu): Olcu {
 /**
  * Çokgenin alan/çevre kartının satırları (A(ABC) = …, Ç(ABC) = …). `tamSayi`: alan ve çevre GÖRÜNEN tam
  * sayılardan hesaplanır (çevre = görünen kenarların toplamı; dikdörtgen/dik üçgen alanı görünen kenarlardan).
+ * `ilkokul` (tamSayi ile): çevre GERÇEK kenarların toplamının yuvarlanmışıdır, tam sayı değilse "yaklaşık"
+ * (tamSayiHesap.toplamdanYuvarlananCevre; uzman 4. tur [176]).
  */
 export function cokgenKartSatirlari(
-  girdi: readonly PointObject[], alanVar: boolean, cevreVar: boolean, tamSayi = false,
+  girdi: readonly PointObject[], alanVar: boolean, cevreVar: boolean, tamSayi = false, ilkokul = false,
 ): { olculer: Olcu[]; turler: KartSatiri[] } {
   const koseler = [...girdi];
   const olculer: Olcu[] = [];
@@ -366,7 +368,7 @@ export function cokgenKartSatirlari(
   }
   if (cevreVar) {
     const o = cevre(koseler, calculatePolygonPerimeter(koseler));
-    olculer.push(tamSayi ? tamSayiOlcusu(o, tamSayiCevre(koseler)) : o);
+    olculer.push(tamSayi ? tamSayiOlcusu(o, ilkokul ? toplamdanYuvarlananCevre(koseler) : tamSayiCevre(koseler)) : o);
     turler.push('cevre');
   }
   return { olculer, turler };
@@ -530,7 +532,7 @@ export function olcumKartKutulari(g: KartGirdisi): OlcumKarti[] {
       if (koseler.length < 3 || koseler.length !== poly.pointIds.length) continue;
       const ekran = koseler.map((p) => worldToScreen(p, layoutViewport));
       const cx = ekran.reduce((t, p) => t + p.x, 0) / ekran.length;
-      const { olculer, turler } = cokgenKartSatirlari(koseler, alanVar, cevreVar, yazim.tamSayi);
+      const { olculer, turler } = cokgenKartSatirlari(koseler, alanVar, cevreVar, yazim.tamSayi, yazim.yaklasikSozcukle);
       // İlk etiketin üst kenarı: en alt köşenin 22 px altı.
       // Kenar etiketleri açıksa etiketler onların da ALTINA iner (yoksa alt kenarın etiketini örtüyordu).
       const kenarBoyu = kutuOlcusu([[sayi(0)]], px(11)).yukseklik * oran;

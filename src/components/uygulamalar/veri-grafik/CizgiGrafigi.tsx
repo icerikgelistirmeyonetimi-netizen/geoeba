@@ -19,7 +19,7 @@ import { satirEtiketi, sayiOku, sayisalSutunlar, type VeriTablosu } from './veri
 import { sayiMetni } from './istatistik';
 import { GECIS, RENK, adVeBirim, birimli, metinGenisligi, metniSigdir, svgKonumu } from './grafikOrtak';
 import { payliEksen } from './SutunGrafigi';
-import { kategoriSayilari, rengeGoreMetin, renkGruplari, satirRengi, type RenkEslemesi } from './kategorik';
+import { rengeGoreMetin, renkGruplari, satirRengi, type RenkEslemesi } from './kategorik';
 import { RenkLejanti, renkLejantiGenisligi } from './RenkLejanti';
 
 export interface CizgiGrafigiProps {
@@ -188,16 +188,6 @@ export function CizgiGrafigi({
   const tek = seriler.length === 1;
   /** Renk anahtarı: kategorik sütun (seriler sayısal olduğundan hiçbir seriyle çakışmaz) */
   const anahtar = renkEslemi && renkEslemi.sutun >= 0 && renkEslemi.sutun < tablo.sutunlar.length ? renkEslemi : null;
-  const cizilenSatirlar = useMemo(() => {
-    const k = new Set<number>();
-    for (const s of seriler)
-      tablo.satirlar.forEach((r, i) => {
-        if (sayiOku(r.hucreler[s.indeks]) !== null) k.add(i);
-      });
-    return [...k].sort((a, b) => a - b);
-  }, [seriler, tablo]);
-  const lejantSayilari = anahtar ? kategoriSayilari(anahtar, cizilenSatirlar) : undefined;
-
   const tumDegerler = useMemo(() => {
     const d: number[] = [];
     for (const s of seriler)
@@ -226,7 +216,7 @@ export function CizgiGrafigi({
   }, []);
   const sonLejant = seriLejantlari[seriLejantlari.length - 1];
   const seriLejantSonu = !tek && sonLejant ? sonLejant.x + ornekG + metinGenisligi(sonLejant.ad, fs, true) + 18 : lejantBas;
-  const renkAyniSatirda = anahtar !== null && !tek && seriLejantSonu + renkLejantiGenisligi(anahtar, lejantSayilari) <= W - SAG;
+  const renkAyniSatirda = anahtar !== null && !tek && seriLejantSonu + renkLejantiGenisligi(anahtar) <= W - SAG;
   const ustSatirSayisi = (tek ? 0 : 1) + (anahtar && !renkAyniSatirda ? 1 : 0);
   const satirTaban = (k: number) => 8 + fs + k * satirYuk;
   const renkLejantY = satirTaban(tek ? 0 : renkAyniSatirda ? 0 : 1);
@@ -435,7 +425,7 @@ export function CizgiGrafigi({
           );
         })}
       {anahtar && (
-        <RenkLejanti eslem={anahtar} x={renkAyniSatirda ? seriLejantSonu : lejantBas} y={renkLejantY} sagSinir={W - SAG} sayilar={lejantSayilari} />
+        <RenkLejanti eslem={anahtar} x={renkAyniSatirda ? seriLejantSonu : lejantBas} y={renkLejantY} sagSinir={W - SAG} />
       )}
       {/* Tek seride dikey eksenin adı (lejant yerine) */}
       {yEksenAdi && (

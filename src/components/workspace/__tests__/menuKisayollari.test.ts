@@ -26,15 +26,25 @@ describe('menü çubuğu araç kısayolu ipuçları', () => {
   });
 
   it('araç seçen her menü maddesi kendi aracının kısayolunu gösterir', () => {
-    const aracMaddeleri = maddeler.filter((madde) => madde.includes('onSelectTool('));
-    // Araçlar: Seçim, Nokta, Doğru / Parça, Çember, Çokgen, Ölçüm, Dönüşüm, Geometri Araçları; Ekle: Metin
-    expect(aracMaddeleri.length).toBeGreaterThanOrEqual(9);
+    // Sabit maddeler: Araçlar menüsünde Seç ve Taşı, Nokta, Doğru Parçası, Çember, Çokgen; Ekle menüsünde Metin.
+    // Alt menülerin (Ölçme, İnşa, Dönüşüm) maddeleri panelin araç kaydından üretilir (aşağıdaki test).
+    const aracMaddeleri = maddeler.filter((madde) => /onSelectTool\('/.test(madde));
+    expect(aracMaddeleri.length).toBeGreaterThanOrEqual(6);
     for (const madde of aracMaddeleri) {
       const araclar = [...madde.matchAll(/onSelectTool\('([a-z_0-9]+)'\)/g)].map((m) => m[1]);
       expect(araclar).toHaveLength(1);
       const ipuclari = [...madde.matchAll(/<AracKisayolu arac="([a-z_0-9]+)"/g)].map((m) => m[1]);
       expect(ipuclari, araclar[0]).toEqual(araclar);
     }
+  });
+
+  it('Araçlar menüsünün alt menü maddeleri paneldeki araç adını ve kısayolunu kullanır', () => {
+    const uretilen = maddeler.filter((madde) => madde.includes('onSelectTool(arac.id as ToolMode)'));
+    expect(uretilen).toHaveLength(1);
+    expect(uretilen[0]).toContain('<AracKisayolu arac={arac.id as ToolMode} />');
+    expect(uretilen[0]).toContain('{arac.name}');
+    // Olmayan "Teğet" ve gruplu eski satır adları kalmadı
+    expect(menu).not.toMatch(/Dikme\/Teğet|Simetri \/ Öteleme|Uzunluk \/ Açı/);
   });
 
   it('Denklem / Fonksiyon maddesi fonksiyon aracının kısayolunu gösterir (o da aynı pencereyi açar)', () => {

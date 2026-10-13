@@ -57,7 +57,8 @@ export type ToolMode =
   | 'delete'
   | 'pan';
 
-export type LayoutMode = 'default' | 'algebra_2d' | '2d_3d' | 'three_col' | 'algebra_3d' | '2d_only' | '3d_only';
+/** Çalışma alanı yerleşimi (liste: components/workspace/gorunumDuzenleri). 'default' eski üç bölmeli kayıtlar içindir. */
+export type LayoutMode = 'default' | 'algebra_only' | 'algebra_2d' | '2d_3d' | 'three_col' | 'algebra_3d' | '2d_only' | '3d_only';
 
 export interface ToolCategory {
   id: string;
@@ -131,6 +132,12 @@ export interface StyleSettings {
    */
   tamSayiOlcu: boolean;
   /**
+   * ORTAOKUL kademesinde ölçüler tam sayı mı yazılır (varsayılan: hayır, 2 ondalık). Alan uzmanı, atölye inceleme
+   * 4. tur: "ölçü etiketlerini virgülden sonra 2 basamakla göster". Ortaokulda Ayarlar'daki kutu bu alanı açar;
+   * diğer kademeler tamSayiOlcu'yu kullanır (olcuYuvarlama.ts).
+   */
+  tamSayiOlcuOrtaokul: boolean;
+  /**
    * Tuval UZAKLAŞTIRILINCA yazıların (nokta adı, ölçü etiketi, yazı notu) inebileceği EN KÜÇÜK ölçek (0–1).
    * Yazılar şekille birlikte küçülür ama bu orandan aşağı inmez; böylece uzaktan da okunur kalır
    * (kullanıcı isteği, 2026-10-09: "zoom out yapıldığında nokta isimleri okunamıyor"). 0 = sınırsız küçülür.
@@ -150,6 +157,7 @@ export const DEFAULT_STYLE_SETTINGS: StyleSettings = {
   olcuYazimi: 'tam',
   aciYazimi: 'sapka',
   tamSayiOlcu: true,
+  tamSayiOlcuOrtaokul: false,
   yaziAltSiniri: 0.7,
 };
 

@@ -66,21 +66,36 @@ describe('sınıf sınıf süzgeç kalmadı', () => {
   });
 });
 
-describe('komutlar ve kısayollar kısıtlanmaz', () => {
-  it('komut motoru, komut kutusu, kısayollar ve araç etkinleştirme kademe süzgecini bilmez', () => {
+describe('komutlar ve kısayollar: yalnız ortaokulda araç SEÇİMİ süzülür', () => {
+  // Alan uzmanı, atölye inceleme 4. tur (ortaokul): "E tuşu Elips aracını etkinleştiriyor, panelde seçili araç görünmüyor".
+  // Kısayolla ve komutla araç SEÇİMİ ortaokulda panel süzgecinden geçer; ilkokul, lise ve "Tüm araçlar" değişmez.
+  // Komutla şekil KURMAK süzülmez (komut motoru kademeyi bilmez).
+  it('komut motoru, sesli komut düğmesi, kısayol eşlemesi ve WorkspaceContext kademe süzgecini bilmez', () => {
     const komutYolu = [
       ...dosyalar(path.join(SRC, 'math', 'commands')),
-      path.join(KOK, 'CommandPanel.tsx'),
       path.join(KOK, 'CommandAssistant.tsx'),
       path.join(KOK, 'toolShortcuts.ts'),
-      path.join(KOK, 'WorkspaceView.tsx'),
       path.join(SRC, 'state', 'WorkspaceContext.tsx'),
     ];
     for (const dosya of komutYolu) {
       expect(oku(dosya), path.relative(SRC, dosya)).not.toMatch(/kademeDuzey|KademeDuzey|useKademeDuzeyi|sinifDuzey|SinifDuzey/);
       // Araç süzgecinin işlevleri de komut yolunda yok. İlkokul GÖRÜNÜM kuralları (ilkokulKipi: harfsiz köşe,
       // tam sayı ölçü, en çok sekizgen) ayrı bir modüldür; yazılı komutla kurulan şekil yine kurulur.
-      expect(oku(dosya), path.relative(SRC, dosya)).not.toMatch(/aracGorunurMu|gorunenAraclar|araclariSuz|gruplariSuz/);
+      expect(oku(dosya), path.relative(SRC, dosya)).not.toMatch(/aracGorunurMu|gorunenAraclar|araclariSuz|gruplariSuz|aracSecilebilirMi/);
     }
+  });
+
+  it('araç etkinleştirme (WorkspaceView) ve komut kutusu (CommandPanel) yalnız aracSecilebilirMi ile süzer', () => {
+    for (const ad of ['WorkspaceView.tsx', 'CommandPanel.tsx']) {
+      const kaynak = oku(path.join(KOK, ad));
+      expect(kaynak, ad).toMatch(/aracSecilebilirMi\(kademeDuzeyi, /);
+      expect(kaynak, ad).toMatch(/kapaliAracBildirimi\(/);
+      expect(kaynak, ad).not.toMatch(/aracGorunurMu|gorunenAraclar|araclariSuz|gruplariSuz/);
+    }
+  });
+
+  it('süzgeç yalnız ortaokulda: kademeDuzeyleri.ARAC_SECIMI_SUZULEN_KADEMELER', () => {
+    const kaynak = oku(path.join(KOK, 'kademeDuzeyleri.ts'));
+    expect(kaynak).toMatch(/export const ARAC_SECIMI_SUZULEN_KADEMELER: readonly KademeId\[\] = \['ortaokul'\];/);
   });
 });

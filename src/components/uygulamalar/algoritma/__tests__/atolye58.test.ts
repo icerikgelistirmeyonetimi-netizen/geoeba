@@ -199,7 +199,7 @@ describe('Atölye 5–8. sınıf', () => {
 
       it('çözüm her dünyada doğru çalışır; son değişkenler ve yapılan iş', () => {
         const s = sinav(a, a.cozum);
-        expect(s.dunyalar.map((d) => d.ileti)).toEqual(a.dunyalar.map(() => 'Program bu dünyada doğru çalıştı.'));
+        expect(s.dunyalar.map((d) => d.ileti)).toEqual(a.dunyalar.map(() => 'Program doğru çalıştı.'));
         expect(s.dunyalar.map((d) => d.iz.son.degiskenler)).toEqual(b.degiskenler);
         expect(s.dunyalar.map((d) => izOzeti(d.iz)[b.is.olcu])).toEqual(b.is.degerler);
         expect(s.verimlilikNotu).toBeNull();
@@ -214,7 +214,7 @@ describe('Atölye 5–8. sınıf', () => {
       'y = 2x + 1': 'Robot sahanın kenarına geldi; daha ileri gidemez.',
       'y = x + 2': 'Robot sahanın kenarına geldi; daha ileri gidemez.',
       'y = 3x': 'Robot sahanın kenarına geldi; daha ileri gidemez.',
-      'y = 3': 'Program bu dünyada doğru çalıştı.',
+      'y = 3': 'Program doğru çalıştı.',
     });
     // Site: son bloktan sonra da boşluk bırakan kod alanın kenarına çıkar (bitişik bloklarda çalışır)
     const site = programKur([['kez', 'n', ['ileri', ['kez', 3, ['koy']], 'ileri', 'koy', ['kez', 'ara', ['ileri']]]]], 'a8o2-');

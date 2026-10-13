@@ -58,21 +58,15 @@ function Para({ maskeKimligi }: { maskeKimligi: string }) {
   );
 }
 
-/** Zar: yuvarlatılmış fildişi küp yüzü, beş nokta. */
+/** Sayı küpü: yuvarlatılmış fildişi küp yüzü, ortada mürekkep rengi rakam (nokta değil; 3B küple aynı dil). */
 function Zar() {
   return (
     <>
       <rect x="3.6" y="3.6" width="16.8" height="16.8" rx="4.2" fill={RENK.fildisi} stroke="currentColor" strokeWidth="1.5" />
       <path d="M6.2 5.6h9.6" stroke="#ffffff" strokeWidth="1.2" opacity="0.8" />
-      {[
-        [8.3, 8.3],
-        [15.7, 8.3],
-        [12, 12],
-        [8.3, 15.7],
-        [15.7, 15.7],
-      ].map(([x, y]) => (
-        <circle key={`${x}-${y}`} cx={x} cy={y} r="1.55" fill={RENK.murekkep} />
-      ))}
+      <text x="12" y="16.5" textAnchor="middle" fontSize="12.5" fontWeight="800" fontFamily="Manrope, system-ui, sans-serif" fill={RENK.murekkep}>
+        3
+      </text>
     </>
   );
 }

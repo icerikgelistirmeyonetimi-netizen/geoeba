@@ -162,7 +162,7 @@ const DENEMELER: Record<string, Deneme[]> = {
         [['kez', 2, ['ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri']]],
       ],
       yildiz: 1,
-      iletiler: { 'Sağ yarı çizili': 'Robot sahanın kenarına geldi; daha ileri gidemez.', 'Üst yarı çizili': 'Program bu dünyada doğru çalıştı.' },
+      iletiler: { 'Sağ yarı çizili': 'Robot sahanın kenarına geldi; daha ileri gidemez.', 'Üst yarı çizili': 'Program doğru çalıştı.' },
     },
     {
       ad: 'her sahada döngüsüz kod',
@@ -302,11 +302,11 @@ describe('Atölye 1–4: çocuğun kodları ve okuduğu cümleler', () => {
     }
   }
 
-  it('çözümler her dünyada "Program bu dünyada doğru çalıştı." der', () => {
+  it('çözümler her dünyada "Program doğru çalıştı." der', () => {
     for (const a of ATOLYELER_1_4) {
       const s = a.dunyaBasinaKod ? sinatAyri(a, a.cozumler ?? []) : sinat(a, a.cozum);
       expect(s.yildiz, a.id).toBe(3);
-      for (const d of s.dunyalar) expect(d.ileti, `${a.id}/${d.dunya.ad}`).toBe('Program bu dünyada doğru çalıştı.');
+      for (const d of s.dunyalar) expect(d.ileti, `${a.id}/${d.dunya.ad}`).toBe('Program doğru çalıştı.');
     }
   });
 });

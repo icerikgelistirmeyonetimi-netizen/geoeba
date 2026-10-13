@@ -13,6 +13,8 @@
  * - Renk anahtarı: satır dilimleri satırın kategori rengini alır, üstteki lejantta her kategorinin toplamdaki payı
  *   yazar. Kategorik dilimlerde (sıklık) anahtar başka bir değişkense dışta ince bir halka dilimi ona göre böler.
  * - 40'tan çok dilimde etiketler ve tutamaçlar gizlenir; dilimler arasında ok tuşlarıyla gezilir.
+ * - `oransiz` (5. sınıf, sinifKurallari.ts): açı ve yüzde yazılmaz, merkez açı yayı ve hesabı çizilmez; dilimlerde ad,
+ *   lejantta ad ve değer kalır (renk ve parça-bütün ilişkisi). Dokunulan dilimin şeridinde değeri ve bütün yazar.
  */
 import React, { useMemo, useRef, useState } from 'react';
 import {
@@ -53,6 +55,8 @@ export interface DaireGrafigiProps {
   renkEslemi?: RenkEslemesi | null;
   /** Kategorik dilimlerde dış halka: dilim satırı → anahtar kategorilerine göre sayılar (eslem sırasıyla, sonda anahtarı boş olanlar) */
   halka?: { eslem: RenkEslemesi; sayilar: Map<number, number[]> } | null;
+  /** Açı ve yüzde yazılmaz (5. sınıf): dilimlerde ad, lejantta ad ve değer; merkez açı yayı ve hesabı yok */
+  oransiz?: boolean;
   /**
    * Sürüklemede değerlerin oturacağı adım (Grafik ayarları → Sürüklerken yuvarla; verilmezse 1). Verinin
    * çözünürlüğünden büyükse çözünürlük kullanılır (2,5 saatlik veride 0,5); toplam ÷ adım 2000'i aşarsa
@@ -194,6 +198,7 @@ export function DaireGrafigi({
   renkEslemi = null,
   halka = null,
   yuvarlamaAdimi,
+  oransiz = false,
 }: DaireGrafigiProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   /** Sürükleme başındaki değerler ve adım: her hareket bunlardan hesaplanır (toplam ve gidiş-dönüş korunur) */
@@ -285,7 +290,11 @@ export function DaireGrafigi({
   // ── Yerleşim ────────────────────────────────────────────────────────────────
   const lejantSagda = W >= 520;
   const lejantMetni = (i: number) =>
-    `${satirEtiketi(tablo, dilimler[i].satir)}: ${sayi(dilimler[i].deger)} (${sayiMetni(oranlar.acilar[i], 1)}°, %${sayiMetni(oranlar.yuzdeler[i], 1)})`;
+    oransiz
+      ? `${satirEtiketi(tablo, dilimler[i].satir)}: ${sayi(dilimler[i].deger)}`
+      : `${satirEtiketi(tablo, dilimler[i].satir)}: ${sayi(dilimler[i].deger)} (${sayiMetni(oranlar.acilar[i], 1)}°, %${sayiMetni(oranlar.yuzdeler[i], 1)})`;
+  /** Dilimin erişilebilir ve kısa metni: "Uyku: 9 (135°, %37,5)"; oransızda "Uyku: 9" */
+  const oranEki = (i: number) => (oransiz ? '' : ` (${sayiMetni(oranlar.acilar[i], 1)}°, %${sayiMetni(oranlar.yuzdeler[i], 1)})`);
   // Sağdaki lejant en uzun satırı kadar geniş (en çok grafiğin %38'i ve 340 px); sığmayan satır kısalır
   const lejantEnUzun = dilimler.slice(0, 60).reduce((m, _, i) => Math.max(m, metinGenisligi(lejantMetni(i), fs, true)), 0);
   const lejantG = lejantSagda ? Math.min(Math.max(160, lejantEnUzun + 40), W * 0.38, 340) : 0;
@@ -296,7 +305,7 @@ export function DaireGrafigi({
   const lejantEslemi = halka?.eslem ?? anahtar;
   const dilimRengi = (satir: number, i: number) => (anahtar ? satirRengi(anahtar, satir) ?? BOS_KATEGORI_RENGI : renkler?.[i] ?? paletRenkleri[i]);
   let paylar: Map<string, string> | undefined;
-  if (anahtar && toplam > 0) {
+  if (anahtar && toplam > 0 && !oransiz) {
     const kategoriToplami = new Map<string, number>();
     for (const n of noktalar) {
       const k = anahtar.satirKategorisi.get(n.satir);
@@ -309,12 +318,9 @@ export function DaireGrafigi({
     );
     paylar = new Map(anahtar.kategoriler.map((k, j) => [k, `%${sayiMetni(payDegerleri[j], 1)}`]));
   }
-  const halkaSayilari = halka
-    ? new Map(halka.eslem.kategoriler.map((k, j) => [k, [...halka.sayilar.values()].reduce((t, s) => t + (s[j] ?? 0), 0)]))
-    : undefined;
   const baslikMetni = `${sutunAdi}${toplam > 0 ? ` · toplam ${sayi(toplam)}` : ''}`;
   const baslikG = metinGenisligi(baslikMetni, fs, true);
-  const lejantBaslikta = lejantEslemi !== null && 16 + baslikG + 20 + renkLejantiGenisligi(lejantEslemi, halkaSayilari, paylar) <= W - 16;
+  const lejantBaslikta = lejantEslemi !== null && 16 + baslikG + 20 + renkLejantiGenisligi(lejantEslemi, paylar) <= W - 16;
   const anahtarLejantY = lejantBaslikta ? baslikY : (aciklama ? aciklamaY : baslikY) + 22;
   const ustAlan = (aciklama ? aciklamaY : baslikY) + 12 + (lejantEslemi && !lejantBaslikta ? 22 : 0);
 
@@ -335,6 +341,14 @@ export function DaireGrafigi({
       const aciM = `${sayiMetni(oranlar.acilar[i], 1)}°`;
       const yuzdeM = `%${sayiMetni(oranlar.yuzdeler[i], 1)}`;
       const ad = satirEtiketi(tablo, d.satir);
+      if (oransiz) {
+        // Açı ve yüzde yok: sığarsa ad dilimin içinde, sığmazsa dışarıda kılavuz çizgiyle
+        if (d.aci >= 359.9) return { tur: 'ic', rho: 0, aciM: '', yuzdeM: '', ad };
+        const rhoA = rr * (d.aci < 60 ? 0.68 : 0.6);
+        const kirisA = 2 * Math.max(0, rhoA - (fs + 2) / 2) * Math.sin((Math.min(d.aci, 180) * Math.PI) / 360);
+        if (d.aci >= 16 && kirisA >= metinGenisligi(ad, fs, true) + 8 && rr - rhoA >= fs + 4) return { tur: 'ic', rho: rhoA, aciM: '', yuzdeM: '', ad };
+        return { tur: 'dis', metin: ad };
+      }
       if (d.aci >= 359.9) return { tur: 'ic', rho: 0, aciM, yuzdeM, ad };
       const rho = rr * (d.aci < 60 ? 0.68 : 0.6);
       // Yazı bloğunun merkeze en yakın satırındaki kiriş (dilim orada en dar)
@@ -487,7 +501,10 @@ export function DaireGrafigi({
     const aciEsit = Math.abs(tamAci - aci) < 1e-9;
     const yuzdeEsit = Math.abs(tamYuzde - yuzde) < 1e-9;
     hesap = {
-      metin: `${satirEtiketi(tablo, d.satir)}: ${sayi(Math.max(0, d.deger))} ÷ ${sayi(toplam)} × 360° ${aciEsit ? '=' : '≈'} ${sayiMetni(aci, 1)}° · ${yuzdeEsit ? '' : '≈ '}%${sayiMetni(yuzde, 1)}`,
+      // Oransızda (5. sınıf) hesap yok: parça ve bütün ("Uyku: 9 · bütün 24")
+      metin: oransiz
+        ? `${satirEtiketi(tablo, d.satir)}: ${sayi(Math.max(0, d.deger))} · bütün ${sayi(toplam)}`
+        : `${satirEtiketi(tablo, d.satir)}: ${sayi(Math.max(0, d.deger))} ÷ ${sayi(toplam)} × 360° ${aciEsit ? '=' : '≈'} ${sayiMetni(aci, 1)}° · ${yuzdeEsit ? '' : '≈ '}%${sayiMetni(yuzde, 1)}`,
       renk: dilimRengi(d.satir, gosterilen),
     };
   }
@@ -514,7 +531,6 @@ export function DaireGrafigi({
           x={lejantBaslikta ? 16 + baslikG + 20 : 16}
           y={anahtarLejantY}
           sagSinir={lejantBaslikta || !lejantSagda ? W - 16 : W - lejantG - 8}
-          sayilar={halkaSayilari}
           ekler={paylar}
         />
       )}
@@ -555,7 +571,7 @@ export function DaireGrafigi({
             tabIndex={cok ? (i === gezinmeIndeksi ? 0 : -1) : undefined}
             role={cok ? 'button' : undefined}
             aria-pressed={cok ? secili : undefined}
-            aria-label={cok ? `${satirEtiketi(tablo, d.satir)}: ${sayi(d.deger)} (${sayiMetni(oranlar.acilar[i], 1)}°, %${sayiMetni(oranlar.yuzdeler[i], 1)}). Ok tuşlarıyla öteki dilimlere geçin` : undefined}
+            aria-label={cok ? `${satirEtiketi(tablo, d.satir)}: ${sayi(d.deger)}${oranEki(i)}. Ok tuşlarıyla öteki dilimlere geçin` : undefined}
             onFocus={cok ? () => setOdakDilim(i) : undefined}
             onBlur={cok ? () => setOdakDilim((o) => (o === i ? null : o)) : undefined}
             onKeyDown={
@@ -614,7 +630,8 @@ export function DaireGrafigi({
         })}
 
       {/* Merkez açı yayı: gösterilen dilimin merkezdeki açısı */}
-      {gosterilen !== null &&
+      {!oransiz &&
+        gosterilen !== null &&
         gosterilen < dilimler.length &&
         toplam > 0 &&
         dilimler[gosterilen].aci > 0 &&
@@ -644,7 +661,11 @@ export function DaireGrafigi({
         const orta = (d.baslangicAci + d.bitisAci) / 2;
         const p = e.rho === 0 ? { x: cx, y: cy } : kutupNoktasi(cx, cy, e.rho, orta);
         // Sığarsa önce ad (kalın), sonra merkez açı ve yüzde
-        const satirlar: [string, number][] = e.ad ? [[e.ad, 800], [e.aciM, 700], [e.yuzdeM, 600]] : [[e.aciM, 800], [e.yuzdeM, 700]];
+        const satirlar: [string, number][] = oransiz
+          ? [[e.ad ?? '', 800]]
+          : e.ad
+            ? [[e.ad, 800], [e.aciM, 700], [e.yuzdeM, 600]]
+            : [[e.aciM, 800], [e.yuzdeM, 700]];
         const ilk = p.y - ((satirlar.length - 1) * (fs + 2)) / 2 + fs * 0.35;
         const golge = { paintOrder: 'stroke' as const, stroke: 'rgba(21, 48, 45, 0.35)', strokeWidth: 2.5, strokeLinejoin: 'round' as const };
         return (
@@ -694,11 +715,11 @@ export function DaireGrafigi({
                 klavyeRef.current = null;
               }}
               tabIndex={0}
-              aria-label={`${satirEtiketi(tablo, d.satir)} dilimi: ${sayi(d.deger)} (${aciM}°, %${yuzdeM}). Sınırı sürükleyerek ya da ok tuşlarıyla değiştirin`}
+              aria-label={`${satirEtiketi(tablo, d.satir)} dilimi: ${sayi(d.deger)}${oranEki(i)}. Sınırı sürükleyerek ya da ok tuşlarıyla değiştirin`}
               aria-valuenow={d.deger}
               aria-valuemin={0}
               aria-valuemax={toplam}
-              aria-valuetext={`${sayi(d.deger)}, ${aciM}°, %${yuzdeM}`}
+              aria-valuetext={oransiz ? sayi(d.deger) : `${sayi(d.deger)}, ${aciM}°, %${yuzdeM}`}
               style={{ cursor: surukle === i ? 'grabbing' : 'grab', outline: 'none' }}
               onPointerDown={(e) => surukleBaslat(e, i)}
               onPointerMove={isaretciHareket}
@@ -727,7 +748,7 @@ export function DaireGrafigi({
           );
         })}
 
-      {/* Lejant: ad, değer, merkez açı ve yüzde (yüzdeler %100, açılar 360° eder) */}
+      {/* Lejant: ad, değer, merkez açı ve yüzde (yüzdeler %100, açılar 360° eder); oransızda ad ve değer */}
       <g transform={lejantSagda ? `translate(${W - lejantG + 8}, ${lejantUst + fs})` : `translate(16, ${H - altLejantY + fs})`} data-daire-lejanti>
         {gosterilenLejant.map((o, k) => {
           const x = lejantSagda ? 0 : (k % 2) * ((W - 32) / 2);
@@ -785,7 +806,13 @@ export function DaireGrafigi({
         ) : (
           <text x={cx} y={seritBaz} fontSize={fs} textAnchor="middle" fill={RENK.solukMetin} data-yalniz-ekran data-daire-ipucu>
             {metniSigdir(
-              surukleVar ? 'Bir dilime dokunun: merkez açısının hesabı burada görünür; sınırını sürükleyin.' : 'Bir dilime dokunun: merkez açısının hesabı burada görünür.',
+              oransiz
+                ? surukleVar
+                  ? 'Bir dilime dokunun: değeri burada görünür; sınırını sürükleyin.'
+                  : 'Bir dilime dokunun: değeri burada görünür.'
+                : surukleVar
+                  ? 'Bir dilime dokunun: merkez açısının hesabı burada görünür; sınırını sürükleyin.'
+                  : 'Bir dilime dokunun: merkez açısının hesabı burada görünür.',
               fs,
               alanG - 24,
             )}

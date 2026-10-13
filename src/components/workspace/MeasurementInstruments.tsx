@@ -53,6 +53,9 @@ import {
   alanKoseKaymasi,
   alanModeliMenusu,
   alanModeliniYerlestir,
+  alanModeliEngelleri,
+  ekranKutusuDunyaya,
+  type DunyaKutusu,
   alanOkumasi,
   cetvelBoyuSuruklemeden,
   cetvelBoyunuDegistir,
@@ -309,6 +312,23 @@ export function MeasurementInstruments({
     setMenu({ x, y, hedef, yukari });
   };
 
+  /**
+   * Tuvalde çizilmiş ölçü etiketlerinin ([data-measurement]) ve yönerge çubuğunun dünya kutuları; ölçme aracının kendi
+   * yazıları sayılmaz.
+   */
+  const cizilmisEtiketler = (vp: ViewportTransform): DunyaKutusu[] => {
+    const kok = kokRef.current;
+    const svg = kok?.ownerSVGElement;
+    if (!kok || !svg) return [];
+    const tuval = svg.getBoundingClientRect();
+    // Tuvalin üstünde duran araç yönerge çubuğu da engeldir (ızgaranın alt satırı ve "4 × 3 = 12 br²" altında kalıyordu)
+    const cubuklar = Array.from(svg.parentElement?.querySelectorAll('[data-yonerge-cubugu]') ?? []);
+    return [...Array.from(svg.querySelectorAll('[data-measurement]')).filter((el) => !kok.contains(el)), ...cubuklar]
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.width > 0 && r.height > 0)
+      .map((r) => ekranKutusuDunyaya({ x0: r.left - tuval.left, y0: r.top - tuval.top, x1: r.right - tuval.left, y1: r.bottom - tuval.top }, vp));
+  };
+
   /** Aracı görünen tuvalin ortasına yerleştirir, boyunu yakınlaştırmaya sığdırır. */
   const ortala = (arac: OlcmeAraci, vp: ViewportTransform) => {
     const t = tercihRef.current;
@@ -325,7 +345,9 @@ export function MeasurementInstruments({
       setSetsquareSize(boy);
       setSetsquarePos(konum);
     } else {
-      const { konum, sutun, satir } = alanModeliniYerlestir(t.sutun, t.satir, vp);
+      // Şekillerin ve ölçü etiketlerinin üstüne konmaz (alan uzmanı, 4. tur: ızgara A(ABC) etiketini kapatıyordu).
+      // Etiketlerin çizildikleri gerçek yerler de engeldir (kaydırılmış dilim/yay etiketleri şeklin kutusunun dışında)
+      const { konum, sutun, satir } = alanModeliniYerlestir(t.sutun, t.satir, vp, [...alanModeliEngelleri(objects), ...cizilmisEtiketler(vp)]);
       setAreaCols(sutun);
       setAreaRows(satir);
       setAreaModelPos(konum);
@@ -930,7 +952,7 @@ export function MeasurementInstruments({
     const donus = rulerRotation;
     const b = CETVEL_UC_BOSLUK;
     const H = CETVEL_KALINLIK;
-    const centik = cetvelCentikYollari(L, z);
+    const centik = cetvelCentikYollari(L, z, ilkokul);
     const boyTopuz = { x: Lp + 24, y: H / 2 };
     const donTopuz = { x: Lp - 20, y: H + 26 };
     // Ölçek şeridi: çentikler + sayı satırı (0…38 px) neredeyse opak, alttaki 10 px yarı saydam kalır.
@@ -1009,14 +1031,15 @@ export function MeasurementInstruments({
             y: donTopuz.y,
             renk: 'vurgu',
             glif: 'don',
-            baslik: 'Döndürmek için sürükleyin (Shift: 15° adım)',
+            baslik: ilkokul ? 'Döndürmek için sürükleyin' : 'Döndürmek için sürükleyin (Shift: 15° adım)',
             onPointerDown: (e) => donusuSurukle(e, 'don', koken, donus, setRulerRotation, false, 15),
           })}
         </g>
 
         {aktifTutamac === 'boy' && okumaHapi(cetvelOkumasi(L), yereldenEkrana(koken, donus, boyTopuz))}
         {/* Döndürme okuması boy tutamacından uzağa itilir (her açıda üstüne binmesin) */}
-        {aktifTutamac === 'don' &&
+        {/* İlkokulda dönüş derecesi okunmaz (4. tur [179]) */}
+        {aktifTutamac === 'don' && !ilkokul &&
           okumaHapi(
             donusOkumasi(donus),
             tutamactanUzaklastir(yereldenEkrana(koken, donus, donTopuz), yereldenEkrana(koken, donus, boyTopuz), 56)
@@ -1063,7 +1086,8 @@ export function MeasurementInstruments({
             <path d={`M 0 ${-Lp} L 0 0 L ${Lp} 0`} fill="none" strokeWidth={2} className={OLCU_CIZGISI} />
             <path d={`M 0 ${-s} H ${s} V 0`} fill="none" strokeWidth={1.5} className={OLCU_CIZGISI} />
             <circle cx={s / 2} cy={-s / 2} r={1.75} className="fill-ada-deniz dark:fill-ada-fener pointer-events-none" />
-            {Lp >= 150 && (
+            {/* Derece yazıları ilkokulda yok: yalnız dik açı işareti (4. tur [179]; TYMM MAT.4.3.7 dik açı referansı) */}
+            {Lp >= 150 && !ilkokul && (
               <>
                 <text x={s + 5} y={-5} className={`text-[11px] ${SAYI}`}>
                   90°
@@ -1092,12 +1116,12 @@ export function MeasurementInstruments({
             y: donTopuz.y,
             renk: 'vurgu',
             glif: 'don',
-            baslik: 'Dik köşesi etrafında döndürmek için sürükleyin (Shift: 15° adım)',
+            baslik: ilkokul ? 'Dik köşesi etrafında döndürmek için sürükleyin' : 'Dik köşesi etrafında döndürmek için sürükleyin (Shift: 15° adım)',
             onPointerDown: (e) => donusuSurukle(e, 'don', koken, donus, setSetsquareRotation, false, 15),
           })}
         </g>
 
-        {aktifTutamac === 'don' && okumaHapi(donusOkumasi(donus), yereldenEkrana(koken, donus, donTopuz))}
+        {aktifTutamac === 'don' && !ilkokul && okumaHapi(donusOkumasi(donus), yereldenEkrana(koken, donus, donTopuz))}
       </g>
     );
   };
@@ -1243,11 +1267,11 @@ export function MeasurementInstruments({
   const menuMaddeleri = (): OlcmeMenuMaddesi[] => {
     switch (activeTool) {
       case 'ruler':
-        return cetvelMenusu({ boy: rulerLength, donusSvg: rulerRotation });
+        return cetvelMenusu({ boy: rulerLength, donusSvg: rulerRotation, ilkokul });
       case 'measure_angle':
         return iletkiMenusu({ aci: protractorAngle, taban: protractorBaseAngle, olcuGoster: gosterim.olcu, ilkokul });
       case 'setsquare':
-        return gonyeMenusu({ donusSvg: setsquareRotation });
+        return gonyeMenusu({ donusSvg: setsquareRotation, ilkokul });
       default:
         return alanModeliMenusu({
           sutun: areaCols,

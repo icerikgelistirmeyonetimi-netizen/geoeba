@@ -2,7 +2,7 @@
 import { Point2D, ScreenPoint, ViewportTransform } from '@/types/math';
 import { Solid3DObject, Point3D } from '@/types/workspace3d';
 import { worldToScreen, formatTurkishNumber } from '@/math/coordinates';
-import { generateSolidMesh, calculate3DVolume, calculate3DSurfaceArea } from '@/math/geometry3d';
+import { generateSolidMesh, calculate3DVolume, calculate3DSurfaceArea, ucgenTepeX } from '@/math/geometry3d';
 import { labelZoomScale } from '@/math/labelViewport';
 
 /** İzdüşüm açısı (55 derece, kavalier/aksonometrik bakış) */
@@ -293,13 +293,14 @@ export function projectSolidFor2D(
       basePerimeter: 2 * (w + d),
     };
   } else if (solid.type === 'triangular_prism') {
-    // ÜÇGEN PRİZMA -> ÜSTTEN GÖRÜNÜM: ÜÇGEN TABAN
+    // ÜÇGEN PRİZMA -> TABAN ÜÇGENİ: 3B cisimdeki üçgenin kendisi (taban w, yükseklik h, tepe ucgenTepeX'te:
+    // ikizkenar / eşkenar ortada, dik üçgende sol köşenin üstünde). Taban alanı = w·h/2, V = taban alanı · d.
     const hw = w / 2;
-    const hd = d / 2;
+    const hh = h / 2;
     const worldCorners = [
-      toWorld(-hw, -hd),
-      toWorld(hw, -hd),
-      toWorld(0, hd),
+      toWorld(-hw, -hh),
+      toWorld(hw, -hh),
+      toWorld(ucgenTepeX(solid), hh),
     ];
     const scrCorners = worldCorners.map((pt) => worldToScreen(pt, viewport));
     const pointsAttr = scrCorners.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
@@ -311,8 +312,8 @@ export function projectSolidFor2D(
       centerScreen: groundCenterScreen,
       dimensionLabels: [],
       baseShapeName: 'Üçgen',
-      baseArea: (w * d) / 2,
-      basePerimeter: w + 2 * Math.hypot(hw, d),
+      baseArea: (w * h) / 2,
+      basePerimeter: w + Math.hypot(ucgenTepeX(solid) + hw, h) + Math.hypot(hw - ucgenTepeX(solid), h),
     };
   } else if (solid.type === 'sphere') {
     // KÜRE -> ÜSTTEN GÖRÜNÜM: DAİRE (yarıçap: r)
@@ -367,11 +368,11 @@ export function projectSolidFor2D(
     ];
   } else if (solid.type === 'triangular_prism') {
     const hw = w / 2;
-    const hd = d / 2;
+    const hh = h / 2;
     footprintWorldPts = [
-      toWorld(-hw, -hd),
-      toWorld(hw, -hd),
-      toWorld(0, hd),
+      toWorld(-hw, -hh),
+      toWorld(hw, -hh),
+      toWorld(ucgenTepeX(solid), hh),
     ];
   } else {
     for (let i = 0; i < 16; i++) {

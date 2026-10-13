@@ -77,6 +77,14 @@ const ikon = {
   ),
 };
 
+/** Büyüt / önceki boyut düğmesinin adları ("Geri al" düzenleme komutuna ayrılmıştır) */
+export const PENCERE_BOYUT_ADLARI = {
+  /** Büyütülmüş pencerede: geri alınmış (önceki) boyuta döner */
+  oncekiBoyut: 'Önceki boyuta getir',
+  /** Geri alınmış pencerede: pencere görev çubuğunun üstündeki alanı kaplar */
+  ekraniKapla: 'Ekranı kapla',
+} as const;
+
 interface Alan {
   w: number;
   h: number;
@@ -348,12 +356,14 @@ export function UygulamaPenceresi({
           <button type="button" className={s['pencere-dugme']} onClick={kucult} aria-label="Küçült" title="Küçült">
             {ikon.kucult}
           </button>
+          {/* "Geri al" adı araç çubuğundaki Geri Al (Ctrl+Z) ile karışıyordu (alan uzmanı, 4. tur): "Geri al" yalnız
+              düzenleme komutudur; pencere düğmesi boyutu söyler (PENCERE_BOYUT_ADLARI) */}
           <button
             type="button"
             className={s['pencere-dugme']}
             onClick={buyutDegistir}
-            aria-label={buyuk ? 'Geri al' : 'Büyüt'}
-            title={buyuk ? 'Geri al' : 'Büyüt'}
+            aria-label={buyuk ? PENCERE_BOYUT_ADLARI.oncekiBoyut : PENCERE_BOYUT_ADLARI.ekraniKapla}
+            title={buyuk ? PENCERE_BOYUT_ADLARI.oncekiBoyut : PENCERE_BOYUT_ADLARI.ekraniKapla}
           >
             {buyuk ? ikon.geriAl : ikon.buyut}
           </button>

@@ -106,7 +106,7 @@ describe('örnek veri: sıcaklık ve sıcak çikolata satışı (saçılım)', (
   });
 });
 
-// ── 16 örnek × 6 sekme: açılış yamasıyla (uygulamanın örnek yüklemesi gibi) her sekmenin grafiği ─────────────
+// ── 20 örnek × 6 sekme: açılış yamasıyla (uygulamanın örnek yüklemesi gibi) her sekmenin grafiği ─────────────
 
 const SEKMELER: GrafikTuru[] = ['nokta', 'sutun', 'cizgi', 'daire', 'sacilim', 'istatistik'];
 const HEPSI: ReadonlySet<Ozellik> = new Set(TUM_OZELLIKLER);
@@ -212,7 +212,7 @@ function sekmeCiz(tablo: VeriTablosuModeli, yama: AcilisYamasi, sekme: GrafikTur
   return cikti;
 }
 
-describe('örnekler: 16 örnek × 6 sekme (açılış yamasıyla, özellikli ve özelliksiz)', () => {
+describe('örnekler: 20 örnek × 6 sekme (açılış yamasıyla, özellikli ve özelliksiz)', () => {
   it('her örnek her sekmede NaN / undefined / Infinity yazmadan çizilir; açılış sekmesinde grafik var', () => {
     let toplam = 0;
     for (const o of ORNEK_VERILER) {
@@ -359,10 +359,10 @@ describe('Keşif kartı (SSR)', () => {
   it('özelliğe bağlı eylem: sinav 3. adım grupla yokken yedek düğme; kitap 3. adım ortanca yokken düğmesiz; sürükleme yazı', () => {
     const sinav = ornekBul('sinav')!;
     expect(metin(kart(sinav, { ilkAdim: 2, ozellikler: HICBIRI }))).toContain('Gruplara göre tabloyu aç');
-    expect(metin(kart(sinav, { ilkAdim: 2, ozellikler: HEPSI }))).toContain('Ortalama ve sapmayı aç');
+    expect(metin(kart(sinav, { ilkAdim: 2, ozellikler: HEPSI }))).toContain('Aritmetik ortalama ve sapmayı aç');
     const kitap = ornekBul('kitap')!;
     expect(kart(kitap, { ilkAdim: 2, ozellikler: HICBIRI })).not.toContain('data-rehber-eylemi');
-    expect(metin(kart(kitap, { ilkAdim: 2, ozellikler: HEPSI }))).toContain('Ortanca ve ortalamayı aç');
+    expect(metin(kart(kitap, { ilkAdim: 2, ozellikler: HEPSI }))).toContain('Ortanca ve aritmetik ortalamayı aç');
     // Sürükleme eylemi düğme değil, yol gösteren yazı
     const gun = kart(ornekBul('gun')!, { ilkAdim: 3 });
     expect(gun).toMatch(/<span[^>]*data-rehber-eylemi="surukle"/);
@@ -418,11 +418,11 @@ describe('Örnek galerisi (SSR)', () => {
   const galeri = (ek: Partial<React.ComponentProps<typeof OrnekGalerisi>> = {}) =>
     renderToStaticMarkup(<OrnekGalerisi yukluOrnekId={null} onceki={null} onYukle={bos} onOncekiTabloyaDon={bos} genislik={860} {...ek} />);
 
-  it('16 örnek: 16 data-ornek ve 16 role="menuitem"; 5 konu; ilk span örneğin adı; mini grafik önerilen türde ve dolu', () => {
+  it('Tüm araçlar: 20 örnek (16 ortaokul + 4 ilkokul): 20 data-ornek ve 20 role="menuitem"; 9 konu; ilk span örneğin adı; mini grafik önerilen türde ve dolu', () => {
     const html = galeri();
-    expect(html.match(/data-ornek="/g)).toHaveLength(16);
-    expect(html.match(/role="menuitem"/g)).toHaveLength(16);
-    expect(html.match(/data-ornek-konusu="/g)).toHaveLength(5);
+    expect(html.match(/data-ornek="/g)).toHaveLength(20);
+    expect(html.match(/role="menuitem"/g)).toHaveLength(20);
+    expect(html.match(/data-ornek-konusu="/g)).toHaveLength(9);
     for (const k of ORNEK_KONULARI) expect(html).toContain(`aria-label="${k.ad}"`);
     expect(html).not.toMatch(BOZUK);
     expect(html).not.toContain('data-onceki-tablo');
@@ -452,9 +452,9 @@ describe('Örnek galerisi (SSR)', () => {
     expect(yuklu).toMatch(/<button[^>]*aria-current="true"[^>]*data-ornek="kitap"/);
   });
 
-  it('önceki tablo: en üstte "Önceki tabloya dön" (ad · satır sayısı) ve ayraç; 17 menuitem', () => {
+  it('önceki tablo: en üstte "Önceki tabloya dön" (ad · satır sayısı) ve ayraç; 21 menuitem', () => {
     const html = galeri({ onceki: { ad: 'Boy (cm)', satirSayisi: 24 } });
-    expect(html.match(/role="menuitem"/g)).toHaveLength(17);
+    expect(html.match(/role="menuitem"/g)).toHaveLength(21);
     expect(html.indexOf('data-onceki-tablo')).toBeLessThan(html.indexOf('data-ornek="'));
     const m = metin(html);
     expect(m).toContain('Önceki tabloya dön');

@@ -194,7 +194,7 @@ function eksikIletisiHam(e: Eksik, bitkiAdi: string, dunya?: DunyaTanimi): strin
 export function sonucIletisi(s: CalismaSonucu, dunya: DunyaTanimi, bitkiAdi: string): string {
   if (s.hata) return hataIletisi(s.hata, dunya, bitkiAdi);
   if (s.eksikler.length) return s.eksikler.map((e) => eksikIletisi(e, bitkiAdi, dunya)).join(' ');
-  return 'Program bu dünyada doğru çalıştı.';
+  return 'Program doğru çalıştı.';
 }
 
 // ---------------------------------------------------------------------------

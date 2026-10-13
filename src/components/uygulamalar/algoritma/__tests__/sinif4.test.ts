@@ -91,7 +91,7 @@ describe('4. sınıf: hatayı bul iletileri (çocuğun okuduğu cümle)', () => 
 describe('4. sınıf: hazır kodlar, blok sınırı ve önceki kodlar', () => {
   it('üç sağa dönüş doğru çizer ama blok sınırını aşar; tek sola dönüş sığar', () => {
     const g = gorev('s4-aci-4');
-    expect(baslangicIletisi(g)).toBe('Program bu dünyada doğru çalıştı.');
+    expect(baslangicIletisi(g)).toBe('Program doğru çalıştı.');
     expect(blokSayisi(g.baslangic as Program)).toBe(7);
     expect(blokSayisi(g.cozum)).toBeLessThanOrEqual(g.enCokBlok!);
   });

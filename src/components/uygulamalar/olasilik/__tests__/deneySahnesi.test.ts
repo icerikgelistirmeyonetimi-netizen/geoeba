@@ -40,7 +40,7 @@ describe('easing', () => {
   });
 });
 
-describe('zar yüzü → quaternion', () => {
+describe('sayı küpü yüzü → quaternion', () => {
   it('her yüz için quaternion o yüzün normalini +Y yapar', () => {
     for (let yuz = 1; yuz <= 6; yuz++) {
       const q = m.zarYuzQuaternion(yuz);
@@ -66,6 +66,91 @@ describe('zar yüzü → quaternion', () => {
     const qF = m.zarYuzQuaternion(5, 0.9);
     const ara = q0.clone().slerp(qF, 1);
     expect(m.zarUstYuzu(ara)).toBe(5);
+  });
+});
+
+/**
+ * Kullanıcı isteği (13.10): sayı küpünün yüzlerinde gerçek zar gibi noktalar değil rakamlar (1–6). Doku bir tuvale
+ * çizilir; Node'da tuval yok, sahte tuval çizim çağrılarını kaydeder.
+ */
+function sahteTuvalleCiz<T>(ciz: () => T): { sonuc: T; cagrilar: { ad: string; arg: unknown[] }[] } {
+  const cagrilar: { ad: string; arg: unknown[] }[] = [];
+  const ctx = new Proxy(
+    {},
+    {
+      get: (_h, ad: string) => (ad === 'createRadialGradient' || ad === 'createLinearGradient' ? () => ({ addColorStop: () => {} }) : (...arg: unknown[]) => cagrilar.push({ ad, arg })),
+      set: (_h, ad: string, deger: unknown) => {
+        cagrilar.push({ ad: `=${ad}`, arg: [deger] });
+        return true;
+      },
+    }
+  );
+  const g = globalThis as { document?: unknown };
+  const eski = g.document;
+  g.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) };
+  try {
+    return { sonuc: ciz(), cagrilar };
+  } finally {
+    if (eski === undefined) delete g.document;
+    else g.document = eski;
+  }
+}
+
+describe('sayı küpü yüzü: rakam, nokta yok', () => {
+  it('her yüzün dokusu ortada tek bir rakam yazar; daire (pip) çizmez', () => {
+    for (let yuz = 1; yuz <= 6; yuz++) {
+      const { cagrilar } = sahteTuvalleCiz(() => m.zarDokusu(yuz));
+      const yazilar = cagrilar.filter((c) => c.ad === 'fillText');
+      expect(yazilar).toHaveLength(1);
+      expect(yazilar[0].arg[0]).toBe(String(yuz));
+      // Ortada (tuvalin yarısı) ve büyük, kalın yazı
+      expect(yazilar[0].arg[1]).toBe(128);
+      expect(cagrilar.some((c) => c.ad === 'arc')).toBe(false);
+      const yazi = cagrilar.filter((c) => c.ad === '=font').map((c) => String(c.arg[0]));
+      expect(yazi.at(-1)).toMatch(/^800 \d+px/);
+      expect(Number(yazi.at(-1)?.match(/(\d+)px/)?.[1])).toBeGreaterThanOrEqual(140);
+      // Fildişi zemin, mürekkep rengi rakam
+      const renkler = cagrilar.filter((c) => c.ad === '=fillStyle').map((c) => c.arg[0]);
+      expect(renkler[0]).toBe('#fbf7ee');
+      expect(renkler.at(-1)).toBe('#15302d');
+    }
+  });
+
+  it('yalnız 6 altı çizili (9 sanılmasın); öbür rakamlar çizgisiz', () => {
+    for (let yuz = 1; yuz <= 6; yuz++) expect(m.zarYuzuYazisi(yuz)).toEqual({ rakam: String(yuz), altiCizili: yuz === 6 });
+    const alti = sahteTuvalleCiz(() => m.zarDokusu(6)).cagrilar.filter((c) => c.ad === 'fillRect');
+    const bes = sahteTuvalleCiz(() => m.zarDokusu(5)).cagrilar.filter((c) => c.ad === 'fillRect');
+    expect(alti.length).toBe(bes.length + 1);
+  });
+
+  it('her yönelimde yukarı bakan yüzün rakamı sonuçtur (malzeme i ↔ ZAR_YUZLERI[i])', () => {
+    for (let yuz = 1; yuz <= 6; yuz++) {
+      for (const d of [0, 0.4, -0.6, 2.5]) {
+        const q = m.zarYuzQuaternion(yuz, d);
+        const ust = m.zarUstYuzu(q);
+        expect(ust).toBe(yuz);
+        const i = m.ZAR_YUZLERI.indexOf(ust);
+        expect(m.zarYuzuYazisi(m.ZAR_YUZLERI[i]).rakam).toBe(String(yuz));
+      }
+    }
+  });
+
+  it('üstteki rakam düz okunur: dönme 0 iken yüz dokusunun üstü kameradan uzağa (−Z) bakar', () => {
+    for (let yuz = 1; yuz <= 6; yuz++) {
+      const q = m.zarYuzQuaternion(yuz, 0);
+      const i = m.ZAR_YUZLERI.indexOf(yuz);
+      const ust = m.ZAR_DOKU_YUKARILARI[i].clone().applyQuaternion(q);
+      expect(ust.x).toBeCloseTo(0, 6);
+      expect(ust.y).toBeCloseTo(0, 6);
+      expect(ust.z).toBeCloseTo(-1, 6);
+      // Küçük dönme yalnız eğiklik verir (en çok o açı kadar)
+      const egik = m.ZAR_DOKU_YUKARILARI[i].clone().applyQuaternion(m.zarYuzQuaternion(yuz, 0.5));
+      expect(egik.angleTo(new THREE.Vector3(0, 0, -1))).toBeCloseTo(0.5, 6);
+    }
+  });
+
+  it('doku yukarıları yüz normallerine dik (her yüzün kendi düzleminde)', () => {
+    for (let i = 0; i < 6; i++) expect(m.ZAR_DOKU_YUKARILARI[i].dot(m.zarYuzNormali(m.ZAR_YUZLERI[i]))).toBeCloseTo(0, 9);
   });
 });
 

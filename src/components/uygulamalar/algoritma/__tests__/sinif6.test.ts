@@ -142,8 +142,8 @@ describe('6. sınıf', () => {
     expect(oncekiIleti('s6-terim-5')).toBe('toplam değişkenine hiç değer verilmedi; 9 olmalıydı.');
     expect(oncekiIleti('s6-en-6')).toBe('enKüçük değişkenine hiç değer verilmedi; 90 olmalıydı.');
     // Genelleme: önceki kod değişmeden çalışır
-    expect(oncekiIleti('s6-formul-2')).toBe('Program bu dünyada doğru çalıştı.');
-    expect(oncekiIleti('s6-en-2')).toBe('Program bu dünyada doğru çalıştı.');
+    expect(oncekiIleti('s6-formul-2')).toBe('Program doğru çalıştı.');
+    expect(oncekiIleti('s6-en-2')).toBe('Program doğru çalıştı.');
   });
 
   it('çözümlerin son değişken değerleri', () => {

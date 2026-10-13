@@ -1,9 +1,10 @@
 'use client';
 
 /**
- * Renk anahtarı lejantı (SVG içinde, PNG'ye de çıkar): "Sınıf: ● A (10) ● B (10)". Kategoriler soldan sağa
- * dizilir; sığmayan kategoriler "…" ile kısaltılır. Bütün grafikler (nokta, sütun, çizgi, daire, saçılım)
- * aynı bileşeni kullanır.
+ * Renk anahtarı lejantı (SVG içinde, PNG'ye de çıkar): "Sınıf: ● A ● B". Kategoriler soldan sağa dizilir; sığmayan
+ * kategoriler "…" ile kısaltılır. Kategorinin yanında veri sayısı yazılmaz (uzman incelemesi, 4. tur: eksen ve lejant
+ * adlarının yanında parantez içinde veri sayısı yok). Bütün grafikler (nokta, sütun, çizgi, daire, saçılım) aynı
+ * bileşeni kullanır.
  */
 import React from 'react';
 import { kenarGerekir, type RenkEslemesi } from './kategorik';
@@ -16,31 +17,28 @@ export interface RenkLejantiProps {
   y: number;
   /** lejantın taşmaması gereken sağ sınır */
   sagSinir: number;
-  /** kategori başına sayı (verilmezse sayı yazılmaz) */
-  sayilar?: Map<string, number>;
-  /** kategori başına ek metin (ör. daire grafiğinde toplamdaki pay "%54,1"); verilirse sayının yerine yazılır */
+  /** kategori başına ek metin (ör. daire grafiğinde toplamdaki pay "%54,1") */
   ekler?: Map<string, string>;
 }
 
 /** 13 px kalın yazıda harf başına yaklaşık genişlik (SVG'de ölçüm yapılmaz) */
 const HARF = 7.4;
 
-function ogeMetni(k: string, sayilar?: Map<string, number>, ekler?: Map<string, string>): string {
-  if (ekler) return `${k} ${ekler.get(k) ?? ''}`.trim();
-  return sayilar ? `${k} (${sayilar.get(k) ?? 0})` : k;
+function ogeMetni(k: string, ekler?: Map<string, string>): string {
+  return ekler ? `${k} ${ekler.get(k) ?? ''}`.trim() : k;
 }
 
 /** Lejantın kısaltılmadan kaplayacağı yaklaşık genişlik (aynı satıra sığıyor mu kararı için) */
-export function renkLejantiGenisligi(eslem: RenkEslemesi, sayilar?: Map<string, number>, ekler?: Map<string, string>): number {
-  return eslem.kategoriler.reduce((t, k) => t + ogeMetni(k, sayilar, ekler).length * HARF + 30, eslem.ad.length * HARF + 14);
+export function renkLejantiGenisligi(eslem: RenkEslemesi, ekler?: Map<string, string>): number {
+  return eslem.kategoriler.reduce((t, k) => t + ogeMetni(k, ekler).length * HARF + 30, eslem.ad.length * HARF + 14);
 }
 
-export function RenkLejanti({ eslem, x, y, sagSinir, sayilar, ekler }: RenkLejantiProps) {
+export function RenkLejanti({ eslem, x, y, sagSinir, ekler }: RenkLejantiProps) {
   let imlec = x + eslem.ad.length * HARF + 14;
   const ogeler: React.ReactNode[] = [];
   let kisaldi = false;
   for (const k of eslem.kategoriler) {
-    const metin = ogeMetni(k, sayilar, ekler);
+    const metin = ogeMetni(k, ekler);
     const genislik = metin.length * HARF + 30;
     if (imlec + genislik > sagSinir) {
       kisaldi = true;

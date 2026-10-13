@@ -373,7 +373,7 @@ export function ogretmenNotu(a: Arastirma): string {
   const h = hazirBaglami(a);
   if (h?.ogretmenNotu) return h.ogretmenNotu;
   if (a.yontem === 'olcum')
-    return 'Ölçmeden önce ölçme yöntemini birlikte kararlaştırın (ör. nabız 1 dakika sayılır). Seçenek şeridinden “Ortalama”yı açın; her yeni değerle ortalama çizgisinin kaydığını gösterin. Ötekilerden çok uzak bir değer çıkarsa önce ölçüm hatası olup olmadığını konuşun.';
+    return 'Ölçmeden önce ölçme yöntemini birlikte kararlaştırın (ör. nabız 1 dakika sayılır). Seçenek şeridinden “Aritmetik ortalama”yı açın; her yeni değerle aritmetik ortalama çizgisinin kaydığını gösterin. Ötekilerden çok uzak bir değer çıkarsa önce ölçüm hatası olup olmadığını konuşun.';
   if (a.yontem === 'deney')
     return 'Önce sınıfta gerçek nesneyle deneyip “Elle kaydet” ile yazın; sonra “Bilgisayar atsın” ile aynı deneyi tekrarlayın. “Atış sayısı artınca ne olur?” düğmesi deneyi 20’den 2000’e kadar yapar ve Deney özetini Çizgi grafiğinde gösterir.';
   return 'Öğrenciler sırayla tahtaya gelip kendi cevabına dokunsun. Veri toplanırken tahmin ettiğiniz seçeneği hatırlayın; bitince grafiği “Sütunlara dönüştür” ile sütun grafiğine çevirip sıklık tablosuyla karşılaştırın.';
