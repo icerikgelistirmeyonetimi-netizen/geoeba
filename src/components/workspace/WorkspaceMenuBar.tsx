@@ -23,6 +23,7 @@ import { KademeDuzeyiMenusu } from './KademeDuzeyiMenusu';
 import { aracGorunurMu, aracSecilebilirMi, gruplariSuz, kademeEtiketi } from './kademeDuzeyleri';
 import { gorunenKisayol } from './ilkokulKipi';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
+import { kamerayiSifirla } from './cisimYerlesimi';
 import {
   FileText,
   FolderOpen,
@@ -215,7 +216,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const onOpenSliderDialog = props.onOpenSliderDialog ?? (() => setIsSliderDialogOpen(true));
   const onOpenAddObjectDialog = props.onOpenAddObjectDialog ?? (() => setIsAddObjectDialogOpen(true));
   const onOpenRegularPolygonDialog = props.onOpenRegularPolygonDialog ?? openRegularPolygonDialog;
-  const onResetView = props.onResetView ?? resetViewport;
+  // 3B etkinken Görünümü Sıfırla 3B kamerayı varsayılan açı ve %100 ölçeğe döndürür (uzman 4. tur [173]: Ölçek %130 kalıyordu)
+  const onResetView =
+    props.onResetView ??
+    (() => (studioDimension === '3D' && sceneBridge ? sceneBridge.setCamera(kamerayiSifirla) : resetViewport()));
   const hasSelection = studioDimension === '3D' ? !!sceneBridge?.selectedIds.length : selectedObjectIds.length > 0;
   // Silme her iki görünümde de seçili 2B nesneleri ve 3B cisimleri birlikte kapsar (deleteSelection)
   const hasDeletable = !!sceneBridge?.selectedIds.length || selectedObjectIds.length > 0;

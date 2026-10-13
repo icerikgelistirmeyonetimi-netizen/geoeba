@@ -1,6 +1,7 @@
 /**
  * Kademe → 3B araç paneli eşlemesi. 2B listesi kademeDuzeyleri.ts'tedir; bu dosya yalnız Toolbar3D'nin
- * ağaç listesini ve Ara sekmesini süzer (Canvas3D, WorkspaceView ve komutlar kademeyi bilmez).
+ * ağaç listesini ve Ara sekmesini süzer (WorkspaceView ve komutlar kademeyi bilmez; Canvas3D ve Canvas yalnız aşağıdaki
+ * 2B - 3B ayrımı kurallarını okur).
  *
  * İlkokul (Dinamik Matematik Yazılımı İlkokul Raporu, 23.07.2026, 3B ekranı): Temel (Taşı, Sil; Döndür ve
  * İncele, Görünümü Kaydır), Katı Cisimler (Küp, Küre, Silindir, Üçgen Prizma, Kare Prizma, Dikdörtgen Prizma —
@@ -90,4 +91,49 @@ export function gorunen3BAracSayisi(gruplar: readonly TreeTool3DGroup[], duzey: 
 export function grupAcikliklari3B(gruplar: readonly TreeTool3DGroup[], duzey: KademeDuzeyi): Record<string, boolean> {
   const hepsiAcik = duzey !== 'tum' && gorunen3BAracSayisi(gruplar, duzey) <= ACIK_GRUP_SINIRI_3B;
   return Object.fromEntries(gruplar.map((g) => [g.id, hepsiAcik ? true : (g.defaultExpanded ?? true)]));
+}
+
+/* ------------------------- 2B - 3B ayrımı (uzman 4. tur, ortaokul) ------------------------- */
+
+/**
+ * 3B sahnede 2B çizimden gelen nesneler (nokta, çember, fonksiyon…) gösterilir mi? Ortaokulda HAYIR (geoeba (3).xlsx
+ * [172]: H ve L noktaları, çember ve fonksiyon 3B'de küre ve elips olarak görünüyor, 3B'nin Tümünü Sil'i ve Nesneler
+ * listesi onları kapsamadığından silinemiyordu → "2D ve 3D nesne kümelerini ayır"). İlkokul, lise ve Tüm araçlar
+ * eskisi gibi ortak modeli (2B nesneler uzayda, z ekseniyle) gösterir.
+ */
+export function kademe2BNesneleri3BdeGosterir(duzey: KademeDuzeyi): boolean {
+  return duzey !== 'ortaokul';
+}
+
+/**
+ * 2B tuvalde 3B cisimlerin üstten görünümü (izdüşüm) açılışta açık mı? Ortaokulda KAPALI ([175]: etiketli izdüşümler
+ * çizim alanını kalabalıklaştırıyor, öğrencinin kendi çizimini gizliyordu); tuvalin "3B cisimler" anahtarıyla açılır.
+ */
+export function cisimIzdusumuVarsayilanAcik(duzey: KademeDuzeyi): boolean {
+  return duzey !== 'ortaokul';
+}
+
+/** "3B cisimler" (izdüşümü göster / gizle) anahtarı bu kademede sunulur mu? İlkokul arayüzü değişmez. */
+export function cisimIzdusumuAnahtariVar(duzey: KademeDuzeyi): boolean {
+  return duzey !== 'ilkokul';
+}
+
+/** Bir tuvalin ayrım durumu: etkin boyut + öteki kümenin o tuvalde gizli olup olmadığı. */
+export interface AyrimDurumu {
+  /** Etkin boyut (studioDimension) bu tuvalin boyutu mu? */
+  etkin: boolean;
+  /** Öteki küme (3B'de 2B nesneler, 2B'de cisimler) bu tuvalde gizli mi? */
+  gizli: boolean;
+}
+
+/**
+ * Tuvalde GÖRÜNMEYEN kümenin seçimi bırakılsın mı (denetim, 4. tur S3)? Bırakılmazsa Sil (menü ya da tuş:
+ * deleteSelection iki kümeyi birlikte siler) ekranda olmayan nesneleri silerdi: 2B'de Ctrl+A → 3B → Sil 2B çizimi,
+ * izdüşüm kapalıyken 3B'de seçili cisim → 2B → Sil cismi. Seçim yalnız durum DEĞİŞİRKEN (tuval kurulurken, etkin boyut
+ * bu tuvale geçerken, küme gizlenirken) bırakılır; durum aynı kaldıkça dokunulmaz: 2D + 3D çift görünümde öteki
+ * paneldeki ilk tıklamanın kurduğu seçim (etkin boyut tıklamanın sonunda değişir) hemen silinmesin.
+ */
+export function gizliSecimBirakilir(onceki: AyrimDurumu | null, simdi: AyrimDurumu, secimVar: boolean): boolean {
+  if (!simdi.etkin || !simdi.gizli || !secimVar) return false;
+  return !onceki || !onceki.etkin || !onceki.gizli;
 }

@@ -51,6 +51,9 @@ import { ContextMenu, ContextMenuItem } from './ContextMenu';
 import { useSliderPlayback } from '@/hooks/useSliderPlayback';
 import { Solid3DObject, Point3D } from '@/types/workspace3d';
 import { projectSolidFor2D } from '@/math/solidProjection2D';
+import { useCisimIzdusumu } from './cisimIzdusumu';
+import { gizliSecimBirakilir, type AyrimDurumu } from './kademeDuzeyleri3B';
+import { cisimBilgiSatiri, izdusumGovdesi, kenarEtiketKutulari, rozetleriYerlestir, satirGenisligi, SATIR_YUKSEKLIGI } from '@/math/cisimEtiketleri2B';
 
 /** Etiketi olmayan nesneler için menü başlığında gösterilecek tür adları. */
 const TYPE_LABELS: Record<string, string> = {
@@ -197,7 +200,7 @@ import { olcumParcasiMi } from '@/math/nesneAdlari';
 import { cizgininUzerindeMi, dogrultuNoktalari, goruntuNoktaAdlari, yayinUzerindeMi } from '@/math/insaYardimcilari';
 import { kesisimMesaji, kesismiyorMesaji } from './kesisimMesaji';
 import { denklemEtiketiMerkezi, noktaAdiBolgesi, olcekliKutu, yiginKaymasi, yiginYeriSec } from './etiketCakismasi';
-import { Box, FlipHorizontal2, Info, Lightbulb, Pentagon, PencilLine, X as CarpiSimgesi } from 'lucide-react';
+import { Box, Eye, EyeOff, FlipHorizontal2, Info, Lightbulb, Pentagon, PencilLine, X as CarpiSimgesi } from 'lucide-react';
 
 // Derlenmiş fonksiyon ifadeleri önbelleği (ifade başına tek derleme)
 const compiledExpressionCache = new Map<string, ((x: number, scope?: Record<string, number>) => number) | null>();
@@ -326,11 +329,15 @@ interface CanvasProps {
   onDragEnd?: () => void;
 }
 
+/** İzdüşüm kapalıyken tuvalin gördüğü sabit boş diziler */
+const BOS_CISIMLER: Solid3DObject[] = [];
+const BOS_CISIM_KIMLIKLERI: string[] = [];
+
 export function Canvas({
   onSwitchTo3D,
-  solids = [],
-  selectedSolidId = null,
-  selectedSolidIds = [],
+  solids: tumCisimler = BOS_CISIMLER,
+  selectedSolidId: seciliCisimHam = null,
+  selectedSolidIds: seciliCisimlerHam = BOS_CISIM_KIMLIKLERI,
   onSelectSolid,
   onSelectSolids,
   onUpdateSolidPosition,
@@ -338,6 +345,13 @@ export function Canvas({
   onDeleteSolids,
   onDragEnd,
 }: CanvasProps) {
+  // 3B cisimlerin üstten görünümü (uzman 4. tur [175]; ortaokulda kapalı açılır: cisimIzdusumu.ts). Kapalıyken tuval
+  // cisimleri hiç görmez: çizim, isabet, seçim ve Sil tuşu yalnız 2B nesnelere gider. Anahtar sahnede cisim varken görünür.
+  const { acik: cisimIzdusumu, degistir: onCisimIzdusumuDegis } = useCisimIzdusumu();
+  const solids = cisimIzdusumu ? tumCisimler : BOS_CISIMLER;
+  const selectedSolidIds = cisimIzdusumu ? seciliCisimlerHam : BOS_CISIM_KIMLIKLERI;
+  const selectedSolidId = cisimIzdusumu ? seciliCisimHam : null;
+  const toplamCisim = tumCisimler.length;
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
@@ -418,6 +432,18 @@ export function Canvas({
     setCircleRadius,
     setLengthMeasurement,
   } = useWorkspace();
+  // İzdüşüm kapalıyken 2B'ye geçilince (ya da anahtar kapatılınca) 3B'den kalan cisim seçimi bırakılır: yoksa 2B'de
+  // Sil (menü ya da tuş: deleteSelection) görünmeyen cisimleri silerdi (3B'deki [172] kuralının eşi; denetim, 4. tur S3).
+  const izdusumDurumuRef = useRef<AyrimDurumu | null>(null);
+  const seciliCisimVar = seciliCisimlerHam.length > 0 || !!seciliCisimHam;
+  useEffect(() => {
+    const simdi: AyrimDurumu = { etkin: studioDimension === '2D', gizli: !cisimIzdusumu };
+    if (gizliSecimBirakilir(izdusumDurumuRef.current, simdi, seciliCisimVar)) {
+      onSelectSolid?.(null);
+      onSelectSolids?.([]);
+    }
+    izdusumDurumuRef.current = simdi;
+  }, [studioDimension, cisimIzdusumu, seciliCisimVar, onSelectSolid, onSelectSolids]);
 
   // Görsel dosyası seçimi (Görsel Ekle aracı)
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -4615,9 +4641,9 @@ export function Canvas({
       yaziBoyu: fs(11, 'axis'),
       // Eksenin hemen yanındaki görünen noktalar da engeldir: üstüne düşen sayı ("-3") noktayı örtmesin, yazılmaz
       // (denetim, 4. tur: eksenin hemen altındaki kesişim noktası F sayının arkasında kalıyordu)
-      engeller: [...tuvalEngelleri(viewport.width, viewport.height, { cisimSecici: solids.length > 0 }), ...eksenYakiniNoktalar],
+      engeller: [...tuvalEngelleri(viewport.width, viewport.height, { cisimSecici: toplamCisim > 0 }), ...eksenYakiniNoktalar],
     });
-  }, [viewport, originScreen, gridLines, gridInfo.step, fs, solids.length, eksenYakiniNoktalar]);
+  }, [viewport, originScreen, gridLines, gridInfo.step, fs, toplamCisim, eksenYakiniNoktalar]);
 
   // FONKSİYON GRAFİĞİ ETİKETLERİ (alan uzmanı, 4. tur, satır 157: "f(x) = 2x + 1"): etiketler birbirine, tuvalin
   // düğmelerine, eksen çizgisine ve sayılarına, +x / +y / -y ve (0; 0) rozetlerine, noktalara, sürgülere, yazılara
@@ -4631,7 +4657,7 @@ export function Canvas({
     const engeller = fonksiyonEtiketiEngelleri(
       { genislik: viewport.width, yukseklik: viewport.height },
       eksenYerlesimi,
-      tuvalEngelleri(viewport.width, viewport.height, { cisimSecici: solids.length > 0 }),
+      tuvalEngelleri(viewport.width, viewport.height, { cisimSecici: toplamCisim > 0 }),
       surguEngelleri(objects, viewport)
     );
     const px = fs(13, 'label') * yaziOlcegi;
@@ -4650,7 +4676,7 @@ export function Canvas({
       sonuc.set(fn.id, { ...yer, metin, px });
     }
     return sonuc;
-  }, [fonksiyonCizimleri, objects, viewport, isSade, fs, yaziOlcegi, solids.length, eksenYerlesimi]);
+  }, [fonksiyonCizimleri, objects, viewport, isSade, fs, yaziOlcegi, toplamCisim, eksenYerlesimi]);
   // Sayıların zemin renginde halesi: ızgara çizgileri ve şekiller üstünde okunur kalır (özel zemin, koyu tema, zemin-acik)
   const eksenSayiHalesi = {
     stroke: tuvalZemini || 'hsl(var(--background))',
@@ -4743,7 +4769,23 @@ export function Canvas({
         {/* Sağ Alan: 3B cisim gösterimi (varsa) ve 2D / 3D geçişi (3B tuvaldekiyle birebir aynı anahtar) */}
         <div className="flex items-center gap-2 pointer-events-auto">
 
-          {/* 3B cisimlerin 2B gösterimi (üstten / izdüşüm) sağ tık menüsünde: üst bar yalnız 2D / 3D anahtarını taşır. */}
+          {/* 3B cisimlerin 2B gösterimi (üstten görünüm) anahtarı: yalnız sahnede cisim varken (uzman 4. tur [175]) */}
+          {onCisimIzdusumuDegis && toplamCisim > 0 && (
+            <button
+              type="button"
+              onClick={onCisimIzdusumuDegis}
+              aria-pressed={cisimIzdusumu}
+              data-cisim-izdusumu-anahtari=""
+              title={cisimIzdusumu ? '3B cisimlerin üstten görünümünü gizle' : '3B cisimlerin üstten görünümünü göster'}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border shadow-md backdrop-blur-md text-xs font-extrabold transition-colors cursor-pointer ${
+                cisimIzdusumu ? 'bg-primary/10 border-primary/40 text-primary' : 'bg-card/95 border-border text-muted-foreground hover:text-foreground hover:bg-muted'
+              }`}
+            >
+              {cisimIzdusumu ? <Eye className="w-3.5 h-3.5" aria-hidden="true" /> : <EyeOff className="w-3.5 h-3.5" aria-hidden="true" />}
+              <span>3B cisimler</span>
+              <span className="font-mono">{toplamCisim}</span>
+            </button>
+          )}
           <div className="flex items-center p-1 rounded-2xl bg-card/95 backdrop-blur-md border border-border shadow-md" role="group" aria-label="2D / 3D görünüm">
             <button
               type="button"
@@ -5369,13 +5411,32 @@ export function Canvas({
             );
           })}
 
-        {/* 4.1 3D KATI CİSİMLER KATMANI (Küp, Prizma, Silindir, Koni, Piramit, Küre) */}
-        {solids && solids.length > 0 && (
+        {/* 4.1 3D KATI CİSİMLER KATMANI (Küp, Prizma, Silindir, Koni, Piramit, Küre). Bilgi satırları önce hepsi
+            birlikte yerleştirilir (rozetleriYerlestir): biri ötekinin, bir cismin ya da ölçü etiketinin üstüne binmez. */}
+        {cisimIzdusumu && solids && solids.length > 0 && (() => {
+          const izdusumler = solids.map((solid) => {
+            const isSelected = selectedSolidIds.includes(solid.id) || selectedSolidId === solid.id;
+            return { solid, isSelected, proj: projectSolidFor2D(solid, viewport, isSelected, 'top', kutuOlcegi) };
+          });
+          const satirlar = new Map(izdusumler.map(({ solid, proj }) => [solid.id, cisimBilgiSatiri(proj)]));
+          const satirYerleri = showDetails
+            ? rozetleriYerlestir(
+                izdusumler.map(({ solid, proj }) => ({
+                  id: solid.id,
+                  govde: izdusumGovdesi(proj),
+                  kenarlar: kenarEtiketKutulari(proj, yaziOlcegi),
+                  w: satirGenisligi(satirlar.get(solid.id)!) * yaziOlcegi,
+                  h: SATIR_YUKSEKLIGI * yaziOlcegi,
+                })),
+                8 * kutuOlcegi,
+                { w: viewport.width, h: viewport.height },
+                // Tuvalin üstündeki düğmeler (araçlar, 2D/3D ve cisim anahtarı, alt bilgi, yakınlaştırma) de engeldir
+                tuvalEngelleri(viewport.width, viewport.height, { cisimSecici: true }),
+              )
+            : new Map<string, { x: number; y: number }>();
+          return (
           <g id="layer-solids-3d">
-            {solids.map((solid) => {
-              const isSelected = selectedSolidIds.includes(solid.id) || selectedSolidId === solid.id;
-              const proj = projectSolidFor2D(solid, viewport, isSelected, 'top', kutuOlcegi);
-
+            {izdusumler.map(({ solid, isSelected, proj }) => {
               return (
                 <g
                   key={solid.id}
@@ -5551,43 +5612,28 @@ export function Canvas({
                   )}
 
 
-                  {/* 5. Cisim Bilgi Rozeti: başlık ve her özellik (boyutlar, taban alanı, hacim) AYRI kutuda,
-                      alt alta; yığının alt kenarı eski tek rozetin alt kenarında (+19) durur. */}
-                  {showDetails && (() => {
+                  {/* 5. Cisim Bilgi Satırı: cismin yanında TEK satır ("Küp 1 · Taban alanı = 9 br² · V = 27 br³");
+                      yeri rozetleriYerlestir'den (uzman 4. tur [175]: başlık ve alt alta kutular birbirine biniyordu). */}
+                  {showDetails && satirYerleri.has(solid.id) && (() => {
+                    const yer = satirYerleri.get(solid.id)!;
+                    const satir = satirlar.get(solid.id)!;
                     const cerceve = isSelected ? '#ec4899' : solid.color || '#3b82f6';
-                    const cizgi = isSelected ? 1.8 : 1.2;
-                    const ozellikler = [
-                      ...(proj.topView ? [] : proj.badge.dimParts),
-                      ...(proj.topView ? [`Taban alanı = ${formatTurkishNumber(proj.topView.baseArea)} br²`] : []),
-                      `V = ${formatTurkishNumber(proj.badge.volume)} br³`,
-                    ];
-                    // Genişlik yazıdan kestirilir (eş aralıklı 9 px ≈ 5,4 px/harf; başlık 10 px kalın ≈ 6,2 px/harf)
-                    const kutular: { metin: string; y: number; w: number }[] = [];
-                    let alt = 19;
-                    for (const metin of [...ozellikler].reverse()) {
-                      kutular.unshift({ metin, y: alt - 16, w: Math.max(44, metin.length * 5.4 + 14) });
-                      alt -= 16 + 3;
-                    }
-                    const baslikW = Math.max(60, proj.badge.title.length * 6.2 + 16);
-                    const baslikY = alt - 17;
+                    const w = satirGenisligi(satir);
+                    const adW = satir.ad.length * 6.2;
                     return (
                       <g
                         data-canvas-label=""
-                        transform={`translate(${proj.badge.x}, ${proj.badge.y}) scale(${yaziOlcegi})`}
+                        data-cisim-bilgisi={solid.id}
+                        transform={`translate(${yer.x}, ${yer.y}) scale(${yaziOlcegi})`}
                         className="select-none pointer-events-none"
                       >
-                        <rect x={-baslikW / 2} y={baslikY} width={baslikW} height={17} rx={6} fill="#0f172a" fillOpacity={0.9} stroke={cerceve} strokeWidth={cizgi} className="shadow-md" />
-                        <text x={0} y={baslikY + 12} textAnchor="middle" fontSize="10" fontWeight="bold" fill="#ffffff" className="font-sans">
-                          {proj.badge.title}
+                        <rect x={-w / 2} y={-SATIR_YUKSEKLIGI / 2} width={w} height={SATIR_YUKSEKLIGI} rx={7} fill="#0f172a" fillOpacity={0.9} stroke={cerceve} strokeWidth={isSelected ? 1.8 : 1.2} className="shadow-md" />
+                        <text x={-w / 2 + 8} y={3.5} fontSize="10" fontWeight="bold" fill="#ffffff" className="font-sans">
+                          {satir.ad}
                         </text>
-                        {kutular.map((k, i) => (
-                          <g key={i} data-cisim-ozelligi="">
-                            <rect x={-k.w / 2} y={k.y} width={k.w} height={16} rx={6} fill="#0f172a" fillOpacity={0.9} stroke={cerceve} strokeWidth={cizgi} className="shadow-md" />
-                            <text x={0} y={k.y + 11.5} textAnchor="middle" fontSize="9" fill="#e2e8f0" className="font-mono">
-                              {k.metin}
-                            </text>
-                          </g>
-                        ))}
+                        <text x={-w / 2 + 8 + adW + 6} y={3.5} fontSize="9" fill="#e2e8f0" className="font-mono">
+                          {satir.degerler}
+                        </text>
                       </g>
                     );
                   })()}
@@ -5595,7 +5641,8 @@ export function Canvas({
               );
             })}
           </g>
-        )}
+          );
+        })()}
 
         {/* 4.25 ÖLÇÜM ETİKETLERİ — "AB eğimi = 5" gibi CANLI sonuç yazıları.
             Değer her karede noktalardan yeniden hesaplanır; noktalar taşınınca güncellenir. */}

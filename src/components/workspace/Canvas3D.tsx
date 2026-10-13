@@ -75,6 +75,9 @@ import {
   type AynaDuzlemi,
 } from '@/math/donusum3d';
 import { CISIM_RENKLERI, KOPYA_RENGI } from './cisimRenkleri';
+import { cismiGorunurKil, cizimOlculeri } from './cisimYerlesimi';
+import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
+import { gizliSecimBirakilir, kademe2BNesneleri3BdeGosterir, type AyrimDurumu } from './kademeDuzeyleri3B';
 import {
   surukleAcisi,
   halkaAcisi,
@@ -1011,6 +1014,11 @@ function buildMathObjects3D(
 
 interface Canvas3DProps {
   solids: Solid3DObject[];
+  /**
+   * 2B çizimden gelen nesneler (nokta, çember, fonksiyon…) sahnede gösterilsin, seçilip taşınsın mı? Verilmezse kademeden:
+   * ortaokulda hayır (kademeDuzeyleri3B.kademe2BNesneleri3BdeGosterir: 2B ve 3B nesne kümeleri ayrı), ötekilerde evet.
+   */
+  goster2BNesneler?: boolean;
   selectedSolidId: string | null;
   selectedSolidIds?: string[];
   activeTool: Tool3DMode;
@@ -1190,8 +1198,13 @@ const CREATE_TYPE_MAP: Partial<Record<Tool3DMode, Solid3DType>> = {
   create_pyramid: 'pyramid',
 };
 
+/** 2B nesneler gizliyken kullanılan sabit boş diziler (bağımlılık dizileri her çizimde değişmesin) */
+const BOS_NESNELER: MathObject[] = [];
+const BOS_KIMLIKLER: string[] = [];
+
 export function Canvas3D(props: Canvas3DProps) {
   const {
+    goster2BNesneler: goster2BNesnelerProp,
     solids,
     selectedSolidId,
     selectedSolidIds,
@@ -1233,8 +1246,23 @@ export function Canvas3D(props: Canvas3DProps) {
   );
 
   const workspace = useWorkspace();
-  const objects = workspace?.objects ?? [];
-  const selectedObjectIds = workspace?.selectedObjectIds ?? [];
+  const [kademeDuzeyi] = useKademeDuzeyi();
+  const goster2BNesneler = goster2BNesnelerProp ?? kademe2BNesneleri3BdeGosterir(kademeDuzeyi);
+  // 2B nesneler gizliyse (ortaokul) sahne, isabet, gizmo ve silme onları hiç görmez
+  const objects = goster2BNesneler ? workspace?.objects ?? BOS_NESNELER : BOS_NESNELER;
+  const selectedObjectIds = goster2BNesneler ? workspace?.selectedObjectIds ?? BOS_KIMLIKLER : BOS_KIMLIKLER;
+  // 3B'ye GEÇİLİRKEN (3B açık kurulurken ya da kademe ortaokula dönünce) 2B'den kalan seçim bırakılır: yoksa 3B'de Sil
+  // (menü ya da tuş) görünmeyen 2B nesneleri silerdi. Yalnız geçişte (kademeDuzeyleri3B.gizliSecimBirakilir): 2D + 3D
+  // çift görünümde 3B panelden sonra 2B paneldeki ilk tıklamanın seçimi hemen silinmesin (denetim, 4. tur S3).
+  const studioDimension = workspace?.studioDimension;
+  const ham2BSecimSayisi = workspace?.selectedObjectIds.length ?? 0;
+  const set2BSecim = workspace?.setSelectedObjectIds;
+  const ayrimDurumuRef = useRef<AyrimDurumu | null>(null);
+  useEffect(() => {
+    const simdi: AyrimDurumu = { etkin: studioDimension === '3D', gizli: !goster2BNesneler };
+    if (gizliSecimBirakilir(ayrimDurumuRef.current, simdi, ham2BSecimSayisi > 0)) set2BSecim?.([]);
+    ayrimDurumuRef.current = simdi;
+  }, [goster2BNesneler, studioDimension, ham2BSecimSayisi, set2BSecim]);
 
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 1200, height: 700 });
   const [isDark, setIsDark] = useState(false);
@@ -1595,6 +1623,25 @@ export function Canvas3D(props: Canvas3DProps) {
     }
     requestRender();
   }, [objects, selectedObjectIds, isDark, requestRender]);
+
+  /* ---------------- Yeni cisme odak (uzman 4. tur [173]) ---------------- */
+  // Bu çizimde İLK KEZ görünen ve seçili gelen cisim (Tıkla Ekle, Ekle penceresi, yansıtma / öteleme kopyası,
+  // yapıştırma) güvenli alanda tam görünmüyorsa kamera ona kaydırılır, sığmıyorsa uzaklaşılır. Geri al / yinele ve
+  // proje açma seçimi boşalttığından kamerayı oynatmaz; ilk açılıştaki cisimler de "yeni" sayılmaz.
+  const oncekiCisimlerRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const onceki = oncekiCisimlerRef.current;
+    oncekiCisimlerRef.current = new Set(solids.map((s) => s.id));
+    if (!onceki) return;
+    const yeniler = solids.filter((s) => !onceki.has(s.id) && effectiveSelectedIds.includes(s.id));
+    if (yeniler.length === 0) return;
+    const koseler = yeniler.flatMap((s) => kutuKoseleri(s));
+    const tumKoseler = solids.flatMap((s) => kutuKoseleri(s));
+    const { width, height } = latest.current.dimensions;
+    setCamera((prev) => cismiGorunurKil(prev, koseler, width, height, tumKoseler));
+    // Yalnız cisim listesi değişince bakılır (seçim değişikliği tek başına kamerayı oynatmasın)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [solids]);
 
   /* ------------------------------ Gizmo -------------------------------- */
   useEffect(() => {
@@ -2371,7 +2418,8 @@ export function Canvas3D(props: Canvas3DProps) {
         const solidType = CREATE_TYPE_MAP[l.activeTool] || 'cube';
         l.onAddSolid(
           solidType,
-          { width: size, height: size, depth: size, radius: size / 2 },
+          // Dikdörtgen prizma küp olmasın: 4 : 3 : 2 oranı (cisimYerlesimi.cizimOlculeri)
+          cizimOlculeri(solidType, size),
           it.groundPos ? { x: Number(it.groundPos.x.toFixed(1)), y: Number(it.groundPos.y.toFixed(1)), z: 0 } : undefined
         );
         if (l.setActive3DTool) l.setActive3DTool('select_move');

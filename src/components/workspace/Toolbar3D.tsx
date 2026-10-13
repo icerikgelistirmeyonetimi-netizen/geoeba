@@ -1,9 +1,18 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Tool3DMode, Solid3DType, Solid3DObject } from '@/types/workspace3d';
+import { Tool3DMode, Solid3DType, Solid3DObject, UCGEN_TABANLARI, type UcgenTabani } from '@/types/workspace3d';
 import { LayoutMode } from '@/types/workspace';
-import { calculate3DVolume, calculate3DSurfaceArea, getSolidPropertyCounts, generateSolidMesh, computeFaceArea } from '@/math/geometry3d';
+import {
+  calculate3DVolume,
+  calculate3DSurfaceArea,
+  getSolidPropertyCounts,
+  generateSolidMesh,
+  computeFaceArea,
+  eskenarYuksekligi,
+  ucgenTabaniniBul,
+} from '@/math/geometry3d';
+import { ucgenTabaniGuncellemesi } from './cisimYerlesimi';
 import { formatTurkishNumber } from '@/math/coordinates';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { KademeAramaBosNotu, KademeSuzgeciSeridi } from './KademeSuzgeci';
@@ -109,6 +118,14 @@ interface GizliGorunum {
   showVertices: boolean;
   showWireframe: boolean;
 }
+
+/** Taban üçgeni seçicisinin düğme adları ve ipuçları (Bağlamlar > Boyutlar) */
+const UCGEN_TABANI_ADLARI: Record<UcgenTabani, string> = { ikizkenar: 'İkizkenar', dik: 'Dik', eskenar: 'Eşkenar' };
+const UCGEN_TABANI_ACIKLAMALARI: Record<UcgenTabani, string> = {
+  ikizkenar: 'İki kenarı eşit üçgen taban (tepe ortada)',
+  dik: 'Bir açısı 90° olan üçgen taban (dik açı solda)',
+  eskenar: 'Üç kenarı eşit üçgen taban (yükseklik = a · √3 / 2)',
+};
 
 /** Nesneler sekmesindeki göz: gizli cisim = opacity 0; yüz, köşe ve telkafes de kapanır (Canvas3D çizmez). */
 export const GIZLEME_GUNCELLEMESI: Readonly<GizliGorunum> = { opacity: 0, showFaces: false, showVertices: false, showWireframe: false };
@@ -561,6 +578,12 @@ export function Toolbar3D({
     onUpdateSolid?.({ dimensions: { ...dims, ...patch } });
   };
   const kutuMu = selectedSolid ? selectedSolid.type === 'prism' || selectedSolid.type === 'pyramid' || selectedSolid.type === 'triangular_prism' : false;
+  // Üçgen prizmanın taban üçgeni (uzman 4. tur [174]): ikizkenar / dik / eşkenar. İlkokulda seçici yok (üçgen türleri
+  // ortaokul konusu); orada prizma eskisi gibi ikizkenar gelir.
+  const ucgenTabani: UcgenTabani | null =
+    selectedSolid?.type === 'triangular_prism' ? ucgenTabaniniBul(selectedSolid) : null;
+  const ucgenSecicisi = ucgenTabani !== null && kademeDuzeyi !== 'ilkokul';
+  const eskenarMi = ucgenTabani === 'eskenar';
   const yuvarlakMi = selectedSolid ? selectedSolid.type === 'sphere' || selectedSolid.type === 'cylinder' || selectedSolid.type === 'cone' : false;
 
   return (
@@ -1146,10 +1169,52 @@ export function Toolbar3D({
                         onChange={(a) => onUpdateSolid?.({ dimensions: { width: a, height: a, depth: a, radius: a / 2 } })}
                       />
                     )}
+                    {ucgenSecicisi && (
+                      <div className="space-y-1">
+                        <span className="text-[11px] font-semibold text-muted-foreground block">Taban üçgeni</span>
+                        <div className="flex items-center gap-1" role="radiogroup" aria-label="Taban üçgeni">
+                          {UCGEN_TABANLARI.map((tur) => {
+                            const etkin = ucgenTabani === tur;
+                            return (
+                              <button
+                                key={tur}
+                                type="button"
+                                role="radio"
+                                aria-checked={etkin}
+                                title={UCGEN_TABANI_ACIKLAMALARI[tur]}
+                                onClick={() => {
+                                  if (!selectedSolid || etkin) return;
+                                  onUpdateSolid?.(ucgenTabaniGuncellemesi(selectedSolid, tur));
+                                }}
+                                className={`flex-1 px-2 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                                  etkin ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border hover:bg-muted'
+                                }`}
+                              >
+                                {UCGEN_TABANI_ADLARI[tur]}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                     {kutuMu && (
                       <>
-                        <KaydiriciSatiri label="Genişlik" value={dims.width} min={0.5} max={12} step={0.5} onChange={(v) => boyutGuncelle({ width: v })} />
-                        <KaydiriciSatiri label="Yükseklik" value={dims.height} min={0.5} max={12} step={0.5} onChange={(v) => boyutGuncelle({ height: v })} />
+                        <KaydiriciSatiri
+                          label={eskenarMi ? 'Kenar (a)' : 'Genişlik'}
+                          value={dims.width}
+                          min={0.5}
+                          max={12}
+                          step={0.5}
+                          // Eşkenar üçgende yükseklik kenara bağlıdır (a·√3/2): ikisi birlikte değişir, üçgen eşkenar kalır
+                          onChange={(v) => boyutGuncelle(eskenarMi ? { width: v, height: eskenarYuksekligi(v) } : { width: v })}
+                        />
+                        {eskenarMi ? (
+                          <div className="text-[11px] text-muted-foreground font-mono">
+                            Yükseklik = a · √3 / 2 ≈ {formatTurkishNumber(dims.height, 2)} br
+                          </div>
+                        ) : (
+                          <KaydiriciSatiri label="Yükseklik" value={dims.height} min={0.5} max={12} step={0.5} onChange={(v) => boyutGuncelle({ height: v })} />
+                        )}
                         <KaydiriciSatiri label="Derinlik" value={dims.depth} min={0.5} max={12} step={0.5} onChange={(v) => boyutGuncelle({ depth: v })} />
                       </>
                     )}

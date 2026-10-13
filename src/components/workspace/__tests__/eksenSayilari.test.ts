@@ -640,19 +640,20 @@ describe('onarım: rozet yanı, dar tuvalde 3B seçici, büyük "(0; 0)" yazıs�
   });
 
   it('3B seçici: geniş tuvalde sağ üstte, dar tuvalde (2D + 3D, üç sütun) araçların altına sarılır', () => {
+    // Uzman 4. tur [175]: sağ üst grup "3B cisimler N" anahtarı + 2D / 3D anahtarı (ölçülen 269 x 38 px, y 13..51)
     const kapsar = (e: Dikdortgen[], d: Dikdortgen) => e.some((k) => k.x <= d.x && k.y <= d.y && sag(k) >= sag(d) && alt(k) >= alt(d));
     const genis = tuvalEngelleri(921, 618, { cisimSecici: true });
-    expect(kapsar(genis, { x: 921 - 16 - 238.6, y: 15, w: 238.6, h: 30 })).toBe(true);
-    expect(genis.some((k) => k.y > 50 && k.y < 60)).toBe(false);
-    for (const dar of [402, 412, 430]) {
+    expect(kapsar(genis, { x: 921 - 16 - 269, y: 13, w: 269, h: 38 })).toBe(true);
+    expect(genis.some((k) => k.y > 52 && k.y < 60)).toBe(false);
+    for (const dar of [402, 412, 430, 460]) {
       const e = tuvalEngelleri(dar, 618, { cisimSecici: true });
-      expect(kapsar(e, { x: 16, y: 56, w: 238.6, h: 30 }), `W=${dar}`).toBe(true);
-      expect(e.some((k) => k.x === dar - 260), `W=${dar}`).toBe(false);
+      expect(kapsar(e, { x: 16, y: 56, w: 269, h: 38 }), `W=${dar}`).toBe(true);
+      expect(e.some((k) => k.x === dar - 290), `W=${dar}`).toBe(false);
     }
-    // Eşik yakınında (447 px) iki konum da ayrılır
-    const esik = tuvalEngelleri(447, 618, { cisimSecici: true });
-    expect(kapsar(esik, { x: 16, y: 56, w: 238.6, h: 30 })).toBe(true);
-    expect(kapsar(esik, { x: 447 - 16 - 238.6, y: 15, w: 238.6, h: 30 })).toBe(true);
+    // Eşik yakınında (477 px) iki konum da ayrılır
+    const esik = tuvalEngelleri(477, 618, { cisimSecici: true });
+    expect(kapsar(esik, { x: 16, y: 56, w: 269, h: 38 })).toBe(true);
+    expect(kapsar(esik, { x: 477 - 16 - 269, y: 13, w: 269, h: 38 })).toBe(true);
     // Cisim yoksa seçici de yok
     expect(tuvalEngelleri(402, 618)).toHaveLength(4);
   });

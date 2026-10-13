@@ -274,6 +274,7 @@ export function validateProjectSolids(input: unknown): Solid3DObject[] {
     numbers(o, ['opacity', 'unfoldProgress']);
     for (const key of ['showWireframe', 'showVertices', 'showFaces']) if (typeof o[key] !== 'boolean') fail('3B görünüm seçeneği geçersiz');
     if (o.opacity < 0 || o.opacity > 1 || o.unfoldProgress < 0 || o.unfoldProgress > 1 || !str(o.color)) fail('3B görünüm geçersiz');
+    if (o.tabanUcgeni !== undefined && !['ikizkenar', 'dik', 'eskenar'].includes(o.tabanUcgeni)) fail('üçgen prizmanın taban türü geçersiz');
     return o as Solid3DObject;
   });
   if (new Set(solids.map(o => o.id)).size !== solids.length) fail('3B kimlikleri benzersiz değil');

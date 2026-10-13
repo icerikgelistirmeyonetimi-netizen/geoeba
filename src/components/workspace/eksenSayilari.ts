@@ -190,8 +190,8 @@ export function tahminiMetinGenisligi(metin: string, yaziBoyu: number): number {
 
 // ---------------------------------------------------------------- tuval üstündeki HTML katmanları
 
-/** "Üstten Görünüm / 3D İzdüşüm" seçicisinin ölçülen genişliği (px; iki kipte de aynı) */
-const CISIM_SECICI_GENISLIK = 239;
+/** 3B cisim varken sağ üst grubun ("3B cisimler N" anahtarı + 2D / 3D anahtarı, gap-2) ölçülen genişliği (px) */
+const CISIM_SECICI_GENISLIK = 269;
 /** Sarılma eşiğinin bu kadar yakınında seçici iki konumda da ayrılır (yazı tipi farkı) */
 const CISIM_SECICI_ESIK_PAYI = 8;
 
@@ -204,9 +204,9 @@ const CISIM_SECICI_ESIK_PAYI = 8;
  * - yakınlaştır / uzaklaştır: Canvas.tsx (bottom-3 right-3, 2 x w-9 h-9, gap-1.5) → x W-48..W-12, y H-90..H-12
  * - klavye + mikrofon hapı: CommandAssistant.tsx (bottom-3 right-14, sm:bottom-4 sm:right-16) → x W-159..W-64,
  *   y H-66..H-16 (dar pencerede W-151..W-56, H-62..H-12; ikisini de kapsar)
- * - 3B cisim varsa "Üstten Görünüm / 3D İzdüşüm" seçicisi (ölçülen 238,6 x 30 px). Şerit `flex-wrap
- *   justify-between` olduğundan geniş tuvalde sağ üsttedir (x W-254..W-16, y 15..45); tuval ~447 px'ten darsa
- *   (2D + 3D, üç sütun, dar pencere) araçların altındaki ikinci satıra, sola sarılır (x 16..255, y 56..86).
+ * - 3B cisim varsa sağ üst grup: "3B cisimler N" izdüşüm anahtarı + 2D / 3D anahtarı (ölçülen 269 x 38 px; uzman
+ *   4. tur [175]). Şerit `flex-wrap justify-between` olduğundan geniş tuvalde sağ üsttedir (x W-285..W-16, y 13..51);
+ *   tuval ~477 px'ten darsa (2D + 3D, üç sütun, dar pencere) araçların altındaki ikinci satıra, sola sarılır.
  *   Eşiğin ±8 px yakınında yazı tipi farkına karşı iki konum da ayrılır.
  * Sol kenardaki "<" tutamacı (x -1..19, satırın ortasında) yerine tam boy `solPay` şeridi kullanılır.
  */
@@ -222,8 +222,8 @@ export function tuvalEngelleri(genislik: number, yukseklik: number, secenek: { c
   if (secenek.cisimSecici) {
     // Şerit: left-4 right-4 (16 px), gap-2 (8 px); sol grup 4 x 36 + 3 x 8 = 168 px
     const bos = W - 32 - (168 + 8 + CISIM_SECICI_GENISLIK);
-    if (bos >= -CISIM_SECICI_ESIK_PAYI) kutular.push({ x: W - 260, y: 8, w: 252, h: 40 });
-    if (bos < CISIM_SECICI_ESIK_PAYI) kutular.push({ x: 12, y: 52, w: CISIM_SECICI_GENISLIK + 8, h: 38 });
+    if (bos >= -CISIM_SECICI_ESIK_PAYI) kutular.push({ x: W - 21 - CISIM_SECICI_GENISLIK, y: 8, w: CISIM_SECICI_GENISLIK + 13, h: 44 });
+    if (bos < CISIM_SECICI_ESIK_PAYI) kutular.push({ x: 12, y: 52, w: CISIM_SECICI_GENISLIK + 8, h: 46 });
   }
   return kutular;
 }

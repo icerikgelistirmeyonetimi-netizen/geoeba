@@ -1,5 +1,5 @@
 // 3D Geometri, Projeksiyon ve Katı Cisim Motoru
-import { Point3D, Face3D, Edge3D, Solid3DObject, Solid3DType } from '@/types/workspace3d';
+import { Point3D, Face3D, Edge3D, Solid3DObject, Solid3DType, type UcgenTabani } from '@/types/workspace3d';
 
 /**
  * 3D Noktayı X, Y, Z eksenlerinde derece cinsinden döndürür
@@ -30,6 +30,25 @@ export function rotatePoint3D(p: Point3D, rotDeg: Point3D): Point3D {
 /**
  * Katı Cisim Mesh Üretimi (Köşeler, Ayrıtlar, Yüzler)
  */
+/**
+ * Üçgen prizmanın taban üçgeninin tepe noktasının yerel x'i (taban −w/2 … w/2, tepe z = h'de): ikizkenar ve eşkenar
+ * üçgende 0, dik üçgende −w/2 (dik açı sol taban köşesinde; sol yan yüz dik durur).
+ */
+export function ucgenTepeX(solid: Pick<Solid3DObject, 'dimensions' | 'tabanUcgeni'>): number {
+  return solid.tabanUcgeni === 'dik' ? -(solid.dimensions.width || 3) / 2 : 0;
+}
+
+/** Eşkenar üçgen tabanın yüksekliği: kenar · √3 / 2 */
+export const eskenarYuksekligi = (kenar: number) => (kenar * Math.sqrt(3)) / 2;
+
+/** Taban üçgeninin türü verilen ölçülerde gerçekten ne? (ikizkenar seçili olsa da h = a·√3/2 ise eşkenardır.) */
+export function ucgenTabaniniBul(solid: Pick<Solid3DObject, 'dimensions' | 'tabanUcgeni'>): UcgenTabani {
+  if (solid.tabanUcgeni === 'dik') return 'dik';
+  const w = solid.dimensions.width || 3;
+  const h = solid.dimensions.height || 3;
+  return Math.abs(h - eskenarYuksekligi(w)) < 0.005 ? 'eskenar' : 'ikizkenar';
+}
+
 export function generateSolidMesh(solid: Solid3DObject): {
   vertices: Point3D[];
   faces: Face3D[];
@@ -311,6 +330,8 @@ export function generateSolidMesh(solid: Solid3DObject): {
     case 'triangular_prism': {
       const hw = w / 2;
       const hd = d / 2;
+      // Taban üçgeninin tepesi (xz düzleminde): ikizkenar / eşkenar ortada, dik üçgende sol köşenin üstünde
+      const ax = ucgenTepeX(solid);
 
       if (unfoldProgress > 0) {
         const u = Math.min(1, Math.max(0, unfoldProgress));
@@ -326,29 +347,35 @@ export function generateSolidMesh(solid: Solid3DObject): {
           { x: -hw, y: hd, z: 0 },
         ];
 
-        // Yan (eğik) yüzlerin genişliği prizmanın eğik kenar uzunluğudur: hypot(w/2, h).
-        // Menteşe dönüşü kapalı iki yüzlü açıdan başlar (u=0'da tepe kenarı x=0, z=h),
+        // Yan (eğik) yüzlerin genişliği taban üçgeninin o kenarıdır: sol hypot(ax + w/2, h), sağ hypot(w/2 - ax, h)
+        // (ikizkenarda ikisi de hypot(w/2, h); dik üçgende sol kenar dik kenar h'dir).
+        // Menteşe dönüşü kapalı iki yüzlü açıdan başlar (u=0'da tepe kenarı x=ax, z=h),
         // u=1'de yüzler tabanla aynı düzleme yatar; böylece yanal alan her aşamada korunur.
-        const slant = Math.hypot(hw, h);
-        const a0 = Math.atan2(h, hw);
-        const phi = a0 + u * (Math.PI - a0);
-        const sPhi = Math.sin(phi);
-        const cPhi = Math.cos(phi);
+        const slantL = Math.hypot(ax + hw, h);
+        const slantR = Math.hypot(hw - ax, h);
+        const a0L = Math.atan2(h, ax + hw);
+        const a0R = Math.atan2(h, hw - ax);
+        const phiL = a0L + u * (Math.PI - a0L);
+        const phiR = a0R + u * (Math.PI - a0R);
+        const sPhiL = Math.sin(phiL);
+        const cPhiL = Math.cos(phiL);
+        const sPhiR = Math.sin(phiR);
+        const cPhiR = Math.cos(phiR);
 
         // Sol Dikdörtgen Yüz (x = -hw menteşesi)
         const ptsLeft: Point3D[] = [
           { x: -hw, y: -hd, z: 0 },
           { x: -hw, y: hd, z: 0 },
-          { x: -hw + slant * cPhi, y: hd, z: slant * sPhi },
-          { x: -hw + slant * cPhi, y: -hd, z: slant * sPhi },
+          { x: -hw + slantL * cPhiL, y: hd, z: slantL * sPhiL },
+          { x: -hw + slantL * cPhiL, y: -hd, z: slantL * sPhiL },
         ];
 
         // Sağ Dikdörtgen Yüz (x = +hw menteşesi)
         const ptsRight: Point3D[] = [
           { x: hw, y: hd, z: 0 },
           { x: hw, y: -hd, z: 0 },
-          { x: hw - slant * cPhi, y: -hd, z: slant * sPhi },
-          { x: hw - slant * cPhi, y: hd, z: slant * sPhi },
+          { x: hw - slantR * cPhiR, y: -hd, z: slantR * sPhiR },
+          { x: hw - slantR * cPhiR, y: hd, z: slantR * sPhiR },
         ];
 
         // Arka Üçgen Kapak (y = +hd menteşesi)
@@ -357,14 +384,14 @@ export function generateSolidMesh(solid: Solid3DObject): {
         const ptsBack: Point3D[] = [
           { x: -hw, y: hd, z: 0 },
           { x: hw, y: hd, z: 0 },
-          { x: 0, y: hd + h * s, z: h * c },
+          { x: ax, y: hd + h * s, z: h * c },
         ];
 
         // Ön Üçgen Kapak (y = -hd menteşesi)
         const ptsFront: Point3D[] = [
           { x: hw, y: -hd, z: 0 },
           { x: -hw, y: -hd, z: 0 },
-          { x: 0, y: -hd - h * s, z: h * c },
+          { x: ax, y: -hd - h * s, z: h * c },
         ];
 
         baseVertices = [];
@@ -373,8 +400,8 @@ export function generateSolidMesh(solid: Solid3DObject): {
 
         const allTriList = [
           { name: 'Alt Dikdörtgen', pts: ptsMid, normal: { x: 0, y: 0, z: -1 }, isQuad: true },
-          { name: 'Sol Dikdörtgen', pts: ptsLeft, normal: { x: -sPhi, y: 0, z: cPhi }, isQuad: true },
-          { name: 'Sağ Dikdörtgen', pts: ptsRight, normal: { x: sPhi, y: 0, z: cPhi }, isQuad: true },
+          { name: 'Sol Dikdörtgen', pts: ptsLeft, normal: { x: -sPhiL, y: 0, z: cPhiL }, isQuad: true },
+          { name: 'Sağ Dikdörtgen', pts: ptsRight, normal: { x: sPhiR, y: 0, z: cPhiR }, isQuad: true },
           { name: 'Arka Üçgen Kapak', pts: ptsBack, normal: { x: 0, y: c, z: s }, isQuad: false },
           { name: 'Ön Üçgen Kapak', pts: ptsFront, normal: { x: 0, y: -c, z: s }, isQuad: false },
         ];
@@ -407,10 +434,10 @@ export function generateSolidMesh(solid: Solid3DObject): {
       baseVertices = [
         { x: -hw, y: -hd, z: 0 },
         { x: hw, y: -hd, z: 0 },
-        { x: 0, y: -hd, z: h },
+        { x: ax, y: -hd, z: h },
         { x: -hw, y: hd, z: 0 },
         { x: hw, y: hd, z: 0 },
-        { x: 0, y: hd, z: h },
+        { x: ax, y: hd, z: h },
       ];
       faces = [
         { vertexIndices: [0, 1, 4, 3], normal: { x: 0, y: 0, z: -1 }, label: 'Alt Dikdörtgen' },
@@ -857,9 +884,11 @@ export function calculate3DSurfaceArea(solid: Solid3DObject): number {
     case 'prism':
       return 2 * (w * d + w * h + d * h);
     case 'triangular_prism': {
-      // İki üçgen taban + alt dikdörtgen + iki eğik dikdörtgen
-      const slant = Math.hypot(h, w / 2);
-      return 2 * (w * h * 0.5) + w * d + 2 * (slant * d);
+      // İki üçgen taban + alt dikdörtgen + iki eğik dikdörtgen (dik üçgende eğik yüzler farklı genişlikte)
+      const ax = ucgenTepeX(solid);
+      const slantL = Math.hypot(h, ax + w / 2);
+      const slantR = Math.hypot(h, w / 2 - ax);
+      return 2 * (w * h * 0.5) + w * d + (slantL + slantR) * d;
     }
     case 'pyramid': {
       // w kenarlı yüzlerin eğik yüksekliği d/2'ye, d kenarlı yüzlerinki w/2'ye bağlıdır
