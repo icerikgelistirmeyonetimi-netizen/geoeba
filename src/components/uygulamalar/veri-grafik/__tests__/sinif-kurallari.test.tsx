@@ -321,6 +321,47 @@ describe('grafikler: eksen okları, yan yana sütun çiftleri, açısız daire, 
     expect(renderToStaticMarkup(<NoktaGrafigi {...kat} yuzdesiz />)).not.toContain('%');
   });
 
+  it('nokta grafiği yan yana (denetim): dar pencerede de bir değerdeki grup yığını komşu değerin yığınına binmez', () => {
+    // 7-A / 7-B puanları (5 puan arayla): 900 px pencerede grafik ~470 px; eskiden 75'in 7-B noktası 80'in 7-A noktasına biniyordu
+    const sinav = ornekBul('sinav')!.olustur();
+    const sinifSutunu = sinav.sutunlar.findIndex((s) => s.ad === 'Sınıf');
+    const puan = sinav.sutunlar.findIndex((s) => s.ad === 'Puan');
+    const eslem = grupEslemesi(sinav, sinifSutunu, undefined, null)!;
+    for (const genislik of [470, 640, 900]) {
+      const html = renderToStaticMarkup(
+        <NoktaGrafigi
+          tablo={sinav}
+          sutun={puan}
+          seciliSatir={null}
+          onSatirSec={bos}
+          onDegiskenBirak={bos}
+          aralik={1}
+          secenekler={{ ortalama: false, oms: false, etiketler: false }}
+          sutunModu={false}
+          genislik={genislik}
+          yukseklik={300}
+          azaltilmisHareket
+          surukleniyor={false}
+          renkEslemi={eslem}
+          yanYana
+          olcuKumesi={sinifKurallari(7).olculer}
+        />,
+      );
+      const noktalar = Array.from(
+        html.matchAll(/data-satir="(\d+)"[^>]*style="transform:translate\(([-\d.]+)px, ([-\d.]+)px\)[\s\S]*?<circle r="([\d.]+)" fill="(?!transparent)/g),
+        (m) => ({ satir: Number(m[1]), x: Number(m[2]), y: Number(m[3]), r: Number(m[4]) }),
+      );
+      expect(noktalar.length, `${genislik}`).toBe(30);
+      for (let i = 0; i < noktalar.length; i++)
+        for (let j = i + 1; j < noktalar.length; j++) {
+          const a = noktalar[i];
+          const b = noktalar[j];
+          const uzaklik = Math.hypot(a.x - b.x, a.y - b.y);
+          expect(uzaklik, `${genislik} px: satır ${a.satir} ile ${b.satir}`).toBeGreaterThanOrEqual(a.r + b.r - 0.01);
+        }
+    }
+  });
+
   it('daire (5. sınıf, oransiz): açı ve yüzde yazılmaz; lejantta ad ve değer, şeritte parça ve bütün', () => {
     const gun = ornekBul('gun')!.olustur();
     const ortak = { tablo: gun, sutun: 1, onSatirSec: bos, onDegerlerDegis: bos, genislik: 800, yukseklik: 420, azaltilmisHareket: true };
@@ -391,6 +432,23 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     expect(ist).not.toContain('data-siklik-tablosu');
     expect(ist).not.toContain('data-tepe-deger');
     expect(metin(ist)).not.toMatch(/Göreli sıklık|Merkez açı|Tepe değer/);
+  });
+
+  it('[109] denetim: Nokta → Sütunlara dönüştür (renk anahtarı Sınıf, karşılaştırma yok) — 5–8. sınıfta parçalar yan yana, sınıfsızda yığılı', () => {
+    const atik = { ...yukle('atik'), sekme: 'nokta' as Sekme, sutunModu: true, ikinciDegisken: null };
+    const html = uygulamaCiz(atik);
+    const nokta = html.slice(html.indexOf('data-grafik="nokta"'));
+    expect(nokta).toContain('data-yan-parca="5-A"');
+    expect(nokta).toContain('data-yan-parca="5-B"');
+    expect(nokta).not.toContain('data-yigin-parcasi');
+    // Yemek artığı: 5-A 3, 5-B 5; Plastik: 5-A 6, 5-B 1 — sayılar kendi sütunlarının üstünde (toplam yazılmaz), yüzde yok
+    const sayilar = Array.from(nokta.matchAll(/data-yan-parca-sayisi="(5-[AB])"[^>]*>(\d+)</g), (m) => `${m[1]}:${m[2]}`);
+    expect(sayilar.slice(0, 4)).toEqual(['5-A:3', '5-B:5', '5-A:6', '5-B:1']);
+    expect(svgYazilari(nokta.slice(0, nokta.indexOf('</svg>')))).not.toMatch(/%/);
+    // Sınıfsız tablo (bağ kopmuş): bugünkü yığılı sütunlar
+    const kendi = uygulamaCiz({ ...atik, ornekId: null, tabloAdi: null });
+    expect(kendi).toContain('data-yigin-parcasi="5-A"');
+    expect(kendi).not.toContain('data-yan-parca=');
   });
 
   it('[109] 5. sınıf başkan: tek sıklık tablosunda yalnız Sıklık sütunu; sütunların üstünde yüzde yok', () => {

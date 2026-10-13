@@ -132,6 +132,11 @@ export interface NoktaGrafigiProps {
   satirKarsiligi?: number[];
   /** Kategorik "Sayılar"da yüzde yazılmaz (5. sınıf) */
   yuzdesiz?: boolean;
+  /**
+   * Sütun modunda renk anahtarının parçaları üst üste değil yan yana (5–8. sınıf örnekleri: karşılaştırmalı sütunlar
+   * yığılmaz); nokta görünümü değişmez. Verilmezse parçalar yığılır (bugünkü davranış).
+   */
+  yanYanaParcalar?: boolean;
 }
 
 /** Bu kadar noktadan sonra geçiş animasyonları kapanır (akıllı tahtada akıcılık) */
@@ -233,6 +238,8 @@ interface SiklikSutunu {
   sutunTepe: number;
   /** kategorik "Sayılar" metni ("12 · %60" ya da dar kutuda "12") */
   metin: string;
+  /** sütun modunda parçalar yan yana (`yanYanaParcalar`): her parça kendi sütunu, sayısı üstünde */
+  yan?: boolean;
 }
 
 interface KategoriKutusu {
@@ -437,6 +444,7 @@ export function NoktaGrafigi({
   olcuKumesi = TUM_OLCULER,
   satirKarsiligi,
   yuzdesiz = false,
+  yanYanaParcalar = false,
 }: NoktaGrafigiProps) {
   /** Türetilmiş satırın asıl tablodaki satırı (karşılık yoksa kendisi) */
   const asil = (s: number) => (satirKarsiligi ? satirKarsiligi[s] ?? s : s);
@@ -492,6 +500,8 @@ export function NoktaGrafigi({
       return g;
     };
     const satirSayisi = altKume ? altKume.size : tablo.satirlar.length;
+    /** Sütun modunda renk anahtarının parçaları yan yana (yan yana görünümde gruplar zaten ayrı sütun) */
+    const parcaYan = yanYanaParcalar && anahtar !== null && !yanAnahtar;
     const SOL = sutunlu ? SOL_SIKLIK : SOL_TEMEL;
     const alanG = Math.max(0, W - SOL - SAG);
     const siralama = anahtarSirasi(anahtar);
@@ -708,9 +718,15 @@ export function NoktaGrafigi({
     // Komşu yığınlar çakışmaz: yarıçap en yakın iki yığının arasının yarısını aşmaz; tek yığında yalnız dikey alan sınırlar.
     // Geniş eksende (ör. toplama sırasında sabit tutulan 60–120 ölçüm penceresi, 1 birim ≈ 15 px) bu kural noktaları
     // okunmaz kılar: o durumda yarıçap OKUNUR_YARICAP'a kadar büyür, komşu yığınlar en çok aralığın ~%24'ü kadar örtüşür.
+    // Yan yana görünümde bu örtüşme payı yoktur: bir değerdeki grup yığınları komşu değerin yığınlarına binmez (dar
+    // pencerede 75'in 7-B noktası 80'in 7-A noktasının üstüne düşmesin; ikili gruplar karışmasın).
     const yanUzaklik = enKucukUzaklik / K;
     const rYatay =
-      yiginlar.length > 1 ? Math.max(yanUzaklik / 2 - 0.5, Math.min(OKUNUR_YARICAP, yanUzaklik * 0.62)) : alanG / 2 / K;
+      yiginlar.length > 1
+        ? yanAnahtar
+          ? Math.max(0.8, yanUzaklik / 2 - 0.5)
+          : Math.max(yanUzaklik / 2 - 0.5, Math.min(OKUNUR_YARICAP, yanUzaklik * 0.62))
+        : alanG / 2 / K;
     /** Verilen dikey alanda sayısal yığınların yarıçapı, adımı ve sıra genişliği */
     const yaricapBul = (dikeyAlan: number): { r: number; adim: number; yiginSutunu: number } => {
       if (!sayisalYigin) return { r: 8, adim: 17, yiginSutunu: 1 };
@@ -871,6 +887,7 @@ export function NoktaGrafigi({
           noktaTepe,
           sutunTepe: taban - adet * birimSutun - 6,
           metin: String(adet),
+          yan: parcaYan || undefined,
         });
       });
     }
@@ -983,6 +1000,7 @@ export function NoktaGrafigi({
           noktaTepe: adet > 0 ? taban - 4 - r - (Math.ceil(adet / kutuSutunu) - 1) * adimK - r - 6 : taban - 8,
           sutunTepe: taban - adet * birimSutun - 6,
           metin: sigar && !yuzdesiz ? yuzdeMetni : String(adet),
+          yan: parcaYan || undefined,
         });
       });
     }
@@ -1103,9 +1121,20 @@ export function NoktaGrafigi({
     yanAnahtar,
     olcuKumesi,
     yuzdesiz,
+    yanYanaParcalar,
   ]);
 
   const { SOL, UST, taban, alanG, alanY, eksen, olcek, konumlar, ondalik } = c;
+  /**
+   * Yan parçalı sütunda (`yanYanaParcalar`) parçanın yuvası: anahtar sırasıyla, anahtarı boş satırlar en sağda; yuvalar
+   * bütün sütunlarda hizalıdır (parçası olmayan grubun yeri boş kalır)
+   */
+  const yanYuvaSayisi = Math.max(1, (anahtar?.kategoriler.length ?? 0) + (c.sutunlar.some((s) => s.yan && s.parcalar.some((p) => p.ad === '(boş)')) ? 1 : 0));
+  const yanParcaYeri = (s: SiklikSutunu, p: SutunParcasi) => {
+    const j = p.ad === '(boş)' ? yanYuvaSayisi - 1 : Math.max(0, anahtar?.kategoriler.indexOf(p.ad) ?? 0);
+    const genislik = Math.max(2, (s.genislik - (yanYuvaSayisi - 1) * 2) / yanYuvaSayisi);
+    return { x: s.x - s.genislik / 2 + j * (genislik + 2), genislik };
+  };
   const cokNokta = konumlar.length > COK_NOKTA;
   const hareketsiz = azaltilmisHareket || cokNokta || akis;
   /**
@@ -1366,19 +1395,21 @@ export function NoktaGrafigi({
         />
       )}
 
-      {/* Sıklık sütunları (sütun modu): yükseklik = sıklık × birim; renk anahtarına göre yığılır */}
+      {/* Sıklık sütunları (sütun modu): yükseklik = sıklık × birim; renk anahtarına göre yığılır (yan: parçalar yan yana) */}
       {atanmis &&
         c.sutunlar.map((s) => (
           <g key={s.anahtar} data-siklik-sutunu={s.anahtar} data-sayi={s.sayi} data-yukseklik={sutunModu ? (s.sayi * c.birimSutun).toFixed(2) : '0'}>
             {s.parcalar.map((p, k) => {
-              const alt = taban - p.alt * c.birimSutun;
-              const boy = Math.max(0.001, p.sayi * c.birimSutun - (k < s.parcalar.length - 1 ? 1.5 : 0));
+              const yer = s.yan ? yanParcaYeri(s, p) : null;
+              const alt = yer ? taban : taban - p.alt * c.birimSutun;
+              const boy = Math.max(0.001, p.sayi * c.birimSutun - (!yer && k < s.parcalar.length - 1 ? 1.5 : 0));
               return (
                 <g
                   key={p.ad || 'tek'}
-                  data-yigin-parcasi={p.ad || undefined}
+                  data-yigin-parcasi={yer ? undefined : p.ad || undefined}
+                  data-yan-parca={yer ? p.ad : undefined}
                   style={{
-                    transform: `translate(${s.x - s.genislik / 2}px, ${alt}px) scaleY(${sutunModu ? -boy : -0.001})`,
+                    transform: `translate(${yer ? yer.x : s.x - s.genislik / 2}px, ${alt}px) scaleY(${sutunModu ? -boy : -0.001})`,
                     transition: sutunGecis,
                     opacity: sutunModu ? 1 : 0,
                   }}
@@ -1386,7 +1417,7 @@ export function NoktaGrafigi({
                   <rect
                     x={0}
                     y={0}
-                    width={s.genislik}
+                    width={yer ? yer.genislik : s.genislik}
                     height={1}
                     fill={p.renk}
                     fillOpacity={0.92}
@@ -1590,6 +1621,32 @@ export function NoktaGrafigi({
           const gorunur = (sutunModu || kategorikSayi) && hepsi.some((x) => x.sayi > 0);
           const metin = kategorik && secenekler.etiketler ? s.metin : String(s.sayi);
           const y = sutunModu ? s.sutunTepe : s.noktaTepe;
+          if (s.yan && sutunModu)
+            return (
+              <g key={`sayi-${s.anahtar}`} style={{ paintOrder: 'stroke', stroke: RENK.kart, strokeWidth: 3, strokeLinejoin: 'round' }}>
+                {s.parcalar.map((p) => {
+                  const yer = yanParcaYeri(s, p);
+                  // Dar sütunun sayısı komşusununkine biner: yazılmaz (sıklık ekseninden okunur; KategorikSutunGrafigi gibi)
+                  if (yer.genislik < 12) return null;
+                  return (
+                    <text
+                      key={p.ad}
+                      x={yer.x + yer.genislik / 2}
+                      y={Math.max(UST + 2, taban - p.sayi * c.birimSutun - 6)}
+                      fontSize={13}
+                      fontWeight={800}
+                      textAnchor="middle"
+                      fill={RENK.metin}
+                      data-siklik-etiketi={gorunur ? String(p.sayi) : undefined}
+                      data-yan-parca-sayisi={p.ad}
+                      style={{ opacity: gorunur ? 1 : 0 }}
+                    >
+                      {p.sayi}
+                    </text>
+                  );
+                })}
+              </g>
+            );
           return (
             <text
               key={`sayi-${s.anahtar}`}

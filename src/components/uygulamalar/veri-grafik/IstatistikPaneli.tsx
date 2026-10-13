@@ -627,7 +627,7 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
           </p>
           {m.yaklasik && (
             <p className="text-muted-foreground" data-yuvarlama-notu>
-              {`Ortalama tam çıkmadığı için farkları yuvarlanmış ortalamayla (${mMetni}) hesapladık.`}
+              {`Aritmetik ortalama tam çıkmadığı için farkları yuvarlanmış ortalamayla (${mMetni}) hesapladık.`}
             </p>
           )}
           <div className="overflow-x-auto py-1">

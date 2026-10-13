@@ -2185,6 +2185,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                     renkEslemi={renkEslemi}
                     olcuKumesi={kurallar.olculer}
                     yuzdesiz={!kurallar.yuzdeVeAci}
+                    yanYanaParcalar={tekGrafik}
                   />
                   {ikiPanel && <PanelAyraci />}
                   {ikiPanel && (
