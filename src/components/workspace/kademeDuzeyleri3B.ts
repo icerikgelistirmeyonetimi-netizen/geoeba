@@ -117,3 +117,23 @@ export function cisimIzdusumuVarsayilanAcik(duzey: KademeDuzeyi): boolean {
 export function cisimIzdusumuAnahtariVar(duzey: KademeDuzeyi): boolean {
   return duzey !== 'ilkokul';
 }
+
+/** Bir tuvalin ayrım durumu: etkin boyut + öteki kümenin o tuvalde gizli olup olmadığı. */
+export interface AyrimDurumu {
+  /** Etkin boyut (studioDimension) bu tuvalin boyutu mu? */
+  etkin: boolean;
+  /** Öteki küme (3B'de 2B nesneler, 2B'de cisimler) bu tuvalde gizli mi? */
+  gizli: boolean;
+}
+
+/**
+ * Tuvalde GÖRÜNMEYEN kümenin seçimi bırakılsın mı (denetim, 4. tur S3)? Bırakılmazsa Sil (menü ya da tuş:
+ * deleteSelection iki kümeyi birlikte siler) ekranda olmayan nesneleri silerdi: 2B'de Ctrl+A → 3B → Sil 2B çizimi,
+ * izdüşüm kapalıyken 3B'de seçili cisim → 2B → Sil cismi. Seçim yalnız durum DEĞİŞİRKEN (tuval kurulurken, etkin boyut
+ * bu tuvale geçerken, küme gizlenirken) bırakılır; durum aynı kaldıkça dokunulmaz: 2D + 3D çift görünümde öteki
+ * paneldeki ilk tıklamanın kurduğu seçim (etkin boyut tıklamanın sonunda değişir) hemen silinmesin.
+ */
+export function gizliSecimBirakilir(onceki: AyrimDurumu | null, simdi: AyrimDurumu, secimVar: boolean): boolean {
+  if (!simdi.etkin || !simdi.gizli || !secimVar) return false;
+  return !onceki || !onceki.etkin || !onceki.gizli;
+}

@@ -77,7 +77,7 @@ import {
 import { CISIM_RENKLERI, KOPYA_RENGI } from './cisimRenkleri';
 import { cismiGorunurKil, cizimOlculeri } from './cisimYerlesimi';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
-import { kademe2BNesneleri3BdeGosterir } from './kademeDuzeyleri3B';
+import { gizliSecimBirakilir, kademe2BNesneleri3BdeGosterir, type AyrimDurumu } from './kademeDuzeyleri3B';
 import {
   surukleAcisi,
   halkaAcisi,
@@ -1251,12 +1251,17 @@ export function Canvas3D(props: Canvas3DProps) {
   // 2B nesneler gizliyse (ortaokul) sahne, isabet, gizmo ve silme onları hiç görmez
   const objects = goster2BNesneler ? workspace?.objects ?? BOS_NESNELER : BOS_NESNELER;
   const selectedObjectIds = goster2BNesneler ? workspace?.selectedObjectIds ?? BOS_KIMLIKLER : BOS_KIMLIKLER;
-  // 3B etkinken 2B'den kalan seçim de bırakılır: yoksa 3B'de Sil (menü ya da tuş) görünmeyen 2B nesneleri silerdi
+  // 3B'ye GEÇİLİRKEN (3B açık kurulurken ya da kademe ortaokula dönünce) 2B'den kalan seçim bırakılır: yoksa 3B'de Sil
+  // (menü ya da tuş) görünmeyen 2B nesneleri silerdi. Yalnız geçişte (kademeDuzeyleri3B.gizliSecimBirakilir): 2D + 3D
+  // çift görünümde 3B panelden sonra 2B paneldeki ilk tıklamanın seçimi hemen silinmesin (denetim, 4. tur S3).
   const studioDimension = workspace?.studioDimension;
   const ham2BSecimSayisi = workspace?.selectedObjectIds.length ?? 0;
   const set2BSecim = workspace?.setSelectedObjectIds;
+  const ayrimDurumuRef = useRef<AyrimDurumu | null>(null);
   useEffect(() => {
-    if (!goster2BNesneler && studioDimension === '3D' && ham2BSecimSayisi > 0) set2BSecim?.([]);
+    const simdi: AyrimDurumu = { etkin: studioDimension === '3D', gizli: !goster2BNesneler };
+    if (gizliSecimBirakilir(ayrimDurumuRef.current, simdi, ham2BSecimSayisi > 0)) set2BSecim?.([]);
+    ayrimDurumuRef.current = simdi;
   }, [goster2BNesneler, studioDimension, ham2BSecimSayisi, set2BSecim]);
 
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 1200, height: 700 });

@@ -52,6 +52,7 @@ import { useSliderPlayback } from '@/hooks/useSliderPlayback';
 import { Solid3DObject, Point3D } from '@/types/workspace3d';
 import { projectSolidFor2D } from '@/math/solidProjection2D';
 import { useCisimIzdusumu } from './cisimIzdusumu';
+import { gizliSecimBirakilir, type AyrimDurumu } from './kademeDuzeyleri3B';
 import { cisimBilgiSatiri, izdusumGovdesi, kenarEtiketKutulari, rozetleriYerlestir, satirGenisligi, SATIR_YUKSEKLIGI } from '@/math/cisimEtiketleri2B';
 
 /** Etiketi olmayan nesneler için menü başlığında gösterilecek tür adları. */
@@ -420,6 +421,18 @@ export function Canvas({
     setCircleRadius,
     setLengthMeasurement,
   } = useWorkspace();
+  // İzdüşüm kapalıyken 2B'ye geçilince (ya da anahtar kapatılınca) 3B'den kalan cisim seçimi bırakılır: yoksa 2B'de
+  // Sil (menü ya da tuş: deleteSelection) görünmeyen cisimleri silerdi (3B'deki [172] kuralının eşi; denetim, 4. tur S3).
+  const izdusumDurumuRef = useRef<AyrimDurumu | null>(null);
+  const seciliCisimVar = seciliCisimlerHam.length > 0 || !!seciliCisimHam;
+  useEffect(() => {
+    const simdi: AyrimDurumu = { etkin: studioDimension === '2D', gizli: !cisimIzdusumu };
+    if (gizliSecimBirakilir(izdusumDurumuRef.current, simdi, seciliCisimVar)) {
+      onSelectSolid?.(null);
+      onSelectSolids?.([]);
+    }
+    izdusumDurumuRef.current = simdi;
+  }, [studioDimension, cisimIzdusumu, seciliCisimVar, onSelectSolid, onSelectSolids]);
 
   // Görsel dosyası seçimi (Görsel Ekle aracı)
   const imageInputRef = useRef<HTMLInputElement>(null);
