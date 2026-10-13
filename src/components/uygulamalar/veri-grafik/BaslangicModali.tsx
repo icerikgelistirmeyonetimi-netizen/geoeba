@@ -12,6 +12,9 @@
  *   planı varsayılanlarla uygular; C paneli Topla görünümünde açar ve pencereyi kapatır (`onPlaniUygula`). Plan isteyen
  *   kart ("Oylama": aday adları) 'plan' adımına geçer. Bağlı araştırmanın kendi kartı yeni tablo açmaz, toplamaya döner.
  * - 'plan': "Kendi sorunu yaz" formu (PlanAdimi; taslak pencerenin yerel durumudur). [Toplamaya başla] planı uygular.
+ * İlkokul kademesinde (Kademe menüsü: İlkokul) iki yol vardır: Örnek veri (yalnız 1–4. sınıf örnekleri) ve Boş tablo. Veri
+ * topla yolu (hazır sorular 5–8. sınıf kazanımlarına bağlı; yüzde, ortalama, olasılık deneyleri) ilkokulda gösterilmez;
+ * 'topla' ve 'plan' adımı istense de seçim adımı açılır.
  * Escape, × ve örtüye dokunma pencereyi kapatır (tablo ve grafik değişmez). Odak her adımda adımın ilk öğesine gider,
  * Tab pencerenin içinde döner, pencere kapanınca açan düğmeye döner. Pencere uygulama kökünün içinde durur (masaüstünün
  * öteki pencereleri ve görev çubuğu kullanılabilir kalır); en çok 860 × 660 px, kökten 16 px içeride. Seçim adımı
@@ -24,8 +27,10 @@ import { DUGME } from './ortak';
 import { PlanAdimi } from './toplama/PlanAdimi';
 import { SoruAdimi } from './toplama/SoruAdimi';
 import { KapatSimgesi, SolOkSimgesi, VeriToplaSimgesi } from './toplama/simgeler';
-import { ORNEK_VERILER, type VeriTablosu } from './veri';
+import { kademeOrnekleri, type VeriTablosu } from './veri';
 import { sekmeOkTusu } from '../sekmeler';
+import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
+import type { KademeDuzeyi } from '@/components/workspace/kademeDuzeyleri';
 
 export type BaslangicAdimi = 'secim' | 'hazir' | 'topla' | 'plan';
 
@@ -40,26 +45,38 @@ export interface BaslangicSecenegi {
   not: string;
 }
 
-export const BASLANGIC_SECENEKLERI: readonly BaslangicSecenegi[] = [
-  {
-    id: 'hazir',
-    ad: 'Örnek veri',
-    aciklama: 'Sınıf düzeyine göre hazır tablolardan birini seçin; grafiği ve Keşif kartı hazır gelir.',
-    not: `${ORNEK_VERILER.length} hazır tablo`,
-  },
-  {
-    id: 'topla',
-    ad: 'Veri topla',
-    aciklama: 'Anket, ölçüm ya da deneyle kendi verinizi toplayın; grafik toplarken çizilir.',
-    not: `${HAZIR_SORULAR.length} hazır soru · kendi sorunuz`,
-  },
-  {
-    id: 'bos',
-    ad: 'Boş tablo',
-    aciklama: 'Boş bir tabloya kendi verinizi yazın; sütunları siz adlandırın.',
-    not: 'Etiket · Değer',
-  },
-];
+/**
+ * Seçim adımının yolları kademeye göre: örnek sayısı kademenin galerisi kadar (ornekKonulari); İlkokul'da Veri topla yok
+ */
+export function baslangicSecenekleri(kademe: KademeDuzeyi = 'tum'): readonly BaslangicSecenegi[] {
+  return [
+    {
+      id: 'hazir',
+      ad: 'Örnek veri',
+      aciklama: 'Sınıf düzeyine göre hazır tablolardan birini seçin; grafiği ve Keşif kartı hazır gelir.',
+      not: `${kademeOrnekleri(kademe).length} hazır tablo`,
+    },
+    ...(kademe === 'ilkokul'
+      ? []
+      : [
+          {
+            id: 'topla' as const,
+            ad: 'Veri topla',
+            aciklama: 'Anket, ölçüm ya da deneyle kendi verinizi toplayın; grafik toplarken çizilir.',
+            not: `${HAZIR_SORULAR.length} hazır soru · kendi sorunuz`,
+          },
+        ]),
+    {
+      id: 'bos',
+      ad: 'Boş tablo',
+      aciklama: 'Boş bir tabloya kendi verinizi yazın; sütunları siz adlandırın.',
+      not: 'Etiket · Değer',
+    },
+  ];
+}
+
+/** Tüm araçlar kademesinin yolları (üçü de) */
+export const BASLANGIC_SECENEKLERI: readonly BaslangicSecenegi[] = baslangicSecenekleri();
 
 /** Pencerenin en büyük ölçüleri (px); uygulama kökünden 16'şar px içeride durur */
 export const BASLANGIC_EN_GENIS = 860;
@@ -177,7 +194,11 @@ export function BaslangicModali({
   onKapatRef.current = onKapat;
   const icGenislik = baslangicGenisligi(genislik);
   // Plan adımı taslaksız çizilemez (olmaması gerekir): "Ne araştıralım?"a düşer
-  const etkinAdim: BaslangicAdimi = adim === 'plan' && !taslak ? 'topla' : adim;
+  const [kademe] = useKademeDuzeyi();
+  const ilkokul = kademe === 'ilkokul';
+  const secenekler = baslangicSecenekleri(kademe);
+  // İlkokulda Veri topla yolu yok: 'topla' / 'plan' istense de seçim adımı
+  const etkinAdim: BaslangicAdimi = ilkokul && (adim === 'topla' || adim === 'plan') ? 'secim' : adim === 'plan' && !taslak ? 'topla' : adim;
 
   // Açan öğe: pencere kapanınca odak ona döner (açılışta gövde odaklıysa dönmez)
   useEffect(() => {
@@ -316,10 +337,10 @@ export function BaslangicModali({
           <div
             role="group"
             aria-label="Başlangıç yolu"
-            className={`grid gap-3 ${yanYana ? 'grid-cols-3' : 'grid-cols-1'}`}
+            className={`grid gap-3 ${yanYana ? (secenekler.length === 2 ? 'grid-cols-2' : 'grid-cols-3') : 'grid-cols-1'}`}
             data-baslangic-secenekler={yanYana ? 'yan-yana' : 'alt-alta'}
           >
-            {BASLANGIC_SECENEKLERI.map((s) => (
+            {secenekler.map((s) => (
               <button
                 key={s.id}
                 type="button"

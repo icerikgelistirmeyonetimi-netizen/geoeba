@@ -458,7 +458,7 @@ describe('örnek veriler: konulara göre, açıklamalı ve öğretici sayılarla
   });
 });
 
-describe('örnek veriler: 16 örnek, sınıf düzeyi, hikâye, kaynak ve rehber', () => {
+describe('örnek veriler: 20 örnek, sınıf düzeyi, hikâye, kaynak ve rehber', () => {
   const degerler = (id: string, sutun: number, grup?: string) => {
     const t = ornekVeriOlustur(id);
     return gecerliDegerler(t, sutun)
@@ -469,14 +469,22 @@ describe('örnek veriler: 16 örnek, sınıf düzeyi, hikâye, kaynak ve rehber'
   const eylemler = (o: OrnekVeri): RehberEylemi[] =>
     o.rehber.flatMap((a) => [a.eylem, a.yedekEylem].filter((e): e is RehberEylemi => !!e));
 
-  it('16 örnek, 5 konu (5-8. sınıf ve zenginleştirme), her konuda en az bir örnek; eski kimlikler yok', () => {
-    expect(ORNEK_VERILER).toHaveLength(16);
-    expect(ORNEK_KONULARI.map((k) => k.id)).toEqual(['sinif5', 'sinif6', 'sinif7', 'sinif8', 'zenginlestirme']);
-    expect(ORNEK_KONULARI.map((k) => k.kisaAd)).toEqual(['5. sınıf', '6. sınıf', '7. sınıf', '8. sınıf', 'Zenginleştirme']);
-    expect(ornekKonulari().map((k) => k.ornekler.length)).toEqual([4, 4, 4, 2, 2]);
+  it('20 örnek, 9 konu (1-8. sınıf ve zenginleştirme), her konuda en az bir örnek; eski kimlikler yok', () => {
+    expect(ORNEK_VERILER).toHaveLength(20);
+    expect(ORNEK_KONULARI.map((k) => k.id)).toEqual(['sinif1', 'sinif2', 'sinif3', 'sinif4', 'sinif5', 'sinif6', 'sinif7', 'sinif8', 'zenginlestirme']);
+    expect(ORNEK_KONULARI.map((k) => k.kisaAd)).toEqual(['1. sınıf', '2. sınıf', '3. sınıf', '4. sınıf', '5. sınıf', '6. sınıf', '7. sınıf', '8. sınıf', 'Zenginleştirme']);
+    expect(ornekKonulari().map((k) => k.ornekler.length)).toEqual([1, 1, 1, 1, 4, 4, 4, 2, 2]);
+    // Ortaokul ve lise kademesinde galeri bugünkü gibi: 5 konu, 16 örnek; ilkokulda yalnız 1–4. sınıf
+    for (const kademe of ['ortaokul', 'lise'] as const) {
+      expect(ornekKonulari(kademe).map((k) => k.id), kademe).toEqual(['sinif5', 'sinif6', 'sinif7', 'sinif8', 'zenginlestirme']);
+      expect(ornekKonulari(kademe).map((k) => k.ornekler.length), kademe).toEqual([4, 4, 4, 2, 2]);
+    }
+    expect(ornekKonulari('ilkokul').map((k) => k.id)).toEqual(['sinif1', 'sinif2', 'sinif3', 'sinif4']);
+    expect(ornekKonulari('ilkokul').flatMap((k) => k.ornekler.map((o) => o.sinif))).toEqual([1, 2, 3, 4]);
     expect(ORNEK_VERILER.map((o) => o.id)).toEqual([
       'baskan', 'atik', 'gun', 'harcama', 'kitap', 'kardes', 'ulasim', 'mac',
       'sinav', 'boy', 'fide', 'sicaklik', 'iklim', 'ekran', 'calisma', 'cikolata',
+      'oyuncak', 'oyun', 'gelis', 'gezi',
     ]);
     for (const eski of ['meyve', 'ders', 'sinif']) {
       expect(ornekBul(eski), eski).toBeUndefined();

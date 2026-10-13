@@ -13,8 +13,19 @@
  *   yana; "önce birinci grup, sonra ikinci grup" değil).
  * Örneğe bağlı olmayan tablo (kendi tablonuz, veri toplama) ya da sınıfı olmayan örnek bugünkü bütün davranışla
  * çalışır: lise ve serbest kullanım değişmez.
+ *
+ * İlkokul (alan uzmanı incelemesi, 4. tur, satır 181; TYMM MAT.1.4.1, MAT.2.4.1, MAT.3.4.1, MAT.4.4.2): kategorik veri,
+ * en çok iki veri grubu; merkezi eğilim ve yayılım ölçüsü, yüzde ve açı yok; daire, çizgi, kök-yaprak ve saçılım yok.
+ * Programın temsilleri: çetele ve sıklık tablosu (İstatistik sekmesi "Sıklık tablosu" adını alır, tabloda çetele
+ * sütunu) ve sınıfın grafiği — 1. sınıf nesne grafiği (her veri bir resim), 2. sınıf şekil grafiği (her veri bir kare),
+ * 3. sınıf nokta grafiği, 4. sınıf nokta grafiği ve sütun grafiği ("Sütunlara dönüştür" yalnız 4. sınıfta).
+ * Kademe menüsünde İlkokul seçiliyken 1–4. sınıf örneğine bağlı olmayan her tablo (kendi tablonuz, veri toplama, 5–8.
+ * sınıf örneği) ilkokulun ortak kurallarıyla (ILKOKUL_KURALLARI: 4. sınıfın temsilleri) çalışır.
  */
-import type { GrafikTuru, SinifDuzeyi } from './veri';
+import { ilkokulSinifi, type GrafikTuru, type SinifDuzeyi } from './veri';
+
+/** Nokta sekmesinin her veriyi çizdiği biçim: nokta (daire), şekil (kare; şekil grafiği) ya da nesne (resim; nesne grafiği) */
+export type NoktaSekli = 'nokta' | 'sekil' | 'nesne';
 
 /** İstatistik ölçüleri (İstatistik paneli, nokta grafiğinin seçenek şeridi, hesaplama adımları) */
 export interface OlcuKumesi {
@@ -40,18 +51,68 @@ export interface SinifKurallari {
    * (Nokta'da alt alta paneller, Sütun'da tek değişken).
    */
   tekGrafikteKarsilastir: boolean;
+  /** Sekmelerin bu sınıftaki adı (ilkokul: "Nesne grafiği", "Sıklık tablosu" …); yazılmayan sekme kendi adıyla */
+  sekmeAdlari: Partial<Record<GrafikTuru, string>>;
+  /** Nokta sekmesinde her veri: nokta, şekil (kare) ya da nesne (resim) */
+  noktaSekli: NoktaSekli;
+  /** Sıklık tablosunda çetele (ilkokul: çetele ve sıklık tablosu birlikte) */
+  cetele: boolean;
+  /** Nokta grafiğinin şeridinde "Sütunlara dönüştür" (ilkokulda yalnız sütun grafiğinin olduğu 4. sınıfta) */
+  sutunaDonustur: boolean;
 }
 
 const TUM_SEKMELER: readonly GrafikTuru[] = ['nokta', 'sutun', 'cizgi', 'daire', 'sacilim', 'istatistik'];
 const HEPSI: OlcuKumesi = { merkezi: true, aciklik: true, oms: true, standartSapma: true };
+const OLCUSUZ: OlcuKumesi = { merkezi: false, aciklik: false, oms: false, standartSapma: false };
+/** 5–8. sınıf ve sınıfsız tablo: sekme adları, nokta biçimi ve sütun dönüşümü bugünkü gibi; çetele yok */
+const ORTAOKUL_TEMSILLERI = { sekmeAdlari: {}, noktaSekli: 'nokta', cetele: false, sutunaDonustur: true } as const;
+
+/** İlkokulun ortak kuralları: ölçü, yüzde ve açı yok; çetele ve sıklık tablosu; iki grup tek grafikte */
+const ILKOKUL_ORTAK = {
+  olculer: OLCUSUZ,
+  yuzdeVeAci: false,
+  tekYonluTabloIleBirlikte: false,
+  tekGrafikteKarsilastir: true,
+  cetele: true,
+} as const;
+const SIKLIK_TABLOSU = 'Sıklık tablosu';
 
 const KURALLAR: Record<SinifDuzeyi, Omit<SinifKurallari, 'sinif'>> = {
+  1: {
+    ...ILKOKUL_ORTAK,
+    sekmeler: ['nokta', 'istatistik'],
+    sekmeAdlari: { nokta: 'Nesne grafiği', istatistik: SIKLIK_TABLOSU },
+    noktaSekli: 'nesne',
+    sutunaDonustur: false,
+  },
+  2: {
+    ...ILKOKUL_ORTAK,
+    sekmeler: ['nokta', 'istatistik'],
+    sekmeAdlari: { nokta: 'Şekil grafiği', istatistik: SIKLIK_TABLOSU },
+    noktaSekli: 'sekil',
+    sutunaDonustur: false,
+  },
+  3: {
+    ...ILKOKUL_ORTAK,
+    sekmeler: ['nokta', 'istatistik'],
+    sekmeAdlari: { nokta: 'Nokta grafiği', istatistik: SIKLIK_TABLOSU },
+    noktaSekli: 'nokta',
+    sutunaDonustur: false,
+  },
+  4: {
+    ...ILKOKUL_ORTAK,
+    sekmeler: ['nokta', 'sutun', 'istatistik'],
+    sekmeAdlari: { nokta: 'Nokta grafiği', sutun: 'Sütun grafiği', istatistik: SIKLIK_TABLOSU },
+    noktaSekli: 'nokta',
+    sutunaDonustur: true,
+  },
   5: {
     sekmeler: ['nokta', 'sutun', 'daire', 'istatistik'],
     olculer: { merkezi: false, aciklik: false, oms: false, standartSapma: false },
     yuzdeVeAci: false,
     tekYonluTabloIleBirlikte: false,
     tekGrafikteKarsilastir: true,
+    ...ORTAOKUL_TEMSILLERI,
   },
   6: {
     sekmeler: ['nokta', 'sutun', 'kokYaprak', 'daire', 'istatistik'],
@@ -59,6 +120,7 @@ const KURALLAR: Record<SinifDuzeyi, Omit<SinifKurallari, 'sinif'>> = {
     yuzdeVeAci: true,
     tekYonluTabloIleBirlikte: true,
     tekGrafikteKarsilastir: true,
+    ...ORTAOKUL_TEMSILLERI,
   },
   7: {
     sekmeler: TUM_SEKMELER,
@@ -66,6 +128,7 @@ const KURALLAR: Record<SinifDuzeyi, Omit<SinifKurallari, 'sinif'>> = {
     yuzdeVeAci: true,
     tekYonluTabloIleBirlikte: true,
     tekGrafikteKarsilastir: true,
+    ...ORTAOKUL_TEMSILLERI,
   },
   8: {
     sekmeler: TUM_SEKMELER,
@@ -73,6 +136,7 @@ const KURALLAR: Record<SinifDuzeyi, Omit<SinifKurallari, 'sinif'>> = {
     yuzdeVeAci: true,
     tekYonluTabloIleBirlikte: true,
     tekGrafikteKarsilastir: true,
+    ...ORTAOKUL_TEMSILLERI,
   },
 };
 
@@ -84,11 +148,28 @@ export const SERBEST_KURALLAR: SinifKurallari = {
   yuzdeVeAci: true,
   tekYonluTabloIleBirlikte: true,
   tekGrafikteKarsilastir: false,
+  ...ORTAOKUL_TEMSILLERI,
 };
 
-export function sinifKurallari(sinif: SinifDuzeyi | null | undefined): SinifKurallari {
+/**
+ * İlkokul kademesinde 1–4. sınıf örneğine bağlı olmayan tablo (kendi tablonuz, veri toplama, 5–8. sınıf örneği):
+ * ilkokulun en geniş temsilleri (4. sınıf) — nokta grafiği, sütun grafiği, çetele ve sıklık tablosu; ölçü, yüzde, açı yok
+ */
+export const ILKOKUL_KURALLARI: SinifKurallari = { ...KURALLAR[4], sinif: null };
+
+/**
+ * Tablonun kuralları: bağlı örneğin sınıfı (1–8) varsa o sınıfın kuralları; yoksa sınıfsız davranış. `ilkokul`
+ * (Kademe menüsünde İlkokul seçili) iken 1–4. sınıf dışındaki her tablo ilkokulun ortak kurallarını alır.
+ */
+export function sinifKurallari(sinif: SinifDuzeyi | null | undefined, ilkokul = false): SinifKurallari {
+  if (ilkokul && !ilkokulSinifi(sinif)) return ILKOKUL_KURALLARI;
   if (sinif === null || sinif === undefined || !(sinif in KURALLAR)) return SERBEST_KURALLAR;
   return { sinif, ...KURALLAR[sinif] };
+}
+
+/** Sekmenin bu kurallardaki adı (ilkokulda "Nesne grafiği", "Sıklık tablosu" …; yoksa `ad`) */
+export function sekmeAdi(sekme: GrafikTuru, ad: string, k: SinifKurallari): string {
+  return k.sekmeAdlari[sekme] ?? ad;
 }
 
 /** Sekme bu sınıfta görünür mü */

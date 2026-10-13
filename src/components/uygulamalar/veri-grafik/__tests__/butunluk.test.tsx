@@ -202,9 +202,9 @@ describe('bütünlük: tarama kuralları (kendi sınaması)', () => {
 
 // ── 16 örnek × 7 sekme ───────────────────────────────────────────────────────────────────────────────────────
 
-describe('bütünlük: 16 örnek × 7 sekme (uygulama kökü, sunucu çizimi)', () => {
-  it('16 örnek ve 7 sekme var (Nokta, Sütun, Çizgi, Kök-yaprak, Daire, Saçılım, İstatistik; Kök-yaprak yalnız 6. sınıfta görünür)', () => {
-    expect(ORNEK_VERILER).toHaveLength(16);
+describe('bütünlük: 20 örnek × 7 sekme (uygulama kökü, sunucu çizimi)', () => {
+  it('20 örnek (16 ortaokul + 4 ilkokul) ve 7 sekme var (Nokta, Sütun, Çizgi, Kök-yaprak, Daire, Saçılım, İstatistik; Kök-yaprak yalnız 6. sınıfta görünür)', () => {
+    expect(ORNEK_VERILER).toHaveLength(20);
     expect(SEKMELER.map((s) => s.ad)).toEqual(['Nokta', 'Sütun', 'Çizgi', 'Kök-yaprak', 'Daire', 'Saçılım', 'İstatistik']);
   });
 
@@ -233,7 +233,7 @@ describe('bütünlük: 16 örnek × 7 sekme (uygulama kökü, sunucu çizimi)', 
         }
       }
     }
-    expect(cizim).toBe(16 * SEKMELER.length * 3 + 16);
+    expect(cizim).toBe(20 * SEKMELER.length * 3 + 20);
     expect(hatalar).toEqual([]);
   });
 

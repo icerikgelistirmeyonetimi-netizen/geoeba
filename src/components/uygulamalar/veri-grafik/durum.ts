@@ -10,10 +10,12 @@
  * `oncekiTabloyaDon` ile geri gelir (kalıcı, tek adım).
  */
 import type { NoktaSecenekleri } from './NoktaGrafigi';
+import type { KademeDuzeyi } from '@/components/workspace/kademeDuzeyleri';
 import {
   ORNEK_VERILER,
   bosTablo,
   ornekBul,
+  ornekKademede,
   ornekVeriOlustur,
   tabloDogrula,
   tumunuTemizle,
@@ -156,6 +158,16 @@ export interface Durum {
 
 /** Açılış örneği: ilk açılışta Tablom bu örnekle gelir */
 export const ACILIS_ORNEGI = 'boy';
+/**
+ * İlkokul kademesinin açılış örneği (alan uzmanı, 4. tur, satır 181: ilkokulda 7. sınıfın boy tablosuyla açılmaz):
+ * 1. sınıfın nesne grafiği
+ */
+export const ILKOKUL_ACILIS_ORNEGI = 'oyuncak';
+
+/** Kademenin açılış örneği: İlkokul'da 1. sınıf örneği, öteki kademelerde (Tüm araçlar dahil) bugünkü boy örneği */
+export function acilisOrnegi(kademe: KademeDuzeyi = 'tum'): string {
+  return kademe === 'ilkokul' ? ILKOKUL_ACILIS_ORNEGI : ACILIS_ORNEGI;
+}
 
 /**
  * Uygulamaya bağlanmış özellikler (`rehber.ts`): özelliğe dayanan rehber eylemleri ve metinler yalnız özellik bu
@@ -181,14 +193,24 @@ export const OZELLIKLER: ReadonlySet<Ozellik> = new Set<Ozellik>([
   'daireYuvarlama',
 ]);
 
-export function baslangicDurumu(): Durum {
+/** İlk açılış durumu; `kademe` İlkokul ise 1. sınıf örneğiyle (açılış görünümü örneğinkidir) */
+export function baslangicDurumu(kademe: KademeDuzeyi = 'tum'): Durum {
+  const ilk = acilisOrnegi(kademe);
+  const d = temelDurum(ilk);
+  if (ilk === ACILIS_ORNEGI) return d;
+  // Boy dışındaki açılış örneği kendi açılış görünümüyle (sekme, eksen, renk anahtarı) gelir; Keşif şeridi kapalı değil
+  const y = ornegiYukle(d, ilk);
+  return y ? { ...y.durum, ipucu: d.ipucu } : d;
+}
+
+function temelDurum(ilk: string): Durum {
   return {
     surum: 1,
     oncekiTablo: null,
-    tabloAdi: ORNEK_VERILER.find((o) => o.id === ACILIS_ORNEGI)?.ad ?? null,
-    ornekId: ACILIS_ORNEGI,
+    tabloAdi: ORNEK_VERILER.find((o) => o.id === ilk)?.ad ?? null,
+    ornekId: ilk,
     ornekTemiz: true,
-    tablo: ornekVeriOlustur(ACILIS_ORNEGI),
+    tablo: ornekVeriOlustur(ilk),
     sekme: 'nokta',
     degisken: null,
     ikinciDegisken: null,
@@ -598,18 +620,33 @@ export function sayisalDegiskenSayisi(tablo: VeriTablosu): number {
  * kalmadı) Nokta'ya döner. `setDurum` hattında `eksenDuzelt`'ten sonra her değişimde çalışır: panel, örnek veri,
  * sütun silme ve tür değiştirme yollarının hepsinde grafik çizilebilir kalır. Değişiklik yoksa aynı nesne döner.
  */
-export function sekmeDuzelt(d: Durum): Durum {
-  const sinifta = sinifSekmesi(d.sekme, durumKurallari(d));
+export function sekmeDuzelt(d: Durum, ilkokul = false): Durum {
+  const sinifta = sinifSekmesi(d.sekme, durumKurallari(d, ilkokul));
   if (sinifta !== d.sekme) return { ...d, sekme: sinifta };
   return sekmeKullanilabilir(d.sekme, sayisalDegiskenSayisi(etkinTablo(d))) ? d : { ...d, sekme: 'nokta' };
 }
 
 /**
- * Etkin tablonun sınıf düzeyi kuralları (sinifKurallari.ts): Tablom bir örneğe bağlıysa örneğin sınıfı (5–8), değilse
+ * Etkin tablonun sınıf düzeyi kuralları (sinifKurallari.ts): Tablom bir örneğe bağlıysa örneğin sınıfı (1–8), değilse
  * (kendi tablonuz, araştırma, Deney özeti) sınıfsız bütün davranış. Sekmeler, ölçüler ve karşılaştırma buna göre süzülür.
+ * `ilkokul` (Kademe menüsünde İlkokul): 1–4. sınıf örneğine bağlı olmayan her tablo ilkokulun ortak kurallarını alır.
  */
-export function durumKurallari(d: Pick<Durum, 'ornekId' | 'etkinKume'>): SinifKurallari {
-  return sinifKurallari(d.etkinKume === 'tablom' ? bagliOrnek(d)?.sinif ?? null : null);
+export function durumKurallari(d: Pick<Durum, 'ornekId' | 'etkinKume'>, ilkokul = false): SinifKurallari {
+  return sinifKurallari(d.etkinKume === 'tablom' ? bagliOrnek(d)?.sinif ?? null : null, ilkokul);
+}
+
+/**
+ * Kademe değişince (ve açılışta): Tablom değiştirilmemiş bir örnekse ve örnek bu kademenin galerisinde değilse
+ * (İlkokul'da 5–8. sınıf örneği, ortaokul ve lisede 1–4. sınıf örneği) kademenin açılış örneği yüklenir. Kullanıcının
+ * kendi tablosu, değiştirilmiş örnek, veri toplama ve Deney özeti olduğu gibi kalır (ilkokulda kuralları süzer). Tüm
+ * araçlar'da hiçbir şey değişmez. Değişiklik yoksa aynı nesne döner.
+ */
+export function kademeyeUyarla(d: Durum, kademe: KademeDuzeyi): Durum {
+  if (kademe === 'tum' || d.etkinKume !== 'tablom' || !d.ornekTemiz || d.toplamaAcik) return d;
+  const ornek = bagliOrnek(d);
+  if (!ornek || ornekKademede(ornek, kademe)) return d;
+  const y = ornegiYukle(d, acilisOrnegi(kademe));
+  return y ? { ...y.durum, ipucu: d.ipucu } : d;
 }
 
 // ── Tablo güvenliği: önceki tablo ──
