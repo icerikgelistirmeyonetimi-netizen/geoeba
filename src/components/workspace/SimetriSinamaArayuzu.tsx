@@ -19,7 +19,7 @@ import { generateNextPointLabels } from '@/math/geometry';
 import { CubukAyirici, CubukDugmesi, CubukMetni, KayanCubuk } from './KayanCubuk';
 import {
   adayNoktasi, adayiSina, ayniDogruMu, icindeMi, katlamaYarilari, katlanmisNokta, sekilUzerindeParca, simetriDogrulari,
-  simetriDogrusuMu, simetriSayisiMetni, sinamaBildirimi, type Dogru, type SinamaSonucu,
+  sekilUzerindekiSimetriDogrusuMu, simetriSayisiMetni, sinamaBildirimi, type Dogru, type SinamaSonucu,
 } from './simetriSinama';
 
 /** Bulunan / gösterilen simetri doğrusunun adı (Yansıt'ın çizdiği simetri doğrusuyla aynı) */
@@ -62,7 +62,10 @@ export interface SimetriSinama {
   etkin: boolean;
   durum: SimetriSinamaDurumu | null;
   koseler: Point2D[] | null;
+  /** Şeklin üzerinde çizili simetri doğruları (Hepsini göster'in ekledikleri dahil) */
   bulunanlar: Dogru[];
+  /** Öğrencinin Katla ile kendi bulduğu simetri doğrusu sayısı (çubuktaki "Bulunan"; Hepsini göster'inkiler sayılmaz) */
+  ogrenciBulunan: number;
   esik: number;
   animasyonda: boolean;
   /** Dokunuş: şekli seçer ya da aday doğrunun bir ucunu koyar. `obj`: dokunulan nesne (yoksa boş tuval / etiket). */
@@ -94,27 +97,36 @@ export function useSimetriSinama(g: SimetriSinamaGirdisi): SimetriSinama {
     const k = sekil.pointIds.map((id) => pointsById.get(id)).filter(Boolean) as PointObject[];
     return k.length >= 3 ? k.map((p) => ({ x: p.x, y: p.y })) : null;
   }, [sekil, pointsById]);
-  /** Şeklin üzerinde zaten çizili (bulunmuş) simetri doğruları: "Simetri doğrusu" adlı parçalardan sınananlar */
-  const bulunanlar = useMemo(() => {
-    if (!koseler) return [] as Dogru[];
+  /** «Hepsini göster»in eklediği simetri doğrularının kimlikleri: öğrencinin "Bulunan" sayısına katılmaz */
+  const gosterilenlerRef = useRef<Set<string>>(new Set());
+  /**
+   * Şeklin üzerinde zaten çizili (bulunmuş) simetri doğruları: "Simetri doğrusu" adlı parçalardan BU şeklin üzerinden
+   * geçenler (yan yana şekillerin aynı doğrultudaki doğruları karışmaz; sekilUzerindekiSimetriDogrusuMu).
+   */
+  const { bulunanlar, ogrenciBulunan } = useMemo(() => {
+    if (!koseler) return { bulunanlar: [] as Dogru[], ogrenciBulunan: 0 };
     const out: Dogru[] = [];
+    let ogrenci = 0;
     for (const o of objects) {
       if (o.type !== 'segment' || o.label !== SIMETRI_DOGRUSU_ADI || o.visible === false) continue;
       const a = pointsById.get((o as SegmentObject).startPointId);
       const b = pointsById.get((o as SegmentObject).endPointId);
       if (!a || !b) continue;
       const d = { a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y } };
-      if (simetriDogrusuMu(koseler, d) && !out.some((x) => ayniDogruMu(x, d))) out.push(d);
+      if (!sekilUzerindekiSimetriDogrusuMu(koseler, d) || out.some((x) => ayniDogruMu(x, d))) continue;
+      out.push(d);
+      if (!gosterilenlerRef.current.has(o.id)) ogrenci++;
     }
-    return out;
+    return { bulunanlar: out, ogrenciBulunan: ogrenci };
   }, [objects, pointsById, koseler]);
   const esik = YAKALAMA_PX / (g.zoom || 1);
 
-  /** Bulunan / gösterilen simetri doğrularını kalıcı kesikli çizgi olarak ekler (uçları gizli, adsız). */
-  const dogrulariEkle = (dogrular: readonly Dogru[], k: readonly Point2D[], aciklama: string) => {
-    if (dogrular.length === 0) return;
+  /** Bulunan / gösterilen simetri doğrularını kalıcı kesikli çizgi olarak ekler (uçları gizli, adsız); parça kimliklerini döndürür. */
+  const dogrulariEkle = (dogrular: readonly Dogru[], k: readonly Point2D[], aciklama: string): string[] => {
+    if (dogrular.length === 0) return [];
     const kullanilan = g.noktaAdlari();
     const yeni: MathObject[] = [];
+    const kimlikler: string[] = [];
     const yuvarla = (v: number) => Number(v.toFixed(2));
     for (const d of dogrular) {
       const parca = sekilUzerindeParca(k, d, 0.8);
@@ -136,8 +148,10 @@ export function useSimetriSinama(g: SimetriSinamaGirdisi): SimetriSinama {
         createdAt: Date.now(),
       };
       yeni.push(uc1, uc2, dogruNesnesi);
+      kimlikler.push(dogruNesnesi.id);
     }
     g.addObjects(yeni, aciklama);
+    return kimlikler;
   };
 
   const tiklama = (world: Point2D, obj?: MathObject) => {
@@ -210,8 +224,11 @@ export function useSimetriSinama(g: SimetriSinamaGirdisi): SimetriSinama {
     if (!durum || !koseler) return;
     const hepsi = simetriDogrulari(koseler);
     const eksik = hepsi.filter((d) => !bulunanlar.some((b) => ayniDogruMu(b, d)));
-    dogrulariEkle(eksik, koseler, `${sekil?.label || 'Şekil'}: bütün simetri doğruları gösterildi (${hepsi.length})`);
-    const bulunan = bulunanlar.length;
+    // Gösterilenler öğrencinin bulduklarına sayılmaz (ikinci basışta "Sen 4 tanesini bulmuştun" demesin)
+    for (const id of dogrulariEkle(eksik, koseler, `${sekil?.label || 'Şekil'}: bütün simetri doğruları gösterildi (${hepsi.length})`)) {
+      gosterilenlerRef.current.add(id);
+    }
+    const bulunan = ogrenciBulunan;
     setDurum({
       ...durum,
       uclar: [], katlama: null, sonuc: null,
@@ -220,7 +237,7 @@ export function useSimetriSinama(g: SimetriSinamaGirdisi): SimetriSinama {
   };
 
   const animasyonda = durum?.katlama !== null && durum?.katlama !== undefined && durum.katlama < 1;
-  return { etkin, durum, koseler, bulunanlar, esik, animasyonda, tiklama, katla, yeniDogru, hepsiniGoster };
+  return { etkin, durum, koseler, bulunanlar, ogrenciBulunan, esik, animasyonda, tiklama, katla, yeniDogru, hepsiniGoster };
 }
 
 /** Tuval katmanı: seçili şekil, aday doğru (önizleme dahil), katlanan yarı, örtüşme / örtüşmeyen bölge. */
@@ -294,7 +311,10 @@ export function SimetriSinamaCubugu({ sinama }: { sinama: SimetriSinama }) {
   const pasif = 'disabled:opacity-40 disabled:cursor-not-allowed';
   return (
     <KayanCubuk konum="ust" data-simetri-sinama role="status" aria-live="polite">
-      <CubukMetni vurgu="lavanta" simge={<FlipHorizontal2 className="w-4 h-4" />} baslik="Simetri Keşfet" aciklama={metin} />
+      {/* Uzun dönüt kendi içinde satır kırar: düğmeler ikinci satıra düşüp çubuk şeklin üstüne inmesin (denetim, 4. tur [178]) */}
+      <div className="min-w-0 max-w-[28rem]" data-simetri-sinama-metni>
+        <CubukMetni vurgu="lavanta" simge={<FlipHorizontal2 className="w-4 h-4" />} baslik="Simetri Keşfet" aciklama={metin} />
+      </div>
       {durum && (
         <>
           <CubukAyirici />
@@ -305,8 +325,8 @@ export function SimetriSinamaCubugu({ sinama }: { sinama: SimetriSinama }) {
             Yeni doğru
           </CubukDugmesi>
           <CubukAyirici />
-          <span className="px-2 text-[13px] font-semibold text-foreground" data-bulunan-simetri={sinama.bulunanlar.length}>
-            Bulunan: {sinama.bulunanlar.length}
+          <span className="px-2 text-[13px] font-semibold text-foreground" data-bulunan-simetri={sinama.ogrenciBulunan}>
+            Bulunan: {sinama.ogrenciBulunan}
           </span>
           <CubukDugmesi className={pasif} disabled={animasyonda} onClick={sinama.hepsiniGoster} data-hepsini-goster>
             Hepsini göster

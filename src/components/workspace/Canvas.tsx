@@ -1024,8 +1024,9 @@ export function Canvas({
   // Tam sayı yazımı kademeye göre: ilkokul hep, ortaokul kendi ayarıyla (varsayılan 2 ondalık), diğerleri tamSayiOlcu
   const tamSayiOlcu = tamSayiOlcuEtkin(styleSettings, kademe);
   const esitlik = useMemo(
-    () => esitlikIsaretleri(objects, { otomatik: viewport.showEqualityMarks !== false, tamSayi: tamSayiOlcu }),
-    [objects, viewport.showEqualityMarks, tamSayiOlcu]
+    // İlkokulda "4 br" ile "yaklaşık 4 br" eş işaretlenmez (4. tur [176] denetimi; esitlikIsaretleri.yaklasikAyri)
+    () => esitlikIsaretleri(objects, { otomatik: viewport.showEqualityMarks !== false, tamSayi: tamSayiOlcu, yaklasikAyri: ilkokul }),
+    [objects, viewport.showEqualityMarks, tamSayiOlcu, ilkokul]
   );
   // Çentiğin altında kalmaması gereken noktalar. DİZİ: StrictMode render'ı aynı props ile iki kez çağırır,
   // tek kullanımlık bir yineleyici (pointsById.values()) ikinci çağrıda boş gelirdi.

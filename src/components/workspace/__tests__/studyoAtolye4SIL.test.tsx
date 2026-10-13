@@ -254,6 +254,7 @@ describe('[178] Simetri Keşfet ilkokulda sınama aracı: aday doğru → Katla 
       durum: durum ? { sekilId: 'k', uclar: [], katlama: null, sonuc: null, mesaj: null, ...durum } : null,
       koseler: [P(0, 0), P(4, 0), P(4, 2), P(0, 2)],
       bulunanlar: [],
+      ogrenciBulunan: 0,
       esik: 0.4,
       animasyonda: false,
       tiklama: () => {},

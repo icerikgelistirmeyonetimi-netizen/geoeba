@@ -19,13 +19,17 @@ const EPS = 1e-9;
 
 const fark = (p: Point2D, q: Point2D) => Math.hypot(p.x - q.x, p.y - q.y);
 
-/** Şeklin ölçüsüne göre karşılaştırma payı: yansıma 2 basamağa yuvarlanır (reflectPointAcrossLine). */
+/**
+ * Şeklin ölçüsüne göre karşılaştırma payı. Yansıma 2 basamağa yuvarlanır (reflectPointAcrossLine) VE Düzgün Çokgen
+ * penceresi köşeleri 2 basamağa yuvarlar (RegularPolygonDialog): ikisi birlikte ≈ 0,03 br sapma verir. 0,02'lik pay
+ * küçük düzgün sekizgenin simetri doğrularının yarısını reddediyordu (denetim, 4. tur [178]); 0,05 br ekranda ~1-2 px.
+ */
 function pay(koseler: readonly Point2D[]): number {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const p of koseler) {
     x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
   }
-  return Math.max(0.02, 0.002 * Math.hypot(x1 - x0, y1 - y0));
+  return Math.max(0.05, 0.002 * Math.hypot(x1 - x0, y1 - y0));
 }
 
 /** Ardışık aynı köşeler ve doğrusal (açısı 180° olan) ara köşeler atılır: aynı şeklin en sade köşe dizisi. */
@@ -86,14 +90,35 @@ export function koseMerkezi(koseler: readonly Point2D[]): Point2D {
   return { x: k.reduce((t, p) => t + p.x, 0) / k.length, y: k.reduce((t, p) => t + p.y, 0) / k.length };
 }
 
-/** İki doğru aynı doğru mu? (aynı doğrultu ve biri ötekinin üstünde) */
-export function ayniDogruMu(d1: Dogru, d2: Dogru, e = 0.02): boolean {
+/**
+ * Tuvalde çizili bir PARÇA bu şeklin simetri doğrusu olarak sayılır mı? Doğrusu simetri doğrusu olmalı VE parça şeklin
+ * üzerinden geçmeli (köşe merkezi parçanın iki ucu arasında). Yoksa yan yana duran iki şeklin aynı doğrultudaki simetri
+ * doğrusu (ör. karenin yatay orta doğrusu, aynı yükseklikteki dikdörtgenin de simetri doğrusudur) öbür şeklin
+ * "Bulunan" sayacına karışıyordu (denetim, 4. tur [178]).
+ */
+export function sekilUzerindekiSimetriDogrusuMu(koseler: readonly Point2D[], parca: Dogru): boolean {
+  if (!simetriDogrusuMu(koseler, parca)) return false;
+  const m = koseMerkezi(koseler);
+  const dx = parca.b.x - parca.a.x, dy = parca.b.y - parca.a.y;
+  const t = ((m.x - parca.a.x) * dx + (m.y - parca.a.y) * dy) / (dx * dx + dy * dy);
+  return t >= -1e-6 && t <= 1 + 1e-6;
+}
+
+/**
+ * İki doğru aynı doğru mu? (aynı doğrultu ve d2'nin orta noktası d1'in üstünde). Karşılaştırılanlar hep AYNI şeklin
+ * sınanmış simetri doğrularıdır (ikisi de köşe merkezinden geçer; ayrı simetri doğruları en az 180°/n açılıdır), bu yüzden
+ * pay, tuvale 2 basamağa yuvarlanarak yazılan uçları ve Düzgün Çokgen penceresinin yuvarladığı köşeleri karşılar:
+ * eski pay (sin < 0,001, iki uç 0,02 içinde) düzgün beşgende köşeden ve karşı kenarın ortasından geçen AYNI doğruyu iki kez
+ * sayıyordu ("9 simetri doğrusu"; denetim, 4. tur [178]).
+ */
+export function ayniDogruMu(d1: Dogru, d2: Dogru, e = 0.05): boolean {
   const u1 = { x: d1.b.x - d1.a.x, y: d1.b.y - d1.a.y };
   const u2 = { x: d2.b.x - d2.a.x, y: d2.b.y - d2.a.y };
   const b1 = Math.hypot(u1.x, u1.y), b2 = Math.hypot(u2.x, u2.y);
   if (b1 < EPS || b2 < EPS) return false;
   const sin = Math.abs(u1.x * u2.y - u1.y * u2.x) / (b1 * b2);
-  return sin < 1e-3 && Math.abs(isaretliUzaklik(d2.a, d1)) < e && Math.abs(isaretliUzaklik(d2.b, d1)) < e;
+  const orta = { x: (d2.a.x + d2.b.x) / 2, y: (d2.a.y + d2.b.y) / 2 };
+  return sin < 0.03 && Math.abs(isaretliUzaklik(orta, d1)) < e;
 }
 
 /**
