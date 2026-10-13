@@ -1,6 +1,9 @@
 
 /* Sayfa modülü kayıt defterleri — parça script'lerinden ÖNCE tanımlı olmalı */
 window.SAYFA_INIT = {}; window.SAYFA_TAMAM = {};
+// 2026-10-12: «çözümü oynat» paketi geri alındı; bu kap yalnız o gün üretilmiş sayfaların
+// `window.SAYFA_COZUM[N] = …` satırı TypeError fırlatıp sahneyi boş bırakmasın diye duruyor.
+window.SAYFA_COZUM = window.SAYFA_COZUM || {};
 window.SAYFA_DURAKLAT = {}; window.SAYFA_DEVAM = {};
 /* JS ÇALIŞMA ZAMANI HATASI KAYDI (2026-09-06, konum-hataları teşhisi: FIZ.11.4 s22
    tanımsız değişkenle SAYFA_INIT yarıda kaldı, 3B tuval bembeyaz çıktı ve görsel tur
@@ -301,6 +304,13 @@ window.EGITSEL = {
      KALIR: 200+ mevcut parça dontVer(kok, ...) diye çağırıyor.
      tip: "dogru" | "yanlis" */
   dontVer: function (kok, tip, mesaj) {
+    /* Nötr tipler (2026-09-26 kök şablonda; 2026-10-12 esk'e taşındı, uzman 3. tur):
+       bazı sayfalar yönlendirmeyi dontVer(kok, "bilgi"/"uyari", …) diye veriyor;
+       eskiden her bilinmeyen tip «yanlis»a dönüp kırmızı + yanlış sesi basıyordu. */
+    if (tip === "uyari" || tip === "bilgi" || tip === "notr" || tip === "ipucu") {
+      if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj); }
+      return;
+    }
     tip = tip === "dogru" ? "dogru" : "yanlis";
     if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj, tip); }
     else { console.warn("EGITSEL.dontVer: SABLON_TOAST yok"); }
@@ -338,6 +348,229 @@ window.EGITSEL = {
       if ("disabled" in el) { el.disabled = kilitli !== false; }
       el.classList.toggle("locked", kilitli !== false);
     });
+  },
+
+  /* ÇOKTAN SEÇMELİ DEĞERLENDİRME MOTORU (2026-09-26, geoeba uzman raporu:
+     «değerlendirme soruları kendi içinde ileri-geri yapılamıyor», «sonucu
+     gör dediğinde kaç doğru kaç yanlış gösteren ekran çıkmıyor», «baştan
+     başlayınca bazı sorular çözülmüş geliyor», «lisede sorular 5 şıklı
+     olmalı», «en az 2 seçim hakkı verilmeli, yanlışta hemen doğru cevap
+     gelmemeli»). Her değerlendirme sayfası bu mekaniği kendisi yazıyordu ve
+     her biri başka eksik taşıyordu; motor TEK doğruluk kaynağıdır.
+       EGITSEL.degerlendirme(kok, {
+         sorular: [{metin, siklar: [{metin, dogru}], donut}],  // şık sayısı serbest (≤6)
+         hak: 2,                // soru başına deneme hakkı
+         karistir: true,        // şık sırası (soru başına BİR kez karışır)
+         soruDegisti: function (i, soru) {},     // sahneyi soruya eşle
+         sahneOnEki: "s7-soru-",  // isteğe bağlı: <g id="s7-soru-K"> grupları etkin soruya göre
+                                  // gösterilir/gizlenir (K = 1..n; esk değerlendirme sözleşmesi)
+         cevaplandi: function (i, dogruMu, soru) {},
+         bitti: function (dogru, toplam) {}
+       })
+     Arayüz .kontrol-govde / .kontrol-eylem İÇİNE kurulur (içerikleri
+     değiştirilir); metin ve şıklar LaTeX içerebilir (MathJax dizilir). */
+  degerlendirme: function (kok, ayar) {
+    ayar = ayar || {};
+    var sorular = (ayar.sorular || []).filter(function (s) { return s && s.siklar && s.siklar.length; });
+    var govde = ayar.govde || (kok && kok.querySelector(".kontrol-govde"));
+    var eylem = ayar.eylem || (kok && kok.querySelector(".kontrol-eylem"));
+    if (!govde || !sorular.length) { console.warn("EGITSEL.degerlendirme: govde/soru yok"); return null; }
+    var HAK = Math.max(1, ayar.hak || 2);
+    var HARF = ["A", "B", "C", "D", "E", "F"];
+    var durum, aktif = 0, sonucEkrani = false;
+
+    function karisik(n) {
+      var d = [];
+      for (var i = 0; i < n; i++) { d.push(i); }
+      if (ayar.karistir === false) { return d; }
+      for (var j = d.length - 1; j > 0; j--) {
+        var k = Math.floor(Math.random() * (j + 1)); var t = d[j]; d[j] = d[k]; d[k] = t;
+      }
+      return d;
+    }
+    function sifirla() {
+      durum = sorular.map(function (s) {
+        return { sira: karisik(s.siklar.length), denenen: [], sonuc: "bos" };  // bos|devam|dogru|yanlis
+      });
+      aktif = 0; sonucEkrani = false;
+    }
+    function el(etiket, sinif, metin) {
+      var e = document.createElement(etiket);
+      if (sinif) { e.className = sinif; }
+      if (metin !== undefined) { e.innerHTML = metin; }
+      return e;
+    }
+    function diz(kap) {
+      try {
+        if (window.MathJax && window.MathJax.typesetPromise) { window.MathJax.typesetPromise([kap]); }
+        else if (window.MathJax && window.MathJax.typeset) { window.MathJax.typeset([kap]); }
+      } catch (e) { /* dizgi hatası etkileşimi durdurmaz */ }
+    }
+    function sayim() {
+      var s = { dogru: 0, yanlis: 0, bos: 0 };
+      durum.forEach(function (d) { if (d.sonuc === "dogru") s.dogru++; else if (d.sonuc === "yanlis") s.yanlis++; else s.bos++; });
+      return s;
+    }
+    // SORU BÖLÜMÜ STANDARDI (2026-10-08, kullanıcı: «kimisinde soru sayısı yazıyor kiminde noktalarla
+    // ifade edilmiş, standart yok; soru sayısı bölümü alan kullanımı açısından daha efektif olabilir»):
+    // numaralı yuvarlaklar panelin BAŞLIK SATIRININ sağına yerleşir (ayrı satır yer kaplamaz);
+    // «Soru i / n» yalnız ekran okuyucuya söylenir. Başlık satırı yoksa eski yerinde (deg-ust) kalır.
+    function noktalar(ust) {
+      var bas = kok.querySelector(".panel-basi .baslik-satiri") || kok.querySelector(".baslik-satiri");
+      var eski = bas && bas.querySelector(".soru-sayac");
+      if (eski) { eski.remove(); }
+      var kap = el("div", "deg-noktalar soru-sayac");
+      kap.setAttribute("role", "group");
+      kap.setAttribute("aria-label", "Sorular");
+      sorular.forEach(function (_, i) {
+        var d = durum[i];
+        var b = el("button", "deg-nokta soru-nokta tiklanir " + d.sonuc + (i === aktif && !sonucEkrani ? " aktif" : ""), String(i + 1));
+        b.type = "button";
+        b.setAttribute("aria-label", (i + 1) + ". soru" + (d.sonuc === "dogru" ? ", doğru" : d.sonuc === "yanlis" ? ", yanlış" : ""));
+        b.addEventListener("click", function () { git(i); });
+        kap.appendChild(b);
+      });
+      var sr = el("span", "sr-only", sonucEkrani ? "Sonuçlar" : "Soru " + (aktif + 1) + " / " + sorular.length);
+      sr.setAttribute("aria-live", "polite");
+      kap.appendChild(sr);
+      (bas || ust).appendChild(kap);
+      if (bas && window.EGITSEL.baslikTekrariniGizle) { window.EGITSEL.baslikTekrariniGizle(bas); }
+    }
+    function eylemKur(dugmeler) {
+      if (!eylem) { return; }
+      eylem.innerHTML = "";
+      var satir = el("div", "deg-eylem");
+      dugmeler.forEach(function (d) {
+        var b = el("button", "buton" + (d.birincil ? " birincil" : ""), d.metin);
+        b.type = "button";
+        if (d.pasif) { b.disabled = true; }
+        b.addEventListener("click", d.is);
+        satir.appendChild(b);
+      });
+      eylem.appendChild(satir);
+    }
+    // Soru sahnesi grupları (sahneOnEki): yalnız etkin sorunun grubu görünür
+    function sahneGoster() {
+      if (!ayar.sahneOnEki) { return; }
+      for (var k = 1; k <= sorular.length; k++) {
+        var g = kok.querySelector("#" + ayar.sahneOnEki + k);
+        // "inline" AÇIKÇA yazılır (2026-10-11, FB.4.4.2 s7): ajan sayfa CSS'ine
+        // `.s7-soru-sahne{display:none}` + `#s7-soru-1{display:block}` yazmıştı; boş
+        // satır içi değer sınıf kuralına yenilir ve 2-5. soru sahneleri hiç açılmaz.
+        if (g) { g.style.display = k === aktif + 1 ? "inline" : "none"; }
+      }
+    }
+    function ciz() {
+      sonucEkrani = false;
+      var soru = sorular[aktif], d = durum[aktif];
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      noktalar(ust);
+      if (ust.childNodes.length) { kap.appendChild(ust); }
+      // soru metni kutusuz ve büyük (.soru-metni — yazı standardı)
+      kap.appendChild(el("div", "soru-metni deg-metin", soru.metin || ""));
+      var liste = el("div", "deg-siklar");
+      var bitmis = d.sonuc === "dogru" || d.sonuc === "yanlis";
+      d.sira.forEach(function (asilNo, gorunen) {
+        var sik = soru.siklar[asilNo];
+        var b = el("button", "parca-btn");
+        b.type = "button";
+        b.appendChild(el("span", "kutucuk", HARF[gorunen] || String(gorunen + 1)));
+        b.appendChild(el("span", "", sik.metin));
+        var denendi = d.denenen.indexOf(asilNo) > -1;
+        if (denendi && !sik.dogru) { b.classList.add("yanlis-secim"); b.disabled = true; }
+        if (bitmis) {
+          b.disabled = true;
+          if (sik.dogru) { b.classList.add("dogru-secim"); }
+          else if (!denendi) { b.classList.add("soluk"); }
+        }
+        b.addEventListener("click", function () { sec(asilNo); });
+        liste.appendChild(b);
+      });
+      kap.appendChild(liste);
+      govde.appendChild(kap);
+      diz(govde);
+      var son = aktif === sorular.length - 1;
+      eylemKur([
+        { metin: "Önceki", pasif: aktif === 0, is: function () { git(aktif - 1); } },
+        // 2. tur uzman notu (7.1.1, 2026-10-06): son soruda düğme «sonraki ekran» değil «Testi Bitir»
+        { metin: son ? "Testi Bitir" : "Sonraki", birincil: true,
+          is: function () { if (son) { sonuc(); } else { git(aktif + 1); } } }
+      ]);
+      sahneGoster();
+      if (typeof ayar.soruDegisti === "function") {
+        try { ayar.soruDegisti(aktif, soru); } catch (e) { console.error("degerlendirme.soruDegisti", e); }
+      }
+    }
+    function sec(asilNo) {
+      var soru = sorular[aktif], d = durum[aktif];
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis" || d.denenen.indexOf(asilNo) > -1) { return; }
+      d.denenen.push(asilNo);
+      var dogruMu = !!soru.siklar[asilNo].dogru;
+      // 3. tur (6. sınıf genel): iki seçenekli soruda bir yanlıştan sonra doğru cevap gösterilir —
+      // hak, yanlış şık sayısını aşmaz; soru başına `hak` verilebilir
+      var hak = soru.hak || Math.min(HAK, Math.max(1, soru.siklar.length - 1));
+      var kalan = hak - d.denenen.length;
+      if (dogruMu) {
+        d.sonuc = "dogru";
+        window.EGITSEL.dontVer(kok, "dogru", soru.donut || "Doğru seçim.");
+      } else if (kalan > 0) {
+        d.sonuc = "devam";
+        // 2. tur (R17): hak 3 iken ilk yanlışta da «Bir hakkın» diyordu — kalan hakkı yaz
+        var KALAN_AD = ["", "Bir", "İki", "Üç", "Dört"];
+        window.EGITSEL.dontVer(kok, "yanlis", (KALAN_AD[kalan] || String(kalan)) + " hakkın daha var, tekrar dene.");
+      } else {
+        d.sonuc = "yanlis";
+        window.EGITSEL.dontVer(kok, "yanlis", soru.donut || "Doğru seçenek işaretlendi.");
+      }
+      ciz();
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis") {
+        if (typeof ayar.cevaplandi === "function") {
+          try { ayar.cevaplandi(aktif, d.sonuc === "dogru", soru); } catch (e) { console.error("degerlendirme.cevaplandi", e); }
+        }
+      }
+    }
+    function git(i) {
+      if (i < 0 || i >= sorular.length) { return; }
+      aktif = i;
+      ciz();
+    }
+    function sonuc() {
+      sonucEkrani = true;
+      var s = sayim(), n = sorular.length;
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Sonuçlar"));
+      noktalar(ust);
+      kap.appendChild(ust);
+      var kutu = el("div", "panel deg-sonuc");
+      kutu.appendChild(el("div", "deg-puan buyuk-sayi", s.dogru + " / " + n));
+      var sayac = el("div", "deg-sayac");
+      sayac.appendChild(el("span", "d", "Doğru: " + s.dogru));
+      sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
+      sayac.appendChild(el("span", "b", "Boş: " + s.bos));
+      kutu.appendChild(sayac);
+      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kap.appendChild(kutu);
+      govde.appendChild(kap);
+      eylemKur([
+        { metin: "Soruları İncele", is: function () { git(0); } },
+        { metin: "Tekrar Çöz", birincil: true, is: function () { sifirla(); ciz(); } }
+      ]);
+      if (typeof ayar.bitti === "function") {
+        try { ayar.bitti(s.dogru, n); } catch (e) { console.error("degerlendirme.bitti", e); }
+      }
+    }
+    sifirla();
+    // Üretim/görsel denetim kancası: window.__BASLANGIC_SORU__ (1 tabanlı) → test o sorudan başlar
+    // (soru sırası zaten karışmaz; yalnız şıklar karışır)
+    var basla = parseInt(window.__BASLANGIC_SORU__, 10);
+    if (basla >= 1 && basla <= sorular.length) { aktif = basla - 1; }
+    ciz();
+    return { git: git, sonuc: sonuc, sifirla: function () { sifirla(); ciz(); } };
   },
 
   /* 2B TUVAL YÜKSEK ÇÖZÜNÜRLÜK (2026-08-17 çözünürlük raporu, P0)

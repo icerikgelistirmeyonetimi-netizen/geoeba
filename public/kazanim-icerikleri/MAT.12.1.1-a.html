@@ -133,6 +133,8 @@ window.EGITSEL = {
          hak: 2,                // soru başına deneme hakkı
          karistir: true,        // şık sırası (soru başına BİR kez karışır)
          soruDegisti: function (i, soru) {},     // sahneyi soruya eşle
+         sahneOnEki: "s7-soru-",  // isteğe bağlı: <g id="s7-soru-K"> grupları etkin soruya göre
+                                  // gösterilir/gizlenir (K = 1..n; esk değerlendirme sözleşmesi)
          cevaplandi: function (i, dogruMu, soru) {},
          bitti: function (dogru, toplam) {}
        })
@@ -180,19 +182,30 @@ window.EGITSEL = {
       durum.forEach(function (d) { if (d.sonuc === "dogru") s.dogru++; else if (d.sonuc === "yanlis") s.yanlis++; else s.bos++; });
       return s;
     }
+    // SORU BÖLÜMÜ STANDARDI (2026-10-08, kullanıcı: «kimisinde soru sayısı yazıyor kiminde noktalarla
+    // ifade edilmiş, standart yok; soru sayısı bölümü alan kullanımı açısından daha efektif olabilir»):
+    // numaralı yuvarlaklar panelin BAŞLIK SATIRININ sağına yerleşir (ayrı satır yer kaplamaz);
+    // «Soru i / n» yalnız ekran okuyucuya söylenir. Başlık satırı yoksa eski yerinde (deg-ust) kalır.
     function noktalar(ust) {
-      var kap = el("div", "deg-noktalar");
+      var bas = kok.querySelector(".panel-basi .baslik-satiri") || kok.querySelector(".baslik-satiri");
+      var eski = bas && bas.querySelector(".soru-sayac");
+      if (eski) { eski.remove(); }
+      var kap = el("div", "deg-noktalar soru-sayac");
       kap.setAttribute("role", "group");
       kap.setAttribute("aria-label", "Sorular");
       sorular.forEach(function (_, i) {
         var d = durum[i];
-        var b = el("button", "deg-nokta " + d.sonuc + (i === aktif && !sonucEkrani ? " aktif" : ""), String(i + 1));
+        var b = el("button", "deg-nokta soru-nokta tiklanir " + d.sonuc + (i === aktif && !sonucEkrani ? " aktif" : ""), String(i + 1));
         b.type = "button";
         b.setAttribute("aria-label", (i + 1) + ". soru" + (d.sonuc === "dogru" ? ", doğru" : d.sonuc === "yanlis" ? ", yanlış" : ""));
         b.addEventListener("click", function () { git(i); });
         kap.appendChild(b);
       });
-      ust.appendChild(kap);
+      var sr = el("span", "sr-only", sonucEkrani ? "Sonuçlar" : "Soru " + (aktif + 1) + " / " + sorular.length);
+      sr.setAttribute("aria-live", "polite");
+      kap.appendChild(sr);
+      (bas || ust).appendChild(kap);
+      if (bas && window.EGITSEL.baslikTekrariniGizle) { window.EGITSEL.baslikTekrariniGizle(bas); }
     }
     function eylemKur(dugmeler) {
       if (!eylem) { return; }
@@ -207,16 +220,24 @@ window.EGITSEL = {
       });
       eylem.appendChild(satir);
     }
+    // Soru sahnesi grupları (sahneOnEki): yalnız etkin sorunun grubu görünür
+    function sahneGoster() {
+      if (!ayar.sahneOnEki) { return; }
+      for (var k = 1; k <= sorular.length; k++) {
+        var g = kok.querySelector("#" + ayar.sahneOnEki + k);
+        if (g) { g.style.display = k === aktif + 1 ? "" : "none"; }
+      }
+    }
     function ciz() {
       sonucEkrani = false;
       var soru = sorular[aktif], d = durum[aktif];
       govde.innerHTML = "";
       var kap = el("div", "deg-kap");
       var ust = el("div", "deg-ust");
-      ust.appendChild(el("span", "etiket", "Soru " + (aktif + 1) + " / " + sorular.length));
       noktalar(ust);
-      kap.appendChild(ust);
-      kap.appendChild(el("div", "panel deg-metin", soru.metin || ""));
+      if (ust.childNodes.length) { kap.appendChild(ust); }
+      // soru metni kutusuz ve büyük (.soru-metni — yazı standardı)
+      kap.appendChild(el("div", "soru-metni deg-metin", soru.metin || ""));
       var liste = el("div", "deg-siklar");
       var bitmis = d.sonuc === "dogru" || d.sonuc === "yanlis";
       d.sira.forEach(function (asilNo, gorunen) {
@@ -245,6 +266,7 @@ window.EGITSEL = {
         { metin: son ? "Testi Bitir" : "Sonraki", birincil: true,
           is: function () { if (son) { sonuc(); } else { git(aktif + 1); } } }
       ]);
+      sahneGoster();
       if (typeof ayar.soruDegisti === "function") {
         try { ayar.soruDegisti(aktif, soru); } catch (e) { console.error("degerlendirme.soruDegisti", e); }
       }
@@ -254,7 +276,10 @@ window.EGITSEL = {
       if (d.sonuc === "dogru" || d.sonuc === "yanlis" || d.denenen.indexOf(asilNo) > -1) { return; }
       d.denenen.push(asilNo);
       var dogruMu = !!soru.siklar[asilNo].dogru;
-      var kalan = HAK - d.denenen.length;
+      // 3. tur (6. sınıf genel): iki seçenekli soruda bir yanlıştan sonra doğru cevap gösterilir —
+      // hak, yanlış şık sayısını aşmaz; soru başına `hak` verilebilir
+      var hak = soru.hak || Math.min(HAK, Math.max(1, soru.siklar.length - 1));
+      var kalan = hak - d.denenen.length;
       if (dogruMu) {
         d.sonuc = "dogru";
         window.EGITSEL.dontVer(kok, "dogru", soru.donut || "Doğru seçim.");
@@ -308,6 +333,10 @@ window.EGITSEL = {
       }
     }
     sifirla();
+    // Üretim/görsel denetim kancası: window.__BASLANGIC_SORU__ (1 tabanlı) → test o sorudan başlar
+    // (soru sırası zaten karışmaz; yalnız şıklar karışır)
+    var basla = parseInt(window.__BASLANGIC_SORU__, 10);
+    if (basla >= 1 && basla <= sorular.length) { aktif = basla - 1; }
     ciz();
     return { git: git, sonuc: sonuc, sifirla: function () { sifirla(); ciz(); } };
   },
@@ -870,7 +899,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/e69c53cf44e7d3b8.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-07 10:51
+  montaj: 2026-10-13 17:50
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 14:32
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 14:34
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 14:34
@@ -898,7 +927,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
   sayfa 25: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 14:35
 -->
 <style id="yazi-standardi">/* YAZI STANDARDI (lise) — uretici/yazi_standardi.py */
-:root { --yz-h2: 26px; --yz-yonerge: 22px; --yz-govde: 20px; --yz-h3: 24px; --yz-kucuk: 18px; --yz-etiket: 18px; --yz-secenek: 20px; --yz-alan: 20px; --yz-buyuk: 22px; --yz-svg: 20px; --yz-svg-baslik: 21px; --yz-donut: 20px; --yz-geri-svg: 0.9000; --yz-geri-svg-baslik: 0.8571; --yz-geri-govde: 0.9000; --yz-taban: 18px; }
+:root { --yz-h2: 26px; --yz-yonerge: 22px; --yz-govde: 20px; --yz-h3: 24px; --yz-kucuk: 18px; --yz-etiket: 18px; --yz-secenek: 20px; --yz-alan: 20px; --yz-buyuk: 22px; --yz-svg: 20px; --yz-svg-baslik: 21px; --yz-donut: 20px; --yz-geri-svg: 0.9000; --yz-geri-svg-baslik: 0.8571; --yz-geri-govde: 0.9000; --yz-taban: 18px; --yz-soru: 23px; }
 #footer .gezinme-buton, #footer #sayfa-durum { font-size: 18px; }
 #cerceve #sayfalar .sayfa-icerik .parca-btn .kutucuk { width: max(28px, 1.45em); height: max(28px, 1.45em); flex: 0 0 max(28px, 1.45em); }
 #cerceve #sayfalar .deg-kap { gap: 8px; }
@@ -908,11 +937,26 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 body #ekran-kapak .sk-sinif small { font-size: clamp(14px, 2.6vh, 20px); }
 body #ekran-kapak .sk-kod { font-size: .9em; }
 body #ekran-kapak .sk-harf { font-size: .95em; }
+#cerceve #sayfalar .baslik-satiri { flex-wrap: wrap; row-gap: 6px; }
+#cerceve #sayfalar .soru-sayac { margin-left: auto; display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; }
+#cerceve #sayfalar .soru-sayac .soru-nokta { display: inline-flex; align-items: center; justify-content: center; min-width: 1.75em; height: 1.75em; min-height: 0 !important; padding: 0 .3em; border-radius: 999px; border: 1.5px solid var(--cizgi); background: var(--yuzey, #fff); color: var(--metin); font-weight: 800; line-height: 1; cursor: default; }
+#cerceve #sayfalar .soru-sayac .soru-nokta.tiklanir { cursor: pointer; }
+#cerceve #sayfalar .soru-sayac .soru-nokta.aktif { border-color: var(--vurgu); box-shadow: 0 0 0 2px var(--vurgu); }
+#cerceve #sayfalar .soru-sayac .soru-nokta.dogru { background: var(--dogru-acik); border-color: var(--dogru); color: var(--dogru); }
+#cerceve #sayfalar .soru-sayac .soru-nokta.yanlis { background: var(--yanlis-acik); border-color: var(--yanlis); color: var(--yanlis); }
+#cerceve #sayfalar .soru-sayac .soru-nokta.devam { border-style: dashed; border-color: var(--uyari, var(--vurgu)); }
+#cerceve #sayfalar .soru-sayac .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+#cerceve #sayfalar .sayfa-icerik .soru-metni { background: none !important; border: 0 !important; box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; margin: 0 0 4px; font-weight: 600; line-height: 1.38; color: var(--metin); }
+@layer sablon {
+#cerceve #sayfalar .sayfa-icerik .soru-sayac .soru-nokta { font-size: var(--yz-etiket) !important; }
+#cerceve #sayfalar .sayfa-icerik .soru-metni,
+#cerceve #sayfalar .sayfa-icerik .soru-metni *:not(mjx-container *) { font-size: var(--yz-soru) !important; }
+}
 </style>
 </head>
 <body>
 <section id="ekran-kapak" class="sk-sinif-12" aria-label="Giriş kapağı">
-<link rel="stylesheet" href="ortak/901b733c8d44d483.css">
+<link rel="stylesheet" href="ortak/83e2dc214d85bbb1.css">
 <svg class="sk-fon" viewBox="0 0 1280 720" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
 <defs>
   <linearGradient id="skg12-su" x1="0" y1="0" x2="0" y2="1">
@@ -975,7 +1019,7 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
 <g class="sk-suru sk-g2" opacity=".5"><g transform="translate(0 214)"><g transform="translate(0 0) scale(-0.47 0.47)"><path d="M0 0 -17 -10 -17 10 Z" fill="#7fdfd4"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#7fdfd4"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(44 -23) scale(-0.47 0.47)"><path d="M0 0 -17 -10 -17 10 Z" fill="#7fdfd4"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#7fdfd4"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(46 21) scale(-0.47 0.47)"><path d="M0 0 -17 -10 -17 10 Z" fill="#7fdfd4"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#7fdfd4"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(89 -4) scale(-0.47 0.47)"><path d="M0 0 -17 -10 -17 10 Z" fill="#7fdfd4"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#7fdfd4"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(87 -44) scale(-0.47 0.47)"><path d="M0 0 -17 -10 -17 10 Z" fill="#7fdfd4"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#7fdfd4"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(86 40) scale(-0.47 0.47)"><path d="M0 0 -17 -10 -17 10 Z" fill="#7fdfd4"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#7fdfd4"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(131 -27) scale(-0.47 0.47)"><path d="M0 0 -17 -10 -17 10 Z" fill="#7fdfd4"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#7fdfd4"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(133 17) scale(-0.47 0.47)"><path d="M0 0 -17 -10 -17 10 Z" fill="#7fdfd4"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#7fdfd4"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(175 -6) scale(-0.47 0.47)"><path d="M0 0 -17 -10 -17 10 Z" fill="#7fdfd4"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#7fdfd4"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(177 -48) scale(-0.47 0.47)"><path d="M0 0 -17 -10 -17 10 Z" fill="#7fdfd4"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#7fdfd4"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g></g></g>
 <g class="sk-suru sk-g4" opacity=".4"><g transform="translate(0 590)"><g transform="translate(0 0) scale(-0.40 0.40)"><path d="M0 0 -17 -10 -17 10 Z" fill="#4fa8c8"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#4fa8c8"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(37 -19) scale(-0.40 0.40)"><path d="M0 0 -17 -10 -17 10 Z" fill="#4fa8c8"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#4fa8c8"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(38 18) scale(-0.40 0.40)"><path d="M0 0 -17 -10 -17 10 Z" fill="#4fa8c8"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#4fa8c8"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(75 -3) scale(-0.40 0.40)"><path d="M0 0 -17 -10 -17 10 Z" fill="#4fa8c8"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#4fa8c8"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(74 -37) scale(-0.40 0.40)"><path d="M0 0 -17 -10 -17 10 Z" fill="#4fa8c8"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#4fa8c8"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(72 34) scale(-0.40 0.40)"><path d="M0 0 -17 -10 -17 10 Z" fill="#4fa8c8"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#4fa8c8"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(110 -22) scale(-0.40 0.40)"><path d="M0 0 -17 -10 -17 10 Z" fill="#4fa8c8"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#4fa8c8"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(112 14) scale(-0.40 0.40)"><path d="M0 0 -17 -10 -17 10 Z" fill="#4fa8c8"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#4fa8c8"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(147 -5) scale(-0.40 0.40)"><path d="M0 0 -17 -10 -17 10 Z" fill="#4fa8c8"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#4fa8c8"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g><g transform="translate(149 -40) scale(-0.40 0.40)"><path d="M0 0 -17 -10 -17 10 Z" fill="#4fa8c8"/><ellipse cx="12" cy="0" rx="18" ry="10" fill="#4fa8c8"/><circle cx="22" cy="-3" r="2.4" fill="#ffffff" opacity=".85"/></g></g></g>
 <circle class="sk-kabarcik sk-g1" cx="64" cy="688" r="9" fill="none" stroke="#9ff0e6" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g2" cx="104" cy="710" r="6" fill="none" stroke="#9ff0e6" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g3" cx="1116" cy="694" r="7" fill="none" stroke="#9ff0e6" stroke-width="2.5" opacity=".75"/><circle class="sk-kabarcik sk-g4" cx="1076" cy="714" r="5" fill="none" stroke="#9ff0e6" stroke-width="2.5" opacity=".75"/>
-<g class="sk-semboller"><g class="sk-sembol sk-g1" style="animation-duration:4.0s"><circle cx="50" cy="210" r="38" fill="#ff5a7a" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="37" cy="195" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="50" y="223" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">∫</text></g><g class="sk-sembol sk-g2" style="animation-duration:4.6s"><circle cx="54" cy="400" r="38" fill="#ffb627" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="41" cy="385" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="54" y="413" font-size="30" font-weight="700" text-anchor="middle" fill="#ffffff">lim</text></g><g class="sk-sembol sk-g3" style="animation-duration:5.2s"><circle cx="48" cy="590" r="38" fill="#46c46b" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="35" cy="575" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="48" y="603" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">∑</text></g><g class="sk-sembol sk-g4" style="animation-duration:5.8s"><circle cx="1230" cy="230" r="38" fill="#3aa0ff" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1217" cy="215" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1230" y="243" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">∞</text></g><g class="sk-sembol sk-g5" style="animation-duration:6.4s"><circle cx="1226" cy="420" r="38" fill="#9b6bff" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1213" cy="405" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1226" y="433" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">√</text></g><g class="sk-sembol sk-g1" style="animation-duration:7.0s"><circle cx="1232" cy="600" r="38" fill="#ff8a5b" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1219" cy="585" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1232" y="613" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">π</text></g></g></svg>
+<g class="sk-semboller"><g class="sk-sembol sk-g1" style="animation-duration:4.0s"><circle cx="50" cy="210" r="38" fill="#ff5a7a" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="37" cy="195" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="50" y="223" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">∫</text></g><g class="sk-sembol sk-g2" style="animation-duration:4.6s"><circle cx="54" cy="400" r="38" fill="#ffb627" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="41" cy="385" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="54" y="413" font-size="30" font-weight="700" text-anchor="middle" fill="#ffffff">lim</text></g><g class="sk-sembol sk-g3" style="animation-duration:5.2s"><circle cx="48" cy="590" r="38" fill="#46c46b" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="35" cy="575" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="48" y="603" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">∑</text></g><g class="sk-sembol sk-g4" style="animation-duration:5.8s"><circle cx="1230" cy="230" r="38" fill="#3aa0ff" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1217" cy="215" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1230" y="243" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">∞</text></g><g class="sk-sembol sk-g5" style="animation-duration:6.4s"><circle cx="1226" cy="420" r="38" fill="#9b6bff" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1213" cy="405" rx="8" ry="6" fill="#fff" opacity=".7"/><g transform="translate(1226 422) scale(1.15)"><path d="M-19 2 L-15 -1 L-9 14 L-2 -15 H19" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/><text x="8.5" y="11" font-size="22" font-weight="700" text-anchor="middle" fill="#fff">2</text></g></g><g class="sk-sembol sk-g1" style="animation-duration:7.0s"><circle cx="1232" cy="600" r="38" fill="#ff8a5b" fill-opacity=".85" stroke="#ffffff" stroke-width="4"/><ellipse cx="1219" cy="585" rx="8" ry="6" fill="#fff" opacity=".7"/><text x="1232" y="613" font-size="38" font-weight="700" text-anchor="middle" fill="#ffffff">π</text></g></g></svg>
 <div class="sk-kart">
   <div class="sk-bas">
     <div class="sk-bas-sol">
@@ -1001,6 +1045,28 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
   </div>
   <div class="sk-alt"><button id="btnBasla" type="button">Başla <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 4.5v15l13-7.5z"/></svg></button></div>
 </div>
+<script>
+(function () {
+  var kapak = document.getElementById("ekran-kapak");
+  if (!kapak) return;
+  var kutular = Array.prototype.slice.call(kapak.querySelectorAll(".sk-kaydir"));
+  function guncelle() {
+    kutular.forEach(function (k) {
+      var b = k.closest ? k.closest(".sk-blok") : k.parentNode;
+      if (b) b.classList.toggle("sk-devam", k.scrollHeight - k.clientHeight - k.scrollTop > 4);
+    });
+  }
+  kutular.forEach(function (k) { k.addEventListener("scroll", guncelle, { passive: true }); });
+  window.addEventListener("resize", guncelle);
+  window.addEventListener("load", guncelle);
+  if (window.ResizeObserver) {
+    var g = new ResizeObserver(guncelle);
+    kutular.forEach(function (k) { g.observe(k); if (k.firstElementChild) g.observe(k.firstElementChild); });
+  }
+  try { document.fonts && document.fonts.ready.then(guncelle); } catch (e) {}
+  guncelle();
+})();
+</script>
 </section>
 <section id="ekran-tebrik" role="dialog" aria-modal="true" aria-label="Tebrikler" aria-hidden="true">
   <div class="st-konfeti" aria-hidden="true"></div>
@@ -1016,10 +1082,13 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
   <rect x="54" y="156" width="92" height="20" rx="6" fill="#07263d"/>
   <path d="M100 44l6 12 13 2-9.5 9 2.5 13L100 74l-12 6 2.5-13L81 58l13-2z" fill="#fff"/>
 </svg>
-    <h2 data-tam="Tebrikler!" data-bos="Henüz etkinlik yapmadın" data-eksik="Biraz daha deneyelim!">Tebrikler!</h2>
+    <h2 data-tam="Tebrikler!" data-bos="Henüz etkinlik yapmadın" data-eksik="Biraz daha deneyelim!"
+        data-test="Biraz daha deneyelim!" data-testsiz="Biraz daha deneyelim!">Tebrikler!</h2>
     <p class="st-alt" data-tam="&lt;b&gt;Nicelikler ve Değişimler (1)&lt;/b&gt; içeriğini başarıyla tamamladın."
        data-bos="Etkinlikleri yapmadan sona geldin. Baştan başlayıp etkinlikleri tamamlamak ister misin?"
-       data-eksik="Etkinliklerin yarısını tamamlamadan sona geldin (__K__ / __N__). Kalan etkinlikleri de yapmak ister misin?"><b>Nicelikler ve Değişimler (1)</b> içeriğini başarıyla tamamladın.</p>
+       data-eksik="Etkinliklerin yarısını tamamlamadan sona geldin (__K__ / __N__). Kalan etkinlikleri de yapmak ister misin?"
+       data-test="Değerlendirme sorularının en az yarısını cevaplamadan sona geldin (__C__ / __S__). Soruları da çözmek ister misin?"
+       data-testsiz="Değerlendirme etkinliğini yapmadan sona geldin. Son etkinliği de yapmak ister misin?"><b>Nicelikler ve Değişimler (1)</b> içeriğini başarıyla tamamladın.</p>
     <div class="st-yildizlar" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#ffc83d" stroke="#e6a100" stroke-width="1" d="M12 2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17l-6.1 3.4 1.5-6.8L2.2 9l6.9-.7z"/></svg></div>
     <div class="st-ogrendim"><h3>Bu içerikte şunları öğrendin</h3><ul><li>Aritmetik ve geometrik dizilerin özelliklerine ilişkin muhakeme yapabilme</li></ul></div>
     <div class="st-dugmeler">
@@ -1060,7 +1129,7 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
      soru çözülüp bölüm bitirildiğinde tebrikler mesajı alınıyor; en az yarısını tamamlamadan tebrikler
      yerine yeniden dene mesajı olabilir»; 11. sınıf: «tüm sorular boş bırakıldığı halde Tebrikler
      mesajı geliyor»). Ölçüt: öğrencinin GERÇEK bir eyleminden (isTrusted olay) sonraki 5 sn içinde
-     dönüt (doğru/yanlış/uyarı) aldığı SAYFA sayısı; sayfaların en az yarısı → Tebrikler, daha azı →
+     dönüt (doğru/yanlış; 3. turda uyarı çıktı) aldığı SAYFA sayısı; sayfaların en az yarısı → Tebrikler, daha azı →
      «Biraz daha deneyelim», hiç → «Henüz etkinlik yapmadın». Kendi kendine (yükleniş, animasyon)
      verilen dönüt sayılmaz. Şablonun «sayfaya dönüşte sıfırlama»sı belgeyi yeniden yüklediği için
      küme sessionStorage'da taşınır; yeni ziyarette (dönüş yüklemesi değilse) sıfırlanır. */
@@ -1073,39 +1142,109 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
       sessionStorage.removeItem(YAPILAN_ANAHTAR);
     }
   } catch (e) {}
-  var sonEylem = 0;
+  /* 3. tur (11. sınıf, 2026-10-12: «Tüm sorular boş bırakıldığı halde Tebrikler mesajı geliyor» — 2. turdaki
+     ölçüte rağmen yinelendi). Tarayıcıda yeniden üretilen iki delik kapatıldı:
+     (1) «Sonraki»/menü/kapak tıklaması da GERÇEK eylem sayılıyordu: açılışta kendiliğinden dönüt veren bir sayfa,
+         öğrenci yalnız «Sonraki»ye bastığı hâlde «yapıldı» sayılıyordu → yalnız SAYFANIN İÇİNDEKİ eylemler sayılır;
+     (2) sayfaların yarısı yapılınca değerlendirme soruları BOŞ kalsa da Tebrikler çıkıyordu → değerlendirme
+         motorunda (EGITSEL.degerlendirme) soruların en az yarısı cevaplanmalı; motorsuz değerlendirmede son sayfa
+         (değerlendirme her zaman son sayfadır) yapılmış olmalı.
+     Ayrıca «uyari» dönütü («Önce bir kart seç» gibi yönlendirme) artık yapılmış sayılmaz: yalnız doğru/yanlış. */
+  /* 3. tur denetimi (2026-10-12): (a) odak sayfanın kendisindeyken (her geçişte şablon odağı section'a
+     taşır) basılan ←/→ sayfa çevirir — eylem DEĞİL; Tab/Esc/değiştirici tuşlar da değil. (b) Eylem hangi
+     sayfada yapıldıysa dönüt yalnız O sayfaya sayılır: bir sayfada dokunup 5 sn içinde «Sonraki»ye basınca
+     yeni sayfanın açılış dönütü artık sayılmaz. */
+  var sonEylem = 0, sonEylemSayfa = 0;
+  var GEZINME_TUS = { Tab: 1, Escape: 1, Shift: 1, Control: 1, Alt: 1, Meta: 1, CapsLock: 1 };
   ["pointerdown", "pointerup", "keydown", "input", "change", "drop"].forEach(function (t) {
-    document.addEventListener(t, function (e) { if (e.isTrusted) sonEylem = Date.now(); }, true);
+    document.addEventListener(t, function (e) {
+      if (!e.isTrusted) return;
+      var h = e.target;
+      if (h && h.nodeType !== 1) h = h.parentElement;
+      var bolum = h && h.closest ? h.closest("section.sayfa") : null;
+      if (!bolum) return;
+      if (e.type === "keydown" && (GEZINME_TUS[e.key] ||
+          (h === bolum && (e.key === "ArrowLeft" || e.key === "ArrowRight")))) return;
+      sonEylem = Date.now();
+      sonEylemSayfa = +String(bolum.id).replace("sayfa-", "") || 0;
+    }, true);
   });
-  var SAYILMAZ = { notr: 1, bilgi: 1, ipucu: 1 };
+  function eylemSayfada(no) { return no && sonEylemSayfa === no && Date.now() - sonEylem < 5000; }
+  var SAYILMAZ = { notr: 1, bilgi: 1, ipucu: 1, uyari: 1 };
+  function kaydet() {
+    try { sessionStorage.setItem(YAPILAN_ANAHTAR, JSON.stringify(Array.from(yapilan))); } catch (e) {}
+  }
   function donutSay() {
     var E = window.EGITSEL;
     if (!E || typeof E.dontVer !== "function" || E.dontVer.__tebrikSayaci) return;
     var asil = E.dontVer;
     E.dontVer = function (kok, tip) {
-      if (!SAYILMAZ[tip] && aktifSayfa && Date.now() - sonEylem < 5000) {
+      if (!SAYILMAZ[tip] && eylemSayfada(aktifSayfa)) {
         yapilan.add(aktifSayfa);
-        try { sessionStorage.setItem(YAPILAN_ANAHTAR, JSON.stringify(Array.from(yapilan))); } catch (e) {}
+        kaydet();
       }
       return asil.apply(this, arguments);
     };
     E.dontVer.__tebrikSayaci = true;
   }
-  donutSay();
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", donutSay);
+  /* Değerlendirme motoru: sayfa → {n: soru sayısı, c: [cevaplanan soru sırası]}; dönüş yüklemesinde korunur. */
+  var DEG_ANAHTAR = "sablon:degerlendirme:" + location.pathname;
+  var deg = {};
+  try {
+    if (window.SABLON_DONUS_HEDEF) deg = JSON.parse(sessionStorage.getItem(DEG_ANAHTAR) || "{}") || {};
+    else sessionStorage.removeItem(DEG_ANAHTAR);
+  } catch (e) { deg = {}; }
+  function degKaydet() { try { sessionStorage.setItem(DEG_ANAHTAR, JSON.stringify(deg)); } catch (e) {} }
+  function degSay() {
+    var E = window.EGITSEL;
+    if (!E || typeof E.degerlendirme !== "function" || E.degerlendirme.__tebrikSayaci) return;
+    var asil = E.degerlendirme;
+    E.degerlendirme = function (kok, ayar) {
+      var bolum = kok && kok.closest ? kok.closest("section.sayfa") : null;
+      var no = bolum ? (+String(bolum.id).replace("sayfa-", "") || aktifSayfa) : aktifSayfa;
+      if (ayar && typeof ayar === "object") {
+        var n = (ayar.sorular || []).filter(function (s) { return s && s.siklar && s.siklar.length; }).length;
+        var kayit = deg[no] || { n: n, c: [] };
+        kayit.n = n;
+        deg[no] = kayit;
+        degKaydet();
+        var asilCevap = ayar.cevaplandi;
+        ayar.cevaplandi = function (i) {
+          if (eylemSayfada(no) && kayit.c.indexOf(i) < 0) { kayit.c.push(i); degKaydet(); }
+          if (typeof asilCevap === "function") return asilCevap.apply(this, arguments);
+        };
+      }
+      return asil.apply(this, arguments);
+    };
+    E.degerlendirme.__tebrikSayaci = true;
+  }
+  function sayaclariKur() { donutSay(); degSay(); }
+  sayaclariKur();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", sayaclariKur);
+  function degerlendirmeDurumu(toplam) {
+    var sayfalar = Object.keys(deg);
+    if (sayfalar.length) {
+      var n = 0, c = 0;
+      sayfalar.forEach(function (s) { n += deg[s].n || 0; c += (deg[s].c || []).length; });
+      return { tamam: c >= Math.max(1, Math.ceil(n / 2)), c: c, n: n };
+    }
+    return { tamam: yapilan.has(toplam), c: yapilan.has(toplam) ? 1 : 0, n: 0 };
+  }
   var oncekiOdak = null;
   function ac() {
     var toplam = sayfaSayisi();
     var esik = Math.max(1, Math.ceil(toplam / 2));
     var k = yapilan.size;
-    var durum = k === 0 ? "bos" : (k < esik ? "eksik" : "tam");
+    var dd = degerlendirmeDurumu(toplam);
+    var durum = k === 0 ? "bos" : (k < esik ? "eksik" : (dd.tamam ? "tam" : (dd.n ? "test" : "testsiz")));
     var bos = durum !== "tam";
     tebrik.classList.toggle("st-bos", bos);
     var baslik = tebrik.querySelector("h2");
     var alt = tebrik.querySelector(".st-alt");
     var oz = function (el) {
-      var v = el.getAttribute("data-" + durum) || el.getAttribute("data-bos") || "";
-      return v.replace("__K__", String(k)).replace("__N__", String(toplam));
+      var v = el.getAttribute("data-" + durum) || el.getAttribute("data-eksik") || el.getAttribute("data-bos") || "";
+      return v.replace("__K__", String(k)).replace("__N__", String(toplam))
+              .replace("__C__", String(dd.c)).replace("__S__", String(dd.n));
     };
     if (baslik) baslik.textContent = oz(baslik);
     if (alt) alt.innerHTML = oz(alt);
@@ -4316,13 +4455,13 @@ window.SAYFA_INIT[5] = function (kok) {
 
     <div class="s6-kart-panosu">
       <span class="etiket">Açılım Kartları</span>
-      <div class="kavram-kart s6-kart" data-seviye="2" role="button" tabindex="0" aria-label="\( a_2 = a_1 \times r^1 \)">
+      <div class="kavram-kart s6-kart" data-seviye="2" role="button" tabindex="0" aria-label="a₂ = a₁ × r¹">
         \( a_2 = a_1 \times r^1 \)
       </div>
-      <div class="kavram-kart s6-kart" data-seviye="3" role="button" tabindex="0" aria-label="\( a_3 = a_1 \times r^2 \)">
+      <div class="kavram-kart s6-kart" data-seviye="3" role="button" tabindex="0" aria-label="a₃ = a₁ × r²">
         \( a_3 = a_1 \times r^2 \)
       </div>
-      <div class="kavram-kart s6-kart" data-seviye="4" role="button" tabindex="0" aria-label="\( a_4 = a_1 \times r^3 \)">
+      <div class="kavram-kart s6-kart" data-seviye="4" role="button" tabindex="0" aria-label="a₄ = a₁ × r³">
         \( a_4 = a_1 \times r^3 \)
       </div>
     </div>
@@ -4875,24 +5014,24 @@ window.SAYFA_INIT[6] = function (kok) {
         <text class="svg-not" x="400" y="424" text-anchor="middle" dominant-baseline="central" fill="#bad6fa">Formül İskeleti</text>
 
         <!-- Yuvalar ve Sabit Operatörler -->
-        <!-- Yuva 1: a_n -->
+        <!-- Yuva 1: aₙ -->
         <g class="s7-yuva" data-yuva="1" data-hedef="a_n">
           <rect class="s7-yuva-taban" x="134" y="464" width="68" height="62" rx="10" fill="#1f4e89" fill-opacity="0.4" stroke="#bad6fa" stroke-width="2.5" stroke-dasharray="5 4" />
           <rect class="s7-yuva-dolgu" x="134" y="464" width="68" height="62" rx="10" fill="url(#s7-grad-yuva-aktif)" opacity="0" />
           <ellipse class="s7-yuva-parlama" cx="154" cy="474" rx="12" ry="4" fill="#bad6fa" fill-opacity="0.4" opacity="0" />
-          <text class="svg-metin s7-yuva-metin" x="168" y="499" text-anchor="middle" dominant-baseline="central" fill="#bad6fa" opacity="0">a_n</text>
+          <text class="svg-metin s7-yuva-metin" x="168" y="499" text-anchor="middle" dominant-baseline="central" fill="#bad6fa" opacity="0">aₙ</text>
           <rect class="s7-yuva-hit" x="134" y="464" width="68" height="62" rx="10" fill="#bad6fa" fill-opacity="0.001" pointer-events="all" />
         </g>
 
         <!-- Sabit: = -->
         <text class="svg-baslik s7-operator" x="227" y="498" text-anchor="middle" dominant-baseline="central" fill="#bad6fa">=</text>
 
-        <!-- Yuva 2: a_1 -->
+        <!-- Yuva 2: a₁ -->
         <g class="s7-yuva" data-yuva="2" data-hedef="a_1">
           <rect class="s7-yuva-taban" x="252" y="464" width="68" height="62" rx="10" fill="#1f4e89" fill-opacity="0.4" stroke="#bad6fa" stroke-width="2.5" stroke-dasharray="5 4" />
           <rect class="s7-yuva-dolgu" x="252" y="464" width="68" height="62" rx="10" fill="url(#s7-grad-yuva-aktif)" opacity="0" />
           <ellipse class="s7-yuva-parlama" cx="272" cy="474" rx="12" ry="4" fill="#bad6fa" fill-opacity="0.4" opacity="0" />
-          <text class="svg-metin s7-yuva-metin" x="286" y="499" text-anchor="middle" dominant-baseline="central" fill="#bad6fa" opacity="0">a_1</text>
+          <text class="svg-metin s7-yuva-metin" x="286" y="499" text-anchor="middle" dominant-baseline="central" fill="#bad6fa" opacity="0">a₁</text>
           <rect class="s7-yuva-hit" x="252" y="464" width="68" height="62" rx="10" fill="#bad6fa" fill-opacity="0.001" pointer-events="all" />
         </g>
 
@@ -4916,7 +5055,7 @@ window.SAYFA_INIT[6] = function (kok) {
           <rect class="s7-yuva-taban" x="460" y="464" width="48" height="62" rx="10" fill="#1f4e89" fill-opacity="0.4" stroke="#bad6fa" stroke-width="2.5" stroke-dasharray="5 4" />
           <rect class="s7-yuva-dolgu" x="460" y="464" width="48" height="62" rx="10" fill="url(#s7-grad-yuva-aktif)" opacity="0" />
           <ellipse class="s7-yuva-parlama" cx="476" cy="474" rx="8" ry="4" fill="#bad6fa" fill-opacity="0.4" opacity="0" />
-          <text class="svg-metin s7-yuva-metin" x="484" y="499" text-anchor="middle" dominant-baseline="central" fill="#bad6fa" opacity="0">-</text>
+          <text class="svg-metin s7-yuva-metin" x="484" y="499" text-anchor="middle" dominant-baseline="central" fill="#bad6fa" opacity="0">−</text>
           <rect class="s7-yuva-hit" x="460" y="464" width="48" height="62" rx="10" fill="#bad6fa" fill-opacity="0.001" pointer-events="all" />
         </g>
 
@@ -4957,10 +5096,10 @@ window.SAYFA_INIT[6] = function (kok) {
       </div>
       <div class="s7-kart-izgara">
         <div class="kavram-kart s7-kart" data-sembol="n" role="button" tabindex="0">n</div>
-        <div class="kavram-kart s7-kart" data-sembol="a_1" role="button" tabindex="0">a_1</div>
+        <div class="kavram-kart s7-kart" data-sembol="a_1" role="button" tabindex="0" aria-label="a₁">\( a_{1} \)</div>
         <div class="kavram-kart s7-kart" data-sembol="d" role="button" tabindex="0">d</div>
-        <div class="kavram-kart s7-kart" data-sembol="a_n" role="button" tabindex="0">a_n</div>
-        <div class="kavram-kart s7-kart" data-sembol="-" role="button" tabindex="0">-</div>
+        <div class="kavram-kart s7-kart" data-sembol="a_n" role="button" tabindex="0" aria-label="aₙ">\( a_{n} \)</div>
+        <div class="kavram-kart s7-kart" data-sembol="-" role="button" tabindex="0" aria-label="eksi">−</div>
         <div class="kavram-kart s7-kart" data-sembol="1" role="button" tabindex="0">1</div>
       </div>
     </div>
@@ -5470,12 +5609,12 @@ window.SAYFA_INIT[7] = function (kok) {
           <text x="155" y="333" text-anchor="middle" fill="#e4ebf5" class="svg-metin">Genel Terim Şablonu</text>
 
           <!-- Formül Bileşenleri -->
-          <!-- an -->
+          <!-- aₙ -->
           <g transform="translate(75, 415)">
             <rect x="0" y="0" width="85" height="85" rx="10" fill="url(#s8-deg-kutu)" stroke="#1e2936" stroke-width="2" />
             <path d="M 4,4 Q 42,2 81,4 Q 42,8 4,4 Z" fill="#e4ebf5" opacity="0.4" />
             <line x1="8" y1="78" x2="77" y2="78" stroke="#1e2936" stroke-width="1.5" stroke-linecap="round" opacity="0.35" />
-            <text x="42" y="52" text-anchor="middle" fill="#e4ebf5" class="svg-baslik">an</text>
+            <text x="42" y="52" text-anchor="middle" fill="#e4ebf5" class="svg-baslik">aₙ</text>
           </g>
 
           <!-- = -->
@@ -6678,7 +6817,7 @@ window.SAYFA_INIT[11] = function (kok) {
 <!-- SUTUN_ORAN: 7fr 5fr -->
 <section class="bolum sahne s12-sahne-zemini">
   <div class="sahne-kap">
-    <svg viewBox="0 0 680 520" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Birim kare alan parçalanması ve kalan boşluk geometrik dizi modeli">
+    <svg viewBox="0 0 680 580" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Birim kare: parçaların toplam alanı ve kalan alan">
       <title>Birim Kare Alan Parçalanması</title>
       <defs>
         <linearGradient id="s12-grad-kare-zemin" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -6705,16 +6844,21 @@ window.SAYFA_INIT[11] = function (kok) {
         <pattern id="s12-izgara" width="19" height="19" patternUnits="userSpaceOnUse">
           <path d="M 19 0 L 0 0 0 19" fill="none" stroke="#ded6c7" stroke-width="1"/>
         </pattern>
+        <!-- Kalan alan taraması (parçalardan görsel olarak ayrılır) -->
+        <pattern id="s12-tarama" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect x="0" y="0" width="12" height="12" fill="#eee5d3"/>
+          <line x1="3" y1="0" x2="3" y2="12" stroke="#e29c38" stroke-width="4" stroke-opacity="0.55"/>
+        </pattern>
       </defs>
 
       <!-- KATMAN 1: ARKA PLAN VE ZEMİN GÖLGESİ -->
       <g id="sayfa12-katman-arka">
-        <ellipse cx="340" cy="475" rx="210" ry="24" fill="#877b6c" fill-opacity="0.25"/>
+        <ellipse cx="340" cy="537" rx="210" ry="24" fill="#877b6c" fill-opacity="0.25"/>
         <!-- Organik Zemin Dalgaları ve Katmanları -->
-        <path d="M 30 460 C 140 435 230 485 340 465 C 450 445 540 480 650 460 L 650 515 L 30 515 Z" fill="#e2d5bd" fill-opacity="0.35"/>
-        <path d="M 20 480 Q 180 450 340 480 T 660 475" fill="none" stroke="#ded6c7" stroke-width="3"/>
-        <path d="M 40 495 Q 220 470 400 495 T 640 490" fill="none" stroke="#ded6c7" stroke-width="2"/>
-        <path d="M 60 510 Q 260 485 460 510 T 620 505" fill="none" stroke="#ded6c7" stroke-width="1.5"/>
+        <path d="M 30 522 C 140 497 230 547 340 527 C 450 507 540 542 650 522 L 650 577 L 30 577 Z" fill="#e2d5bd" fill-opacity="0.35"/>
+        <path d="M 20 542 Q 180 512 340 542 T 660 537" fill="none" stroke="#ded6c7" stroke-width="3"/>
+        <path d="M 40 557 Q 220 532 400 557 T 640 552" fill="none" stroke="#ded6c7" stroke-width="2"/>
+        <path d="M 60 572 Q 260 547 460 572 T 620 567" fill="none" stroke="#ded6c7" stroke-width="1.5"/>
         <!-- Üst Köşe Organik Işık Kavisleri -->
         <path d="M 50 30 Q 120 70 80 140" fill="none" stroke="#ded6c7" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M 620 40 Q 560 90 600 150" fill="none" stroke="#ded6c7" stroke-width="2.5" stroke-linecap="round"/>
@@ -6733,6 +6877,9 @@ window.SAYFA_INIT[11] = function (kok) {
         <circle cx="518" cy="438" r="3.5" fill="#877b6c" stroke="#2a2521" stroke-width="1"/>
         <path d="M 168 74 L 512 74" stroke="#eee5d3" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
         <path d="M 154 88 L 154 432" stroke="#eee5d3" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.5"/>
+
+        <!-- KALAN ALAN: parçaların kaplamadığı bölgenin tamamı (her adımda JS ile küçülür) -->
+        <rect id="s12-kalan" x="150" y="70" width="380" height="380" rx="12" fill="url(#s12-tarama)" stroke="#e29c38" stroke-width="3" stroke-dasharray="7 4" pointer-events="none"/>
 
         <!-- Sol Kenar Ölçüsü (1 birim) -->
         <g id="s12-sol-olcu">
@@ -6821,22 +6968,6 @@ window.SAYFA_INIT[11] = function (kok) {
           <rect id="s12-hedef-3" class="s12-svg-hedef" x="340" y="260" width="95" height="190" rx="10" fill="#eee5d3" fill-opacity="0.001" pointer-events="all" cursor="pointer"/>
         </g>
 
-        <!-- BÖLGE 4: Kalan Boşluk (Sağ Alt Çeyreğin Diğer Yarısı: 95x190) -->
-        <g id="s12-bolge-bosluk">
-          <rect x="435" y="260" width="95" height="190" rx="10" fill="url(#s12-grad-bosluk)" stroke="#e29c38" stroke-width="2.5" stroke-dasharray="6 4"/>
-          <!-- İç Izgara Doku -->
-          <line x1="435" y1="307" x2="530" y2="307" stroke="#877b6c" stroke-width="1" stroke-dasharray="3 3" stroke-opacity="0.5"/>
-          <line x1="435" y1="355" x2="530" y2="355" stroke="#877b6c" stroke-width="1" stroke-dasharray="3 3" stroke-opacity="0.5"/>
-          <line x1="435" y1="402" x2="530" y2="402" stroke="#877b6c" stroke-width="1" stroke-dasharray="3 3" stroke-opacity="0.5"/>
-          <line x1="482" y1="260" x2="482" y2="450" stroke="#877b6c" stroke-width="1" stroke-dasharray="3 3" stroke-opacity="0.35"/>
-          <!-- Köşe Vurgu Çentikleri -->
-          <path d="M 440 268 L 440 264 Q 440 262 443 262 L 448 262" fill="none" stroke="#e29c38" stroke-width="2"/>
-          <path d="M 525 442 L 525 446 Q 525 448 522 448 L 517 448" fill="none" stroke="#e29c38" stroke-width="2"/>
-          <!-- Rozet ve Etiket -->
-          <rect x="437" y="308" width="90" height="54" rx="8" fill="#eee5d3" stroke="#e29c38" stroke-width="1.5"/>
-          <text x="482" y="326" text-anchor="middle" class="svg-not" fill="#2a2521">Kalan</text>
-          <text id="s12-svg-bosluk-deger" x="482" y="350" text-anchor="middle" class="svg-not" fill="#235784">1/2</text>
-        </g>
       </g>
 
       <!-- KATMAN 3: ÖN KATMAN - BİLGİ ROZETLERİ -->
@@ -6846,11 +6977,23 @@ window.SAYFA_INIT[11] = function (kok) {
         <path d="M 172 84 Q 225 86 278 84" fill="none" stroke="#ded6c7" stroke-width="1"/>
         <text x="225" y="101" text-anchor="middle" class="svg-not" fill="#2a2521">Birim Kare</text>
 
-        <!-- Özet Durum Bandı -->
-        <g id="s12-durum-bandi" style="display: none;">
-          <path d="M 195 470 L 485 470 Q 500 470 500 482 L 500 492 Q 500 504 485 504 L 195 504 Q 180 504 180 492 L 180 482 Q 180 470 195 470 Z" fill="#eee5d3" stroke="#877b6c" stroke-width="1.5"/>
-          <path d="M 198 474 Q 340 476 482 474" fill="none" stroke="#ded6c7" stroke-width="1"/>
-          <text id="s12-durum-ozet" x="340" y="492" text-anchor="middle" class="svg-not" fill="#2a2521"></text>
+        <!-- Kalan alan etiketi (kalan bölgenin ortasına taşınır) -->
+        <g id="s12-kalan-etiket" transform="translate(340 260)" pointer-events="none">
+          <rect x="-46" y="-28" width="92" height="56" rx="8" fill="#eee5d3" stroke="#e29c38" stroke-width="2"/>
+          <text x="0" y="-6" text-anchor="middle" class="svg-not" fill="#2a2521">Kalan</text>
+          <text id="s12-kalan-deger" x="0" y="18" text-anchor="middle" class="svg-not" fill="#2a2521">1</text>
+        </g>
+
+        <!-- Cebirsel ayrım: parçaların toplam alanı / kalan alan -->
+        <g id="s12-cebir">
+          <rect x="30" y="462" width="620" height="40" rx="10" fill="#eee5d3" stroke="#235784" stroke-width="1.5"/>
+          <rect x="44" y="474" width="10" height="16" fill="#3d7fb8" stroke="#2a2521" stroke-width="1"/>
+          <rect x="54" y="474" width="10" height="16" fill="#4b8562" stroke="#2a2521" stroke-width="1"/>
+          <rect x="64" y="474" width="10" height="16" fill="#bf5741" stroke="#2a2521" stroke-width="1"/>
+          <text id="s12-cebir-toplam" x="88" y="488" class="svg-not" fill="#235784">Parçaların toplam alanı: 0</text>
+          <rect x="30" y="510" width="620" height="40" rx="10" fill="#eee5d3" stroke="#e29c38" stroke-width="1.5"/>
+          <rect x="44" y="522" width="30" height="16" fill="url(#s12-tarama)" stroke="#e29c38" stroke-width="1.5"/>
+          <text id="s12-cebir-kalan" x="88" y="536" class="svg-not" fill="#2a2521">Kalan alan: 1</text>
         </g>
       </g>
     </svg>
@@ -6899,17 +7042,17 @@ window.SAYFA_INIT[11] = function (kok) {
       </div>
       <!-- Bağıntı Kartları Havuzu -->
       <div class="s12-baginti-havuz" id="s12-baginti-kartlari">
-        <div class="kavram-kart s12-baginti-kart s12-kilitli" data-dogru="true" role="button" tabindex="0" aria-label="Bağıntı S_n = 1 - (1/2)^n">
-          \( S_n = 1 - \left(\frac{1}{2}\right)^n \)
+        <div class="kavram-kart s12-baginti-kart s12-kilitli" data-dogru="true" role="button" tabindex="0" aria-label="Bağıntı Sₙ = 1 − (1/2)ⁿ">
+          \( S_{n} = 1 - \left(\frac{1}{2}\right)^{n} \)
         </div>
-        <div class="kavram-kart s12-baginti-kart s12-kilitli" data-dogru="false" role="button" tabindex="0" aria-label="Bağıntı S_n = 1 - 1/(2n)">
-          \( S_n = 1 - \frac{1}{2n} \)
+        <div class="kavram-kart s12-baginti-kart s12-kilitli" data-dogru="false" role="button" tabindex="0" aria-label="Bağıntı Sₙ = 1 − 1/(2n)">
+          \( S_{n} = 1 - \frac{1}{2n} \)
         </div>
-        <div class="kavram-kart s12-baginti-kart s12-kilitli" data-dogru="false" role="button" tabindex="0" aria-label="Bağıntı S_n = 1 - (1/2)^(n-1)">
-          \( S_n = 1 - \left(\frac{1}{2}\right)^{n-1} \)
+        <div class="kavram-kart s12-baginti-kart s12-kilitli" data-dogru="false" role="button" tabindex="0" aria-label="Bağıntı Sₙ = 1 − (1/2)ⁿ⁻¹">
+          \( S_{n} = 1 - \left(\frac{1}{2}\right)^{n-1} \)
         </div>
-        <div class="kavram-kart s12-baginti-kart s12-kilitli" data-dogru="false" role="button" tabindex="0" aria-label="Bağıntı S_n = (1/2)^n">
-          \( S_n = \left(\frac{1}{2}\right)^n \)
+        <div class="kavram-kart s12-baginti-kart s12-kilitli" data-dogru="false" role="button" tabindex="0" aria-label="Bağıntı Sₙ = (1/2)ⁿ">
+          \( S_{n} = \left(\frac{1}{2}\right)^{n} \)
         </div>
       </div>
     </div>
@@ -7045,9 +7188,38 @@ window.SAYFA_INIT[12] = function (kok) {
   var bagintiKartlar = kok.querySelectorAll(".s12-baginti-kart");
   var formulYuva = kok.querySelector("#s12-yuva-formul");
   var yuvaIcerik = kok.querySelector("#s12-yuva-icerik");
-  var svgBoslukDeger = kok.querySelector("#s12-svg-bosluk-deger");
-  var durumOzet = kok.querySelector("#s12-durum-ozet");
+  var kalanRect = kok.querySelector("#s12-kalan");
+  var kalanEtiket = kok.querySelector("#s12-kalan-etiket");
+  var kalanDeger = kok.querySelector("#s12-kalan-deger");
+  var cebirToplam = kok.querySelector("#s12-cebir-toplam");
+  var cebirKalan = kok.querySelector("#s12-cebir-kalan");
   var sifirlaBtn = kok.querySelector("#s12-sifirla");
+
+  // Kalan alan = birim karenin parçalarla kaplanmayan bölgesinin TAMAMI.
+  // Her durum: kalan bölgenin dikdörtgeni, etiketin merkezi, kalan değer ve iki cebir satırı.
+  // (Parçalar: 1/2 + 1/4 + 1/8; kalan 1 − Sₙ = (1/2)ⁿ — sahnede görsel, bantta cebirsel ayrım.)
+  var DURUMLAR = {
+    1: { x: 150, y: 70, w: 380, h: 380, cx: 340, cy: 260, kalan: "1",
+         toplam: "Parçaların toplam alanı: 0", kalanMetin: "Kalan alan: 1" },
+    2: { x: 340, y: 70, w: 190, h: 380, cx: 435, cy: 260, kalan: "1/2",
+         toplam: "Parçaların toplam alanı: S₁ = 1/2", kalanMetin: "Kalan alan: 1 − S₁ = 1/2" },
+    3: { x: 340, y: 260, w: 190, h: 190, cx: 435, cy: 355, kalan: "1/4",
+         toplam: "Parçaların toplam alanı: S₂ = 1/2 + 1/4 = 3/4", kalanMetin: "Kalan alan: 1 − S₂ = 1/4" },
+    4: { x: 435, y: 260, w: 95, h: 190, cx: 482.5, cy: 355, kalan: "1/8",
+         toplam: "Parçaların toplam alanı: S₃ = 1/2 + 1/4 + 1/8 = 7/8", kalanMetin: "Kalan alan: 1 − S₃ = 1/8" }
+  };
+
+  function kalanGuncelle(no, bitti) {
+    var d = DURUMLAR[Math.min(no, 4)];
+    kalanRect.setAttribute("x", d.x);
+    kalanRect.setAttribute("y", d.y);
+    kalanRect.setAttribute("width", d.w);
+    kalanRect.setAttribute("height", d.h);
+    kalanEtiket.setAttribute("transform", "translate(" + d.cx + " " + d.cy + ")");
+    kalanDeger.textContent = d.kalan;
+    cebirToplam.textContent = d.toplam;
+    cebirKalan.textContent = bitti ? "Kalan alan: 1 − S₃ = 1/8 = (1/2)³" : d.kalanMetin;
+  }
 
   // Bağıntı kartlarını karıştır (Fisher-Yates)
   var bagintiHavuz = kok.querySelector("#s12-baginti-kartlari");
@@ -7112,9 +7284,6 @@ window.SAYFA_INIT[12] = function (kok) {
       if (dolu) dolu.style.display = "";
       svgHedefParla(hedefNo, false);
 
-      var durumBandi = kok.querySelector("#s12-durum-bandi");
-      if (durumBandi) durumBandi.style.display = "";
-
       seciliSerit.classList.remove("s12-secili");
       seciliSerit.classList.add("s12-yerlesti");
       seciliSerit.setAttribute("aria-disabled", "true");
@@ -7122,18 +7291,13 @@ window.SAYFA_INIT[12] = function (kok) {
 
       adim++;
 
-      // Kalan boşluk ve özet güncelleme
+      // Kalan alan (görsel) ve iki cebir satırı güncelleme
+      kalanGuncelle(adim, false);
       if (adim === 2) {
-        svgBoslukDeger.textContent = "1/4";
-        durumOzet.textContent = "Kaplanan: 1/2 | Kalan Boşluk: 1/2";
         kok.querySelector('.s12-serit-kart[data-serit="1/4"]').classList.remove("s12-beklemede");
       } else if (adim === 3) {
-        svgBoslukDeger.textContent = "1/8";
-        durumOzet.textContent = "Kaplanan: 3/4 | Kalan Boşluk: 1/4";
         kok.querySelector('.s12-serit-kart[data-serit="1/8"]').classList.remove("s12-beklemede");
       } else if (adim === 4) {
-        svgBoslukDeger.textContent = "1/8";
-        durumOzet.textContent = "Kaplanan: 7/8 | Kalan Boşluk: 1/8";
         // Bağıntı kartlarının kilidini aç
         bagintiKartlar.forEach(function (k) { k.classList.remove("s12-kilitli"); });
       }
@@ -7172,16 +7336,19 @@ window.SAYFA_INIT[12] = function (kok) {
       formulYuva.classList.remove("s12-hedef-vurgu");
       formulYuva.classList.add("s12-kilitlendi");
       seciliBaginti.classList.add("s12-yerlesti");
+      // .kavram-kart şablon kuralı katmansız: yerleşen kartı havuzdan satır içi gizle
+      seciliBaginti.style.display = "none";
       bagintiKartlar.forEach(function (k) { k.classList.add("s12-kilitli"); });
       adim = 5;
-      EGITSEL.dontVer(kok, "dogru", "Toplam birden boşluğu çıkarır.");
+      kalanGuncelle(4, true);
+      EGITSEL.dontVer(kok, "dogru", "Doğru! Sₙ = 1 − kalan alan; kalan alan (1/2)ⁿ olur.");
     } else {
       seciliBaginti.classList.add("s12-titre");
       var hataliKart = seciliBaginti;
       setTimeout(function () {
         hataliKart.classList.remove("s12-titre");
       }, 400);
-      EGITSEL.dontVer(kok, "yanlis", "Kalan boşluk paydasını incele.");
+      EGITSEL.dontVer(kok, "yanlis", "Sₙ = 1 − kalan alan; kalan her adımda yarıya iner.");
     }
   }
 
@@ -7292,16 +7459,14 @@ window.SAYFA_INIT[12] = function (kok) {
       else k.classList.remove("s12-beklemede");
     });
 
-    svgBoslukDeger.textContent = "1/2";
-    var durumBandi = kok.querySelector("#s12-durum-bandi");
-    if (durumBandi) durumBandi.style.display = "none";
-    durumOzet.textContent = "";
+    kalanGuncelle(1, false);
 
     formulYuva.classList.remove("s12-hedef-vurgu", "s12-kilitlendi");
     yuvaIcerik.innerHTML = '<span class="kucuk-not">Formülü buraya bırak</span>';
 
     bagintiKartlar.forEach(function (k) {
       k.classList.remove("s12-secili", "s12-yerlesti", "s12-titre");
+      k.style.display = "";
       k.classList.add("s12-kilitli");
     });
   });
@@ -7444,7 +7609,7 @@ window.SAYFA_INIT[12] = function (kok) {
 
       <!-- ÖN KATMAN: Formül İfadesi ve Hedef Yuvalar -->
       <g id="sayfa13-katman-on">
-        <!-- S_n = Metni -->
+        <!-- Sₙ = Metni -->
         <text x="145" y="278" class="svg-baslik" text-anchor="end" fill="#1b3866">S<tspan dy="6">n</tspan><tspan dy="-6"> =</tspan></text>
 
         <!-- Kesir Çizgisi ve Alt Gölgeliği -->
@@ -8304,7 +8469,7 @@ window.SAYFA_INIT[14] = function (kok) {
 
             <rect x="65" y="294" width="610" height="152" rx="14" fill="#f3ede0" stroke="#d5cebe" stroke-width="2"/>
             
-            <!-- Sol Cebirsel İfade: Sn = a1 * -->
+            <!-- Sol Cebirsel İfade: Sₙ = a₁ * -->
             <g transform="translate(95, 376)">
               <text class="svg-baslik" x="0" y="0" fill="#16333f" font-weight="bold">S</text>
               <text class="svg-not" x="18" y="10" fill="#16333f" font-weight="bold">n</text>
@@ -9106,15 +9271,16 @@ window.SAYFA_INIT[17] = function (kok) {
 <div class="sayfa-icerik">
 <div class="sayfa-duzen" style="--sutun-sol:8fr;--sutun-sag:4fr">
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 14:32 -->
+<!-- DUZELTME: 2026-10-13 uzman 4. tur — adım sayısı ↔ tasarruf ve manuel ↔ formül bağıntısı görünür kuruldu -->
 <!-- PALET: zemin #d8e8f5 #c8dff2 | baskin #1b4f8a #2b6cb0 #4a8fd9 #8ebef0 | ikincil #1f7a52 #2d9d6e #68c498 | notr #485c72 #7e92a6 | vurgu #d95f43 | kontur #162c46 -->
 <!-- SAYFA_BASLIK: Ağda Bilgi Yayılımı -->
-<!-- YONERGE: Adım sürgüsünü 10'a getirip tasarruf farkı kartını grafikteki hedef yuvaya sürükleyin. -->
+<!-- YONERGE: Sürgüyle adım sayısını değiştirip tasarrufu izle; 20 adımdaki tasarruf kartını grafikteki yuvaya sürükle. -->
 <!-- ETIKET: UYGULAMA -->
 <!-- SUTUN_ORAN: 8fr 4fr -->
 <section class="bolum sahne s18-sahne-zemini">
   <div class="sahne-kap">
     <svg viewBox="0 0 960 640" preserveAspectRatio="xMidYMid meet" role="img">
-      <title>Ağda Bilgi Yayılımı ve İşlem Yükü Karşılaştırması</title>
+      <title>Ağda Bilgi Yayılımı: Manuel Toplama ile Formülün İşlem Sayısı</title>
       <defs>
         <linearGradient id="s18-grad-zemin" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stop-color="#d8e8f5"/>
@@ -9163,173 +9329,163 @@ window.SAYFA_INIT[17] = function (kok) {
         <path d="M 512 54 Q 512 40 526 40 L 902 40 Q 916 40 916 54" fill="none" stroke="#8ebef0" stroke-width="1.8" opacity="0.6"/>
       </g>
 
-      <!-- KATMAN 2: ORTA KATMAN (Yayılım Ağı - Mesaj Zinciri) -->
+      <!-- KATMAN 2: ORTA KATMAN (Yayılım Ağı: n. adımda 2ⁿ⁻¹ yeni kişi) -->
       <g id="sayfa18-katman-orta">
-        <!-- Panel Başlıkları -->
         <text x="64" y="76" class="svg-baslik" fill="#162c46">Yayılım Ağı</text>
-        <text x="64" y="102" class="svg-not" fill="#485c72">Mesaj Zinciri</text>
+        <text x="64" y="102" class="svg-not" fill="#485c72">Her kişi 2 kişiye iletir</text>
 
-        <!-- Ağ Bağlantı Hatları -->
+        <!-- Ağ Bağlantı Hatları (seviye k'ya giden hatlar data-adim="k") -->
         <g id="s18-ag-hatlar">
-          <!-- Kökten 2. Seviyeye -->
-          <path d="M 100 310 Q 140 230 180 230" fill="none" stroke="#2b6cb0" stroke-width="3" stroke-linecap="round"/>
-          <path d="M 100 310 Q 140 390 180 390" fill="none" stroke="#2b6cb0" stroke-width="3" stroke-linecap="round"/>
-          <!-- Veri İletim Paketleri (Akış Noktaları) -->
-          <circle cx="140" cy="265" r="3.5" fill="#8ebef0" opacity="0.85"/>
-          <circle cx="140" cy="355" r="3.5" fill="#8ebef0" opacity="0.85"/>
-
-          <!-- 2. Seviyeden 3. Seviyeye -->
-          <path d="M 180 230 Q 220 170 256 170" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M 180 230 Q 220 270 256 270" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M 180 390 Q 220 350 256 350" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M 180 390 Q 220 450 256 450" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
-          <circle cx="218" cy="198" r="3" fill="#8ebef0" opacity="0.8"/>
-          <circle cx="218" cy="252" r="3" fill="#8ebef0" opacity="0.8"/>
-          <circle cx="218" cy="368" r="3" fill="#8ebef0" opacity="0.8"/>
-          <circle cx="218" cy="422" r="3" fill="#8ebef0" opacity="0.8"/>
-
-          <!-- 3. Seviyeden 4. Seviyeye -->
-          <path d="M 256 170 Q 296 140 332 140" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M 256 170 Q 296 195 332 195" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M 256 270 Q 296 245 332 245" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M 256 270 Q 296 295 332 295" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M 256 350 Q 296 325 332 325" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M 256 350 Q 296 375 332 375" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M 256 450 Q 296 425 332 425" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M 256 450 Q 296 480 332 480" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
-
-          <!-- 4. Seviyeden 5. Kümeye (Adım 7-10 Uç Noktaları) -->
-          <path d="M 332 140 L 410 120" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-dasharray="3,3"/>
-          <path d="M 332 195 L 410 175" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-dasharray="3,3"/>
-          <path d="M 332 245 L 410 230" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-dasharray="3,3"/>
-          <path d="M 332 295 L 410 285" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-dasharray="3,3"/>
-          <path d="M 332 325 L 410 335" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-dasharray="3,3"/>
-          <path d="M 332 375 L 410 390" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-dasharray="3,3"/>
-          <path d="M 332 425 L 410 445" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-dasharray="3,3"/>
-          <path d="M 332 480 L 410 500" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-dasharray="3,3"/>
+          <g class="s18-ag-adimi" data-adim="2">
+            <path d="M 100 310 Q 140 215 180 215" fill="none" stroke="#2b6cb0" stroke-width="3" stroke-linecap="round"/>
+            <path d="M 100 310 Q 140 405 180 405" fill="none" stroke="#2b6cb0" stroke-width="3" stroke-linecap="round"/>
+          </g>
+          <g class="s18-ag-adimi" data-adim="3">
+            <path d="M 180 215 Q 220 167.5 256 167.5" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M 180 215 Q 220 262.5 256 262.5" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M 180 405 Q 220 357.5 256 357.5" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M 180 405 Q 220 452.5 256 452.5" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
+          </g>
+          <g class="s18-ag-adimi" data-adim="4">
+            <path d="M 256 167.5 Q 296 143.75 332 143.75" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M 256 167.5 Q 296 191.25 332 191.25" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M 256 262.5 Q 296 238.75 332 238.75" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M 256 262.5 Q 296 286.25 332 286.25" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M 256 357.5 Q 296 333.75 332 333.75" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M 256 357.5 Q 296 381.25 332 381.25" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M 256 452.5 Q 296 428.75 332 428.75" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M 256 452.5 Q 296 476.25 332 476.25" fill="none" stroke="#4a8fd9" stroke-width="2.5" stroke-linecap="round"/>
+          </g>
+          <g class="s18-ag-adimi" data-adim="5">
+            <path d="M 332 143.75 Q 372 131.88 410 131.88" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 143.75 Q 372 155.62 410 155.62" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 191.25 Q 372 179.38 410 179.38" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 191.25 Q 372 203.12 410 203.12" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 238.75 Q 372 226.88 410 226.88" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 238.75 Q 372 250.62 410 250.62" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 286.25 Q 372 274.38 410 274.38" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 286.25 Q 372 298.12 410 298.12" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 333.75 Q 372 321.88 410 321.88" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 333.75 Q 372 345.62 410 345.62" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 381.25 Q 372 369.38 410 369.38" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 381.25 Q 372 393.12 410 393.12" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 428.75 Q 372 416.88 410 416.88" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 428.75 Q 372 440.62 410 440.62" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 476.25 Q 372 464.38 410 464.38" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+            <path d="M 332 476.25 Q 372 488.12 410 488.12" fill="none" stroke="#8ebef0" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="3,3"/>
+          </g>
         </g>
 
-        <!-- Düğümler (Nodes) -->
+        <!-- Düğümler: k. adımda 2ᵏ⁻¹ yeni kişi (sütun altında sayısı) -->
         <g id="s18-ag-dugumler">
-          <!-- Kök Düğüm (Adım 1) - Sunucu Merkezi -->
           <g class="s18-ag-adimi" data-adim="1">
             <circle cx="100" cy="310" r="28" fill="none" stroke="#4a8fd9" stroke-width="1.5" stroke-dasharray="3,3" opacity="0.6"/>
             <circle cx="100" cy="310" r="22" fill="url(#s18-grad-ag-kok)" stroke="#162c46" stroke-width="3"/>
-            <ellipse cx="94" cy="302" rx="10" ry="6" fill="#8ebef0" opacity="0.45"/>
-            <path d="M 86 298 A 18 18 0 0 1 114 298" fill="none" stroke="#8ebef0" stroke-width="1.5" stroke-linecap="round" opacity="0.75"/>
             <circle cx="100" cy="310" r="7" fill="#8ebef0"/>
+            <text x="100" y="530" text-anchor="middle" class="svg-not" fill="#1b4f8a">1 kişi</text>
           </g>
-
-          <!-- 2. Adım Düğümleri -->
           <g class="s18-ag-adimi" data-adim="2">
-            <circle cx="180" cy="230" r="16" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2.5"/>
-            <ellipse cx="175" cy="224" rx="7" ry="4" fill="#8ebef0" opacity="0.45"/>
-            <circle cx="180" cy="390" r="16" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2.5"/>
-            <ellipse cx="175" cy="384" rx="7" ry="4" fill="#8ebef0" opacity="0.45"/>
+            <circle cx="180" cy="215" r="16" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2.5"/>
+            <circle cx="180" cy="405" r="16" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2.5"/>
+            <text x="180" y="530" text-anchor="middle" class="svg-not" fill="#1b4f8a">2 kişi</text>
           </g>
-
-          <!-- 3. Adım Düğümleri -->
           <g class="s18-ag-adimi" data-adim="3">
-            <circle cx="256" cy="170" r="13" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
-            <circle cx="256" cy="270" r="13" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
-            <circle cx="256" cy="350" r="13" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
-            <circle cx="256" cy="450" r="13" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <circle cx="256" cy="167.5" r="13" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <circle cx="256" cy="262.5" r="13" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <circle cx="256" cy="357.5" r="13" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <circle cx="256" cy="452.5" r="13" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <text x="256" y="530" text-anchor="middle" class="svg-not" fill="#1b4f8a">4 kişi</text>
           </g>
-
-          <!-- 4-6. Adım Düğümleri -->
+          <g class="s18-ag-adimi" data-adim="4">
+            <circle cx="332" cy="143.75" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <circle cx="332" cy="191.25" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <circle cx="332" cy="238.75" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <circle cx="332" cy="286.25" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <circle cx="332" cy="333.75" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <circle cx="332" cy="381.25" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <circle cx="332" cy="428.75" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <circle cx="332" cy="476.25" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
+            <text x="332" y="530" text-anchor="middle" class="svg-not" fill="#1b4f8a">8 kişi</text>
+          </g>
           <g class="s18-ag-adimi" data-adim="5">
-            <circle cx="332" cy="140" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
-            <circle cx="332" cy="195" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
-            <circle cx="332" cy="245" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
-            <circle cx="332" cy="295" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
-            <circle cx="332" cy="325" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
-            <circle cx="332" cy="375" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
-            <circle cx="332" cy="425" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
-            <circle cx="332" cy="480" r="10" fill="url(#s18-grad-ag-dal)" stroke="#162c46" stroke-width="2"/>
-          </g>
-
-          <!-- 7-10. Adım Düğümleri (Geniş Ağ Uçları) -->
-          <g class="s18-ag-adimi" data-adim="10">
-            <circle cx="410" cy="120" r="8" fill="#4a8fd9" stroke="#162c46" stroke-width="1.8"/>
-            <circle cx="410" cy="175" r="8" fill="#4a8fd9" stroke="#162c46" stroke-width="1.8"/>
-            <circle cx="410" cy="230" r="8" fill="#4a8fd9" stroke="#162c46" stroke-width="1.8"/>
-            <circle cx="410" cy="285" r="8" fill="#4a8fd9" stroke="#162c46" stroke-width="1.8"/>
-            <circle cx="410" cy="335" r="8" fill="#4a8fd9" stroke="#162c46" stroke-width="1.8"/>
-            <circle cx="410" cy="390" r="8" fill="#4a8fd9" stroke="#162c46" stroke-width="1.8"/>
-            <circle cx="410" cy="445" r="8" fill="#4a8fd9" stroke="#162c46" stroke-width="1.8"/>
-            <circle cx="410" cy="500" r="8" fill="#4a8fd9" stroke="#162c46" stroke-width="1.8"/>
+            <circle cx="410" cy="131.88" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="155.62" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="179.38" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="203.12" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="226.88" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="250.62" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="274.38" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="298.12" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="321.88" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="345.62" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="369.38" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="393.12" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="416.88" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="440.62" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="464.38" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <circle cx="410" cy="488.12" r="7" fill="#4a8fd9" stroke="#162c46" stroke-width="1.5"/>
+            <text x="410" y="530" text-anchor="middle" class="svg-not" fill="#1b4f8a">16 kişi</text>
           </g>
         </g>
 
-        <!-- Ağ Açıklama Rozeti -->
-        <rect x="64" y="524" width="392" height="34" rx="8" fill="#c8dff2" stroke="#485c72" stroke-width="1"/>
-        <text x="260" y="546" text-anchor="middle" class="svg-not" fill="#1b4f8a">Mesaj her adımda katlanarak yayılır</text>
+        <!-- Ağ Açıklama Rozeti: n. adımdaki yeni kişi sayısı (genel terim) -->
+        <rect x="64" y="542" width="392" height="30" rx="8" fill="#c8dff2" stroke="#485c72" stroke-width="1"/>
+        <text id="s18-ag-yazi" x="260" y="563" text-anchor="middle" class="svg-not" fill="#1b4f8a">3. adımda 2² = 4 yeni kişi</text>
       </g>
 
-      <!-- KATMAN 3: ÖN KATMAN (İşlem Grafiği ve Tasarruf Hedefi) -->
+      <!-- KATMAN 3: ÖN KATMAN (İşlem Sayısı Grafiği ve Tasarruf) -->
       <g id="sayfa18-katman-on">
-        <!-- Grafik Başlıkları -->
-        <text x="532" y="76" class="svg-baslik" fill="#162c46">İşlem Grafiği</text>
-        <text x="532" y="102" class="svg-metin" fill="#485c72">İşlem Yükü</text>
+        <text x="532" y="76" class="svg-baslik" fill="#162c46">İşlem Sayısı</text>
 
-        <!-- Izgara ve Kılavuz Çizgileri -->
+        <!-- HEDEF YUVA: 20 adımdaki tasarruf -->
+        <g id="s18-hedef-yuva" class="s18-hedef-grup" tabindex="0" role="button" aria-label="20 adımda tasarruf yuvası">
+          <rect id="s18-yuva-cerceve" x="532" y="96" width="364" height="56" rx="8" fill="#d8e8f5" stroke="#485c72" stroke-width="2" stroke-dasharray="6,6"/>
+          <path d="M 540 108 L 540 102 L 546 102" fill="none" stroke="#2b6cb0" stroke-width="2" stroke-linecap="round"/>
+          <path d="M 888 108 L 888 102 L 882 102" fill="none" stroke="#2b6cb0" stroke-width="2" stroke-linecap="round"/>
+          <path d="M 540 140 L 540 146 L 546 146" fill="none" stroke="#2b6cb0" stroke-width="2" stroke-linecap="round"/>
+          <path d="M 888 140 L 888 146 L 882 146" fill="none" stroke="#2b6cb0" stroke-width="2" stroke-linecap="round"/>
+          <text id="s18-yuva-metin" x="714" y="131" text-anchor="middle" class="svg-metin" fill="#485c72">20 adımda tasarruf: ?</text>
+          <rect x="526" y="90" width="376" height="68" fill-opacity="0.001" pointer-events="all"/>
+        </g>
+
+        <!-- Izgara: 1 işlem = 28 birim; çizgiler 3, 6, 9 işlemde -->
         <g id="s18-izgara">
           <line x1="532" y1="480" x2="896" y2="480" stroke="#162c46" stroke-width="2"/>
-          <line x1="532" y1="438" x2="896" y2="438" stroke="#7e92a6" stroke-width="1" stroke-dasharray="4,4"/>
-          <text x="522" y="443" text-anchor="end" class="svg-not" fill="#7e92a6">3</text>
-
-          <line x1="532" y1="340" x2="896" y2="340" stroke="#7e92a6" stroke-width="1" stroke-dasharray="4,4"/>
-          <text x="522" y="345" text-anchor="end" class="svg-not" fill="#7e92a6">10</text>
-
-          <line x1="532" y1="214" x2="896" y2="214" stroke="#7e92a6" stroke-width="1" stroke-dasharray="4,4"/>
-          <text x="522" y="219" text-anchor="end" class="svg-not" fill="#7e92a6">19</text>
+          <line x1="532" y1="396" x2="896" y2="396" stroke="#7e92a6" stroke-width="1" stroke-dasharray="4,4"/>
+          <text x="522" y="401" text-anchor="end" class="svg-not" fill="#7e92a6">3</text>
+          <line x1="532" y1="312" x2="896" y2="312" stroke="#7e92a6" stroke-width="1" stroke-dasharray="4,4"/>
+          <text x="522" y="317" text-anchor="end" class="svg-not" fill="#7e92a6">6</text>
+          <line x1="532" y1="228" x2="896" y2="228" stroke="#7e92a6" stroke-width="1" stroke-dasharray="4,4"/>
+          <text x="522" y="233" text-anchor="end" class="svg-not" fill="#7e92a6">9</text>
         </g>
 
-        <!-- İki Sütun Arasındaki Tasarruf Farkı Bandı (Başlangıçta gizli) -->
-        <rect id="s18-tasarruf-bandi" x="626" y="214" width="168" height="224" rx="8" fill="url(#s18-grad-band)" stroke="#1f7a52" stroke-width="2" stroke-dasharray="4,4" style="display:none;"/>
+        <!-- İki sütun arasındaki tasarruf bandı (manuel − formül) -->
+        <rect id="s18-tasarruf-bandi" x="646" y="396" width="140" height="0" rx="8" fill="url(#s18-grad-band)" stroke="#1f7a52" stroke-width="2" stroke-dasharray="4,4" style="display:none;"/>
+        <text id="s18-tasarruf-baslik" x="716" y="370" text-anchor="middle" class="svg-not" fill="#1f7a52">Tasarruf yok</text>
+        <text id="s18-tasarruf-deger" x="716" y="392" text-anchor="middle" class="svg-metin" fill="#1f7a52"></text>
 
         <!-- Sütun Taban Pedestalleri -->
-        <ellipse cx="586" cy="482" rx="36" ry="5" fill="#162c46" opacity="0.2"/>
-        <ellipse cx="834" cy="482" rx="36" ry="5" fill="#162c46" opacity="0.2"/>
+        <ellipse cx="591" cy="482" rx="36" ry="5" fill="#162c46" opacity="0.2"/>
+        <ellipse cx="836" cy="482" rx="36" ry="5" fill="#162c46" opacity="0.2"/>
 
-        <!-- 1. SÜTUN: Manuel Yöntem (19 İşlem) -->
+        <!-- 1. SÜTUN: Manuel Yöntem (n − 1 toplama) -->
         <g id="s18-manuel-grup">
-          <rect id="s18-manuel-sutun" x="554" y="214" width="64" height="266" rx="8" fill="url(#s18-grad-mercan)" stroke="#162c46" stroke-width="2.5"/>
-          <!-- Parlama -->
-          <rect id="s18-manuel-parlama" x="558" y="218" width="10" height="258" rx="4" fill="#8ebef0" opacity="0.4"/>
-          <!-- Değer Yazısı -->
-          <text id="s18-manuel-islem-yazi" x="586" y="198" text-anchor="middle" class="svg-metin" fill="#d95f43">19 İşlem</text>
-          <!-- Sütun Alt Etiketi -->
-          <text x="586" y="508" text-anchor="middle" class="svg-metin" fill="#162c46">Manuel Yöntem</text>
-          <text x="586" y="530" text-anchor="middle" class="svg-not" fill="#485c72">Tek tek toplama</text>
+          <rect id="s18-manuel-sutun" x="556" y="424" width="70" height="56" rx="8" fill="url(#s18-grad-mercan)" stroke="#162c46" stroke-width="2.5"/>
+          <rect id="s18-manuel-parlama" x="560" y="428" width="10" height="48" rx="4" fill="#8ebef0" opacity="0.4"/>
+          <text id="s18-manuel-islem-yazi" x="591" y="410" text-anchor="middle" class="svg-metin" fill="#d95f43">2 işlem</text>
+          <text x="591" y="508" text-anchor="middle" class="svg-metin" fill="#162c46">Manuel yöntem</text>
+          <text x="591" y="532" text-anchor="middle" class="svg-not" fill="#485c72">n − 1 toplama</text>
         </g>
 
-        <!-- 2. SÜTUN: Formül Yöntemi (3 İşlem) -->
+        <!-- 2. SÜTUN: Formül Yöntemi (her n için 3 işlem) -->
         <g id="s18-formul-grup">
-          <rect x="802" y="438" width="64" height="42" rx="8" fill="url(#s18-grad-formul)" stroke="#162c46" stroke-width="2.5"/>
-          <!-- 3 İşlem Kademe Çizgileri -->
-          <line x1="806" y1="452" x2="862" y2="452" stroke="#162c46" stroke-width="1.5" stroke-opacity="0.3"/>
-          <line x1="806" y1="466" x2="862" y2="466" stroke="#162c46" stroke-width="1.5" stroke-opacity="0.3"/>
-          <!-- Parlama -->
-          <rect x="806" y="442" width="10" height="34" rx="4" fill="#8ebef0" opacity="0.4"/>
-          <!-- Değer Yazısı -->
-          <text x="834" y="422" text-anchor="middle" class="svg-metin" fill="#1f7a52">3 İşlem</text>
-          <!-- Sütun Alt Etiketi -->
-          <text x="834" y="508" text-anchor="middle" class="svg-metin" fill="#162c46">Formül Yöntemi</text>
-          <text x="834" y="530" text-anchor="middle" class="svg-not" fill="#1f7a52">Geometrik toplam</text>
-        </g>
-
-        <!-- HEDEF YUVA: Tasarruf Farkı Bırakma Alanı -->
-        <g id="s18-hedef-yuva" class="s18-hedef-grup" tabindex="0" role="button" aria-label="Tasarruf Farkı Hedef Yuvası">
-          <rect id="s18-yuva-cerceve" x="638" y="296" width="144" height="60" rx="8" fill="#d8e8f5" stroke="#485c72" stroke-width="2" stroke-dasharray="6,6"/>
-          <!-- Yuva Köşe Bağlantı Çentikleri -->
-          <path d="M 646 308 L 646 302 L 652 302" fill="none" stroke="#2b6cb0" stroke-width="2" stroke-linecap="round"/>
-          <path d="M 774 308 L 774 302 L 768 302" fill="none" stroke="#2b6cb0" stroke-width="2" stroke-linecap="round"/>
-          <path d="M 646 344 L 646 350 L 652 350" fill="none" stroke="#2b6cb0" stroke-width="2" stroke-linecap="round"/>
-          <path d="M 774 344 L 774 350 L 768 350" fill="none" stroke="#2b6cb0" stroke-width="2" stroke-linecap="round"/>
-          <text id="s18-yuva-metin" x="710" y="332" text-anchor="middle" class="svg-metin" fill="#485c72">Tasarruf Farkı</text>
-          <!-- Genişletilmiş Görünmez Vuruş Alanı -->
-          <rect x="630" y="288" width="160" height="76" fill-opacity="0.001" pointer-events="all"/>
+          <rect x="801" y="396" width="70" height="84" rx="8" fill="url(#s18-grad-formul)" stroke="#162c46" stroke-width="2.5"/>
+          <line x1="805" y1="424" x2="867" y2="424" stroke="#162c46" stroke-width="1.5" stroke-opacity="0.3"/>
+          <line x1="805" y1="452" x2="867" y2="452" stroke="#162c46" stroke-width="1.5" stroke-opacity="0.3"/>
+          <rect x="805" y="400" width="10" height="76" rx="4" fill="#8ebef0" opacity="0.4"/>
+          <text x="836" y="382" text-anchor="middle" class="svg-metin" fill="#1f7a52">3 işlem</text>
+          <text x="836" y="508" text-anchor="middle" class="svg-metin" fill="#162c46">Formül yöntemi</text>
+          <text x="836" y="532" text-anchor="middle" class="svg-not" fill="#1f7a52">her n için 3</text>
         </g>
       </g>
     </svg>
@@ -9339,37 +9495,37 @@ window.SAYFA_INIT[17] = function (kok) {
 <section class="bolum etkilesim">
 <div class="panel-basi">
 <div class="baslik-satiri"><h2>Ağda Bilgi Yayılımı</h2><span class="etiket">UYGULAMA</span></div>
-<p class="yonerge">Adım sürgüsünü 10'a getirip tasarruf farkı kartını grafikteki hedef yuvaya sürükleyin.</p>
+<p class="yonerge">Sürgüyle adım sayısını değiştirip tasarrufu izle; 20 adımdaki tasarruf kartını grafikteki yuvaya sürükle.</p>
 </div>
 
   <div class="kontrol-govde">
-    <!-- Adım Sürgüsü Paneli -->
+    <!-- Adım Sürgüsü -->
     <div class="s18-panel-kutu">
       <div class="s18-satir">
-        <label for="s18-adim-slider" class="s18-etiket">Adım Sayısı</label>
-        <span id="s18-adim-gosterge" class="buyuk-sayi">Adım 10</span>
+        <label for="s18-adim-slider" class="s18-etiket">Adım sayısı</label>
+        <span id="s18-adim-gosterge" class="buyuk-sayi">n = 3</span>
       </div>
-      <input type="range" id="s18-adim-slider" min="1" max="10" value="10" aria-label="Adım Sayısı">
-      <div class="s18-ipucu">
-        Formül: \( S_n = a_1 \frac{r^n - 1}{r - 1} \)
-      </div>
+      <input type="range" id="s18-adim-slider" min="1" max="10" value="3" aria-label="Adım sayısı n">
     </div>
 
-    <!-- Tasarruf Kartları Havuzu -->
+    <!-- Manuel toplam ile formül aynı Sₙ'yi verir -->
+    <div class="s18-panel-kutu" aria-live="polite">
+      <div class="s18-yontem"><span class="s18-etiket">Manuel:</span> <span id="s18-manuel-ifade">\( 1 + 2 + 4 = 7 \)</span></div>
+      <div class="s18-yontem"><span class="s18-etiket">Formül:</span> <span id="s18-formul-ifade">\( S_{3} = \dfrac{2^{3} - 1}{2 - 1} = 7 \)</span></div>
+    </div>
+
+    <!-- Tasarruf Kartları -->
     <div class="s18-panel-kutu">
-      <div class="s18-kart-baslik">İşlem Tasarrufu:</div>
-      <div class="s18-kart-listesi">
-        <div role="button" tabindex="0" class="kavram-kart s18-kart" data-deger="16" aria-label="16 Adım Tasarruf">
-          16 Adım Tasarruf
-        </div>
-        <div role="button" tabindex="0" class="kavram-kart s18-kart" data-deger="10" aria-label="10 Adım Tasarruf">
-          10 Adım Tasarruf
-        </div>
-        <div role="button" tabindex="0" class="kavram-kart s18-kart" data-deger="6" aria-label="6 Adım Tasarruf">
-          6 Adım Tasarruf
-        </div>
+      <div class="s18-kart-baslik">20 adımda tasarruf (işlem):</div>
+      <div class="s18-kart-listesi" id="s18-kart-listesi">
+        <div role="button" tabindex="0" class="kavram-kart s18-kart" data-deger="19" aria-label="19 işlem">19</div>
+        <div role="button" tabindex="0" class="kavram-kart s18-kart" data-deger="16" aria-label="16 işlem">16</div>
+        <div role="button" tabindex="0" class="kavram-kart s18-kart" data-deger="17" aria-label="17 işlem">17</div>
       </div>
     </div>
+  </div>
+  <div class="kontrol-eylem">
+    <button class="buton" id="s18-sifirla" type="button">Yeniden Başlat</button>
   </div>
 </section>
 
@@ -9384,10 +9540,10 @@ window.SAYFA_INIT[17] = function (kok) {
     background: var(--panel);
     border: 1px solid var(--cizgi);
     border-radius: var(--r-secenek);
-    padding: 14px;
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
   }
 
   #sayfa-18 .s18-satir {
@@ -9401,8 +9557,8 @@ window.SAYFA_INIT[17] = function (kok) {
     font-weight: 600;
   }
 
-  #sayfa-18 .s18-ipucu {
-    color: var(--metin-soluk);
+  #sayfa-18 .s18-yontem {
+    color: var(--metin);
   }
 
   #sayfa-18 .s18-kart-baslik {
@@ -9411,15 +9567,17 @@ window.SAYFA_INIT[17] = function (kok) {
   }
 
   #sayfa-18 .s18-kart-listesi {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
   }
 
   #sayfa-18 .s18-kart {
     touch-action: none;
     cursor: grab;
     user-select: none;
+    justify-content: center;
+    text-align: center;
     transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
   }
 
@@ -9468,54 +9626,111 @@ window.SAYFA_INIT[18] = function (kok) {
   var yuvaCerceve = kok.querySelector("#s18-yuva-cerceve");
   var yuvaMetin = kok.querySelector("#s18-yuva-metin");
   var tasarrufBandi = kok.querySelector("#s18-tasarruf-bandi");
+  var tasarrufBaslik = kok.querySelector("#s18-tasarruf-baslik");
+  var tasarrufDeger = kok.querySelector("#s18-tasarruf-deger");
+  var agYazi = kok.querySelector("#s18-ag-yazi");
+  var manuelIfade = kok.querySelector("#s18-manuel-ifade");
+  var formulIfade = kok.querySelector("#s18-formul-ifade");
+  var kartListesi = kok.querySelector("#s18-kart-listesi");
   var kartlar = kok.querySelectorAll(".s18-kart");
   var agAdimlari = kok.querySelectorAll(".s18-ag-adimi");
+  var btnSifirla = kok.querySelector("#s18-sifirla");
+
+  // Model: n adımda mesajı alan toplam kişi Sₙ = 1 + 2 + 4 + … + 2ⁿ⁻¹ = (2ⁿ − 1)/(2 − 1).
+  // Manuel yöntem n terimi tek tek toplar: n − 1 toplama. Formül her n için 3 işlem
+  // (üs alma, çıkarma, bölme). Tasarruf = (n − 1) − 3 = n − 4  →  n = 20 için 16.
+  var FORMUL_ISLEM = 3;
+  var BIRIM = 28;      // 1 işlem = 28 birim yükseklik
+  var TABAN = 480;
+  var UST = ["⁰", "¹", "²", "³", "⁴", "⁵", "⁶", "⁷", "⁸", "⁹"];
+  function ust(k) { return String(k).split("").map(function (c) { return UST[+c]; }).join(""); }
 
   var seciliKart = null;
   var kilitli = false;
 
+  function dizgi(el) {
+    try {
+      if (window.MathJax && window.MathJax.typesetClear) { window.MathJax.typesetClear([el]); }
+      if (window.MathJax && window.MathJax.typesetPromise) { window.MathJax.typesetPromise([el]); }
+      else if (window.MathJax && window.MathJax.typeset) { window.MathJax.typeset([el]); }
+    } catch (e) { /* dizgi hatası etkileşimi durdurmaz */ }
+  }
+
   function adimGuncelle() {
-    var adim = parseInt(slider.value, 10);
-    adimGosterge.textContent = "Adım " + adim;
+    var n = parseInt(slider.value, 10);
+    adimGosterge.textContent = "n = " + n;
 
-    var manuelIslem = 2 * adim - 1;
-    manuelYazi.textContent = manuelIslem + " İşlem";
+    // Sahne: ağın ilk n adımı belirgin
+    agAdimlari.forEach(function (g) {
+      var seviye = parseInt(g.getAttribute("data-adim"), 10);
+      g.style.opacity = seviye <= n ? "1" : "0.25";
+    });
+    agYazi.textContent = n + ". adımda 2" + ust(n - 1) + " = " + Math.pow(2, n - 1) + " yeni kişi";
 
-    var baseY = 480;
-    var yukseklik = manuelIslem * 14;
-    var yeniY = baseY - yukseklik;
-
+    // Grafik: manuel n − 1 toplama, formül 3 işlem
+    var manuel = n - 1;
+    var yuk = Math.max(2, manuel * BIRIM);
+    var yeniY = TABAN - yuk;
     manuelSutun.setAttribute("y", yeniY);
-    manuelSutun.setAttribute("height", yukseklik);
+    manuelSutun.setAttribute("height", yuk);
     manuelParlama.setAttribute("y", yeniY + 4);
-    manuelParlama.setAttribute("height", Math.max(10, yukseklik - 8));
+    manuelParlama.setAttribute("height", Math.max(0, yuk - 8));
+    manuelParlama.style.display = yuk > 12 ? "" : "none";
+    manuelYazi.textContent = manuel + " işlem";
     manuelYazi.setAttribute("y", yeniY - 14);
 
-    agAdimlari.forEach(function (g) {
-      var adimSeviyesi = parseInt(g.getAttribute("data-adim"), 10);
-      if (adimSeviyesi <= adim) {
-        g.style.opacity = "1";
+    var tasarruf = manuel - FORMUL_ISLEM;
+    var formulUst = TABAN - FORMUL_ISLEM * BIRIM;
+    if (tasarruf > 0) {
+      var bandUst = TABAN - manuel * BIRIM;
+      var bandYuk = formulUst - bandUst;
+      tasarrufBandi.setAttribute("y", bandUst);
+      tasarrufBandi.setAttribute("height", bandYuk);
+      tasarrufBandi.style.display = "block";
+      tasarrufBaslik.textContent = "Tasarruf";
+      tasarrufDeger.textContent = tasarruf + " işlem";
+      if (bandYuk >= 64) {
+        tasarrufBaslik.setAttribute("y", bandUst + bandYuk / 2 - 6);
+        tasarrufDeger.setAttribute("y", bandUst + bandYuk / 2 + 18);
       } else {
-        g.style.opacity = "0.25";
+        tasarrufBaslik.setAttribute("y", bandUst - 32);
+        tasarrufDeger.setAttribute("y", bandUst - 10);
       }
-    });
+    } else {
+      tasarrufBandi.style.display = "none";
+      tasarrufBaslik.textContent = "Tasarruf yok";
+      tasarrufBaslik.setAttribute("y", formulUst - 36);
+      tasarrufDeger.textContent = "";
+    }
+
+    // Panel: iki yöntem aynı Sₙ'yi verir
+    var terimler = [];
+    for (var k = 0; k < n; k++) { terimler.push(Math.pow(2, k)); }
+    var S = Math.pow(2, n) - 1;
+    var manuelMetin = n <= 4 ? terimler.join(" + ") : "1 + 2 + 4 + \\dots + " + Math.pow(2, n - 1);
+    manuelIfade.innerHTML = "\\( " + manuelMetin + " = " + S + " \\)";
+    formulIfade.innerHTML = "\\( S_{" + n + "} = \\dfrac{2^{" + n + "} - 1}{2 - 1} = " + S + " \\)";
+    dizgi(manuelIfade.parentNode.parentNode);
   }
 
   slider.addEventListener("input", adimGuncelle);
   adimGuncelle();
+
+  var DONUT = {
+    "19": "19, manuel yöntemin işlem sayısı; formülün 3 işlemini çıkar.",
+    "17": "20 terimi toplamak 19 toplama ister; sonra formülün 3 işlemini çıkar."
+  };
 
   function degerlendir(deger) {
     if (kilitli) return;
 
     if (deger === "16") {
       kilitli = true;
-      EGITSEL.dontVer(kok, "dogru", "Formül 16 adım kazandırır.");
-
-      tasarrufBandi.style.display = "block";
+      EGITSEL.dontVer(kok, "dogru", "Doğru! Tasarruf = (n − 1) − 3 = n − 4; 20 adımda 16 işlem.");
       yuvaCerceve.setAttribute("stroke", "#1f7a52");
       yuvaCerceve.setAttribute("stroke-width", "3");
       yuvaCerceve.removeAttribute("stroke-dasharray");
-      yuvaMetin.textContent = "16 Adım Tasarruf";
+      yuvaMetin.textContent = "20 adımda tasarruf: 16 işlem";
       yuvaMetin.setAttribute("fill", "#1f7a52");
 
       kartlar.forEach(function (k) {
@@ -9526,7 +9741,7 @@ window.SAYFA_INIT[18] = function (kok) {
         k.setAttribute("aria-disabled", "true");
       });
     } else {
-      EGITSEL.dontVer(kok, "yanlis", "İşlem farkını yeniden hesaplayın.");
+      EGITSEL.dontVer(kok, "yanlis", DONUT[deger] || "Manuel ile formülün işlem farkını hesapla.");
       hedefYuva.classList.add("yanlis-titreme");
       setTimeout(function () {
         hedefYuva.classList.remove("yanlis-titreme");
@@ -9538,6 +9753,35 @@ window.SAYFA_INIT[18] = function (kok) {
       }
     }
   }
+
+  function kartlariKaristir() {
+    var dizi = Array.prototype.slice.call(kartListesi.children);
+    for (var i = dizi.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = dizi[i]; dizi[i] = dizi[j]; dizi[j] = t;
+    }
+    dizi.forEach(function (k) { kartListesi.appendChild(k); });
+  }
+  kartlariKaristir();
+
+  function sifirla() {
+    kilitli = false;
+    seciliKart = null;
+    slider.value = "3";
+    yuvaCerceve.setAttribute("stroke", "#485c72");
+    yuvaCerceve.setAttribute("stroke-width", "2");
+    yuvaCerceve.setAttribute("stroke-dasharray", "6,6");
+    yuvaMetin.textContent = "20 adımda tasarruf: ?";
+    yuvaMetin.setAttribute("fill", "#485c72");
+    hedefYuva.classList.remove("uzerinde", "yanlis-titreme");
+    kartlar.forEach(function (k) {
+      k.classList.remove("yerlesti", "secili", "surukleniyor");
+      k.removeAttribute("aria-disabled");
+    });
+    kartlariKaristir();
+    adimGuncelle();
+  }
+  if (btnSifirla) { btnSifirla.addEventListener("click", sifirla); }
 
   // Tıkla-seç desteği
   kartlar.forEach(function (kart) {
@@ -9564,12 +9808,9 @@ window.SAYFA_INIT[18] = function (kok) {
   hedefYuva.addEventListener("click", function () {
     if (kilitli) return;
     if (seciliKart) {
-      var val = seciliKart.getAttribute("data-deger");
-      degerlendir(val);
-    } else {
-      if (window.SABLON_TOAST) {
-        window.SABLON_TOAST("Lütfen önce bir tasarruf kartı seçin veya sürükleyin.");
-      }
+      degerlendir(seciliKart.getAttribute("data-deger"));
+    } else if (window.SABLON_TOAST) {
+      window.SABLON_TOAST("Önce bir tasarruf kartı seç ya da sürükle.");
     }
   });
 
@@ -11367,40 +11608,40 @@ window.SAYFA_INIT[21] = function (kok) {
           <rect x="30" y="68" width="142" height="24" rx="6" fill="#38649d" stroke="#242220" stroke-width="1.2" />
           <text x="101" y="84" text-anchor="middle" fill="#f3efe6" class="svg-metin">Toplam Eşitliği</text>
           
-          <!-- S_n Kutusu -->
+          <!-- Sₙ Kutusu -->
           <ellipse cx="205" cy="95" rx="20" ry="2.5" fill="#6b645b" opacity="0.2" />
           <rect x="180" y="64" width="50" height="30" rx="6" fill="url(#s22-baskin-grad)" stroke="#242220" stroke-width="1.5" />
           <path d="M 183 67 Q 195 66 205 67" stroke="#f3efe6" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.7" />
-          <text x="205" y="85" text-anchor="middle" fill="#242220" class="svg-metin">S_n</text>
+          <text x="205" y="85" text-anchor="middle" fill="#242220" class="svg-metin">Sₙ</text>
           <text x="240" y="85" text-anchor="middle" fill="#242220" class="svg-baslik">=</text>
 
-          <!-- a_1 (İlk Terim) -->
+          <!-- a₁ (İlk Terim) -->
           <g id="s22-terim-a1">
             <ellipse cx="276" cy="95" rx="20" ry="2.5" fill="#6b645b" opacity="0.2" />
             <rect x="252" y="64" width="48" height="30" rx="6" fill="#cce4d2" stroke="#4a7c59" stroke-width="1.5" />
             <path d="M 255 67 Q 267 66 277 67" stroke="#f3efe6" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.8" />
-            <text x="276" y="85" text-anchor="middle" fill="#242220" class="svg-metin">a_1</text>
+            <text x="276" y="85" text-anchor="middle" fill="#242220" class="svg-metin">a₁</text>
           </g>
           <text x="312" y="85" text-anchor="middle" fill="#6b645b" class="svg-metin">+</text>
 
-          <!-- a_1 × r -->
+          <!-- a₁ × r -->
           <g id="s22-terim-ust-1">
             <rect x="324" y="64" width="76" height="30" rx="6" fill="#f3efe6" stroke="#948b80" stroke-width="1.5" />
-            <text x="362" y="85" text-anchor="middle" fill="#242220" class="svg-metin">a_1 × r</text>
+            <text x="362" y="85" text-anchor="middle" fill="#242220" class="svg-metin">a₁ × r</text>
           </g>
           <text x="412" y="85" text-anchor="middle" fill="#6b645b" class="svg-metin">+</text>
 
-          <!-- a_1 × r^2 -->
+          <!-- a₁ × r² -->
           <g id="s22-terim-ust-2">
             <rect x="424" y="64" width="98" height="30" rx="6" fill="#f3efe6" stroke="#948b80" stroke-width="1.5" />
-            <text x="473" y="85" text-anchor="middle" fill="#242220" class="svg-metin">a_1 × r^2</text>
+            <text x="473" y="85" text-anchor="middle" fill="#242220" class="svg-metin">a₁ × r²</text>
           </g>
-          <text x="552" y="85" text-anchor="middle" fill="#6b645b" class="svg-metin">+ ... +</text>
+          <text x="552" y="85" text-anchor="middle" fill="#6b645b" class="svg-metin">+ … +</text>
 
-          <!-- a_1 × r^(n-1) -->
+          <!-- a₁ × rⁿ⁻¹ -->
           <g id="s22-terim-ust-3">
             <rect x="582" y="64" width="134" height="30" rx="6" fill="#f3efe6" stroke="#948b80" stroke-width="1.5" />
-            <text x="649" y="85" text-anchor="middle" fill="#242220" class="svg-metin">a_1 × r^{n-1}</text>
+            <text x="649" y="85" text-anchor="middle" fill="#242220" class="svg-metin">a₁ × rⁿ⁻¹</text>
           </g>
         </g>
 
@@ -11409,33 +11650,33 @@ window.SAYFA_INIT[21] = function (kok) {
           <rect x="30" y="112" width="142" height="24" rx="6" fill="#38649d" stroke="#242220" stroke-width="1.2" />
           <text x="101" y="128" text-anchor="middle" fill="#f3efe6" class="svg-metin">Çarpım Eşitliği</text>
 
-          <!-- r × S_n Kutusu -->
+          <!-- r × Sₙ Kutusu -->
           <ellipse cx="215" cy="139" rx="30" ry="2.5" fill="#6b645b" opacity="0.2" />
           <rect x="178" y="108" width="74" height="30" rx="6" fill="url(#s22-ikincil-grad)" stroke="#242220" stroke-width="1.5" />
           <path d="M 181 111 Q 196 110 211 111" stroke="#f3efe6" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.7" />
-          <text x="215" y="129" text-anchor="middle" fill="#f3efe6" class="svg-metin">r × S_n</text>
+          <text x="215" y="129" text-anchor="middle" fill="#f3efe6" class="svg-metin">r × Sₙ</text>
           <text x="262" y="129" text-anchor="middle" fill="#242220" class="svg-baslik">=</text>
 
           <!-- Alttaki Sağa Kayan Terimler Grubu -->
           <g id="s22-alt-terimler" class="s22-anim-kayma" transform="translate(0, 0)">
-            <!-- a_1 × r -->
+            <!-- a₁ × r -->
             <g id="s22-terim-alt-1">
               <rect x="282" y="108" width="76" height="30" rx="6" fill="#f3efe6" stroke="#948b80" stroke-width="1.5" />
-              <text x="320" y="129" text-anchor="middle" fill="#242220" class="svg-metin">a_1 × r</text>
+              <text x="320" y="129" text-anchor="middle" fill="#242220" class="svg-metin">a₁ × r</text>
             </g>
             <text x="370" y="129" text-anchor="middle" fill="#6b645b" class="svg-metin">+</text>
 
-            <!-- a_1 × r^2 -->
+            <!-- a₁ × r² -->
             <g id="s22-terim-alt-2">
               <rect x="382" y="108" width="98" height="30" rx="6" fill="#f3efe6" stroke="#948b80" stroke-width="1.5" />
-              <text x="431" y="129" text-anchor="middle" fill="#242220" class="svg-metin">a_1 × r^2</text>
+              <text x="431" y="129" text-anchor="middle" fill="#242220" class="svg-metin">a₁ × r²</text>
             </g>
-            <text x="510" y="129" text-anchor="middle" fill="#6b645b" class="svg-metin">+ ... +</text>
+            <text x="510" y="129" text-anchor="middle" fill="#6b645b" class="svg-metin">+ … +</text>
 
-            <!-- a_1 × r^n (Son Terim) -->
+            <!-- a₁ × rⁿ (Son Terim) -->
             <g id="s22-terim-alt-son">
               <rect x="557" y="108" width="100" height="30" rx="6" fill="#cce4d2" stroke="#4a7c59" stroke-width="1.5" />
-              <text x="607" y="129" text-anchor="middle" fill="#242220" class="svg-metin">a_1 × r^n</text>
+              <text x="607" y="129" text-anchor="middle" fill="#242220" class="svg-metin">a₁ × rⁿ</text>
             </g>
           </g>
         </g>
@@ -11468,8 +11709,8 @@ window.SAYFA_INIT[21] = function (kok) {
           <!-- Sol Parantez Yayları -->
           <path id="s22-sol-parantez" d="M 46 186 Q 36 201 46 216" stroke="#244673" stroke-width="2.5" fill="none" />
           <rect x="52" y="188" width="60" height="26" rx="6" fill="#ded7cb" stroke="#38649d" stroke-width="1.2" />
-          <text x="82" y="206" text-anchor="middle" fill="#244673" class="svg-not">1 - r</text>
-          <text x="142" y="206" text-anchor="middle" fill="#242220" class="svg-metin">· S_n</text>
+          <text x="82" y="206" text-anchor="middle" fill="#244673" class="svg-not">1 − r</text>
+          <text x="142" y="206" text-anchor="middle" fill="#242220" class="svg-metin">· Sₙ</text>
           <text x="180" y="206" text-anchor="middle" fill="#242220" class="svg-baslik">=</text>
 
           <!-- Sağ Taraf: Ortak Çarpan Parantezi -->
@@ -11477,7 +11718,7 @@ window.SAYFA_INIT[21] = function (kok) {
           <text x="321" y="206" text-anchor="middle" fill="#242220" class="svg-not">Ortak Çarpan Parantezi</text>
 
           <!-- Sağ Parantez İfadesi -->
-          <text x="545" y="206" text-anchor="middle" fill="#242220" class="svg-metin">a_1 · (1 - r^n)</text>
+          <text x="545" y="206" text-anchor="middle" fill="#242220" class="svg-metin">a₁ · (1 − rⁿ)</text>
 
           <!-- 4. Adım: Toplam Formülü Rozeti -->
           <g id="s22-genel-formul-ozet" style="display: none;">
@@ -11504,7 +11745,7 @@ window.SAYFA_INIT[21] = function (kok) {
           <text x="110" y="344" text-anchor="middle" fill="#f3efe6" class="svg-not">1. İspat Adımı</text>
           <!-- Yerleşen İfade Grubu (Başlangıçta gizli) -->
           <g class="s22-yerlesen-ifade" style="display: none;">
-            <text x="430" y="344" text-anchor="middle" fill="#242220" class="svg-metin">r × S_n = a_1 × r + a_1 × r^2 + ... + a_1 × r^n</text>
+            <text x="430" y="344" text-anchor="middle" fill="#242220" class="svg-metin">r × Sₙ = a₁ × r + a₁ × r² + … + a₁ × rⁿ</text>
           </g>
           <!-- Kılavuz manyetik yay -->
           <path d="M 680 325 Q 700 340 680 355" stroke="#948b80" stroke-width="1.2" stroke-dasharray="3 3" fill="none" opacity="0.45" />
@@ -11520,7 +11761,7 @@ window.SAYFA_INIT[21] = function (kok) {
           <text x="110" y="416" text-anchor="middle" fill="#f3efe6" class="svg-not">2. İspat Adımı</text>
           <!-- Yerleşen İfade Grubu -->
           <g class="s22-yerlesen-ifade" style="display: none;">
-            <text x="430" y="416" text-anchor="middle" fill="#242220" class="svg-metin">S_n - r × S_n = a_1 - a_1 × r^n</text>
+            <text x="430" y="416" text-anchor="middle" fill="#242220" class="svg-metin">Sₙ − r × Sₙ = a₁ − a₁ × rⁿ</text>
           </g>
           <!-- Kılavuz manyetik yay -->
           <path d="M 680 397 Q 700 412 680 427" stroke="#948b80" stroke-width="1.2" stroke-dasharray="3 3" fill="none" opacity="0.45" />
@@ -11536,7 +11777,7 @@ window.SAYFA_INIT[21] = function (kok) {
           <text x="110" y="488" text-anchor="middle" fill="#f3efe6" class="svg-not">3. İspat Adımı</text>
           <!-- Yerleşen İfade Grubu -->
           <g class="s22-yerlesen-ifade" style="display: none;">
-            <text x="430" y="488" text-anchor="middle" fill="#242220" class="svg-metin">(1 - r) × S_n = a_1 × (1 - r^n)</text>
+            <text x="430" y="488" text-anchor="middle" fill="#242220" class="svg-metin">(1 − r) × Sₙ = a₁ × (1 − rⁿ)</text>
           </g>
           <!-- Kılavuz manyetik yay -->
           <path d="M 680 469 Q 700 484 680 499" stroke="#948b80" stroke-width="1.2" stroke-dasharray="3 3" fill="none" opacity="0.45" />
@@ -11552,7 +11793,7 @@ window.SAYFA_INIT[21] = function (kok) {
           <text x="110" y="560" text-anchor="middle" fill="#f3efe6" class="svg-not">4. İspat Adımı</text>
           <!-- Yerleşen İfade Grubu -->
           <g class="s22-yerlesen-ifade" style="display: none;">
-            <text x="430" y="560" text-anchor="middle" fill="#242220" class="svg-metin">S_n = a_1 · (1 - r^n) / (1 - r)   [ r ≠ 1 ]</text>
+            <text x="430" y="560" text-anchor="middle" fill="#242220" class="svg-metin">Sₙ = a₁ · (1 − rⁿ) / (1 − r)   [ r ≠ 1 ]</text>
           </g>
           <!-- Kılavuz manyetik yay -->
           <path d="M 680 541 Q 700 556 680 571" stroke="#948b80" stroke-width="1.2" stroke-dasharray="3 3" fill="none" opacity="0.45" />
@@ -11576,7 +11817,7 @@ window.SAYFA_INIT[21] = function (kok) {
       <div class="kavram-kart s22-kart-oge" data-adim="1" role="button" tabindex="0">
         <div class="s22-rozet">Çarpım Eşitliği</div>
         <div class="s22-kart-formul">
-          \( r \times S_n = a_1 \times r + a_1 \times r^2 + \dots + a_1 \times r^n \)
+          \( r \times S_{n} = a_{1} \times r + a_{1} \times r^{2} + \dots + a_{1} \times r^{n} \)
         </div>
       </div>
 
@@ -11584,7 +11825,7 @@ window.SAYFA_INIT[21] = function (kok) {
       <div class="kavram-kart s22-kart-oge" data-adim="2" role="button" tabindex="0">
         <div class="s22-rozet">Taraf Tarafa Çıkarma</div>
         <div class="s22-kart-formul">
-          \( S_n - r \times S_n = a_1 - a_1 \times r^n \)
+          \( S_{n} - r \times S_{n} = a_{1} - a_{1} \times r^{n} \)
         </div>
       </div>
 
@@ -11592,7 +11833,7 @@ window.SAYFA_INIT[21] = function (kok) {
       <div class="kavram-kart s22-kart-oge" data-adim="3" role="button" tabindex="0">
         <div class="s22-rozet">Ortak Çarpan Parantezi</div>
         <div class="s22-kart-formul">
-          \( (1 - r) \times S_n = a_1 \times (1 - r^n) \)
+          \( (1 - r) \times S_{n} = a_{1} \times (1 - r^{n}) \)
         </div>
       </div>
 
@@ -11600,7 +11841,7 @@ window.SAYFA_INIT[21] = function (kok) {
       <div class="kavram-kart s22-kart-oge" data-adim="4" role="button" tabindex="0">
         <div class="s22-rozet">Genel Toplam Formülü</div>
         <div class="s22-kart-formul">
-          \( S_n = a_1 \frac{1 - r^n}{1 - r} \quad (r \neq 1) \)
+          \( S_{n} = a_{1} \dfrac{1 - r^{n}}{1 - r} \quad (r \neq 1) \)
         </div>
       </div>
     </div>
@@ -12045,7 +12286,17 @@ window.SAYFA_INIT[22] = function (kok) {
       <g id="s23-katman-on">
         <text id="s23-toplam-yazi" x="212" y="70" text-anchor="middle" class="svg-metin" fill="#262a33">1 + 3 + 5 + 7 + 9</text>
         <text id="s23-kare-yazi" x="0" y="0" class="svg-not" fill="#262a33" display="none">kare</text>
-        <text id="s23-tasan-yazi" x="0" y="0" class="svg-not" fill="#588135" display="none">sığmayan</text>
+        <text id="s23-tasan-yazi" x="0" y="0" class="svg-not" fill="#588135" display="none">kareye sığmayan</text>
+        <!-- 2. etap açıklaması: her terim = kareye yerleşen katman + kareye sığmayan fazlalık -->
+        <g id="s23-aciklama" display="none">
+          <rect x="16" y="516" width="672" height="96" rx="14" fill="#fffdf8" stroke="#b8ad9c" stroke-width="1.5" />
+          <text id="s23-acik-0" x="52" y="542" class="svg-not" fill="#262a33">Her terim = kareye yerleşen + kareye sığmayan</text>
+          <circle cx="62" cy="565" r="8" fill="url(#s23-g-mavi)" stroke="#2a5ca8" stroke-width="1.5" />
+          <text id="s23-acik-1" x="80" y="571" class="svg-not" fill="#2a5ca8">Kareye yerleşen: 1 + 3 + 5 = 3 × 3 = 9</text>
+          <circle cx="62" cy="593" r="8" fill="url(#s23-g-mavi)" stroke="#2a5ca8" stroke-width="1.5" />
+          <circle cx="62" cy="593" r="11" fill="none" stroke="#588135" stroke-width="1.6" stroke-dasharray="3 2" />
+          <text id="s23-acik-2" x="80" y="599" class="svg-not" fill="#588135">Kareye sığmayan: 2 + 4 + 6 = 12</text>
+        </g>
         <text x="558" y="126" text-anchor="middle" class="svg-metin" fill="#ffffff">Formül</text>
         <text id="s23-k1" x="444" y="176" class="svg-metin" fill="#262a33">Sₙ = n · (a₁ + aₙ) / 2</text>
         <text id="s23-k2" x="444" y="208" class="svg-not" fill="#2a5ca8">a₁ = 1,  d = 2</text>
@@ -12216,9 +12467,25 @@ window.SAYFA_INIT[23] = function (kok) {
       for (var t = 0; t < 2 * k; t++) nokta(xs + (n + 1 + t + 0.5) * s, y, s, mavi, true);
     }
     oz(kareCerceve, { x: sayi(xs - 4), y: sayi(ys - 4), width: sayi(h + 8), height: sayi(h + 8), display: "inline" });
-    oz(kareYazi, { x: sayi(xs - 4), y: sayi(ys + h + 34), display: "inline" }).textContent = "kare: " + n + " × " + n + " = " + (n * n);
-    oz(tasanYazi, { x: sayi(xs + (n + 1) * s), y: sayi(ys - 16), display: "inline" }).textContent = "sığmayan: " + (n * (n + 1));
+    oz(kareYazi, { x: sayi(xs - 4), y: sayi(ys - 16), display: "inline" }).textContent = "kare";
+    oz(tasanYazi, { x: sayi(xs + (n + 1) * s), y: sayi(ys - 16), display: "inline" }).textContent = "kareye sığmayan";
     olcu(0, 0, 0, n, false);
+    aciklama(n);
+  }
+
+  // «Sığmayan» ne demek: k. terim 4k − 1 nokta = (2k − 1) nokta karenin k. katmanı + 2k nokta
+  // karenin dışında kalan fazlalık. Toplam = kare (n × n) + sığmayanlar (2 + 4 + … + 2n = n(n + 1)).
+  function aciklama(n) {
+    var k = Math.min(n, 2);
+    var tekler = [], ciftler = [];
+    for (var i = 1; i <= Math.min(n, 3); i++) { tekler.push(2 * i - 1); ciftler.push(2 * i); }
+    var tekMetin = n <= 3 ? tekler.join(" + ") : "1 + 3 + … + " + (2 * n - 1);
+    var ciftMetin = n <= 3 ? ciftler.join(" + ") : "2 + 4 + … + " + (2 * n);
+    q("#s23-acik-0").textContent = "Her terim = kareye yerleşen + kareye sığmayan: " +
+      (4 * k - 1) + " = " + (2 * k - 1) + " + " + (2 * k);
+    q("#s23-acik-1").textContent = "Kareye yerleşen: " + (n > 1 ? tekMetin + " = " : "") +
+      n + " × " + n + " = " + (n * n);
+    q("#s23-acik-2").textContent = "Kareye sığmayan: " + ciftMetin + (n > 1 ? " = " + (n * (n + 1)) : "");
   }
 
   function kartA(n) {
@@ -12243,6 +12510,7 @@ window.SAYFA_INIT[23] = function (kok) {
   function ciz() {
     var n = parseInt(surgu.value, 10);
     nYazi.textContent = String(n);
+    q("#s23-aciklama").setAttribute("display", etap === 1 ? "none" : "inline");
     if (etap === 1) {
       grupB.innerHTML = "";
       kareCerceve.setAttribute("display", "none");
@@ -14398,6 +14666,11 @@ window.SAYFA_INIT[25] = function (kok) {
     var sayfa = document.querySelector('#sayfalar .sayfa.aktif') || document.querySelector('#sayfalar');
     if (!sayfa) return;
     var co = cerceveOlcegi();
+    // 0) Soru sayacı başlık satırına sığmıyorsa rozet tekrarı/«DEĞERLENDİRME» gizlenir (sayfa açıkken ölçülür)
+    var basSatir = sayfa.querySelector('.baslik-satiri');
+    if (basSatir && basSatir.querySelector('.soru-sayac') && window.EGITSEL && window.EGITSEL.baslikTekrariniGizle) {
+      window.EGITSEL.baslikTekrariniGizle(basSatir);
+    }
     // 1) Görünür yazı tabanı: ölçekli SVG'deki küçük yazıyı büyüt (en çok ×UST)
     var liste = sayfa.querySelectorAll('svg text, svg tspan, svg textPath');
     for (var i = 0; i < liste.length; i++) {
@@ -14574,6 +14847,79 @@ window.SAYFA_INIT[25] = function (kok) {
     addEventListener('resize', function () { planla(120); });
     sayfaAcildi();
   }
+  // ── SORU BÖLÜMÜ STANDARDI (2026-10-08): tek tip soru sayacı. Değerlendirme sayfası çağırır:
+  //   var sayac = EGITSEL.soruSayaci(kok, 5, { tikla: function (i) { ... } });   // tikla isteğe bağlı
+  //   sayac.goster(i)                    → i. soru etkin (0 tabanlı)
+  //   sayac.isaretle(i, 'dogru'|'yanlis'|'devam'|null)
+  //   sayac.sifirla()
+  // Sayaç panelin başlık satırının sağına yerleşir (yoksa .kontrol-govde'nin başına); «Soru i / n»
+  // yalnız ekran okuyucuya söylenir. Soru metni öğesine class="soru-metni" verilir (kutusuz, büyük).
+  window.EGITSEL = window.EGITSEL || {};
+  // Başlık «Değerlendirme» ile rozet «DEĞERLENDİRME» aynıysa rozet gizlenir: sayaç başlık satırına sığsın
+  window.EGITSEL.baslikTekrariniGizle = function (bas) {
+    var h = bas && bas.querySelector('h2'), e = bas && bas.querySelector('.etiket');
+    if (!h || !e) return;
+    var a = h.textContent.trim().toLocaleUpperCase('tr'), b = e.textContent.trim().toLocaleUpperCase('tr');
+    if (a && a === b) { e.style.display = 'none'; return; }
+    // Sayaç başlık satırına sığmayıp alt satıra indiyse «DEĞERLENDİRME» rozeti gizlenir (alan verimi)
+    var s = bas.querySelector('.soru-sayac');
+    var asagida = function () { return s.offsetTop > h.offsetTop + h.offsetHeight / 2; };
+    if (s && /^DE[ĞG]ERLEND[İI]RME$/.test(b) && s.offsetHeight && asagida()) {
+      e.style.display = 'none';
+      if (asagida()) e.style.display = '';   // gizlemek yetmiyor (başlık uzun): rozet kalsın
+    }
+  };
+  window.EGITSEL.soruSayaci = function (kok, toplam, ayar) {
+    ayar = ayar || {};
+    toplam = Math.max(0, toplam | 0);
+    var bas = kok && (kok.querySelector('.panel-basi .baslik-satiri') || kok.querySelector('.baslik-satiri'));
+    var hedef = bas || (kok && kok.querySelector('.kontrol-govde'));
+    if (!hedef) return null;
+    var kap = hedef.querySelector('.soru-sayac');
+    if (!kap) {
+      kap = document.createElement('div');
+      kap.className = 'soru-sayac';
+      kap.setAttribute('role', 'group');
+      kap.setAttribute('aria-label', 'Sorular');
+      if (bas) hedef.appendChild(kap); else hedef.insertBefore(kap, hedef.firstChild);
+    }
+    if (bas) window.EGITSEL.baslikTekrariniGizle(bas);
+    kap.innerHTML = '';
+    var aktif = 0, durum = [], noktalar = [];
+    for (var i = 0; i < toplam; i++) {
+      var b = document.createElement(ayar.tikla ? 'button' : 'span');
+      b.className = 'soru-nokta' + (ayar.tikla ? ' tiklanir' : '');
+      b.textContent = String(i + 1);
+      if (ayar.tikla) {
+        b.type = 'button';
+        (function (n) { b.addEventListener('click', function () { ayar.tikla(n); }); })(i);
+      }
+      kap.appendChild(b);
+      noktalar.push(b);
+    }
+    var sr = document.createElement('span');
+    sr.className = 'sr-only';
+    sr.setAttribute('aria-live', 'polite');
+    kap.appendChild(sr);
+    function ciz() {
+      noktalar.forEach(function (b, n) {
+        b.className = 'soru-nokta' + (ayar.tikla ? ' tiklanir' : '') + (durum[n] ? ' ' + durum[n] : '')
+          + (n === aktif ? ' aktif' : '');
+        b.setAttribute('aria-label', (n + 1) + '. soru' + (durum[n] === 'dogru' ? ', doğru'
+          : durum[n] === 'yanlis' ? ', yanlış' : ''));
+        if (n === aktif) b.setAttribute('aria-current', 'step'); else b.removeAttribute('aria-current');
+      });
+      sr.textContent = aktif >= 0 && aktif < toplam ? 'Soru ' + (aktif + 1) + ' / ' + toplam : '';
+    }
+    ciz();
+    return {
+      kap: kap,
+      toplam: toplam,
+      goster: function (n) { aktif = n; ciz(); },
+      isaretle: function (n, d) { durum[n] = d || null; ciz(); },
+      sifirla: function () { durum = []; aktif = 0; ciz(); }
+    };
+  };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', baslat);
   else baslat();
 })();

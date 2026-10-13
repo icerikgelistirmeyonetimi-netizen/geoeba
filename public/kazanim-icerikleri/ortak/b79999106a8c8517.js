@@ -37,6 +37,27 @@
   // dinleyici hiç tetiklenmez ve çerçeve ölçeksiz kalırdı; hemen bir kez koş.
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", olcekle);
   else olcekle();
+  /* SAYFA ROZETİ ALT ÇUBUKTA (2026-10-10 kullanıcı kararı: «sayfa numarası yanında düz
+     yazsın»): KEŞİF/UYGULA/DEĞERLENDİRME rozeti panel başlığında ayrı satır açıyordu
+     (ilkokul boylarında ~40px). Sayaç FOOTER'daysa «1 / 6 · Keşif» yazılır ve panel rozeti
+     gizlenir (body.etiket-altta); sayaç bannerda ya da hiç yoksa rozet panelde kalır. */
+  function sayfaDurumYaz(no) {
+    const durum = document.getElementById("sayfa-durum");
+    if (!durum) return;
+    let metin = no + " / " + SAYFA_SAYISI;
+    const footer = document.getElementById("footer");
+    if (footer && durum.parentElement === footer) {
+      const el = sayfaEl(no);
+      const etiket = el && el.querySelector(".panel-basi .baslik-satiri .etiket");
+      const ham = etiket ? etiket.textContent.trim() : "";
+      if (ham) {
+        const kucuk = ham.toLocaleLowerCase("tr");
+        metin += " · " + kucuk.charAt(0).toLocaleUpperCase("tr") + kucuk.slice(1);
+      }
+      document.body.classList.add("etiket-altta");
+    }
+    durum.textContent = metin;
+  }
   let aktif = 1;
   const baslatilan = new Set();
   let toastZamanlayici = null;
@@ -134,7 +155,8 @@
     if (initDustu.has(no)) return true;
     const L = window.__JS_HATALAR__ && window.__JS_HATALAR__[no];
     // HESAP kaydı (2026-09-26) kod durması değildir: sahne çizilir, ilk çizim beklenir.
-    return !!(L && L.some((s) => !/^KONUM3B(\s|$)|^(\S+\s+)?EŞ DÜZLEM|^HESAP(\s|$)/.test(String(s))));
+    // YERLES3B kaydı (2026-10-12) da ölçümdür, kod durması değildir.
+    return !!(L && L.some((s) => !/^KONUM3B(\s|$)|^(\S+\s+)?EŞ DÜZLEM|^HESAP(\s|$)|^YERLES3B(\s|$)/.test(String(s))));
   }
   function hazirDenetle() {
     hazirZamanli = false;
@@ -778,8 +800,7 @@
     }
     svgLatexDuzelt(el);         // INIT'in çizdiği SVG metinleri de kapsanır
     // Sayfa numarası banner/footer'da olabilir ya da hiç olmayabilir
-    const durum = document.getElementById("sayfa-durum");
-    if (durum) durum.textContent = aktif + " / " + SAYFA_SAYISI;
+    sayfaDurumYaz(aktif);
     noktalariGuncelle();
     // ERİŞİLEBİLİRLİK: odak yeni sayfaya taşınır (section tabindex="-1"
     // montajdan gelir) — ekran okuyucunun bağlamı değişir, sayfa değişimini
@@ -939,9 +960,8 @@
       }
       initSonrasi(no, ilk, yeniden);
       svgLatexDuzelt(ilk);
-      // Montaj göstergeyi «1 / N» basar; başka sayfada açıldıysa o sayfayı söylesin.
-      const durum = document.getElementById("sayfa-durum");
-      if (durum && no !== 1) durum.textContent = no + " / " + SAYFA_SAYISI;
+      // Montaj göstergeyi «1 / N» basar; açılan sayfanın numarası + rozeti buradan yazılır.
+      sayfaDurumYaz(no);
     }
     menuKur();
     noktalariGuncelle();
@@ -1403,7 +1423,47 @@
       r.setPixelRatio = function () { oraniUygula(kayit); return this; };
 
       const asilRender = r.render.bind(r);
+      // KUŞ BAKIŞI ÇEKİM (2026-10-12, kullanıcı: «çözümleri uygula» — aynalama/konum denetimi):
+      // çekim kopyası window.__KUSBAKISI__ koyunca ekrana çizilen sahne, sahnenin kutusunu kaplayan
+      // tepeden ortografik kamerayla çizilir. Ekranın SAĞI = asıl kameranın sağı, ÜSTÜ = asıl
+      // kameradan UZAK (cam.up = kameranın bakış yönü). Zemin/deniz gibi 40 birimden büyük
+      // nesneler kutuya girmez. Yalnız çekimde; normal sayfada kamera değişmez.
+      function kusBakisi(sahne, kamera) {
+        try {
+          const kutu = new THREE.Box3(), tmp = new THREE.Box3(), b = new THREE.Vector3();
+          sahne.updateMatrixWorld(true);
+          sahne.traverse((o) => {
+            if (!o.isMesh || !o.visible || !o.geometry) return;
+            tmp.setFromObject(o); tmp.getSize(b);
+            if (!isFinite(b.x) || Math.max(b.x, b.y, b.z) > 40 || Math.max(b.x, b.y, b.z) < 0.01) return;
+            kutu.union(tmp);
+          });
+          if (kutu.isEmpty()) return kamera;
+          const boyut = kutu.getSize(new THREE.Vector3()), merkez = kutu.getCenter(new THREE.Vector3());
+          const yari = Math.max(boyut.x, boyut.z) * 0.6 + 0.5;
+          const en = r.domElement.width || 1, boy = r.domElement.height || 1, oran = en / boy;
+          const k = kayit.kusKamera || (kayit.kusKamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000));
+          k.left = -yari * oran; k.right = yari * oran; k.top = yari; k.bottom = -yari;
+          k.near = 0.1; k.far = boyut.y + 200;
+          const yon = new THREE.Vector3(0, 0, -1);
+          if (kamera && kamera.getWorldDirection) kamera.getWorldDirection(yon);
+          yon.y = 0; if (yon.lengthSq() < 1e-9) yon.set(0, 0, -1); yon.normalize();
+          k.up.copy(yon);
+          k.position.set(merkez.x, kutu.max.y + 100, merkez.z);
+          k.lookAt(merkez.x, kutu.min.y, merkez.z);
+          k.updateProjectionMatrix(); k.updateMatrixWorld(true);
+          return k;
+        } catch (e) { return kamera; }
+      }
       r.render = function (sahne, kamera) {
+        // Son işlem zincirli sayfada (EffectComposer) sahne bir render hedefine çizilir (RenderPass),
+        // ekrana yalnız dörtgen gider — ölçüldü (FB.4.3.1 s3): hedef=null şartı kuş bakışını
+        // atlıyordu. Şart: Scene + gerçek kamera + yardımcı (PMREM/CubeCamera) hedef DEĞİL.
+        if (window.__KUSBAKISI__ && sahne && sahne.isScene === true && kamera && kamera.isCamera
+            && !(kamera.userData && kamera.userData.yardimci)
+            && !yardimciHedef(r.getRenderTarget ? r.getRenderTarget() : null)) {
+          kamera = kusBakisi(sahne, kamera);
+        }
         // SON İŞLEM ZİNCİRİ (2026-09-03, postprocessing.js): EffectComposer
         // geçişleri tam-ekran dörtgeni (Mesh) orto kamerayla çizer — Scene
         // değildir. Bu çağrılar köprünün kamera kaydına/yuva izdüşümüne
@@ -1440,6 +1500,27 @@
         }
         // Y1: bağlam geri gelince eşlenecek sahneler (yardımcı sahneler hariç).
         (kayit.sahneler || (kayit.sahneler = new Set())).add(sahne);
+        // AÇIK GEOMETRİ ÇİFT YÜZ (2026-10-12, kullanıcı: «mekanik çözümü 3B'ler için geri
+        // getir»; FB.4.4.2 s1: tava tabanı tek yüzlü CircleGeometry +π/2 döndürülmüş —
+        // normal aşağı bakıyor, üstten arka yüz çizilmiyor, alev tabandan geçip görünüyordu;
+        // gövde de openEnded silindir). Düz (Circle/Plane/Ring/Shape) ve açık uçlu (openEnded)
+        // geometrilerin tek yüzlü (FrontSide=0) malzemesi DoubleSide (2) yapılır. İlk çizimde
+        // ve 2 sn sonra bir kez daha (geç eklenen nesneler); işlenen sahne yeniden taranmaz.
+        if (!kayit.cifYuzSahneler) kayit.cifYuzSahneler = new WeakSet();
+        if (!kayit.cifYuzSahneler.has(sahne)) {
+          kayit.cifYuzSahneler.add(sahne);
+          const cifYuz = (s) => { try { s.traverse((o) => {
+            if (!o.isMesh || !o.geometry || !o.material) return;
+            const g = o.geometry, t = String(g.type || ""), p = g.parameters || {};
+            const acik = /^(Circle|Plane|Ring|Shape)Geometry$/.test(t)
+                      || (/^(Cylinder|Cone)Geometry$/.test(t) && p.openEnded === true);
+            if (!acik) return;
+            (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
+              if (m && m.side === 0) { m.side = 2; m.needsUpdate = true; } });
+          }); } catch (e) {} };
+          cifYuz(sahne);
+          setTimeout(() => cifYuz(sahne), 2000);
+        }
         const k = (window.SAHNE3B = window.SAHNE3B || {kameralar: []});
         // SAYFA BAŞINA KAYIT (2026-09-03, ışık sürgüleri): gizli sayfaların rAF
         // döngüsü de buraya düşer; «son*» alanlar yalnız AKTİF sayfanın çizimiyle

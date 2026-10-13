@@ -612,10 +612,10 @@ export const ortaokulLevel: Level = {
             },
             {
               "id": "topic-6-3-2-kesir-bolme-i-liskisi",
-              "title": "Kesir-Bölme İlişkisi",
+              "title": "Kesir - Bölme İşlemi İlişkisi",
               "code": "MAT.6.3.2",
               "category": "sayi",
-              "badge": "Kesir-Bölme İli",
+              "badge": "Kesir - Bölme İ",
               "description": "",
               "learningOutcomes": [],
               "activities": [
