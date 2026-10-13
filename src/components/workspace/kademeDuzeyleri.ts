@@ -284,9 +284,11 @@ export function araclariSuz<T extends { id: string }>(araclar: readonly T[], duz
 /**
  * Kademeye özel araç adları (panel, Araçlar menüsü, kılavuz bu süzülmüş listeden okur). Ortaokulda bütün ölçüler
  * Ayarlar'daki varsayılan birimle (br) yazıldığı için "Uzunluk Ölç (cm)" birimini adından bırakır (alan uzmanı,
- * atölye inceleme 4. tur: "tüm ölçülerde tek birim kullan"; olcuYuvarlama.ts). Diğer kademelerde ad değişmez.
+ * atölye inceleme 4. tur: "tüm ölçülerde tek birim kullan"; olcuYuvarlama.ts). İlkokulda da ekranda "cm" yoktur
+ * (4. tur [177]: bütün ölçmeler birimle). Lisede ad değişmez.
  */
 export const KADEME_ARAC_ADLARI: Partial<Record<KademeId, Readonly<Record<string, string>>>> = {
+  ilkokul: { measure_distance: 'Uzunluk Ölç' },
   ortaokul: { measure_distance: 'Uzunluk Ölç' },
 };
 

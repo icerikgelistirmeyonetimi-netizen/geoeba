@@ -26,6 +26,7 @@ import {
   type TreeTool3DItem,
 } from './treeToolDefinitions3D';
 import { gruplari3BSuz, grupAcikliklari3B } from './kademeDuzeyleri3B';
+import { ilkokulCisimOzellikleri } from './ilkokul3B';
 import { GorunumDuzeniPaneli } from './gorunumDuzenleri';
 import {
   Box,
@@ -583,6 +584,9 @@ export function Toolbar3D({
   const ucgenTabani: UcgenTabani | null =
     selectedSolid?.type === 'triangular_prism' ? ucgenTabaniniBul(selectedSolid) : null;
   const ucgenSecicisi = ucgenTabani !== null && kademeDuzeyi !== 'ilkokul';
+  // İlkokul (uzman 4. tur [180]): hacim, yüzey alanı, br² / br³, harfle kenar (a, r, h), konum koordinatları ve derece yok;
+  // cisim özellikleri yüz / köşe / ayrıt sayısı ve yüzlerin biçimiyle sınırlı (ilkokul3B.ts)
+  const ilkokul = kademeDuzeyi === 'ilkokul';
   const eskenarMi = ucgenTabani === 'eskenar';
   const yuvarlakMi = selectedSolid ? selectedSolid.type === 'sphere' || selectedSolid.type === 'cylinder' || selectedSolid.type === 'cone' : false;
 
@@ -918,7 +922,8 @@ export function Toolbar3D({
                                 {s.name}
                               </span>
                               <span className="block text-[11px] text-muted-foreground truncate">
-                                {CISIM_ADLARI[s.type]} · ({formatTurkishNumber(s.position.x, 1)}; {formatTurkishNumber(s.position.y, 1)}; {formatTurkishNumber(s.position.z, 1)})
+                                {CISIM_ADLARI[s.type]}
+                                {!ilkokul && <> · ({formatTurkishNumber(s.position.x, 1)}; {formatTurkishNumber(s.position.y, 1)}; {formatTurkishNumber(s.position.z, 1)})</>}
                               </span>
                             </div>
                           )}
@@ -989,7 +994,8 @@ export function Toolbar3D({
                   <div>
                     <h4 className="font-bold text-foreground text-sm">Seçili Cisim Yok</h4>
                     <p className="mt-1 text-muted-foreground/80 leading-relaxed">
-                      Sahneden veya <strong>Nesneler</strong> sekmesinden bir cisim seçin. Hacmi, yüzey alanı, boyutları ve rengi burada görünür.
+                      Sahneden veya <strong>Nesneler</strong> sekmesinden bir cisim seçin.{' '}
+                      {ilkokul ? 'Yüz, köşe ve ayrıt sayısı, boyutları ve rengi burada görünür.' : 'Hacmi, yüzey alanı, boyutları ve rengi burada görünür.'}
                     </p>
                   </div>
                   <button
@@ -1024,7 +1030,33 @@ export function Toolbar3D({
                     </button>
                   </div>
 
+                  {/* İlkokul: cismin özellikleri — yüz, köşe, ayrıt sayısı ve yüzlerin biçimi */}
+                  {ilkokul && ((oz) => (
+                    <section className="p-3 rounded-2xl bg-gradient-to-br from-ada-deniz/10 via-ada-vurgu/5 to-ada-lavanta/10 border border-primary/20 space-y-2" aria-live="polite" data-ilkokul-cisim-ozellikleri>
+                      <h4 className="text-[13px] font-bold text-primary flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                        <span>Cismin Özellikleri</span>
+                      </h4>
+                      <div className="grid grid-cols-3 gap-2 text-center">
+                        {[
+                          { ad: 'Yüz', sayi: oz.yuz },
+                          { ad: 'Köşe', sayi: oz.kose },
+                          { ad: 'Ayrıt', sayi: oz.ayrit },
+                        ].map((x) => (
+                          <div key={x.ad} className="p-2 rounded-xl bg-card border border-border/80">
+                            <span className="text-[11px] font-semibold text-muted-foreground block">{x.ad}</span>
+                            <span className="font-bold text-foreground text-[15px]">{x.sayi}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="p-2 rounded-xl bg-card border border-border/80 text-[12px] text-muted-foreground">
+                        Yüzleri: <strong className="text-foreground">{oz.yuzler}</strong>
+                      </div>
+                    </section>
+                  ))(ilkokulCisimOzellikleri(selectedSolid))}
+
                   {/* Canlı ölçümler: V, A ve K - E + Y = 2 (MAT.8.4.3) */}
+                  {!ilkokul && (
                   <section className="p-3 rounded-2xl bg-gradient-to-br from-ada-deniz/10 via-ada-vurgu/5 to-ada-lavanta/10 border border-primary/20 space-y-2" aria-live="polite">
                     <h4 className="text-[13px] font-bold text-primary flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
@@ -1057,13 +1089,14 @@ export function Toolbar3D({
                       </div>
                     )}
                   </section>
+                  )}
 
                   {/* Seçili yüz: alanı ve rengi */}
                   {olcumler.seciliYuz && ((yuz) => (
                     <BaglamKarti
                       baslik={`Seçili Yüz: ${yuz.label}`}
                       simge={<Paintbrush className="w-3.5 h-3.5 text-ada-altin dark:text-ada-fener" aria-hidden="true" />}
-                      sag={<span className="font-mono text-[12px] text-muted-foreground">A = {formatTurkishNumber(yuz.area, 2)} br²</span>}
+                      sag={ilkokul ? undefined : <span className="font-mono text-[12px] text-muted-foreground">A = {formatTurkishNumber(yuz.area, 2)} br²</span>}
                     >
                       <div className="flex flex-wrap gap-1.5 items-center" role="group" aria-label="Yüz rengi">
                         {CISIM_RENKLERI.map((c) => (
@@ -1161,7 +1194,7 @@ export function Toolbar3D({
                   >
                     {selectedSolid.type === 'cube' && (
                       <KaydiriciSatiri
-                        label="Kenar (a)"
+                        label={ilkokul ? 'Kenar uzunluğu' : 'Kenar (a)'}
                         value={dims.width}
                         min={0.5}
                         max={10}
@@ -1220,7 +1253,7 @@ export function Toolbar3D({
                     )}
                     {yuvarlakMi && (
                       <KaydiriciSatiri
-                        label="Yarıçap (r)"
+                        label={ilkokul ? 'Büyüklük' : 'Yarıçap (r)'}
                         value={yaricap}
                         min={0.25}
                         max={8}
@@ -1229,11 +1262,12 @@ export function Toolbar3D({
                       />
                     )}
                     {(selectedSolid.type === 'cylinder' || selectedSolid.type === 'cone') && (
-                      <KaydiriciSatiri label="Yükseklik (h)" value={dims.height} min={0.5} max={12} step={0.5} onChange={(v) => boyutGuncelle({ height: v })} />
+                      <KaydiriciSatiri label={ilkokul ? 'Yükseklik' : 'Yükseklik (h)'} value={dims.height} min={0.5} max={12} step={0.5} onChange={(v) => boyutGuncelle({ height: v })} />
                     )}
                   </BaglamKarti>
 
-                  {/* Konum (taban merkezi) */}
+                  {/* Konum (taban merkezi). İlkokulda koordinat ve negatif sayı yok: kart gösterilmez (4. tur [180]) */}
+                  {!ilkokul && (
                   <BaglamKarti
                     baslik="Konum"
                     simge={<MapPin className="w-3.5 h-3.5 text-primary" aria-hidden="true" />}
@@ -1258,8 +1292,11 @@ export function Toolbar3D({
                       ))}
                     </div>
                   </BaglamKarti>
+                  )}
 
-                  {/* Cismi Döndür (derece; X → Y → Z sırası) */}
+                  {/* Cismi Döndür (derece; X → Y → Z sırası). İlkokulda derece ve eksen yok: döndürme Cismi Döndür aracının
+                      çeyrek dönüş düğmeleriyle (4. tur [179], [180]) */}
+                  {!ilkokul && (
                   <BaglamKarti
                     baslik="Cismi Döndür"
                     simge={<RotateCw className="w-3.5 h-3.5 text-ada-mercan" aria-hidden="true" />}
@@ -1287,6 +1324,7 @@ export function Toolbar3D({
                       />
                     ))}
                   </BaglamKarti>
+                  )}
 
                   {/* Renk, saydamlık, telkafes */}
                   <BaglamKarti baslik="Renk ve Görünüm" simge={<Paintbrush className="w-3.5 h-3.5 text-primary" aria-hidden="true" />}>

@@ -18,8 +18,15 @@ export interface EkranKutusu {
   h: number;
 }
 
-/** Satırın iki parçası: kalın yazılan ad ve değerler ("Taban alanı = 9 br² · V = 27 br³"). */
-export function cisimBilgiSatiri(proj: Pick<ProjectedSolid2D, 'name' | 'type' | 'topView' | 'badge'>): { ad: string; degerler: string } {
+/**
+ * Satırın iki parçası: kalın yazılan ad ve değerler ("Taban alanı = 9 br² · V = 27 br³"). `yalnizAd` (ilkokul, 4. tur
+ * [180]): yalnız cismin adı — taban alanı, hacim, br² ve br³ ilkokul programının kapsamı dışındadır.
+ */
+export function cisimBilgiSatiri(
+  proj: Pick<ProjectedSolid2D, 'name' | 'type' | 'topView' | 'badge'>,
+  secenek: { yalnizAd?: boolean } = {},
+): { ad: string; degerler: string } {
+  if (secenek.yalnizAd) return { ad: proj.name, degerler: '' };
   const parcalar: string[] = [];
   if (!proj.topView) parcalar.push(...proj.badge.dimParts);
   // Kürenin tabanı yoktur: üstten görünüşü daire olsa da "taban alanı" yazılmaz
@@ -31,7 +38,7 @@ export function cisimBilgiSatiri(proj: Pick<ProjectedSolid2D, 'name' | 'type' | 
 /** Satırın ölçek 1'deki boyutu: ad 10 px kalın (≈ 6,2 px/harf), değerler 9 px eş aralıklı (≈ 5,4 px/harf). */
 export const SATIR_YUKSEKLIGI = 18;
 export function satirGenisligi(satir: { ad: string; degerler: string }): number {
-  return Math.round(16 + satir.ad.length * 6.2 + 6 + satir.degerler.length * 5.4);
+  return Math.round(16 + satir.ad.length * 6.2 + (satir.degerler ? 6 + satir.degerler.length * 5.4 : 0));
 }
 
 /** Üstten görünümün ekrandaki sınır kutusu (çokgen köşeleri ya da daire). */

@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { formatTurkishNumber } from '@/math/coordinates';
+import { ILKOKUL_DONUSLERI, ilkokulDonusAcisi, ilkokulDonusAdi, type DonusYonu } from './ilkokulKipi';
 
 interface RotateGizmoProps {
   /** Döndürme merkezinin EKRAN koordinatı (piksel). */
@@ -12,6 +13,11 @@ interface RotateGizmoProps {
   onFreeRotateStart: (e: React.MouseEvent) => void;
   /** Hazır derece düğmelerine tıklandığında çağrılır (saat yönü tersi pozitif). */
   onRotate: (deg: number) => void;
+  /**
+   * İlkokul (alan uzmanı, 4. tur [179]): derece yok — düğmeler çeyrek / yarım / tam dönüş ve yön (saat yönünde /
+   * saat yönünün tersine); sürükleme okuması da dönüşün adını yazar (TYMM MAT.4.3.5: açı bir dönme miktarıdır).
+   */
+  ilkokul?: boolean;
 }
 
 const HAZIR_DERECELER = [30, 45, 60, 90, 120, 135, 180, 270];
@@ -25,7 +31,9 @@ const HAZIR_DERECELER = [30, 45, 60, 90, 120, 135, 180, 270];
  * Çokgen, yay ve daire dilimi katmanlarının hepsi bu bileşeni kullanır; böylece
  * palet her şekilde aynı görünür ve tek yerden değişir.
  */
-export function RotateGizmo({ center, feedbackDeg, onFreeRotateStart, onRotate }: RotateGizmoProps) {
+export function RotateGizmo({ center, feedbackDeg, onFreeRotateStart, onRotate, ilkokul = false }: RotateGizmoProps) {
+  const [yon, setYon] = useState<DonusYonu>('saat');
+  const ilkokulOkumasi = ilkokul && feedbackDeg !== null ? ilkokulDonusAdi(feedbackDeg) : '';
   return (
     <g className="rotate-gizmo-layer select-none">
       {/* A) Merkez Döndürme Noktası (Pivot) */}
@@ -80,8 +88,27 @@ export function RotateGizmo({ center, feedbackDeg, onFreeRotateStart, onRotate }
         />
       </g>
 
+      {/* D') İlkokul: sürüklerken dönüşün adı ("çeyrek dönüş saat yönünde"); derece yazılmaz */}
+      {ilkokulOkumasi && (
+        <g transform={`translate(${center.x}, ${center.y - 82})`} data-ilkokul-donus-okumasi>
+          <rect
+            x={-(12 + ilkokulOkumasi.length * 3.4)}
+            y="-13"
+            width={24 + ilkokulOkumasi.length * 6.8}
+            height="26"
+            rx="8"
+            fillOpacity={0.96}
+            strokeWidth="1.5"
+            className="fill-ada-murekkep stroke-ada-mercan shadow-2xl"
+          />
+          <text x="0" y="5" textAnchor="middle" className="fill-ada-fildisi font-bold text-xs font-sans">
+            {ilkokulOkumasi}
+          </text>
+        </g>
+      )}
+
       {/* D) Canlı Sürükleme Derecesi */}
-      {feedbackDeg !== null && (
+      {!ilkokul && feedbackDeg !== null && (
         <g transform={`translate(${center.x}, ${center.y - 82})`}>
           <rect
             x="-35"
@@ -99,7 +126,61 @@ export function RotateGizmo({ center, feedbackDeg, onFreeRotateStart, onRotate }
         </g>
       )}
 
+      {/* E') İlkokul: yön (saat yönünde / tersine) + çeyrek, yarım, tam dönüş */}
+      {ilkokul && (
+        <g transform={`translate(${center.x - 150}, ${center.y + 44})`} data-ilkokul-donus-dugmeleri>
+          <rect width={300} height={66} rx={10} fillOpacity={0.96} strokeWidth={1.2} className="fill-ada-murekkep stroke-ada-mercan shadow-2xl" />
+          {([
+            { y: 'saat', ad: '↻ Saat yönünde' },
+            { y: 'ters', ad: '↺ Saat yönünün tersine' },
+          ] as const).map((d, i) => (
+            <g
+              key={d.y}
+              transform={`translate(${8 + i * 144}, 6)`}
+              className="cursor-pointer group/deg"
+              role="button"
+              aria-pressed={yon === d.y}
+              data-donus-yonu={d.y}
+              onClick={(e) => {
+                e.stopPropagation();
+                setYon(d.y);
+              }}
+            >
+              <rect
+                width={140}
+                height={24}
+                rx={6}
+                strokeWidth={1}
+                className={`${yon === d.y ? 'fill-ada-deniz stroke-ada-fildisi/70' : 'fill-ada-murekkep-2 stroke-ada-mercan/60'} group-hover/deg:fill-ada-vurgu transition-colors`}
+              />
+              <text x={70} y={16} textAnchor="middle" className="fill-ada-fildisi font-bold text-[10px] font-sans pointer-events-none">
+                {d.ad}
+              </text>
+            </g>
+          ))}
+          {ILKOKUL_DONUSLERI.map((d, i) => (
+            <g
+              key={d.ceyrek}
+              transform={`translate(${8 + i * 96}, 36)`}
+              className="cursor-pointer group/deg"
+              role="button"
+              data-donus-ceyrek={d.ceyrek}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRotate(ilkokulDonusAcisi(d.ceyrek, yon));
+              }}
+            >
+              <rect width={92} height={24} rx={6} strokeWidth={1} className="fill-ada-murekkep-2 stroke-ada-mercan/60 group-hover/deg:fill-ada-deniz transition-colors" />
+              <text x={46} y={16} textAnchor="middle" className="fill-ada-fildisi font-bold text-[10px] font-sans pointer-events-none">
+                {d.ad}
+              </text>
+            </g>
+          ))}
+        </g>
+      )}
+
       {/* E) Hazır Derece Düğmeleri */}
+      {!ilkokul && (
       <g transform={`translate(${center.x - 170}, ${center.y + 44})`}>
         <rect
           width={340}
@@ -161,6 +242,7 @@ export function RotateGizmo({ center, feedbackDeg, onFreeRotateStart, onRotate }
           </text>
         </g>
       </g>
+      )}
     </g>
   );
 }

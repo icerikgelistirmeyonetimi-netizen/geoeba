@@ -512,9 +512,14 @@ export function cetvelCentikDuzeni(zoom: number): { etiketAdimi: number; yarim: 
 
 const px = (v: number) => Number(v.toFixed(2));
 
-/** Cetvel çentikleri üç <path> olarak (ölçü kenarı y = 0, çentikler gövdenin içine doğru). */
-export function cetvelCentikYollari(boy: number, zoom: number): { birim: string; yarim: string; onda: string } {
+/**
+ * Cetvel çentikleri üç <path> olarak (ölçü kenarı y = 0, çentikler gövdenin içine doğru). `ilkokul`: tam birim ve
+ * yarım birim çentikleri; milimetreyi andıran onda bir çentikleri YOK (alan uzmanı, 4. tur [177]: "br" cetvelinde
+ * milimetre görünümlü bölmeler iki ölçme sistemini karıştırıyordu).
+ */
+export function cetvelCentikYollari(boy: number, zoom: number, ilkokul = false): { birim: string; yarim: string; onda: string } {
   const d = cetvelCentikDuzeni(zoom);
+  if (ilkokul) d.onda = false;
   const birim: string[] = [];
   const yarim: string[] = [];
   const onda: string[] = [];
@@ -671,7 +676,8 @@ export const ALAN_HAZIR_BOYUTLAR = [
   [10, 10],
 ] as const;
 
-export function cetvelMenusu({ boy, donusSvg }: { boy: number; donusSvg: number }): OlcmeMenuMaddesi[] {
+/** `ilkokul`: "Yatay yap" / "Dikey yap" derece yazmaz (4. tur [179]: ilkokulda derece yok). */
+export function cetvelMenusu({ boy, donusSvg, ilkokul = false }: { boy: number; donusSvg: number; ilkokul?: boolean }): OlcmeMenuMaddesi[] {
   const donus = normalizeDeg(donusSvg);
   return [
     {
@@ -701,8 +707,8 @@ export function cetvelMenusu({ boy, donusSvg }: { boy: number; donusSvg: number 
     },
     { id: 'cetvel-uzat', label: '1 br uzat', ikon: 'Plus', disabled: boy >= CETVEL_BOY_MAX, eylem: { tur: 'cetvelBoy', boy: Math.min(CETVEL_BOY_MAX, boy + 1) } },
     { id: 'cetvel-kisalt', label: '1 br kısalt', ikon: 'Minus', disabled: boy <= CETVEL_BOY_MIN, eylem: { tur: 'cetvelBoy', boy: Math.max(CETVEL_BOY_MIN, boy - 1) } },
-    { id: 'cetvel-yatay', label: 'Yatay yap (0°)', ikon: 'MoveHorizontal', separatorBefore: true, disabled: donus === 0, eylem: { tur: 'cetvelDonus', donusSvg: 0 } },
-    { id: 'cetvel-dikey', label: 'Dikey yap (90°)', ikon: 'MoveVertical', disabled: donus === 270, eylem: { tur: 'cetvelDonus', donusSvg: 270 } },
+    { id: 'cetvel-yatay', label: ilkokul ? 'Yatay yap' : 'Yatay yap (0°)', ikon: 'MoveHorizontal', separatorBefore: true, disabled: donus === 0, eylem: { tur: 'cetvelDonus', donusSvg: 0 } },
+    { id: 'cetvel-dikey', label: ilkokul ? 'Dikey yap' : 'Dikey yap (90°)', ikon: 'MoveVertical', disabled: donus === 270, eylem: { tur: 'cetvelDonus', donusSvg: 270 } },
     { id: 'cetvel-parca', label: 'Doğru parçası olarak ekle', ikon: 'geo:segment', separatorBefore: true, eylem: { tur: 'cetvelParcaEkle' } },
     ...ortakSon('cetvel'),
   ];
@@ -752,8 +758,29 @@ export function iletkiMenusu({ aci, taban, olcuGoster = true, ilkokul = false }:
   ];
 }
 
-export function gonyeMenusu({ donusSvg }: { donusSvg: number }): OlcmeMenuMaddesi[] {
+/**
+ * Gönyenin sağ tık menüsü. `ilkokul` (4. tur [179]): derece yok — gönye çeyrek dönüş (saat yönünde / tersine) ya da
+ * yarım dönüş döndürülür; "Başlangıçtaki gibi" dik köşeyi sol alta getirir.
+ */
+export function gonyeMenusu({ donusSvg, ilkokul = false }: { donusSvg: number; ilkokul?: boolean }): OlcmeMenuMaddesi[] {
   const matematik = normalizeDeg(-donusSvg);
+  if (ilkokul) {
+    const dondur = (derece: number): OlcmeEylemi => ({ tur: 'gonyeDonus', donusSvg: normalizeDeg(-(matematik + derece)) });
+    return [
+      {
+        id: 'gonye-dondur',
+        label: 'Döndür',
+        ikon: 'RotateCcw',
+        submenu: [
+          { id: 'gonye-ceyrek-saat', label: 'Çeyrek dönüş (saat yönünde)', eylem: dondur(-90) },
+          { id: 'gonye-ceyrek-ters', label: 'Çeyrek dönüş (saat yönünün tersine)', eylem: dondur(90) },
+          { id: 'gonye-yarim', label: 'Yarım dönüş', eylem: dondur(180) },
+          { id: 'gonye-baslangic', label: 'Başlangıçtaki gibi', separatorBefore: true, disabled: matematik === 0, eylem: { tur: 'gonyeDonus', donusSvg: 0 } },
+        ],
+      },
+      ...ortakSon('gonye'),
+    ];
+  }
   return [
     {
       id: 'gonye-dondur',

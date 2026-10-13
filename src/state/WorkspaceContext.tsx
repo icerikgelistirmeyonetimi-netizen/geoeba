@@ -4617,7 +4617,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const hasShape = currentObjects.some((o) => o.id === currentSelectedId && o.type === 'polygon');
         setHintMessageState(
           hasShape
-            ? 'Döndürmek için şeklin üzerindeki döndürme tutamacını sürükleyin veya hazır derece düğmelerine tıklayın'
+            ? ilkokulKipindeMi()
+              // İlkokulda derece yok: çeyrek / yarım / tam dönüş (uzman 4. tur [179])
+              ? 'Döndürmek için şeklin altındaki çeyrek, yarım ya da tam dönüş düğmelerine dokun'
+              : 'Döndürmek için şeklin üzerindeki döndürme tutamacını sürükleyin veya hazır derece düğmelerine tıklayın'
             : 'Önce bir şekil seçin'
         );
         return;

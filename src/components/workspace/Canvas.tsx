@@ -52,7 +52,7 @@ import { useSliderPlayback } from '@/hooks/useSliderPlayback';
 import { Solid3DObject, Point3D } from '@/types/workspace3d';
 import { projectSolidFor2D } from '@/math/solidProjection2D';
 import { useCisimIzdusumu } from './cisimIzdusumu';
-import { gizliSecimBirakilir, type AyrimDurumu } from './kademeDuzeyleri3B';
+import { cisimIzdusumuYalnizAd, gizliSecimBirakilir, type AyrimDurumu } from './kademeDuzeyleri3B';
 import { cisimBilgiSatiri, izdusumGovdesi, kenarEtiketKutulari, rozetleriYerlestir, satirGenisligi, SATIR_YUKSEKLIGI } from '@/math/cisimEtiketleri2B';
 
 /** Etiketi olmayan nesneler için menü başlığında gösterilecek tür adları. */
@@ -172,7 +172,11 @@ import { KayanCubuk, CubukMetni, CubukAyirici, CubukDugmesi } from './KayanCubuk
 import { aracYonergesi } from './aracYonergeleri';
 import { useIlkokulKipi, useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { tamSayiOlcuEtkin, olcumBildirimi, uzunlukOlcBirimi } from './olcuYuvarlama';
-import { ilkokulSimetriDogrusu, ilkokulUzunlukMetni, type SimetriYonu } from './ilkokulKipi';
+import {
+  ceyregeYuvarla, egikCevreUyarisi, ilkokulCevreGorunumu, ilkokulDonusAdi, ilkokulSimetriDogrusu, ilkokulUzunlukMetni,
+  kenarlarZemineParalelMi, type SimetriYonu,
+} from './ilkokulKipi';
+import { SimetriSinamaCubugu, SimetriSinamaKatmani, useSimetriSinama } from './SimetriSinamaArayuzu';
 import { aciEtiketiUzakta, aciYayYaricapi, cizgiCercevesi, cizgiEtiketiUzakta, etiketAcisi, etiketDondurme, kenarEkseninden, kenarEksenine, koseAcilariniAyir, tabanaGoreDik, yayEtiketiYerlesimi, type KoseAcisi, type YayEtiketGeometrisi } from './olcuEtiketi';
 import { MatematikEtiketi, type EtiketRengi, type KutuStili } from './MatematikEtiketi';
 import { EtiketMetniDiyalogu } from './EtiketMetniDiyalogu';
@@ -510,6 +514,8 @@ export function Canvas({
     baseIds: string[];
   } | null>(null);
   const [mouseWorldPos, setMouseWorldPos] = useState<Point2D>({ x: 0, y: 0 });
+  /** İlkokul Simetri Keşfet etkinken ölçü etiketine basış aday doğrunun ucunu koyar (SimetriSinamaArayuzu.tiklama) */
+  const simetriEtiketGecisiRef = useRef<((world: Point2D) => void) | null>(null);
   const [showSettingsMenu, setShowSettingsMenu] = useState(false);
 
   // Sürükleyerek Şekil Boyutlandırma ve Oluşturma Durumu
@@ -1587,6 +1593,11 @@ export function Canvas({
           if (!nesneBasisiIslenmeli(activeTool, e)) return;
           if (e.pointerType === 'mouse' && e.button !== 0) return;
           e.stopPropagation();
+          if (simetriEtiketGecisiRef.current && svgRef.current) {
+            const r = svgRef.current.getBoundingClientRect();
+            simetriEtiketGecisiRef.current(screenToWorld({ x: e.clientX - r.left, y: e.clientY - r.top }, viewportRef.current));
+            return;
+          }
           etiketBasisRef.current = { zaman: Date.now(), fare: e.pointerType === 'mouse' };
           labelJustDraggedRef.current = false;
           if (silAraciylaSilinir) {
@@ -1628,6 +1639,8 @@ export function Canvas({
           // El aracında etiket gizlenmez/silinmez: görünüm aracı sahneyi değiştirmez
           if (!nesneBasisiIslenmeli(activeTool, e)) return;
           e.stopPropagation();
+          // İlkokul Simetri Keşfet: basış aday ucunu koydu; etiket gizlenmez
+          if (simetriEtiketGecisiRef.current) return;
           // Taşıma yapıldıysa bu tıklama sürüklemenin devamıdır; etiketi gizleme/silme.
           if (labelJustDraggedRef.current || labelDragRef.current?.moved) {
             labelJustDraggedRef.current = false;
@@ -1660,7 +1673,11 @@ export function Canvas({
   /** Kullanıcının ölçü/açı yazımı ayarı: Tam/Kısa ve şapka / ∠ (src/math/matematikYazimi.ts). */
   // İlkokulda ölçüler hep TAM sayı (alan uzmanları: "ondalık kesir kullanılmamalı"), ayar kapalı olsa da
   // Ortaokulda varsayılan 2 ondalık (alan uzmanı, 4. tur): tamSayi kademenin kendi ayarından (olcuYuvarlama.ts)
-  const yazim = useMemo(() => ({ ...yazimAyari(styleSettings), tamSayi: tamSayiOlcu }), [styleSettings, tamSayiOlcu]);
+  // İlkokulda yuvarlanan değer tuvalde de "yaklaşık" der (uzman 4. tur [176]; matematikYazimi.yaklasikSozcukle)
+  const yazim = useMemo(
+    () => ({ ...yazimAyari(styleSettings), tamSayi: tamSayiOlcu, ...(ilkokul ? { yaklasikSozcukle: true } : {}) }),
+    [styleSettings, tamSayiOlcu, ilkokul],
+  );
   /** Nokta arayıcı: yazım kuralları nesnenin .label'ını değil, GÖRÜNEN nokta adlarını kullanır. */
   const noktaBul = useMemo(() => noktaBulucu(pointsById), [pointsById]);
 
@@ -1719,9 +1736,14 @@ export function Canvas({
    * ÖLÇÜM KARTLARI (çokgen alan/çevre, çember, elips) tek yerden ölçülür: 4, 4.6 ve 5 katmanları
    * kartı buradan çizer, 6 (açı rozeti) ve 7.5 (yay rozeti) katmanları kutuları ENGEL olarak okur.
    */
+  // İlkokulda eğik kenarlı çokgenin çevre etiketi okuma değil yönlendirmedir ("Çevre: cetvelle ölç"; uzman 4. tur [176])
+  const kartNesneleri = useMemo(
+    () => (ilkokul ? ilkokulCevreGorunumu(objects, viewport.gridStyle) : objects),
+    [ilkokul, objects, viewport.gridStyle],
+  );
   const kartKutulari = useMemo(
-    () => (showDetails ? olcumKartKutulari({ objects, viewport, yazim, px: (t) => fs(t, 'measure'), yaziOlcegi }) : []),
-    [objects, viewport, yazim, fs, showDetails, yaziOlcegi],
+    () => (showDetails ? olcumKartKutulari({ objects: kartNesneleri, viewport, yazim, px: (t) => fs(t, 'measure'), yaziOlcegi }) : []),
+    [kartNesneleri, viewport, yazim, fs, showDetails, yaziOlcegi],
   );
   /**
    * Alanı Bul / Çevre Hesapla sonucu zaten etikette görünüyorsa o etiket 1,6 sn vurgulanır (kutusu kalın çizgiyle
@@ -1743,8 +1765,8 @@ export function Canvas({
   }, [kartKutulari]);
   const kartEngelleri = useMemo(() => showDetails
     // Yerleşim uzayındaki çakışma kutuları: alt sınırla büyüyen yazıyla örtüşsün diye yazı ölçeği = yerlesimOrani
-    ? olcumKartKutulari({ objects, viewport: etiketGorunumu, yazim, px: (t) => fs(t, 'measure'), yaziOlcegi: yerlesimOrani }).map(k => k.kutu) : [],
-  [objects, etiketGorunumu, yazim, fs, showDetails, yerlesimOrani]);
+    ? olcumKartKutulari({ objects: kartNesneleri, viewport: etiketGorunumu, yazim, px: (t) => fs(t, 'measure'), yaziOlcegi: yerlesimOrani }).map(k => k.kutu) : [],
+  [kartNesneleri, etiketGorunumu, yazim, fs, showDetails, yerlesimOrani]);
 
   /**
    * AÇI YAYI YARIÇAPI (etiket yerleşim pikseli; ekranda etiketOlcegi ile çarpılır). Dar açıda yay okunur
@@ -2500,6 +2522,11 @@ export function Canvas({
     // PERGEL: kendi akışı var; boş tuval tıklaması NOKTA ÜRETMEZ.
     if (activeTool === 'compass') {
       pergelAdimi(world);
+      return;
+    }
+
+    if (isBackground && activeTool === 'symmetry' && ilkokul) {
+      simetri.tiklama(world);
       return;
     }
 
@@ -3976,9 +4003,22 @@ export function Canvas({
       if (obj.type === 'polygon') {
         const poly = obj as PolygonObject;
         const polyPoints = poly.pointIds.map((id) => pointsById.get(id)).filter(Boolean) as PointObject[];
-        // Kartla AYNI sayı: tam sayı açıkken çevre görünen kenarların toplamıdır (cokgenKartSatirlari)
-        const [cevreOlcusu] = cokgenKartSatirlari(polyPoints, false, true, yazim.tamSayi).olculer;
         const zaten = poly.showPerimeter === true;
+        // İlkokul, eğik kenarlı şekil: çevre okuması yerine "cetvelle ölç" yönlendirmesi; etiket de bunu yazar
+        // (uzman 4. tur [176]; ilkokulKipi.ilkokulCevreGorunumu)
+        if (ilkokul && !kenarlarZemineParalelMi(polyPoints, viewport.gridStyle)) {
+          if (!zaten) {
+            commit(
+              (prev) => prev.map((o) => (o.id === poly.id ? ({ ...o, showPerimeter: true } as MathObject) : o)),
+              'Çevre: cetvelle ölçülecek'
+            );
+          } else kartiVurgula(poly.id, 'perimeter');
+          setHintMessage(egikCevreUyarisi(viewport.gridStyle));
+          return;
+        }
+        // Kartla AYNI sayı: tam sayı açıkken çevre görünen kenarların toplamıdır, ilkokulda gerçek kenarların
+        // toplamının yuvarlanmışı (cokgenKartSatirlari)
+        const [cevreOlcusu] = cokgenKartSatirlari(polyPoints, false, true, yazim.tamSayi, ilkokul).olculer;
         if (!zaten) {
           commit(
             (prev) => prev.map((o) => (o.id === poly.id ? ({ ...o, showPerimeter: true } as MathObject) : o)),
@@ -4111,6 +4151,13 @@ export function Canvas({
             : 'Bu şekil döndürülemiyor. Çokgen, yay, daire dilimi ve doğru parçası döndürülebilir.'
         );
       }
+      return;
+    }
+
+    // İlkokul Simetri Keşfet: her dokunuş şekli seçer ya da aday doğrunun ucunu koyar (uzman 4. tur [178])
+    if (activeTool === 'symmetry' && ilkokul && svgRef.current) {
+      const rect = svgRef.current.getBoundingClientRect();
+      simetri.tiklama(screenToWorld({ x: e.clientX - rect.left, y: e.clientY - rect.top }, viewport), obj);
       return;
     }
 
@@ -4349,10 +4396,65 @@ export function Canvas({
   /** Bu şekil döndürme aracıyla çevrilebilir mi? (Tam çemberi döndürmek görsel olarak anlamsızdır.) */
   const dondurulebilir = (obj: MathObject) => donusVerisi(obj) !== null;
 
+  /**
+   * İlkokulda çeyrek / yarım / tam dönüş düğmeleri şekli CANLANDIRARAK döndürür (uzman 4. tur [179]: açı bir dönme
+   * miktarıdır, MAT.4.3.5): tam dönüşte şeklin bir tur dönüp aynı yere geldiği görülür. Bir dönüş sürerken yenisi
+   * başlamaz; geçmişe tek kayıt yazılır.
+   */
+  const donusAnimasyonuRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (donusAnimasyonuRef.current !== null) cancelAnimationFrame(donusAnimasyonuRef.current);
+  }, []);
+  const donusuCanlandir = (obj: MathObject, veri: NonNullable<ReturnType<typeof donusVerisi>>, deg: number) => {
+    if (donusAnimasyonuRef.current !== null) return;
+    const elipsMi = obj.type === 'ellipse';
+    const bas = elipsMi ? (obj as EllipseObject).rotation ?? 0 : 0;
+    const ilk = veri.points.map((p) => ({ id: p.id, x: p.x, y: p.y }));
+    const { x: cx, y: cy } = veri.pivot;
+    const uygula = (aci: number) => {
+      if (elipsMi) {
+        updateObject(obj.id, { rotation: Number(((((bas + aci) % 360) + 360) % 360).toFixed(2)) } as Partial<MathObject>, false);
+        return;
+      }
+      const r = (aci * Math.PI) / 180;
+      const cos = Math.cos(r);
+      const sin = Math.sin(r);
+      ilk.forEach((pt) => {
+        const dx = pt.x - cx;
+        const dy = pt.y - cy;
+        updateObject(pt.id, { x: Number((cx + dx * cos - dy * sin).toFixed(2)), y: Number((cy + dx * sin + dy * cos).toFixed(2)) }, false);
+      });
+    };
+    const kayit = `${obj.label || 'Şekil'} ${ilkokulDonusAdi(deg)} döndürüldü`;
+    const azHareket = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (azHareket || typeof requestAnimationFrame === 'undefined') {
+      uygula(deg);
+      recordHistory(kayit);
+      return;
+    }
+    const sure = Math.min(1400, 350 * Math.max(1, Math.abs(deg) / 90));
+    const t0 = performance.now();
+    const adim = (t: number) => {
+      const f = Math.min(1, (t - t0) / sure);
+      uygula(f < 1 ? deg * (1 - Math.cos(Math.PI * f)) / 2 : deg);
+      if (f < 1) {
+        donusAnimasyonuRef.current = requestAnimationFrame(adim);
+      } else {
+        donusAnimasyonuRef.current = null;
+        recordHistory(kayit);
+      }
+    };
+    donusAnimasyonuRef.current = requestAnimationFrame(adim);
+  };
+
   const rotateShapeByAngle = (obj: MathObject, deg: number) => {
     const veri = donusVerisi(obj);
     if (!veri) {
       setHintMessage('Bu şekil döndürülemiyor.');
+      return;
+    }
+    if (ilkokul) {
+      donusuCanlandir(obj, veri, deg);
       return;
     }
     if (obj.type === 'ellipse') {
@@ -4412,7 +4514,10 @@ export function Canvas({
       const deltaAngle = currentAngle - startAngle;
       let deg = Math.round((deltaAngle * 180) / Math.PI);
 
-      if (moveEvent.shiftKey) {
+      // İlkokulda dönme miktarı çeyrek dönüşlerle (derece yok; uzman 4. tur [179])
+      if (ilkokul) {
+        deg = ceyregeYuvarla(deg);
+      } else if (moveEvent.shiftKey) {
         deg = Math.round(deg / 15) * 15;
       }
 
@@ -4441,7 +4546,7 @@ export function Canvas({
     const handleMouseUp = () => {
       setRotatingFeedback(null);
       if (lastDeg !== 0) {
-        recordHistory(`${obj.label || 'Şekil'} ${formatTurkishNumber(lastDeg)}° döndürüldü`);
+        recordHistory(`${obj.label || 'Şekil'} ${ilkokul ? ilkokulDonusAdi(lastDeg) : `${formatTurkishNumber(lastDeg)}°`} döndürüldü`);
       }
       window.removeEventListener('pointermove', handleMouseMove);
       window.removeEventListener('pointerup', handleMouseUp);
@@ -4521,6 +4626,24 @@ export function Canvas({
       aciklama: `${poly.label || 'Şekil'}: simetri doğrusuna göre simetriği çizildi`,
     });
   };
+
+  // İLKOKUL «SİMETRİ KEŞFET»: aday doğruyu katlayarak sınama (uzman 4. tur [178]; SimetriSinamaArayuzu.tsx)
+  const simetri = useSimetriSinama({
+    etkin: ilkokul && activeTool === 'symmetry',
+    objects,
+    pointsById,
+    zoom: viewport.zoom,
+    addObjects,
+    yeniNokta: makePoint,
+    noktaAdlari: existingPointLabels,
+    kimlik: createId,
+    sec: (id) => {
+      setSelectedObjectId(id);
+      setSelectedObjectIds([id]);
+    },
+  });
+  // Ölçü etiketine dokunuş da aday ucu koyar (etiketi gizlemez): etiketler şeklin üstünde ve yanında durur
+  simetriEtiketGecisiRef.current = simetri.etkin ? (w: Point2D) => simetri.tiklama(w) : null;
 
   // Zoom Hızlı Eylemleri (görünüm merkezi etrafında)
   const zoomIn = () => zoomAt(null, 1.2);
@@ -5405,6 +5528,7 @@ export function Canvas({
                     feedbackDeg={rotatingFeedback?.shapeId === poly.id ? rotatingFeedback.deg : null}
                     onFreeRotateStart={(e) => handleStartRotateShape(e, poly)}
                     onRotate={(deg) => rotateShapeByAngle(poly, deg)}
+                    ilkokul={ilkokul}
                   />
                 )}
               </g>
@@ -5418,13 +5542,15 @@ export function Canvas({
             const isSelected = selectedSolidIds.includes(solid.id) || selectedSolidId === solid.id;
             return { solid, isSelected, proj: projectSolidFor2D(solid, viewport, isSelected, 'top', kutuOlcegi) };
           });
-          const satirlar = new Map(izdusumler.map(({ solid, proj }) => [solid.id, cisimBilgiSatiri(proj)]));
+          // İlkokulda yalnız cismin adı: taban alanı, hacim ve "a = 3 br" yok (uzman 4. tur [180])
+          const yalnizAd = cisimIzdusumuYalnizAd(kademe);
+          const satirlar = new Map(izdusumler.map(({ solid, proj }) => [solid.id, cisimBilgiSatiri(proj, { yalnizAd })]));
           const satirYerleri = showDetails
             ? rozetleriYerlestir(
                 izdusumler.map(({ solid, proj }) => ({
                   id: solid.id,
                   govde: izdusumGovdesi(proj),
-                  kenarlar: kenarEtiketKutulari(proj, yaziOlcegi),
+                  kenarlar: yalnizAd ? [] : kenarEtiketKutulari(proj, yaziOlcegi),
                   w: satirGenisligi(satirlar.get(solid.id)!) * yaziOlcegi,
                   h: SATIR_YUKSEKLIGI * yaziOlcegi,
                 })),
@@ -5581,8 +5707,8 @@ export function Canvas({
                         </g>
                       )}
 
-                      {/* Kenar / Yarıçap Ölçü Etiketleri */}
-                      {showDetails &&
+                      {/* Kenar / Yarıçap Ölçü Etiketleri (ilkokulda yok: harfle kenar "a = 3 br" gösterilmez) */}
+                      {showDetails && !yalnizAd &&
                         proj.topView.dimensionLabels.map((lbl, li) => (
                           <g key={li} data-canvas-label="" transform={`translate(${lbl.x} ${lbl.y}) scale(${yaziOlcegi})`} className="select-none pointer-events-none">
                             <rect
@@ -6313,6 +6439,7 @@ export function Canvas({
                     feedbackDeg={rotatingFeedback?.shapeId === shape.id ? rotatingFeedback.deg : null}
                     onFreeRotateStart={(e) => handleStartRotateShape(e, shape)}
                     onRotate={(deg) => rotateShapeByAngle(shape, deg)}
+                    ilkokul={ilkokul}
                   />
                 )}
               </g>
@@ -6365,6 +6492,7 @@ export function Canvas({
                       feedbackDeg={rotatingFeedback?.shapeId === elp.id ? rotatingFeedback.deg : null}
                       onFreeRotateStart={(e) => handleStartRotateShape(e, elp)}
                       onRotate={(deg) => rotateShapeByAngle(elp, deg)}
+                      ilkokul={ilkokul}
                     />
                   )}
                 </g>
@@ -6581,6 +6709,7 @@ export function Canvas({
                       feedbackDeg={rotatingFeedback?.shapeId === seg.id ? rotatingFeedback.deg : null}
                       onFreeRotateStart={(e) => handleStartRotateShape(e, seg)}
                       onRotate={(deg) => rotateShapeByAngle(seg, deg)}
+                      ilkokul={ilkokul}
                     />
                   )}
                 </g>
@@ -8034,6 +8163,11 @@ export function Canvas({
           const isCm = activeTool === 'measure_distance';
           const midX = (s1.x + s2.x) / 2;
           const midY = (s1.y + s2.y) / 2;
+          const canliMetin = ilkokul
+            ? ilkokulUzunlukMetni(dist, isCm ? uzunlukOlcBirimi(kademe) : 'br')
+            : `${formatTurkishNumber(dist)} ${isCm ? uzunlukOlcBirimi(kademe) : 'br'}`;
+          // "yaklaşık 4 br" 72 px'lik rozete sığmıyordu
+          const rozetGenisligi = Math.max(72, 16 + canliMetin.length * 7);
 
           return (
             <g className="pointer-events-none measurement-live-preview">
@@ -8063,9 +8197,9 @@ export function Canvas({
               {/* Canlı Ölçüm Rozeti */}
               <g data-canvas-label="" transform={`translate(${midX}, ${midY - 14}) scale(${yaziOlcegi})`}>
                 <rect
-                  x="-36"
+                  x={-rozetGenisligi / 2}
                   y="-12"
-                  width="72"
+                  width={rozetGenisligi}
                   height="24"
                   rx="7"
                   fill="#0f172a"
@@ -8081,7 +8215,7 @@ export function Canvas({
                   fill="#ffffff"
                   className="font-bold text-xs font-sans tracking-wide"
                 >
-                  {ilkokul ? ilkokulUzunlukMetni(dist, isCm ? 'cm' : 'br') : `${formatTurkishNumber(dist)} ${isCm ? uzunlukOlcBirimi(kademe) : 'br'}`}
+                  {canliMetin}
                 </text>
               </g>
             </g>
@@ -8174,11 +8308,17 @@ export function Canvas({
           }}
         />
 
+        {/* İLKOKUL SİMETRİ KEŞFET: aday doğru, katlanan yarı, örtüşme / örtüşmeyen bölge (uzman 4. tur [178]) */}
+        <SimetriSinamaKatmani sinama={simetri} viewport={viewport} imlec={mouseWorldPos} />
+
       </svg>
 
 
-      {/* İLKOKUL SİMETRİ ÇUBUĞU: yalnız şekil seçilir; simetri doğrusu dikey ya da yatay (eksen düğmesi yok) */}
-      {['reflect', 'symmetry'].includes(activeTool) && ilkokul && (() => {
+      {/* İLKOKUL SİMETRİ KEŞFET ÇUBUĞU: aday doğru → Katla → örtüşme; bulunan simetri doğrularının sayısı (uzman 4. tur [178]) */}
+      {activeTool === 'symmetry' && ilkokul && <SimetriSinamaCubugu sinama={simetri} />}
+
+      {/* İLKOKUL YANSIT ÇUBUĞU (simetrik tamamlama): yalnız şekil seçilir; simetri doğrusu dikey ya da yatay (eksen düğmesi yok) */}
+      {activeTool === 'reflect' && ilkokul && (() => {
         const hedefId = reflectTargetPolyId || selectedObjectId;
         const sekil = objects.find((o) => o.id === hedefId && o.type === 'polygon') as PolygonObject | undefined;
         const yonSec = (yon: SimetriYonu) => {
@@ -8190,8 +8330,8 @@ export function Canvas({
             <CubukMetni
               vurgu="lavanta"
               simge={<FlipHorizontal2 className="w-4 h-4" />}
-              baslik="Simetri"
-              aciklama={sekil ? 'Simetri doğrusunu seç' : 'Simetriğini çizmek istediğin şekle dokun'}
+              baslik="Yansıt"
+              aciklama={sekil ? 'Simetri doğrusunu seç' : 'Simetriğiyle tamamlamak istediğin şekle dokun'}
             />
             <CubukAyirici />
             <CubukDugmesi tur={ilkokulSimetriYonu === 'dikey' ? 'birincil' : 'normal'} aria-pressed={ilkokulSimetriYonu === 'dikey'} onClick={() => yonSec('dikey')}>

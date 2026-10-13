@@ -8,6 +8,8 @@
  * koni ve piramit YOK), Yüzü Seç ve Renklendir, Uzunluk Ölçme (ayrıtlar tam sayı), Cismi Döndür, Büyüt ve
  * Küçült (yansıtma ve öteleme YOK), Cisim Özellikleri (Köşeleri / Ayrıtları / Yüzleri Göster), görünümler.
  * Açınım 4. sınıf kazanımıdır (MAT.4.3.1: küp ve prizmaların açınımları) ve ilkokulda kalır.
+ * Eksenleri Göster ilkokulda YOK (alan uzmanı, 4. tur [180]: 2B'deki gibi 3B'de de koordinat ekseni, negatif sayı ve
+ * koordinat yazısı yok; zemin ızgarası kalır — kademe3BEksenleriGosterir).
  * Ortaokul ve lise: bütün araçlar (MAT.7.4.x prizmalar, MAT.8.4.1-3 açınım ve silindir, MAT.12.4.1-3).
  */
 import type { KademeDuzeyi, KademeId } from './kademeDuzeyleri';
@@ -35,7 +37,7 @@ export const ILKOKUL_3B_ARACLARI: readonly Tool3DTreeId[] = [
   'show_edges',
   'show_faces',
   'show_grid',
-  'show_axes',
+  // Eksenleri Göster: ilkokulda YOK (4. tur [180])
   'view_front', // "Önünden Görünüm"
   'view_top',
   'view_right',
@@ -95,26 +97,48 @@ export function grupAcikliklari3B(gruplar: readonly TreeTool3DGroup[], duzey: Ka
 
 /* ------------------------- 2B - 3B ayrımı (uzman 4. tur, ortaokul) ------------------------- */
 
+/** 2B ve 3B nesne kümeleri ayrı olan kademeler: ortaokul ([172]) ve ilkokul (4. tur SIL [180]) */
+const AYRIK_KUMELI_KADEMELER: readonly KademeDuzeyi[] = ['ortaokul', 'ilkokul'];
+
 /**
  * 3B sahnede 2B çizimden gelen nesneler (nokta, çember, fonksiyon…) gösterilir mi? Ortaokulda HAYIR (geoeba (3).xlsx
  * [172]: H ve L noktaları, çember ve fonksiyon 3B'de küre ve elips olarak görünüyor, 3B'nin Tümünü Sil'i ve Nesneler
- * listesi onları kapsamadığından silinemiyordu → "2D ve 3D nesne kümelerini ayır"). İlkokul, lise ve Tüm araçlar
- * eskisi gibi ortak modeli (2B nesneler uzayda, z ekseniyle) gösterir.
+ * listesi onları kapsamadığından silinemiyordu → "2D ve 3D nesne kümelerini ayır"). İlkokulda da HAYIR ([180]: "2B'de
+ * çizilen bir çember de 3B sahnede elips olarak belirmektedir"; nesnenin habersizce öbür görünümde başka biçimde
+ * belirmesi öğrencinin izlemesini güçleştirir). Lise ve Tüm araçlar eskisi gibi ortak modeli (z ekseniyle) gösterir.
  */
 export function kademe2BNesneleri3BdeGosterir(duzey: KademeDuzeyi): boolean {
-  return duzey !== 'ortaokul';
+  return !AYRIK_KUMELI_KADEMELER.includes(duzey);
 }
 
 /**
  * 2B tuvalde 3B cisimlerin üstten görünümü (izdüşüm) açılışta açık mı? Ortaokulda KAPALI ([175]: etiketli izdüşümler
- * çizim alanını kalabalıklaştırıyor, öğrencinin kendi çizimini gizliyordu); tuvalin "3B cisimler" anahtarıyla açılır.
+ * çizim alanını kalabalıklaştırıyor, öğrencinin kendi çizimini gizliyordu); ilkokulda da KAPALI ([180]: "3B cisimlerin
+ * 2B görünümdeki yansımaları ilkokulda gösterilmemeli ya da yalnızca cismin adıyla sınırlı kalmalıdır"). Tuvalin
+ * "3B cisimler" anahtarıyla açılır; ilkokulda açılınca yalnız cismin adı yazılır (cisimIzdusumuYalnizAd).
  */
 export function cisimIzdusumuVarsayilanAcik(duzey: KademeDuzeyi): boolean {
-  return duzey !== 'ortaokul';
+  return !AYRIK_KUMELI_KADEMELER.includes(duzey);
 }
 
-/** "3B cisimler" (izdüşümü göster / gizle) anahtarı bu kademede sunulur mu? İlkokul arayüzü değişmez. */
-export function cisimIzdusumuAnahtariVar(duzey: KademeDuzeyi): boolean {
+/**
+ * "3B cisimler" (izdüşümü göster / gizle) anahtarı bu kademede sunulur mu? Her kademede: ilkokulda da izdüşüm kapalı
+ * açıldığı için (4. tur SIL [180]) onu açmanın yolu bu anahtardır.
+ */
+export function cisimIzdusumuAnahtariVar(_duzey: KademeDuzeyi): boolean {
+  return true;
+}
+
+/** İzdüşüm etiketi yalnız cismin adı mı (taban alanı, hacim, br², br³ ve "a = 3 br" yok)? İlkokulda evet ([180]). */
+export function cisimIzdusumuYalnizAd(duzey: KademeDuzeyi): boolean {
+  return duzey === 'ilkokul';
+}
+
+/**
+ * 3B sahnede eksenler (x, y, z), eksen sayıları (negatifler dahil), "(0; 0; 0)" ve konum koordinatları gösterilir mi?
+ * İlkokulda HAYIR ([180]: 2B ilkokul kipi koordinat eksenini kapatıyor, 3B'de açık kalıyordu); zemin ızgarası kalır.
+ */
+export function kademe3BEksenleriGosterir(duzey: KademeDuzeyi): boolean {
   return duzey !== 'ilkokul';
 }
 

@@ -24,15 +24,29 @@ function ilkokulYonergesi(arac: string, secilen: number): AracYonergesi | null {
       };
     case 'angle':
       return { baslik: 'Açı Oluştur', aciklama: `Sırayla 3 noktaya dokun: ortadaki nokta köşe olur${sayac(secilen, 3)}.` };
+    // 4. tur [177]: ekranda "cm" yok — ekrandaki bir kare gerçek bir santimetre değildir; bütün ölçmeler birimle (br)
     case 'measure_distance':
-      return { baslik: 'Uzunluk Ölç (cm)', aciklama: `İki köşeye ya da noktaya dokun; uzunluk tam santimetre yazılır${sayac(secilen, 2)}.` };
+      return { baslik: 'Uzunluk Ölç', aciklama: `İki köşeye ya da noktaya dokun; uzunluk birim (br) olarak yazılır, tam değilse «yaklaşık» denir${sayac(secilen, 2)}.` };
     case 'unit_measure':
       return { baslik: 'Birimle Ölç (br)', aciklama: `Kareli zeminde iki köşeye ya da noktaya dokun; uzunluk kaç kare kenarı olduğu (birim) yazılır${sayac(secilen, 2)}.` };
+    case 'measure_perimeter':
+      return { baslik: 'Çevre Hesapla', aciklama: 'Çevresini görmek istediğin şekle dokun. Kenarları kareli zemine paralel değilse çevresini cetvelle ölç.' };
+    // 4. tur [178]: iki araç ayrı işler — Yansıt simetrik TAMAMLAMA, Simetri Keşfet simetri doğrusunu SINAMA
     case 'reflect':
+      return {
+        baslik: 'Yansıt',
+        aciklama: 'Şekli simetriğiyle tamamla: şekle dokun; simetri doğrusu şeklin yanına çizilir, simetriği öbür yana konur. Üstteki düğmelerle dikey ya da yatay simetri doğrusunu seç.',
+      };
     case 'symmetry':
       return {
-        baslik: 'Simetri',
-        aciklama: 'Simetriğini çizmek istediğin şekle dokun. Simetri doğrusu şeklin yanına çizilir; üstteki düğmelerle dikey ya da yatay simetri doğrusunu seç.',
+        baslik: 'Simetri Keşfet',
+        aciklama: 'Şekle dokun, üzerine aday simetri doğrusunun iki ucunu işaretle ve «Katla»ya bas: iki yarı örtüşürse bu bir simetri doğrusudur.',
+      };
+    // 4. tur [179]: derece yok (TYMM MAT.4.3.5: açı bir dönme miktarıdır)
+    case 'rotate':
+      return {
+        baslik: 'Şekli Döndür',
+        aciklama: 'Önce bir şekil seç; altındaki düğmelerle şekli çeyrek dönüş, yarım dönüş ya da tam dönüş döndür. Yönü seç: saat yönünde ya da saat yönünün tersine.',
       };
     default:
       return null;

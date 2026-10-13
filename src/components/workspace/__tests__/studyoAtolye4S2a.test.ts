@@ -136,17 +136,18 @@ describe('[151] / [152] ortaokulda 2 ondalık ve tek birim (br); çokgen kenarı
     const p2 = nokta('b', 'B', 5.81, 0);
     const o = uzunluk(p1, p2, 5.81, { birim: uzunlukOlcBirimi('ortaokul') });
     expect(olcuMetni(o, { olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: false })).toMatch(/5,81 br/);
-    expect(uzunlukOlcBirimi('ilkokul')).toBe('cm');
+    // İlkokulda da br (uzman 4. tur [177], SIL: ekranda "cm" yok)
+    expect(uzunlukOlcBirimi('ilkokul')).toBe('br');
     expect(uzunlukOlcBirimi('lise')).toBe('cm');
     expect(uzunlukOlcBirimi('tum')).toBe('cm');
   });
 
-  it('ortaokulda Uzunluk Ölç adı birimini bırakır; diğer kademelerde "(cm)" kalır', () => {
+  it('ortaokulda (ve ilkokulda, SIL [177]) Uzunluk Ölç adı birimini bırakır; lise ve Tüm araçlarda "(cm)" kalır', () => {
     const ad = (k: 'ortaokul' | 'lise' | 'ilkokul' | 'tum') =>
       gruplariSuz(TREE_TOOL_GROUPS, k).flatMap((g) => g.tools).find((t) => t.id === 'measure_distance')?.name;
     expect(ad('ortaokul')).toBe('Uzunluk Ölç');
     expect(ad('lise')).toBe('Uzunluk Ölç (cm)');
-    expect(ad('ilkokul')).toBe('Uzunluk Ölç (cm)');
+    expect(ad('ilkokul')).toBe('Uzunluk Ölç');
     expect(ad('tum')).toBe('Uzunluk Ölç (cm)');
     expect(aracYonergesi('measure_distance', 0, { uzunlukBirimi: 'br' })?.baslik).toBe('Uzunluk Ölç');
     expect(aracYonergesi('measure_distance', 0, {})?.baslik).toBe('Uzunluk Ölç (cm)');

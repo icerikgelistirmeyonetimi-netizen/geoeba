@@ -77,7 +77,9 @@ import {
 import { CISIM_RENKLERI, KOPYA_RENGI } from './cisimRenkleri';
 import { cismiGorunurKil, cizimOlculeri } from './cisimYerlesimi';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
-import { gizliSecimBirakilir, kademe2BNesneleri3BdeGosterir, type AyrimDurumu } from './kademeDuzeyleri3B';
+import { gizliSecimBirakilir, kademe2BNesneleri3BdeGosterir, kademe3BEksenleriGosterir, type AyrimDurumu } from './kademeDuzeyleri3B';
+import { ILKOKUL_3B_DONUS_YONLERI, ilkokulOlcekNotu, ilkokulOzellikMetni } from './ilkokul3B';
+import { ilkokulUzunlukMetni } from './ilkokulKipi';
 import {
   surukleAcisi,
   halkaAcisi,
@@ -1248,7 +1250,11 @@ export function Canvas3D(props: Canvas3DProps) {
   const workspace = useWorkspace();
   const [kademeDuzeyi] = useKademeDuzeyi();
   const goster2BNesneler = goster2BNesnelerProp ?? kademe2BNesneleri3BdeGosterir(kademeDuzeyi);
-  // 2B nesneler gizliyse (ortaokul) sahne, isabet, gizmo ve silme onları hiç görmez
+  // İlkokul (uzman 4. tur [180]): eksen, eksen sayıları, "(0; 0; 0)" ve konum koordinatları yok; hacim / yüzey alanı yerine
+  // yüz, köşe, ayrıt sayısı; döndürme çeyrek dönüşlerle (ilkokul3B.ts)
+  const eksenlerGorunur = kademe3BEksenleriGosterir(kademeDuzeyi);
+  const ilkokul3B = kademeDuzeyi === 'ilkokul';
+  // 2B nesneler gizliyse (ortaokul, ilkokul) sahne, isabet, gizmo ve silme onları hiç görmez
   const objects = goster2BNesneler ? workspace?.objects ?? BOS_NESNELER : BOS_NESNELER;
   const selectedObjectIds = goster2BNesneler ? workspace?.selectedObjectIds ?? BOS_KIMLIKLER : BOS_KIMLIKLER;
   // 3B'ye GEÇİLİRKEN (3B açık kurulurken ya da kademe ortaokula dönünce) 2B'den kalan seçim bırakılır: yoksa 3B'de Sil
@@ -1563,9 +1569,9 @@ export function Canvas3D(props: Canvas3DProps) {
     const t = threeRef.current;
     if (!t) return;
     if (t.gridGroup) t.gridGroup.visible = camera.showGrid;
-    if (t.axesGroup) t.axesGroup.visible = camera.showAxes;
+    if (t.axesGroup) t.axesGroup.visible = camera.showAxes && eksenlerGorunur;
     requestRender();
-  }, [camera.showGrid, camera.showAxes, requestRender]);
+  }, [camera.showGrid, camera.showAxes, eksenlerGorunur, requestRender]);
 
   /* --------------------------- Boyut / kamera -------------------------- */
   useEffect(() => {
@@ -2646,11 +2652,12 @@ export function Canvas3D(props: Canvas3DProps) {
       const olcu = ayritOlcusu(solid, a.edgeIdx);
       if (!olcu) return;
       const p = projectToScreen(olcu.orta, cam, width, height);
-      if (!p.behind) edgeLabels.push({ key: ayritAnahtari(a), x: p.x, y: p.y, text: uzunlukMetni(olcu.uzunluk) });
+      // İlkokulda ayrıt tam sayı birim; tam değilse "yaklaşık" (2B ile aynı kural, 4. tur [176])
+      if (!p.behind) edgeLabels.push({ key: ayritAnahtari(a), x: p.x, y: p.y, text: ilkokul3B ? ilkokulUzunlukMetni(olcu.uzunluk, 'br') : uzunlukMetni(olcu.uzunluk) });
     });
 
     return { gizmoLabels, coordBadges, faceBadge, edgeLabels };
-  }, [solids, effectiveSelectedIds, activeTool, basis, dimensions, objects, selectedObjectIds, olculenAyritlar, interaction]);
+  }, [solids, effectiveSelectedIds, activeTool, basis, dimensions, objects, selectedObjectIds, olculenAyritlar, interaction, ilkokul3B]);
 
   /**
    * Ekran üstü bindirmeler (ipucu şeritleri, kapsüller, araç çubukları) kök
@@ -2803,7 +2810,8 @@ export function Canvas3D(props: Canvas3DProps) {
 
       {/* Gizmo eksen rozetleri ve koordinat etiketleri (HTML bindirme) */}
       {/* Eksen harfleri: ok ucunda küçük, kenarlıksız yuvarlak (ekranı kapatmasın) */}
-      {overlays.gizmoLabels.map((g) => (
+      {/* İlkokulda eksen harfi ve koordinat rozeti yok (4. tur [180]) */}
+      {eksenlerGorunur && overlays.gizmoLabels.map((g) => (
         <div
           key={`gl-${g.id}-${g.axis}`}
           className="absolute z-10 w-3.5 h-3.5 -ml-[7px] -mt-[7px] rounded-full text-white text-[8px] font-bold font-mono leading-none flex items-center justify-center shadow-sm opacity-90 pointer-events-none"
@@ -2813,7 +2821,7 @@ export function Canvas3D(props: Canvas3DProps) {
         </div>
       ))}
       {/* Koordinat rozeti: yalnız sürüklerken, açık zeminli ve küçük */}
-      {overlays.coordBadges.map((b) => (
+      {eksenlerGorunur && overlays.coordBadges.map((b) => (
         <div
           key={`cb-${b.id}`}
           className="absolute z-10 -translate-x-1/2 -translate-y-1/2 px-2 py-0.5 rounded-md bg-card/90 backdrop-blur-sm text-foreground text-[10px] font-mono font-semibold border border-border shadow-sm whitespace-nowrap pointer-events-none"
@@ -2823,7 +2831,7 @@ export function Canvas3D(props: Canvas3DProps) {
         </div>
       ))}
       {/* Seçili yüz: yalnız alan, küçük ve açık zeminli; yüzün adı alt şeritte yazar */}
-      {overlays.faceBadge && (
+      {overlays.faceBadge && !ilkokul3B && (
         <div
           className="absolute z-10 -translate-x-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-md bg-card/85 backdrop-blur-sm text-foreground text-[10px] font-mono font-semibold border border-border/70 shadow-sm whitespace-nowrap pointer-events-none"
           style={{ left: overlays.faceBadge.x, top: overlays.faceBadge.y }}
@@ -2846,9 +2854,11 @@ export function Canvas3D(props: Canvas3DProps) {
         <div
           className="absolute top-14 right-4 z-20 px-2.5 py-1 rounded-xl bg-card/85 backdrop-blur-md border border-border/80 shadow-sm text-[11px] font-mono font-semibold text-foreground pointer-events-none whitespace-nowrap"
           role="status"
-          aria-label={`${seciliCisim.name}: ${hacimAlanMetni(seciliCisim)}`}
+          aria-label={`${seciliCisim.name}: ${ilkokul3B ? ilkokulOzellikMetni(seciliCisim) : hacimAlanMetni(seciliCisim)}`}
+          data-cisim-ozeti
         >
-          {hacimAlanMetni(seciliCisim)}
+          {/* İlkokulda hacim ve yüzey alanı yerine yüz, köşe, ayrıt sayısı ve yüz biçimleri (4. tur [180]) */}
+          {ilkokul3B ? ilkokulOzellikMetni(seciliCisim) : hacimAlanMetni(seciliCisim)}
         </div>
       )}
 
@@ -3009,12 +3019,43 @@ export function Canvas3D(props: Canvas3DProps) {
             aciklama={
               secimYok
                 ? ONCE_CISIM_SECIN
-                : seciliCisim
-                  ? eulerMetni(seciliCisim.rotation)
-                  : `${seciliCisimler.length} cisim · cisme basıp sürükleyin, Shift ile 15° adım`
+                : ilkokul3B
+                  // İlkokul: derece ve eksen harfi yok; yön seçilir, cisim çeyrek dönüş döner (4. tur [179], [180])
+                  ? 'Cisme basıp sürükleyerek çevir ya da yönü seçip çeyrek dönüş döndür'
+                  : seciliCisim
+                    ? eulerMetni(seciliCisim.rotation)
+                    : `${seciliCisimler.length} cisim · cisme basıp sürükleyin, Shift ile 15° adım`
             }
           />
-          {!secimYok && (
+          {!secimYok && ilkokul3B && (
+            <>
+              <CubukAyirici />
+              <div className="flex items-center gap-0.5" role="group" aria-label="Dönme yönü" data-ilkokul-donus-yonleri>
+                {ILKOKUL_3B_DONUS_YONLERI.map((y) => (
+                  <button
+                    key={y.eksen}
+                    type="button"
+                    onClick={() => setDondurEkseni(y.eksen)}
+                    aria-pressed={dondurEkseni === y.eksen}
+                    className={secenekDugmesi(dondurEkseni === y.eksen)}
+                  >
+                    {y.ad}
+                  </button>
+                ))}
+              </div>
+              <CubukDugmesi tur="birincil" simge={<RotateCw className="w-4 h-4" />} onClick={() => hazirAciylaDondur(90)}>
+                Çeyrek dönüş
+              </CubukDugmesi>
+              <CubukDugmesi simge={<RotateCcw className="w-4 h-4" />} onClick={() => hazirAciylaDondur(-90)}>
+                Ters yöne
+              </CubukDugmesi>
+              <CubukAyirici />
+              <CubukDugmesi onClick={() => donusumUygula(donmeyiSifirla)} title="Döndürmeyi sıfırla (cisim dik durur)">
+                Sıfırla
+              </CubukDugmesi>
+            </>
+          )}
+          {!secimYok && !ilkokul3B && (
             <>
               <CubukAyirici />
               <div className="flex items-center gap-0.5" role="group" aria-label="Dönme ekseni">
@@ -3070,13 +3111,18 @@ export function Canvas3D(props: Canvas3DProps) {
             aciklama={
               secimYok
                 ? ONCE_CISIM_SECIN
-                : seciliCisim
+                : ilkokul3B
+                  // İlkokul: hacim ve yüzey alanı katı yazılmaz (4. tur [180])
                   ? sonOlcek !== null
-                    ? `${hacimAlanMetni(seciliCisim)} · ${olcekNotu(sonOlcek)}`
-                    : `${hacimAlanMetni(seciliCisim)} · köşedeki tutamacı sürükleyin`
-                  : sonOlcek !== null
-                    ? olcekNotu(sonOlcek)
-                    : `${seciliCisimler.length} cisim · köşedeki tutamacı sürükleyin`
+                    ? ilkokulOlcekNotu(sonOlcek)
+                    : 'köşedeki tutamacı sürükleyin'
+                  : seciliCisim
+                    ? sonOlcek !== null
+                      ? `${hacimAlanMetni(seciliCisim)} · ${olcekNotu(sonOlcek)}`
+                      : `${hacimAlanMetni(seciliCisim)} · köşedeki tutamacı sürükleyin`
+                    : sonOlcek !== null
+                      ? olcekNotu(sonOlcek)
+                      : `${seciliCisimler.length} cisim · köşedeki tutamacı sürükleyin`
             }
           />
           {!secimYok && (

@@ -37,10 +37,12 @@ export function olcumBildirimi(olcu: string, zatenGorunur: boolean): string {
 
 /**
  * Uzunluk Ölç aracının birimi: ortaokulda bütün ölçüler Ayarlar'daki varsayılan birimle (br) yazılır; aynı kenar
- * bir yerde 'cm', başka yerde 'br' görünmesin. İlkokul (cetvelle santimetre) ve lisede 'cm' kalır.
+ * bir yerde 'cm', başka yerde 'br' görünmesin. İlkokulda da 'br' (alan uzmanı, 4. tur [177]: ekrandaki bir kare
+ * aralığı gerçek bir santimetre değildir — dizüstünde ≈ 1,2 cm, akıllı tahtada 3 cm'den fazla — ve yakınlaştırmayla
+ * değişir; "1 cm" yazmak standart birimi keyfî bir etikete çevirir). Lisede 'cm' kalır.
  */
 export function uzunlukOlcBirimi(kademe: KademeDuzeyi): 'cm' | 'br' {
-  return kademe === 'ortaokul' ? 'br' : 'cm';
+  return kademe === 'ortaokul' || kademe === 'ilkokul' ? 'br' : 'cm';
 }
 
 /** Şu anki kademede Uzunluk Ölç'ün birimi (React dışı okuma: WorkspaceContext'in araç işleyicisi). */

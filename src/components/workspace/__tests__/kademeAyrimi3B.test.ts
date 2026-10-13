@@ -1,24 +1,33 @@
 import { describe, expect, it } from 'vitest';
-import { cisimIzdusumuAnahtariVar, cisimIzdusumuVarsayilanAcik, gizliSecimBirakilir, kademe2BNesneleri3BdeGosterir } from '../kademeDuzeyleri3B';
+import {
+  cisimIzdusumuAnahtariVar, cisimIzdusumuVarsayilanAcik, cisimIzdusumuYalnizAd, gizliSecimBirakilir, kademe2BNesneleri3BdeGosterir,
+  kademe3BEksenleriGosterir,
+} from '../kademeDuzeyleri3B';
 import { KADEME_KIMLIKLERI } from '../kademeDuzeyleri';
 import { cisimIzdusumuAcikMi, cisimIzdusumunuDegistir } from '../cisimIzdusumu';
 
 /*
- * Uzman 4. tur [172], [175] (ortaokul): 2B ve 3B nesne kümeleri ayrı. Kural YALNIZ ortaokulda; ilkokul, lise ve
+ * Uzman 4. tur [172], [175] (ortaokul): 2B ve 3B nesne kümeleri ayrı. İlkokulda da ayrı (4. tur SIL [180]: "2B'de
+ * çizilen bir çember de 3B sahnede elips olarak belirmektedir"; izdüşümler gösterilmesin ya da yalnız adıyla). Lise ve
  * Tüm araçlar eskisi gibi (ortak model, izdüşüm açık).
  */
 describe('Kademe: 2B - 3B ayrımı', () => {
-  it('3B sahnede 2B nesneler yalnız ortaokulda gizli', () => {
-    expect(kademe2BNesneleri3BdeGosterir('ortaokul')).toBe(false);
-    for (const k of ['ilkokul', 'lise', 'tum'] as const) expect(kademe2BNesneleri3BdeGosterir(k), k).toBe(true);
+  it('3B sahnede 2B nesneler ortaokulda ve ilkokulda gizli; lise ve Tüm araçlarda görünür', () => {
+    for (const k of ['ortaokul', 'ilkokul'] as const) expect(kademe2BNesneleri3BdeGosterir(k), k).toBe(false);
+    for (const k of ['lise', 'tum'] as const) expect(kademe2BNesneleri3BdeGosterir(k), k).toBe(true);
   });
-  it('2B tuvalde cisim izdüşümü ortaokulda kapalı açılır, ötekilerde açık', () => {
-    expect(cisimIzdusumuVarsayilanAcik('ortaokul')).toBe(false);
-    for (const k of ['ilkokul', 'lise', 'tum'] as const) expect(cisimIzdusumuVarsayilanAcik(k), k).toBe(true);
+  it('2B tuvalde cisim izdüşümü ortaokulda ve ilkokulda kapalı açılır, ötekilerde açık', () => {
+    for (const k of ['ortaokul', 'ilkokul'] as const) expect(cisimIzdusumuVarsayilanAcik(k), k).toBe(false);
+    for (const k of ['lise', 'tum'] as const) expect(cisimIzdusumuVarsayilanAcik(k), k).toBe(true);
   });
-  it('"3B cisimler" anahtarı ilkokul dışındaki her kademede; ilkokul arayüzü değişmez', () => {
-    expect(cisimIzdusumuAnahtariVar('ilkokul')).toBe(false);
-    for (const k of [...KADEME_KIMLIKLERI.filter((k) => k !== 'ilkokul'), 'tum'] as const) expect(cisimIzdusumuAnahtariVar(k), k).toBe(true);
+  it('"3B cisimler" anahtarı her kademede (ilkokulda izdüşümü açmanın yolu); ilkokulda etiket yalnız ad', () => {
+    for (const k of [...KADEME_KIMLIKLERI, 'tum'] as const) expect(cisimIzdusumuAnahtariVar(k), k).toBe(true);
+    expect(cisimIzdusumuYalnizAd('ilkokul')).toBe(true);
+    for (const k of ['ortaokul', 'lise', 'tum'] as const) expect(cisimIzdusumuYalnizAd(k), k).toBe(false);
+  });
+  it('3B eksenleri ve koordinatlar ilkokulda yok; öbür kademelerde var', () => {
+    expect(kademe3BEksenleriGosterir('ilkokul')).toBe(false);
+    for (const k of ['ortaokul', 'lise', 'tum'] as const) expect(kademe3BEksenleriGosterir(k), k).toBe(true);
   });
 });
 

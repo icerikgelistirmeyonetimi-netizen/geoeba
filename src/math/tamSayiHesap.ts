@@ -62,6 +62,17 @@ export function tamSayiCevre(k: readonly Point2D[]): TamSayiSonucu {
 }
 
 /**
+ * İlkokulda çokgenin çevresi: GERÇEK kenar uzunlukları toplanır, toplam en yakın tam sayıya yuvarlanır (alan uzmanı,
+ * 4. tur [176]: tabanı 4, yüksekliği 4 br ikizkenar üçgende kenarlar ayrı ayrı yuvarlanınca 4 + 4 + 4 = 12 çıkıyordu;
+ * gerçek çevre 4 + 2·√20 ≈ 12,94 → yaklaşık 13 br). Toplam tam sayı değilse `yaklasik`.
+ */
+export function toplamdanYuvarlananCevre(k: readonly Point2D[]): TamSayiSonucu {
+  const gercek = kenarlar(k).reduce((t, x) => t + x, 0);
+  const deger = Math.round(gercek);
+  return { deger, yaklasik: Math.abs(deger - gercek) > 1e-6, sabitBasamak: true };
+}
+
+/**
  * Çokgenin alanı: dikdörtgende ve dik üçgende görünen kenarlardan; öteki çokgenlerde gerçek alanın
  * tam sayıya yuvarlanmışı.
  */
