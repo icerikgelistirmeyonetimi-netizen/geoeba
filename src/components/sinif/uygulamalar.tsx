@@ -14,7 +14,7 @@
 import React, { type ComponentType } from 'react';
 import dynamic from 'next/dynamic';
 import { manifest as veriGrafikManifesti } from '@/components/uygulamalar/veri-grafik/manifest';
-import { manifest as olasilikManifesti } from '@/components/uygulamalar/olasilik/manifest';
+import { ilkokulManifesti as olasilikIlkokulManifesti, manifest as olasilikManifesti } from '@/components/uygulamalar/olasilik/manifest';
 import { manifest as algoritmaManifesti } from '@/components/uygulamalar/algoritma/manifest';
 import s from './sinif.module.css';
 
@@ -118,14 +118,23 @@ export function uygulamaBul(id: string): UygulamaTanimi | undefined {
 
 /**
  * İlkokul kademesinde (Çizim Stüdyosu'nun Kademe menüsü: İlkokul) masaüstünde gösterilmeyen uygulamalar.
- * Olasılık Laboratuvarı: alan uzmanları (2. tur) — 3. sınıf: "zar kaldırılmalı, ilkokul öğrencileri için uygun
- * değildir"; 4. sınıf: TYMM MAT.4.4.1 "olasılık tahminlerinde oran, kesir ve yüzde gibi sayı temsilleri kullanmaları
- * beklenmez". Laboratuvar baştan sona zar / para / torba deneyleri, kesir ve yüzde (deneysel ve teorik olasılık)
- * üzerine kurulu olduğundan ilkokulda gizlenir; ortaokul, lise ve "Tüm araçlar"da yerinde kalır.
+ * Şu an yok. Olasılık Laboratuvarı 2. turda burada gizleniyordu (3. sınıf: "zar kaldırılmalı"; 4. sınıf: TYMM
+ * MAT.4.4.1 "olasılık tahminlerinde oran, kesir ve yüzde gibi sayı temsilleri kullanmaları beklenmez"; laboratuvar
+ * baştan sona sayı küpü, kesir ve yüzde üzerine kurulu). 4. turda alan uzmanı (geoeba (3).xlsx satır 183): tamamen
+ * kaldırmak MAT.4.4.1'in "günlük yaşamdaki olayların olasılığını imkânsız, olabilir, kesin olarak belirleme"
+ * çıktısını karşılıksız bırakıyor. Bu yüzden laboratuvar ilkokulda da görünür ama «olay kartları» kipiyle açılır
+ * (olasilik/OlayKartlariGorunumu.tsx): sayı, kesir, yüzde ve sayı küpü yok; öğrenci olayı önce sınıflandırır, sonra torba
+ * ya da çark deneyiyle sınar. Ortaokul, lise ve "Tüm araçlar"da laboratuvar değişmez.
  */
-export const ILKOKULDA_GIZLI_UYGULAMALAR: readonly string[] = ['olasilik'];
+export const ILKOKULDA_GIZLI_UYGULAMALAR: readonly string[] = [];
+
+/** İlkokulda kısayol / Başlat menüsü / pencere başlığında açıklaması ve simgesi değişen uygulamalar */
+const ILKOKUL_UYARLAMALARI: Readonly<Record<string, Partial<Pick<UygulamaManifesti, 'aciklama' | 'simge'>>>> = {
+  olasilik: olasilikIlkokulManifesti,
+};
 
 /** Masaüstü, görev çubuğu ve Başlat menüsünün kademeye göre listesi (sıra korunur) */
 export function kademeninUygulamalari(ilkokul: boolean, liste: readonly UygulamaTanimi[] = UYGULAMALAR): readonly UygulamaTanimi[] {
-  return ilkokul ? liste.filter((u) => !ILKOKULDA_GIZLI_UYGULAMALAR.includes(u.id)) : liste;
+  if (!ilkokul) return liste;
+  return liste.filter((u) => !ILKOKULDA_GIZLI_UYGULAMALAR.includes(u.id)).map((u) => (ILKOKUL_UYARLAMALARI[u.id] ? { ...u, ...ILKOKUL_UYARLAMALARI[u.id] } : u));
 }

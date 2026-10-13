@@ -3,12 +3,19 @@
 /**
  * Olasılık Laboratuvarı — masaüstü uygulaması (Üretim / olasilik).
  *
- * Rastgele olay şablonları (para, zar, çark, torba, kart), üç olasılık paneli (öznel / teorik /
+ * Rastgele olay şablonları (para, sayı küpü, çark, torba, kart), üç olasılık paneli (öznel / teorik /
  * deneysel), 3B deney alanı, sonuç tablosu, karşılaştırma ve yakınsama grafikleri. Durum
  * localStorage'da ('geoeba_olasilik_v1'); mantık durum.ts / olasilik.ts / simulasyon.ts'te.
+ *
+ * İlkokul kademesinde (Kademe menüsü: İlkokul) laboratuvar yerine «olay kartları» görünümü açılır
+ * (OlayKartlariGorunumu.tsx: imkânsız / olabilir / kesin, torba ve çark deneyiyle; TYMM MAT.4.4.1). Ortaokul,
+ * lise ve "Tüm araçlar"da laboratuvar değişmeden açılır.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useIlkokulKipi } from '@/hooks/useKademeDuzeyi';
 import { DeneyAlani, type DeneyAlaniTutamaci } from './DeneyAlani';
+import { OlayKartlariGorunumu } from './OlayKartlariGorunumu';
+import { useAzHareket, useKoyuTema } from './kancalar';
 import { sekmeKimlikleri, sekmeOkTusu } from '../sekmeler';
 import { KarsilastirmaGrafigi } from './KarsilastirmaGrafigi';
 import { OlayPaneli } from './OlayPaneli';
@@ -52,38 +59,19 @@ function ilkDurum(): LabDurumu {
   }
 }
 
-function useKoyuTema(): boolean {
-  const [koyu, setKoyu] = useState(false);
-  useEffect(() => {
-    const kok = document.documentElement;
-    const guncelle = () => setKoyu(kok.classList.contains('dark'));
-    guncelle();
-    const mo = new MutationObserver(guncelle);
-    mo.observe(kok, { attributes: true, attributeFilter: ['class'] });
-    return () => mo.disconnect();
-  }, []);
-  return koyu;
-}
-
-function useAzHareket(): boolean {
-  const [az, setAz] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const guncelle = () => setAz(mq.matches);
-    guncelle();
-    mq.addEventListener('change', guncelle);
-    return () => mq.removeEventListener('change', guncelle);
-  }, []);
-  return az;
-}
-
 interface Is {
   kalan: number;
   dd: DeneyDurumu;
   son: Sonuc | null;
 }
 
-export default function OlasilikUygulamasi(_props: { pencereGenisligi?: number; pencereYuksekligi?: number }) {
+/** Kademe menüsü İlkokul ise «olay kartları», değilse laboratuvar (ortaokul, lise, Tüm araçlar). */
+export default function OlasilikUygulamasi(props: { pencereGenisligi?: number; pencereYuksekligi?: number }) {
+  const ilkokul = useIlkokulKipi();
+  return ilkokul ? <OlayKartlariGorunumu {...props} /> : <OlasilikLaboratuvari {...props} />;
+}
+
+function OlasilikLaboratuvari(_props: { pencereGenisligi?: number; pencereYuksekligi?: number }) {
   const [durum, setDurum] = useState<LabDurumu>(ilkDurum);
   const [animasyonda, setAnimasyonda] = useState(false);
   /** Toplu deneme sürüyor (sayım akar; tıklama ile atlanacak bir animasyon yok) */

@@ -121,7 +121,7 @@ describe('bozuk kayıt doğrulama (durumuCoz)', () => {
     expect(e!.deneme).toBe(5);
   });
 
-  it('istenen alanı olmayan zar ve bilyesiz torba reddedilir', () => {
+  it('istenen alanı olmayan sayı küpü ve bilyesiz torba reddedilir', () => {
     const d = durumuCoz('{"sablonTuru":"zar","sablonlar":{"zar":{"tur":"zar","ikiZar":true},"torba":{"tur":"torba","bilyeler":"x","iadeli":false,"istenenRenk":"K"}}}');
     expect(d!.sablonlar.zar).toEqual(bosDurum().sablonlar.zar);
     expect(d!.sablonlar.torba).toEqual(bosDurum().sablonlar.torba);
