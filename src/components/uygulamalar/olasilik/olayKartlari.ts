@@ -213,6 +213,16 @@ export function donut(kart: OlayKarti, d: KartDurumu): Donut | null {
   return { dogru, sinif, gozlem: gozlemMetni(kart.sablon, g), karar, gerekce: kart.gerekce, ek };
 }
 
+/**
+ * Dönütten sonra gidilecek kart: aktiften sonraki ilk bitmemiş kart, yoksa baştan ilk bitmemiş kart; aktif dışında
+ * bitmemiş kart kalmadıysa null (bitiş iletisi). Kartlar sırasız bitirilse de bitiş iletisi son bitirilen kartta çıkar.
+ */
+export function siradakiKart(aktif: number, tamamlanan: readonly boolean[]): number | null {
+  const bitmemis = tamamlanan.map((t, i) => (t || i === aktif ? -1 : i)).filter((i) => i >= 0);
+  if (!bitmemis.length) return null;
+  return bitmemis.find((i) => i > aktif) ?? bitmemis[0];
+}
+
 /** Deneyden önceki yönlendirme metni (sınıflandırma yok / deney az) */
 export function yonlendirme(kart: OlayKarti, d: KartDurumu): string {
   if (d.tahmin === null) return 'Önce karar ver: bu olay imkânsız mı, olabilir mi, kesin mi?';

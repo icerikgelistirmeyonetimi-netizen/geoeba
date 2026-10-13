@@ -16,6 +16,7 @@ import {
   gozlem,
   gozlemMetni,
   olaySinifi,
+  siradakiKart,
   sonuclariIsle,
   tahminEt,
   yonlendirme,
@@ -200,5 +201,26 @@ describe('olay kartları: nitel dönüt', () => {
         for (const metin of [dn?.gozlem, dn?.karar, dn?.gerekce, dn?.ek ?? '', yonlendirme(k, d), yonlendirme(k, tahminEt(BOS_KART_DURUMU, t))]) expect(metin).not.toMatch(SAYISIZ);
       }
     }
+  });
+});
+
+describe('olay kartları: dönütten sonraki kart (denetim)', () => {
+  const hic = OLAY_KARTLARI.map(() => false);
+  it('sırayla giderken sonraki bitmemiş kart; son kartta baştaki bitmemiş kart', () => {
+    expect(siradakiKart(0, [true, false, false, false, false, false])).toBe(1);
+    expect(siradakiKart(2, [true, false, true, false, false, false])).toBe(3);
+    expect(siradakiKart(5, [true, false, true, true, true, true])).toBe(1);
+    expect(siradakiKart(0, hic)).toBe(1);
+  });
+
+  it('sonraki kart bitmişse atlanır (bitmiş karta geri gönderilmez)', () => {
+    expect(siradakiKart(1, [false, true, true, true, false, false])).toBe(4);
+  });
+
+  it('kartlar sırasız bitirilse de (2–6, sonra 1) bitiş iletisi son bitirilen kartta çıkar', () => {
+    const hepsi = OLAY_KARTLARI.map(() => true);
+    for (let i = 0; i < OLAY_KARTLARI.length; i++) expect(siradakiKart(i, hepsi)).toBeNull();
+    // Aktif kartın kendisi gidilecek kart sayılmaz: ondan başka bitmemiş yoksa bitiş
+    expect(siradakiKart(0, [false, true, true, true, true, true])).toBeNull();
   });
 });

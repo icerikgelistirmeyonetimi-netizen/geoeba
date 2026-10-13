@@ -25,6 +25,7 @@ import {
   OLAY_SINIFLARI,
   deneyAcikMi,
   donut,
+  siradakiKart,
   sonuclariIsle,
   tahminEt,
   yonlendirme,
@@ -178,8 +179,8 @@ export function OlayKartlariGorunumu(_props: OlayKartlariGorunumuProps) {
   const orta = genislik >= 820;
   const kilitli = d.deneme > 0;
   const tamamlandi = (i: number) => donut(OLAY_KARTLARI[i], durumlar[i]) !== null;
-  // Dönütten sonra: sıradaki kart; son karttaysa bitmemiş ilk kart; hepsi bittiyse null
-  const siradaki = aktif < OLAY_KARTLARI.length - 1 ? aktif + 1 : ((i) => (i < 0 ? null : i))(OLAY_KARTLARI.findIndex((_, i) => i !== aktif && !tamamlandi(i)));
+  // Dönütten sonra: sıradaki bitmemiş kart; hepsi bittiyse null (bitiş iletisi; kartlar sırasız bitirilse de)
+  const siradaki = siradakiKart(aktif, OLAY_KARTLARI.map((_, i) => tamamlandi(i)));
   const adim = d.tahmin === null ? 0 : dn ? 2 : 1;
 
   const kartPaneli = (
