@@ -10,7 +10,8 @@
  * Sütun tepesinde sıklık ve yüzde nokta grafiğindeki gibi tek satırda ("9 · %45"); dar sütunda iki satır. Yan yana
  * sütunlarda ve `yuzdeGoster` kapalıyken (5. sınıf) yalnız sıklık yazılır. Eksenlerin ucunda ok vardır.
  * Sınıf düzeyi (sinifKurallari.ts) istatistikte tepe değeri, göreli sıklık ve merkez açı sütunlarını ve iki yönlü tablo
- * varken tek yönlü tabloyu kapatabilir.
+ * varken tek yönlü tabloyu kapatabilir. İlkokulda (`cetele`) sıklık tablosu çeteleyle birlikte çizilir: tek yönlü tabloda
+ * çubuk yerine "Çetele" sütunu (sıklıktan önce), anahtara göre tabloda her hücrede çetele ve sayı.
  * Yazı ailesi uygulamanın geri kalanıyla aynı (Manrope); sayılar `sayiMetni` biçiminde.
  */
 import React, { useMemo } from 'react';
@@ -33,6 +34,7 @@ import type { VeriTablosu } from './veri';
 import { GECIS, RENK, RenkNoktasi } from './grafikOrtak';
 import { RenkLejanti } from './RenkLejanti';
 import { EksenOklari } from './EksenOklari';
+import { Cetele } from './toplama/Cetele';
 
 /** Renk anahtarı gösterilen değişkenden farklı bir kategorik sütunsa onu döndürür (aynıysa renkler zaten kategorilerin) */
 function farkliAnahtar(renkEslemi: RenkEslemesi | null | undefined, tablo: VeriTablosu, sutun: number): RenkEslemesi | null {
@@ -303,7 +305,14 @@ export interface KategorikIstatistikProps {
   oranlar?: boolean;
   /** İki yönlü tablo varken tek yönlü sıklık tablosu da gösterilsin mi (5. sınıfta yalnız iki yönlü); verilmezse evet */
   tekYonluIleBirlikte?: boolean;
+  /** Çetele ve sıklık tablosu birlikte (ilkokul): tek yönlü tabloda çubuk yerine çetele, iki yönlüde hücrelerde çetele */
+  cetele?: boolean;
+  /** Başlıktaki değişken türü (sayısal değişkenin değerlerinin sıklığında "sayısal değişken"); verilmezse kategorik */
+  turAdi?: string;
 }
+
+/** Sıklık tablosundaki çetelenin satır yüksekliği (px) */
+const CETELE_BOYU = 22;
 
 const KART = 'rounded-[calc(var(--radius)-4px)] border border-border bg-card px-4 py-3 shadow-[0_18px_40px_-18px_rgba(6,40,45,.35)]';
 const KART_BASLIGI = 'text-[13px] font-bold uppercase tracking-wide text-muted-foreground';
@@ -330,6 +339,8 @@ export function KategorikIstatistik({
   tepeDeger = true,
   oranlar = true,
   tekYonluIleBirlikte = true,
+  cetele = false,
+  turAdi = 'kategorik değişken',
 }: KategorikIstatistikProps) {
   const metinler = useMemo(() => sutunMetinleri(tablo, sutun).map((m) => m.deger), [tablo, sutun]);
   const f = useMemo(() => frekanslar(metinler, sira), [metinler, sira]);
@@ -347,7 +358,7 @@ export function KategorikIstatistik({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-auto bg-background p-4" data-kategorik-istatistik>
       <h2 className="mb-3 text-lg font-bold text-foreground">
-        {sutunAdi} <span className="text-muted-foreground">{`· kategorik değişken · Veri sayısı: ${n}`}</span>
+        {sutunAdi} <span className="text-muted-foreground">{`· ${turAdi} · Veri sayısı: ${n}`}</span>
       </h2>
       {n === 0 ? (
         <p className="rounded-[calc(var(--radius)-4px)] border border-border bg-card p-4 text-[13px] text-muted-foreground">Bu değişkende değer yok.</p>
@@ -372,16 +383,17 @@ export function KategorikIstatistik({
           </div>
           {tekYonlu && (
           <section className="rounded-[calc(var(--radius)-4px)] border border-border bg-card p-4" data-siklik-tablosu>
-            <h3 className="mb-2 text-base font-bold text-foreground">Sıklık tablosu</h3>
+            <h3 className="mb-2 text-base font-bold text-foreground">{cetele ? 'Çetele ve sıklık tablosu' : 'Sıklık tablosu'}</h3>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[480px] max-w-[720px] text-[13px] tabular-nums text-foreground">
                 <thead>
                   <tr className="text-left text-muted-foreground">
                     <th className="h-9 pr-4 font-bold">{sutunAdi}</th>
+                    {cetele && <th className="pr-4 font-bold">Çetele</th>}
                     <th className="pr-4 text-right font-bold">Sıklık</th>
                     {oranlar && <th className="pr-4 text-right font-bold">Göreli sıklık</th>}
                     {oranlar && <th className="pr-4 text-right font-bold">Merkez açı</th>}
-                    <th className="w-[28%] font-bold" aria-label={oranlar ? 'Yüzde çubuğu' : 'Sıklık çubuğu'} />
+                    {!cetele && <th className="w-[28%] font-bold" aria-label={oranlar ? 'Yüzde çubuğu' : 'Sıklık çubuğu'} />}
                   </tr>
                 </thead>
                 <tbody>
@@ -395,22 +407,30 @@ export function KategorikIstatistik({
                           {x.kategori}
                         </span>
                       </td>
+                      {cetele && (
+                        <td className="pr-4 py-1" data-cetele-hucresi>
+                          <Cetele sayi={x.sayi} renk={kategoriRengi(x.kategori, i)} yukseklik={CETELE_BOYU} />
+                        </td>
+                      )}
                       <td className="pr-4 text-right">{x.sayi}</td>
                       {oranlar && <td className="whitespace-nowrap pr-4 text-right">{goreliSiklikMetni(x.sayi, n, yuzdeler[i] ?? 0)}</td>}
                       {oranlar && <td className="whitespace-nowrap pr-4 text-right">{merkezAciMetni(x.sayi, n, acilar[i] ?? 0)}</td>}
-                      <td>
-                        <div className="h-3 rounded-full bg-muted">
-                          <div className="h-3 rounded-full" style={{ width: `${x.oran * 100}%`, background: kategoriRengi(x.kategori, i) }} />
-                        </div>
-                      </td>
+                      {!cetele && (
+                        <td>
+                          <div className="h-3 rounded-full bg-muted">
+                            <div className="h-3 rounded-full" style={{ width: `${x.oran * 100}%`, background: kategoriRengi(x.kategori, i) }} />
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   ))}
                   <tr className="border-t border-border font-bold">
                     <td className="h-9 pr-4">Toplam</td>
+                    {cetele && <td />}
                     <td className="pr-4 text-right">{n}</td>
                     {oranlar && <td className="whitespace-nowrap pr-4 text-right">{`${n}/${n} = 1 (%100)`}</td>}
                     {oranlar && <td className="pr-4 text-right">360°</td>}
-                    <td />
+                    {!cetele && <td />}
                   </tr>
                 </tbody>
               </table>
@@ -456,7 +476,15 @@ export function KategorikIstatistik({
                         </td>
                         {c.sayilar.map((s, j) => (
                           <td key={anahtar.kategoriler[j]} className="pr-4 text-right">
-                            {s}
+                            {cetele ? (
+                              // İlkokul: hücrede çetele ve sayı (sayı sağda hizalı kalır)
+                              <span className="inline-flex items-center justify-end gap-2 py-1" data-cetele-hucresi>
+                                <Cetele sayi={s} renk={anahtar.renkler.get(anahtar.kategoriler[j])} yukseklik={CETELE_BOYU} />
+                                <span className="min-w-[1.5em]">{s}</span>
+                              </span>
+                            ) : (
+                              s
+                            )}
                           </td>
                         ))}
                         {bosVar && <td className="pr-4 text-right">{c.bos}</td>}

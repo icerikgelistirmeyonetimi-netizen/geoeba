@@ -8,7 +8,7 @@
  *   1. Adım adım     sıralı adımlar, sayma          MAT.1.3.1 · 1.1.5 · 1.1.3
  *   2. Sağa, sola    yön değiştirme                 MAT.1.3.1
  *   3. Git ve sula   eylemi doğru yerde yapmak      MAT.1.3.1 · 1.2.1 · 1.1.3
- *   4. Örüntü        tekrar eden parça (2. sınıfta "tekrarla" olacak)   MAT.1.1.6
+ *   4. Örüntü        tekrar eden parça (2. sınıfta "tekrarla" bloğu)    MAT.1.1.6
  */
 import { programKur, type BlokSablonu, type KisaBlok } from './program';
 import { bahce, type HedefAdi, type Hedef } from './dunya';
@@ -471,7 +471,8 @@ export const SINIF1: readonly Unite[] = [
     id: 's1-oruntu',
     no: 4,
     ad: 'Örüntü',
-    yeniKavram: 'Tekrar eden parça (2. sınıfta "tekrarla" olacak)',
+    // Uzman (4. tur, satır 182): parantezdeki "(2. sınıfta … olacak)" tasarım notuydu; öğretmen notunda (dersler) zaten var
+    yeniKavram: 'Örüntüdeki tekrarı bul',
     oncedenBilinen: 'Git ve sula (3. ünite)',
     kalip: 'oruntu',
     kazanimlar: ['MAT.1.1.6'],

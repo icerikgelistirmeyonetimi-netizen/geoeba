@@ -24,6 +24,7 @@
 import { ifadeKur, kosulKur, programKur, type BlokSablonu, type EylemTuru, type KisaBlok } from './program';
 import { bahce, insaatAlani, saha, saksiSirasi, type DunyaTanimi } from './dunya';
 import type { Atolye } from './gorev';
+import { SAHNE } from './sahneAdi';
 
 const k = (liste: KisaBlok[], onek: string) => programKur(liste, onek);
 const E = (eylem: EylemTuru): BlokSablonu => ({ tur: 'eylem', eylem });
@@ -108,9 +109,11 @@ const A5_HASAT: Atolye = {
   id: 'a5-hasattan-tohuma',
   sinif: 5,
   ad: 'Hasattan tohuma',
-  aciklama: 'Olgun domatesleri topla ve say; tarlaya topladığın kadar tohum ek.',
-  yonerge: 'Robot sıradaki bütün olgun domatesleri toplasın. Sonra alttaki tarlaya, topladığı her domates için bir tohum eksin. Sıralar farklı uzunlukta; kodun her bahçede çalışmalı.',
+  aciklama: 'Olgun domatesleri topla ve say; kahverengi karelere topladığın kadar tohum ek.',
+  // Uzman (4. tur, satır 117): "alttaki tarla" net değil → "kahverengi kareler"; dünya → tarla
+  yonerge: 'Robot sıradaki bütün olgun domatesleri toplasın. Sonra alttaki kahverengi karelere, topladığı her domates için bir tohum eksin. Sıralar farklı uzunlukta; kodun her tarlada çalışmalı.',
   dunyalar: [HASAT_1, HASAT_2, HASAT_3, HASAT_4],
+  sahne: SAHNE.tarla,
   hedef: { kirmizilariTopla: true, boyamayiTamamla: true, cikistaBitir: false },
   bitkiAdi: 'bitki',
   aracKutusu: [ILERI, SAGA, SOLA, TOPLA, EK, CIKISA_KADAR, EGER_KIRMIZI, ata('sayaç', 0), ata('sayaç', ['sayaç', '+', 1]), kez(4), kezIfade('sayaç')],
@@ -147,6 +150,7 @@ const A5_GOKDELEN: Atolye = {
   aciklama: 'Her bina bir öncekinden bir kat yüksek. Cadde uzasa da kodun çalışsın.',
   yonerge: 'Dron caddeye binaları kursun: ilk bina 1 katlı, her bina bir öncekinden 1 kat yüksek. Dron sarı çıkış karesine varınca iş biter. Caddeler farklı uzunlukta.',
   dunyalar: [GOKDELEN_1, GOKDELEN_2, GOKDELEN_3, GOKDELEN_4],
+  sahne: SAHNE.cadde,
   hedef: { yapiyiKur: true, cikistaBitir: true },
   bitkiAdi: 'bitki',
   aracKutusu: [ILERI, KOY, CIKISA_KADAR, kez(4), kezIfade('kat'), ata('kat', 1), ata('kat', ['kat', '+', 1])],
@@ -177,11 +181,15 @@ const A5_MERDIVEN: Atolye = {
   sinif: 5,
   ad: 'Merdiven tarla',
   aciklama: 'Sıraları 1, 3, 5 … kare olan tarlayı ek. Kaç kare ekeceğini tahmin edebilir misin?',
-  yonerge: 'Merdiven biçimli tarlanın her karesine tohum ek. İlk sırada 1 kare var; her sıra bir öncekinden 2 kare uzun. Robot sarı çıkışa varınca iş biter. Tarlaların sıra sayısı farklı.',
+  yonerge: 'Merdiven biçimli tarlanın her kahverengi karesine tohum ek. İlk sırada 1 kare var; her sıra bir öncekinden 2 kare uzun. Robot sarı çıkışa varınca iş biter. Tarlaların sıra sayısı farklı.',
   dunyalar: [MERDIVEN_1, MERDIVEN_2, MERDIVEN_3, MERDIVEN_4],
+  sahne: SAHNE.tarla,
   hedef: { boyamayiTamamla: true, cikistaBitir: true },
   bitkiAdi: 'bitki',
-  aracKutusu: [ILERI, SAGA, SOLA, EK, CIKISA_KADAR, kez(4), kezIfade('kat'), ata('kat', 1), ata('kat', ['kat', '+', 1])],
+  // Uzman (4. tur, satır 119): "5. sınıf seviyesine uygun değil, ipuçları yetersiz". Görev korunur; ön adım olarak
+  // "kat ← kat + 2" araç kutusunda hazır gelir (eskiden "+ 1" verilip sayının 2 yapılması bekleniyordu) ve
+  // ipuçları adım adım yönlendirir.
+  aracKutusu: [ILERI, SAGA, SOLA, EK, CIKISA_KADAR, kez(4), kezIfade('kat'), ata('kat', 1), ata('kat', ['kat', '+', 2])],
   enCokBlok: 14,
   cozum: k(
     [
@@ -193,7 +201,12 @@ const A5_MERDIVEN: Atolye = {
   degiskenler: ['kat'],
   kazanimlar: ['MAT.5.4.2', 'MAT.5.2.3'],
   kalip: 'yilan',
-  ipucu: 'Bir sırayı ek, sıranın başına dön, alt sıraya geç; sıranın uzunluğunu bir değişkende büyüt.',
+  ipucu: 'Bütün tarlayı birden düşünme, önce tek bir sırayı ek. Her sırada robot aynı işleri yapar; yalnız sıranın uzunluğu değişir.',
+  ipuclari: [
+    'Sıranın uzunluğunu kat değişkeninde tut. İlk sıra 1 kare: başta "kat ← 1". Bir sırayı ekmek için "kat kez tekrarla" içine "tohum ek" ve "ileri git" koy.',
+    'Sıra bitince robotu sıranın başına götür: iki kez sağa dön, "kat kez tekrarla" ile kat kadar ileri git. Sonra sola dön, ileri git, sola dön. Robot alt sıranın başında.',
+    'Alt sıra 2 kare uzun: sıranın sonunda "kat ← kat + 2" koy. Bu parçanın hepsini "çıkışa varana kadar tekrarla" içine al; robot sarı çıkışa varınca durur.',
+  ],
   gorunum: 'blok',
 };
 
@@ -215,6 +228,7 @@ const A6_TAKVIM: Atolye = {
   aciklama: 'Her k. saksıya gübre, kuru toprağa su. k her serada farklı.',
   yonerge: 'Robotun renk algılayıcısı bozuk. Bu seralarda her k. saksının yaprakları sarı; k her serada farklı. Sarı yapraklılara gübre ver, kuru toprakları sula, çıkışa var.',
   dunyalar: [TAKVIM_1, TAKVIM_2, TAKVIM_3, TAKVIM_4],
+  sahne: SAHNE.sera,
   hedef: { kurulariSula: true, sarilariGubrele: true, cikistaBitir: true },
   bitkiAdi: 'saksı',
   aracKutusu: [ILERI, SULA, GUBRE, CIKISA_KADAR, EGER_KURU, { tur: 'eger', kosul: kosulKur([['sıra', 'mod', 3], '=', 0]) }, ata('sıra', 0), ata('sıra', ['sıra', '+', 1]), kez(5)],
@@ -250,8 +264,9 @@ const A6_PIRAMIT: Atolye = {
   sinif: 6,
   ad: 'Basamaklı piramit',
   aciklama: 'Kuleler tek sayılarla tepeye çıkıp aynı sayılarla iniyor: 1, 3, 5, 3, 1.',
-  yonerge: 'Dron bir piramit kursun: kuleler 1, 3, 5 … diye tepedeki n. kuleye kadar yükselir, sonra aynı sayılarla iner. n her alanda farklı.',
+  yonerge: 'Dron bir piramit kursun: kuleler 1, 3, 5 … diye tepedeki n. kuleye kadar yükselir, sonra aynı sayılarla iner. n her piramitte farklı.',
   dunyalar: [PIRAMIT_1, PIRAMIT_2, PIRAMIT_3],
+  sahne: SAHNE.piramit,
   hedef: { yapiyiKur: true, cikistaBitir: false },
   bitkiAdi: 'bitki',
   aracKutusu: [ILERI, KOY, kez(3), kezIfade('n'), kezIfade(['n', '+', 1]), kezIfade([[2, '×', 'n'], '+', 1]), ata('i', 1), ata('i', ['i', '+', 1])],
@@ -304,8 +319,9 @@ const A6_SARMAL: Atolye = {
   sinif: 6,
   ad: 'Sarmal pist',
   aciklama: 'Her parçası bir öncekinden 1 birim uzun sarmal bir koşu pisti çiz.',
-  yonerge: 'Çizgi robotu sarmal pistin bütün çizgilerini çizsin. Pist n parçadan oluşuyor; ilk parça 1 birim ve her parça bir öncekinden 1 birim uzun. n her sahada farklı.',
+  yonerge: 'Çizgi robotu sarmal pistin bütün çizgilerini çizsin. Pist n parçadan oluşuyor; ilk parça 1 birim ve her parça bir öncekinden 1 birim uzun. n her pistte farklı.',
   dunyalar: [SARMAL_1, SARMAL_2, SARMAL_3, SARMAL_4],
+  sahne: SAHNE.pist,
   hedef: { cizimiTamamla: true, cikistaBitir: false },
   bitkiAdi: 'bitki',
   aracKutusu: [ILERI, SAGA, SOLA, kez(4), kezIfade('n'), ata('i', 1), ata('i', ['i', '+', 1])],
@@ -339,9 +355,10 @@ const A7_BLOK: Atolye = {
   id: 'a7-sera-bloklari',
   sinif: 7,
   ad: 'Sera blokları',
-  aciklama: 'en × boy bitkilik serada her bitkiye bak: kuruyu sula, olgunu topla.',
+  aciklama: 'Sera en × boy bitkilik. Her bitkiye bak: kuruyu sula, olgunu topla.',
   yonerge: 'Sera en × boy bitkilik bir blok; en ve boy her serada farklı. Robot bütün kuru saksıları sulasın, bütün olgun domatesleri toplasın.',
   dunyalar: [BLOK_1, BLOK_2, BLOK_3, BLOK_4],
+  sahne: SAHNE.sera,
   hedef: { kurulariSula: true, kirmizilariTopla: true, cikistaBitir: false },
   bitkiAdi: 'bitki',
   aracKutusu: [ILERI, SAGA, SOLA, SULA, TOPLA, CIKISA_KADAR, EGER_KURU, EGER_KIRMIZI, { tur: 'eger', kosul: 'domatesKirmizi', degilse: true }, kez(2), kezIfade('en')],
@@ -388,9 +405,10 @@ const A7_TRIBUN: Atolye = {
   id: 'a7-tribun',
   sinif: 7,
   ad: 'Stadyum tribünü',
-  aciklama: 'Arkadan öne alçalan bir tribünü küplerle kur; ölçüler her alanda farklı.',
-  yonerge: 'Dron en × boy tabanlı bir tribün kursun: en arka sıra boy kat, öne doğru her sıra bir kat alçak, en ön sıra 1 kat. en ve boy her alanda farklı.',
+  aciklama: 'Arkadan öne alçalan bir tribünü küplerle kur; ölçüler her tribünde farklı.',
+  yonerge: 'Dron en × boy tabanlı bir tribün kursun: en arka sıra boy kat, öne doğru her sıra bir kat alçak, en ön sıra 1 kat. Ölçüler (en ve boy) her tribünde farklı.',
   dunyalar: [TRIBUN_1, TRIBUN_2, TRIBUN_3, TRIBUN_4],
+  sahne: SAHNE.tribun,
   hedef: { yapiyiKur: true, cikistaBitir: false },
   bitkiAdi: 'bitki',
   aracKutusu: [ILERI, SAGA, SOLA, KOY, kez(2), kezIfade('en'), ata('basamak', 1), ata('basamak', ['basamak', '+', 1])],
@@ -451,8 +469,9 @@ const A7_SUR: Atolye = {
   sinif: 7,
   ad: 'Göldeki yansıma',
   aciklama: 'Kıyıdaki surun göle düşen yansımasını çiz. Surun diş sayısı değişiyor.',
-  yonerge: 'Kıyıdaki sur hazır çizili; göldeki yansıması görünmüyor. Çizgi robotu surun kıyı çizgisine göre yansımasını çizsin. Surdaki diş sayısı n her sahada farklı.',
+  yonerge: 'Kıyıdaki sur hazır çizili; göldeki yansıması görünmüyor. Çizgi robotu surun kıyı çizgisine göre yansımasını çizsin. Surdaki diş sayısı n her gölde farklı.',
   dunyalar: [SUR_1, SUR_2, SUR_3],
+  sahne: SAHNE.gol,
   hedef: { cizimiTamamla: true, cikistaBitir: false },
   bitkiAdi: 'bitki',
   aracKutusu: [ILERI, SAGA, SOLA, KALDIR, INDIR, kez(2), kezIfade('n')],
@@ -492,6 +511,7 @@ const A8_DOGRU: Atolye = {
   aciklama: 'y = m·x + b doğrusunun noktalarını işaretle; m, b ve n her düzlemde farklı.',
   yonerge: 'Noktalar gizli. y = m·x + b doğrusunun x = 0, 1, …, n − 1 için noktalarını işaretle. m, b ve n her düzlemde farklı. Robot (0, 0) noktasında, x ekseni yönüne bakıyor.',
   dunyalar: [DOGRU_1, DOGRU_2, DOGRU_3, DOGRU_4],
+  sahne: SAHNE.duzlem,
   hedef: { noktalariKoy: true, cikistaBitir: false },
   bitkiAdi: 'bitki',
   aracKutusu: [ILERI, SAGA, SOLA, ISARETLE, kez(2), kezIfade('m'), kezIfade(['n', '+', 1])],
@@ -519,8 +539,9 @@ const A8_SITE: Atolye = {
   sinif: 8,
   ad: 'Site inşaatı',
   aciklama: 'Eş blokları bir kez tanımla, sitenin her yerinde kullan.',
-  yonerge: 'Sitede n eş blok var: her blokta 3 katlı bir bina ve yanında 1 katlı bir dükkân. Bloklar arasında ara kadar boş kare kalır. Dron bütün blokları kursun; n ve ara her alanda farklı.',
+  yonerge: 'Sitede n eş blok var: her blokta 3 katlı bir bina ve yanında 1 katlı bir dükkân. Bloklar arasında ara kadar boş kare kalır. Dron bütün blokları kursun; n ve ara her sitede farklı.',
   dunyalar: [SITE_1, SITE_2, SITE_3, SITE_4],
+  sahne: SAHNE.site,
   hedef: { yapiyiKur: true, cikistaBitir: false },
   bitkiAdi: 'bitki',
   aracKutusu: [ILERI, KOY, kez(2), kezIfade('n'), kezIfade(['n', '+', 1]), { tur: 'tanim', ad: 'BLOK' }, { tur: 'cagir', ad: 'BLOK' }],
@@ -554,6 +575,7 @@ const A8_USLU: Atolye = {
   aciklama: 'Sarı yapraklar r’nin kuvveti olan sıralarda: 1, r, r² … Onları bul, kuruları sula.',
   yonerge: 'Robotun renk algılayıcısı bozuk. Yaprakları sarı saksılar r’nin kuvvetleri olan sıralarda: 1, r, r², r³ … (r her serada farklı). Sarılara gübre ver, kuru toprakları sula, çıkışa var.',
   dunyalar: [USLU_1, USLU_2, USLU_3, USLU_4],
+  sahne: SAHNE.sera,
   hedef: { kurulariSula: true, sarilariGubrele: true, cikistaBitir: true },
   bitkiAdi: 'saksı',
   aracKutusu: [

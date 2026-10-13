@@ -1,7 +1,7 @@
 /**
  * Olasılık Laboratuvarı — 3B deney sahnesi (Three.js).
  *
- * React'tan bağımsız sınıf: verilen kaba WebGL tuvali kurar, şablona göre madeni para / zar /
+ * React'tan bağımsız sınıf: verilen kaba WebGL tuvali kurar, şablona göre madeni para / sayı küpü /
  * çark / torba / kart nesnelerini oluşturur ve oynat(sonuc) ile sonucu gösteren animasyonu
  * çalıştırır; bitince 'bitti' olayı yayar. adaSahnesi.ts kurulum dili: antialias, AgX ton
  * eşleme, sRGB çıkış, PCFSoft gölge, HemisphereLight + gölgeli DirectionalLight, kum zemin.
@@ -55,7 +55,7 @@ export function modulo(a: number, n: number): number {
   return ((a % n) + n) % n;
 }
 
-/** BoxGeometry yüz sırası (+X, −X, +Y, −Y, +Z, −Z) üzerinde standart zar dizilimi (karşılıklı yüzler 7). */
+/** BoxGeometry yüz sırası (+X, −X, +Y, −Y, +Z, −Z) üzerinde standart sayı küpü dizilimi (karşılıklı yüzler 7). */
 export const ZAR_YUZLERI: readonly number[] = [2, 5, 1, 6, 3, 4];
 
 const YUZ_NORMALLERI: readonly THREE.Vector3[] = [
@@ -69,16 +69,40 @@ const YUZ_NORMALLERI: readonly THREE.Vector3[] = [
 
 const YUKARI = new THREE.Vector3(0, 1, 0);
 
+/**
+ * Her yüz dokusunun "yukarı"sı (tuvalin üst kenarı) küpün yerel ekseninde, aynı yüz sırasıyla. RoundedBoxGeometry
+ * (three/addons) UV'leri: ±X, ±Z yüzlerinde v → +Y; +Y yüzünde v → −Z; −Y yüzünde v → +Z (CanvasTexture flipY).
+ */
+export const ZAR_DOKU_YUKARILARI: readonly THREE.Vector3[] = [
+  new THREE.Vector3(0, 1, 0),
+  new THREE.Vector3(0, 1, 0),
+  new THREE.Vector3(0, 0, -1),
+  new THREE.Vector3(0, 0, 1),
+  new THREE.Vector3(0, 1, 0),
+  new THREE.Vector3(0, 1, 0),
+];
+
+/** Kameradan uzağa (−Z) bakan yön: üst yüzdeki rakam bu yöne "dik" durunca öğrenciye düz okunur. */
+const KAMERADAN_UZAK = new THREE.Vector3(0, 0, -1);
+
 /** Zar yüzünün (1–6) yerel normali. */
 export function zarYuzNormali(yuz: number): THREE.Vector3 {
   const i = ZAR_YUZLERI.indexOf(yuz);
   return (i >= 0 ? YUZ_NORMALLERI[i] : YUZ_NORMALLERI[2]).clone();
 }
 
-/** İstenen yüzü yukarı (+Y) getiren quaternion; dönme (yaw) Y ekseninde radyan. */
+/**
+ * İstenen yüzü yukarı (+Y) getiren quaternion; dönme (yaw) Y ekseninde radyan. Yüz yukarı getirildikten sonra
+ * rakamın üst kenarı kameradan uzağa (−Z) çevrilir: donme = 0'da üst yüzdeki rakam düz okunur (ters / yan durmaz);
+ * küçük donme yalnız hafif bir eğiklik verir. Üst yüz değişmez (Y ekseninde dönme).
+ */
 export function zarYuzQuaternion(yuz: number, donme = 0): THREE.Quaternion {
+  const i = ZAR_YUZLERI.indexOf(yuz);
   const q = new THREE.Quaternion().setFromUnitVectors(zarYuzNormali(yuz), YUKARI);
-  const yaw = new THREE.Quaternion().setFromAxisAngle(YUKARI, donme);
+  const ust = (i >= 0 ? ZAR_DOKU_YUKARILARI[i] : ZAR_DOKU_YUKARILARI[2]).clone().applyQuaternion(q);
+  // ust yatay düzlemde; onu −Z'ye getiren Y açısı (sağ el: +Y etrafında θ, (x, z) → (x cos θ + z sin θ, −x sin θ + z cos θ))
+  const duzelt = Math.atan2(ust.x, ust.z) - Math.atan2(KAMERADAN_UZAK.x, KAMERADAN_UZAK.z);
+  const yaw = new THREE.Quaternion().setFromAxisAngle(YUKARI, donme - duzelt);
   return yaw.multiply(q);
 }
 
@@ -440,8 +464,16 @@ function paraDokusu(yuz: ParaYuzu): THREE.CanvasTexture {
   });
 }
 
-/** Zar yüzü: fildişi zemin, mürekkep noktalar. */
-function zarDokusu(yuz: number): THREE.CanvasTexture {
+/**
+ * Sayı küpü yüzünün yazısı: ortada büyük, kalın rakam (nokta / pip yok). 6 altı çizili: yan ya da ters dururken
+ * 9 sanılmasın (sınıf sayı küplerindeki alışılmış işaret).
+ */
+export function zarYuzuYazisi(yuz: number): { rakam: string; altiCizili: boolean } {
+  return { rakam: String(yuz), altiCizili: yuz === 6 || yuz === 9 };
+}
+
+/** Sayı küpü yüzü: fildişi zemin, mürekkep rengi rakam. */
+export function zarDokusu(yuz: number): THREE.CanvasTexture {
   return tuvalDokusu(256, (ctx, s) => {
     ctx.fillStyle = '#fbf7ee';
     ctx.fillRect(0, 0, s, s);
@@ -450,45 +482,13 @@ function zarDokusu(yuz: number): THREE.CanvasTexture {
     g.addColorStop(1, 'rgba(180,160,120,0.25)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, s, s);
-    const konumlar: Record<number, [number, number][]> = {
-      1: [[0.5, 0.5]],
-      2: [
-        [0.3, 0.3],
-        [0.7, 0.7],
-      ],
-      3: [
-        [0.3, 0.3],
-        [0.5, 0.5],
-        [0.7, 0.7],
-      ],
-      4: [
-        [0.3, 0.3],
-        [0.7, 0.3],
-        [0.3, 0.7],
-        [0.7, 0.7],
-      ],
-      5: [
-        [0.3, 0.3],
-        [0.7, 0.3],
-        [0.5, 0.5],
-        [0.3, 0.7],
-        [0.7, 0.7],
-      ],
-      6: [
-        [0.3, 0.28],
-        [0.7, 0.28],
-        [0.3, 0.5],
-        [0.7, 0.5],
-        [0.3, 0.72],
-        [0.7, 0.72],
-      ],
-    };
+    const { rakam, altiCizili } = zarYuzuYazisi(yuz);
     ctx.fillStyle = '#15302d';
-    for (const [x, y] of konumlar[yuz] ?? []) {
-      ctx.beginPath();
-      ctx.arc(x * s, y * s, s * 0.075, 0, IKI_PI);
-      ctx.fill();
-    }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `800 ${Math.round(s * 0.6)}px Manrope, system-ui, sans-serif`;
+    ctx.fillText(rakam, s * 0.5, s * 0.53);
+    if (altiCizili) ctx.fillRect(s * 0.36, s * 0.83, s * 0.28, s * 0.05);
   });
 }
 

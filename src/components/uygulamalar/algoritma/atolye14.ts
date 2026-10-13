@@ -36,6 +36,7 @@ import { programKur, type BlokSablonu, type KisaBlok } from './program';
 import { bahce, insaatAlani, saha, type BitkiTanimi, type DunyaTanimi, type Hedef } from './dunya';
 import { CICEK } from './sinif1';
 import type { Atolye } from './gorev';
+import { SAHNE } from './sahneAdi';
 
 // ---------------------------------------------------------------------------
 // Bloklar ve hedefler
@@ -391,6 +392,7 @@ export const ATOLYELER_1_4: readonly Atolye[] = [
     aciklama: 'Her serada sula, gübrele, topla. Tek kodun uzun, kısa, bütün seralarda çalışsın.',
     yonerge: 'Kuru saksıları sula, sararmış yapraklara gübre ver, olgun domatesleri topla, çıkışta dur. Seraların uzunluğu ve bitkileri farklı: kodun hepsinde çalışsın.',
     dunyalar: SERALAR,
+    sahne: SAHNE.sera,
     hedef: { kurulariSula: true, sarilariGubrele: true, kirmizilariTopla: true, cikistaBitir: true },
     bitkiAdi: 'bitki',
     aracKutusu: [ILERI, SULA, GUBRE, TOPLA, KADAR, KURUYSA, SARIYSA, KIRMIZIYSA, kez(6)],
@@ -408,6 +410,7 @@ export const ATOLYELER_1_4: readonly Atolye[] = [
     aciklama: 'Basamaklı bahçelerde basamak sayısı farklı. Kuru saksıları sula, çiçeğe in.',
     yonerge: 'Kuru saksıları sula, nemlileri sulama, robotu çiçeğe indir. Her bahçede basamak sayısı ve saksıların yeri farklı: kodun hepsinde çalışsın.',
     dunyalar: TERASLAR,
+    sahne: SAHNE.bahce,
     hedef: SULA_VE_VAR,
     bitkiAdi: 'saksı',
     aracKutusu: [ILERI, SAGA, SOLA, SULA, KADAR, KURUYSA, kez(3)],
@@ -425,6 +428,7 @@ export const ATOLYELER_1_4: readonly Atolye[] = [
     aciklama: 'Artı şeklinin her sahada başka bir yarısı çizili. Eksik yarıyı çizen kodu her sahada sen kur.',
     yonerge: 'Şeklin bir yarısı çizili; öbür yarısı aynadaki görüntüsü. Robot simetri doğrusunun ucunda. Eksik yarıyı çizen kodu kur. Her sahada başka yarı eksik: her sahanın kodunu ayrı kur.',
     dunyalar: AYNALAR,
+    sahne: SAHNE.saha,
     dunyaBasinaKod: true,
     hedef: CIZ,
     bitkiAdi: 'bitki',
@@ -446,6 +450,7 @@ export const ATOLYELER_1_4: readonly Atolye[] = [
     aciklama: 'Kare bahçenin çevresini bir tur dolaş: kuruyu sula, olgunu topla. Bitkiler her bahçede farklı.',
     yonerge: 'Robot kare bahçenin çevresini bir tur dolaşsın: kuru saksıları sulasın, olgun domatesleri toplasın. Her bahçede bitkiler başka yerde: kodun hepsinde çalışsın.',
     dunyalar: HALKALAR,
+    sahne: SAHNE.bahce,
     hedef: { kurulariSula: true, kirmizilariTopla: true, cikistaBitir: false },
     bitkiAdi: 'bitki',
     aracKutusu: [ILERI, SAGA, SOLA, SULA, TOPLA, KURUYSA, KIRMIZIYSA, kez(3)],
@@ -463,6 +468,7 @@ export const ATOLYELER_1_4: readonly Atolye[] = [
     aciklama: 'Her sokakta kule sayısı farklı, her kule 3 küp. Tek kodla bütün sokakları kur.',
     yonerge: 'Dron sokaktaki bütün kuleleri kursun, her kule 3 küp. Sonra çıkışta dursun. Sokakların uzunluğu ve yönü farklı: kodun hepsinde çalışsın.',
     dunyalar: SOKAKLAR,
+    sahne: SAHNE.sokak,
     hedef: KUR_VE_CIK,
     bitkiAdi: 'bitki',
     aracKutusu: [ILERI, SAGA, KOY, KADAR, kez(4)],
@@ -480,6 +486,7 @@ export const ATOLYELER_1_4: readonly Atolye[] = [
     aciklama: 'Dört camlı pencerelerin her seferinde başka çıtaları eksik. Hangisi eksik olursa olsun tamamla.',
     yonerge: 'Pencerenin eksik çıtalarını çiz. Her pencerede başka çıtalar eksik: kodun hepsinde bütün pencereyi tamamlasın.',
     dunyalar: PENCERELER,
+    sahne: SAHNE.pencere,
     hedef: CIZ,
     bitkiAdi: 'bitki',
     aracKutusu: [ILERI, SAGA, SOLA, kez(4)],

@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { CIZIM_KIMLIGI, ILKOKULDA_GIZLI_UYGULAMALAR, UYGULAMALAR, UygulamaHazirlaniyor, kademeninUygulamalari, uygulamaBul } from '../uygulamalar';
 import { manifest as veriGrafikManifesti } from '@/components/uygulamalar/veri-grafik/manifest';
-import { manifest as olasilikManifesti } from '@/components/uygulamalar/olasilik/manifest';
+import { ilkokulManifesti as olasilikIlkokulManifesti, manifest as olasilikManifesti } from '@/components/uygulamalar/olasilik/manifest';
 import { manifest as veriGrafikIndex } from '@/components/uygulamalar/veri-grafik';
 import { manifest as olasilikIndex } from '@/components/uygulamalar/olasilik';
 import { manifest as algoritmaManifesti } from '@/components/uygulamalar/algoritma/manifest';
@@ -65,13 +65,37 @@ describe('uygulama kayıt defteri', () => {
   });
 });
 
-describe('ilkokul kademesi (alan uzmanları, 2. tur)', () => {
-  it('Olasılık Laboratuvarı ilkokulda masaüstünde yok (zar, kesir ve yüzde: TYMM MAT.4.4.1); öbür uygulamalar sırasıyla kalır', () => {
-    expect(ILKOKULDA_GIZLI_UYGULAMALAR).toEqual(['olasilik']);
-    expect(kademeninUygulamalari(true).map((u) => u.id)).toEqual([CIZIM_KIMLIGI, 'veri-grafik', 'algoritma']);
+describe('ilkokul kademesi (alan uzmanları, 2. ve 4. tur)', () => {
+  it('Olasılık Laboratuvarı ilkokulda da masaüstünde (4. tur, satır 183: «olay kartları» kipi, MAT.4.4.1); sıra korunur', () => {
+    expect(ILKOKULDA_GIZLI_UYGULAMALAR).toEqual([]);
+    expect(kademeninUygulamalari(true).map((u) => u.id)).toEqual([CIZIM_KIMLIGI, 'veri-grafik', 'olasilik', 'algoritma']);
+  });
+
+  it('ilkokulda Olasılık kısayolunun açıklaması ve simgesi olay kartlarını anlatır: sayı, yüzde, sayı küpü yok', () => {
+    const o = kademeninUygulamalari(true).find((u) => u.id === 'olasilik');
+    expect(o?.aciklama).toBe(olasilikIlkokulManifesti.aciklama);
+    expect(o?.aciklama).toMatch(/imkânsız, olabilir ya da kesin/);
+    expect(o?.aciklama).not.toMatch(/[0-9%]|teorik|deneysel|öznel|sayı küpü|zar/i);
+    expect(o?.simge).toBe(olasilikIlkokulManifesti.simge);
+    const html = renderToStaticMarkup(<>{o?.simge}</>);
+    expect(html).not.toContain('<text');
+    // Ad, renk ve gövde aynı: kademe değişince pencere yeniden kurulmaz, uygulama içi kip değişir
+    const genel = uygulamaBul('olasilik');
+    expect(o?.ad).toBe(genel?.ad);
+    expect(o?.renk).toBe(genel?.renk);
+    expect(o?.Bilesen).toBe(genel?.Bilesen);
+    // Öbür uygulamalar ilkokulda da aynı kayıt
+    for (const u of kademeninUygulamalari(true)) if (u.id !== 'olasilik') expect(u).toBe(uygulamaBul(u.id));
   });
 
   it('ortaokul, lise ve "Tüm araçlar"da liste değişmez', () => {
     expect(kademeninUygulamalari(false)).toBe(UYGULAMALAR);
+    expect(uygulamaBul('olasilik')?.aciklama).toBe('Öznel, teorik ve deneysel olasılığı 3B deneylerle karşılaştır.');
+  });
+
+  it('Olasılık simgesi sayı küpü: yüzünde nokta değil rakam (kullanıcı isteği 13.10)', () => {
+    const html = renderToStaticMarkup(<>{olasilikManifesti.simge}</>);
+    expect(html).toMatch(/<text[^>]*>3<\/text>/);
+    expect(html).not.toContain('<circle');
   });
 });

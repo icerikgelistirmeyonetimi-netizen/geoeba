@@ -1,10 +1,10 @@
 // Sahip: Z (birleştirme ve son doğrulama: bütünlük taraması)
 //
 // Uygulamanın bütün kökü sunucuda çizilir (sahte localStorage'lı pencereyle; durum ilk çizimde okunur):
-// - 16 örnek × 6 grafik sekmesi (örnek yüklemesinin açılış görünümüyle; ölçüler, adımlar ve sütun modu açık çeşitlerle),
+// - 20 örnek × 6 grafik sekmesi (örnek yüklemesinin açılış görünümüyle; ölçüler, adımlar ve sütun modu açık çeşitlerle),
 // - "Veri topla" paneli: "Ne araştıralım?", "Kendi sorunu yaz" formu (üç yöntem), 18 hazır sorunun Topla görünümü
 //   (boş ve veriyle), Deney özeti (iki deney) ve panel kapandıktan sonraki soru şeridi, eski örnekleyici kaydının göçü,
-// - [i] öğretmen kartının üç bölümü (18 hazır soru) ve Keşif kartı (16 örnek).
+// - [i] öğretmen kartının üç bölümü (18 hazır soru) ve Keşif kartı (20 örnek).
 // Çıktıda NaN / undefined / Infinity, plan §6'daki eski terimler, emoji ve saydam kart sınıfı (bg-card/) olmamalı.
 // Kaynak taraması (fs): vg/ altında eski örnekleyici paneli, bayrak anahtarı, adım yolu ve sendika verisi geçmez.
 import { describe, expect, it, vi } from 'vitest';
@@ -200,11 +200,11 @@ describe('bütünlük: tarama kuralları (kendi sınaması)', () => {
   });
 });
 
-// ── 16 örnek × 7 sekme ───────────────────────────────────────────────────────────────────────────────────────
+// ── 20 örnek × 7 sekme ───────────────────────────────────────────────────────────────────────────────────────
 
-describe('bütünlük: 16 örnek × 7 sekme (uygulama kökü, sunucu çizimi)', () => {
-  it('16 örnek ve 7 sekme var (Nokta, Sütun, Çizgi, Kök-yaprak, Daire, Saçılım, İstatistik; Kök-yaprak yalnız 6. sınıfta görünür)', () => {
-    expect(ORNEK_VERILER).toHaveLength(16);
+describe('bütünlük: 20 örnek × 7 sekme (uygulama kökü, sunucu çizimi)', () => {
+  it('20 örnek (16 ortaokul + 4 ilkokul) ve 7 sekme var (Nokta, Sütun, Çizgi, Kök-yaprak, Daire, Saçılım, İstatistik; Kök-yaprak yalnız 6. sınıfta görünür)', () => {
+    expect(ORNEK_VERILER).toHaveLength(20);
     expect(SEKMELER.map((s) => s.ad)).toEqual(['Nokta', 'Sütun', 'Çizgi', 'Kök-yaprak', 'Daire', 'Saçılım', 'İstatistik']);
   });
 
@@ -233,7 +233,7 @@ describe('bütünlük: 16 örnek × 7 sekme (uygulama kökü, sunucu çizimi)', 
         }
       }
     }
-    expect(cizim).toBe(16 * SEKMELER.length * 3 + 16);
+    expect(cizim).toBe(20 * SEKMELER.length * 3 + 20);
     expect(hatalar).toEqual([]);
   });
 
@@ -408,7 +408,7 @@ describe('bütünlük: [i] öğretmen kartı ve Keşif kartı', () => {
     expect(hatalar).toEqual([]);
   });
 
-  it('Keşif kartı ve şeridi 16 örnek × 6 sekme × 4 adım temiz; kaynak bağlantıları yalnız resmî kurumlara (MEB, MGM, TÜİK, WHO)', () => {
+  it('Keşif kartı ve şeridi 20 örnek × 6 sekme × 4 adım temiz; kaynak bağlantıları yalnız resmî kurumlara (MEB, MGM, TÜİK, WHO)', () => {
     const hatalar: string[] = [];
     const baglantilar = new Set<string>();
     for (const o of ORNEK_VERILER)

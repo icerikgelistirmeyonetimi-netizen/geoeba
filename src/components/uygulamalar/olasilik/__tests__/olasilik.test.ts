@@ -38,7 +38,7 @@ describe('kesir', () => {
 });
 
 describe('örnek uzay', () => {
-  it('para 2, zar 6, iki zar 36, kart 52 durum', () => {
+  it('para 2, sayı küpü 6, iki sayı küpü 36, kart 52 durum', () => {
     expect(ornekUzay(varsayilanSablon('para')).toplam).toBe(2);
     expect(ornekUzay(varsayilanSablon('zar')).toplam).toBe(6);
     expect(ornekUzay({ tur: 'zar', ikiZar: true, istenen: { tip: 'sayi', deger: 7 } }).toplam).toBe(36);
@@ -80,14 +80,14 @@ describe('teorik olasılık', () => {
     expect(p.formul).toBe('İstenen / Tüm durumlar = 1 / 2 ≈ %50,0');
   });
 
-  it('zar çift sayı 3/6 = 1/2, ≥ 4 → 1/2, tek sayı 1/2', () => {
+  it('sayı küpü çift sayı 3/6 = 1/2, ≥ 4 → 1/2, tek sayı 1/2', () => {
     expect(teorikOlasilik({ tur: 'zar', ikiZar: false, istenen: { tip: 'cift' } }).formul).toBe('İstenen / Tüm durumlar = 3 / 6 = 1/2 ≈ %50,0');
     expect(teorikOlasilik({ tur: 'zar', ikiZar: false, istenen: { tip: 'enAz', deger: 4 } }).kesir).toEqual({ pay: 1, payda: 2 });
     expect(teorikOlasilik({ tur: 'zar', ikiZar: false, istenen: { tip: 'tek' } }).deger).toBeCloseTo(0.5);
     expect(teorikOlasilik({ tur: 'zar', ikiZar: false, istenen: { tip: 'enFazla', deger: 2 } }).kesir).toEqual({ pay: 1, payda: 3 });
   });
 
-  it('iki zar toplamı 7 → 6/36 = 1/6', () => {
+  it('iki sayı küpü toplamı 7 → 6/36 = 1/6', () => {
     const p = teorikOlasilik({ tur: 'zar', ikiZar: true, istenen: { tip: 'sayi', deger: 7 } });
     expect(p.istenen).toBe(6);
     expect(p.tum).toBe(36);
@@ -145,7 +145,7 @@ describe('istenenMi ve etiketler', () => {
     expect(istenenMi(varsayilanSablon('para'), { tur: 'zar', zarlar: [6] })).toBe(false);
   });
 
-  it('zar koşulları toplam üzerinden çalışır', () => {
+  it('sayı küpü koşulları toplam üzerinden çalışır', () => {
     const s: Sablon = { tur: 'zar', ikiZar: true, istenen: { tip: 'enAz', deger: 10 } };
     expect(istenenMi(s, { tur: 'zar', zarlar: [5, 5] })).toBe(true);
     expect(istenenMi(s, { tur: 'zar', zarlar: [4, 5] })).toBe(false);
@@ -194,7 +194,7 @@ describe('uyarılar', () => {
     expect(sablonUyarilari(cark).some((u) => u.mesaj.includes('İstenen renk'))).toBe(true);
   });
 
-  it('olanaksız zar koşulu uyarı verir', () => {
+  it('olanaksız sayı küpü koşulu uyarı verir', () => {
     expect(sablonUyarilari({ tur: 'zar', ikiZar: false, istenen: { tip: 'enAz', deger: 7 } })).toHaveLength(1);
     expect(sablonUyarilari(varsayilanSablon('zar'))).toHaveLength(0);
   });

@@ -8,6 +8,7 @@
  */
 // kategorik.ts veri'den yalnız tür alır: çalışma anında içe aktarma döngüsü yok
 import { arastirmaSutunRolu } from './kategorik';
+import type { KademeDuzeyi } from '@/components/workspace/kademeDuzeyleri';
 
 export type SutunTuru = 'etiket' | 'sayi';
 
@@ -448,7 +449,13 @@ export function sonrakiHucre(konum: HucreKonumu, yon: GezintiYonu, satirSayisi: 
  */
 export type GrafikTuru = 'nokta' | 'sutun' | 'cizgi' | 'kokYaprak' | 'daire' | 'sacilim' | 'istatistik';
 
-export type SinifDuzeyi = 5 | 6 | 7 | 8;
+/** Örneğin sınıf düzeyi: 1–4 ilkokul (yalnız İlkokul ve Tüm araçlar kademesinde görünür), 5–8 ortaokul */
+export type SinifDuzeyi = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+
+/** İlkokul sınıf düzeyi mi (1–4) */
+export function ilkokulSinifi(sinif: SinifDuzeyi | null | undefined): boolean {
+  return sinif === 1 || sinif === 2 || sinif === 3 || sinif === 4;
+}
 
 /**
  * Uygulamaya aşama aşama gelen özellikler. Bir rehber eylemi ya da metin henüz olmayan bir özelliğe dayanıyorsa
@@ -606,15 +613,28 @@ export interface OrnekVeri {
   hassas?: boolean;
   /** Uygulamanın ilk açılış verisi (baslangicDurumu) */
   varsayilanAcilis?: boolean;
+  /**
+   * İlkokul nesne / şekil grafiğinin anahtarı (grafiğin üst satırında): "Her resim 1 öğrenciyi gösterir." Yalnız sınıf
+   * kuralı nesne ya da şekil grafiği çizerken yazılır (sinifKurallari.ts: noktaSekli).
+   */
+  sekilAnahtari?: string;
 }
 
-/** Örnek verilerin konu başlıkları: menüde bu sırayla kümelenir (sınıf düzeyine göre; öğretim programı sırası) */
+/**
+ * Örnek verilerin konu başlıkları: menüde bu sırayla kümelenir (sınıf düzeyine göre; öğretim programı sırası).
+ * `kademe`: konunun görüneceği kademe (ornekKonulari): ilkokul konuları yalnız İlkokul ve Tüm araçlar kademesinde,
+ * ortaokul konuları (zenginleştirme dahil) İlkokul dışındaki kademelerde görünür.
+ */
 export const ORNEK_KONULARI = [
-  { id: 'sinif5', ad: '5. sınıf · Kategorik veri: sıklık, sütun ve daire grafiği', kisaAd: '5. sınıf' },
-  { id: 'sinif6', ad: '6. sınıf · Aritmetik ortalama, ortanca, tepe değer, açıklık', kisaAd: '6. sınıf' },
-  { id: 'sinif7', ad: '7. sınıf · Açıklık, ortalama mutlak sapma, çizgi grafiği', kisaAd: '7. sınıf' },
-  { id: 'sinif8', ad: '8. sınıf · Gerçek veri, evren ve örneklem', kisaAd: '8. sınıf' },
-  { id: 'zenginlestirme', ad: 'Zenginleştirme (programda yok) · İki değişkenin ilişkisi', kisaAd: 'Zenginleştirme' },
+  { id: 'sinif1', ad: '1. sınıf · Nesne grafiği, çetele ve sıklık tablosu', kisaAd: '1. sınıf', kademe: 'ilkokul' },
+  { id: 'sinif2', ad: '2. sınıf · Şekil grafiği, çetele ve sıklık tablosu', kisaAd: '2. sınıf', kademe: 'ilkokul' },
+  { id: 'sinif3', ad: '3. sınıf · Nokta grafiği, çetele ve sıklık tablosu', kisaAd: '3. sınıf', kademe: 'ilkokul' },
+  { id: 'sinif4', ad: '4. sınıf · Nokta ve sütun grafiği, çetele ve sıklık tablosu', kisaAd: '4. sınıf', kademe: 'ilkokul' },
+  { id: 'sinif5', ad: '5. sınıf · Kategorik veri: sıklık, sütun ve daire grafiği', kisaAd: '5. sınıf', kademe: 'ortaokul' },
+  { id: 'sinif6', ad: '6. sınıf · Aritmetik ortalama, ortanca, tepe değer, açıklık', kisaAd: '6. sınıf', kademe: 'ortaokul' },
+  { id: 'sinif7', ad: '7. sınıf · Açıklık, ortalama mutlak sapma, çizgi grafiği', kisaAd: '7. sınıf', kademe: 'ortaokul' },
+  { id: 'sinif8', ad: '8. sınıf · Gerçek veri, evren ve örneklem', kisaAd: '8. sınıf', kademe: 'ortaokul' },
+  { id: 'zenginlestirme', ad: 'Zenginleştirme (programda yok) · İki değişkenin ilişkisi', kisaAd: 'Zenginleştirme', kademe: 'ortaokul' },
 ] as const;
 
 export const ORNEK_VERILER: OrnekVeri[] = [
@@ -1785,13 +1805,318 @@ export const ORNEK_VERILER: OrnekVeri[] = [
         ],
       ),
   },
+  // ── İlkokul (1–4. sınıf): yalnız İlkokul ve Tüm araçlar kademesinde galeride (ornekKonulari) ─────────────────
+  // Kategorik veri, en çok iki veri grubu; temsiller programın öngördüğü gibi: 1. sınıf nesne grafiği, 2. sınıf şekil
+  // grafiği, 3. sınıf nokta grafiği, 4. sınıf nokta ve sütun grafiği; hepsinde çetele ve sıklık tablosu (sinifKurallari.ts).
+  {
+    id: 'oyuncak',
+    ad: "1-A'nın en sevdiği oyuncak",
+    konu: 'sinif1',
+    sinif: 1,
+    kazanim: ['MAT.1.4.1'],
+    aciklama: 'Her resim bir öğrencinin seçtiği oyuncak: resimleri sayın, sonra sıklık tablosundaki çeteleyle karşılaştırın.',
+    onerilenGrafik: 'nokta',
+    varsayilanDegisken: 'Oyuncak',
+    kategoriSirasi: { Oyuncak: ['Top', 'Uçurtma', 'Araba', 'Ayıcık'] },
+    daire: 'siklik',
+    acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false }, sutunModu: false },
+    sekilAnahtari: 'Her resim 1 öğrenciyi gösterir.',
+    hikaye: {
+      arastirmaSorusu: 'Sınıfımızda en çok hangi oyuncak seviliyor?',
+      kim: '1-A sınıfındaki 15 öğrenci',
+      neZaman: 'Ekim 2025, oyun saati',
+      nasil: 'Her öğrenci en sevdiği oyuncağın kartını panoya astı; kartlar sayılırken tahtaya çetele tutuldu. Her satır bir öğrenci.',
+      n: 15,
+      cumle: "1-A'daki 15 öğrenci Ekim 2025'te en sevdiği oyuncağın kartını panoya astı; kartlar sayılırken çetele tutuldu, her satır bir öğrenci.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal sınıf verisi', not: 'Sınıfın oyuncak köşesine alınacak yeni oyuncak için kurgulandı.' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Saymadan önce tahmin et: sınıfta en çok hangi oyuncak seviliyor olabilir?',
+        cevap: 'Herkesin tahmini farklı olabilir. Doğru cevabı bulmak için her oyuncağın resimlerini tek tek sayacağız: en uzun resim sırası en çok sevilen oyuncaktır.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Nesne grafiğinde en uzun resim sırası hangi oyuncakta? Kaç resim var?',
+        cevap: 'Top: 6 resim, yani 6 öğrenci topu seçti. Ayıcığı 4, uçurtmayı 3, arabayı 2 öğrenci seçti.',
+        eylem: { tur: 'secenek', ac: ['etiketler'], etiket: 'Sayıları göster' },
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: 'Sıklık tablosunu aç. Topun çetelesindeki çizgileri say: resimlerle aynı sayı mı?',
+        cevap: 'Aynı: topun çetelesinde bir beşli demet ve 1 çizgi var, 5 ve 1 daha 6 eder. Bütün çizgiler 15: sınıfta 15 öğrenci var.',
+        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Sıklık tablosunu aç' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Sınıfın oyuncak köşesine bir oyuncak daha alınacak. Hangisini alalım? Neden?',
+        cevap: 'Top alalım: en çok öğrenci (6) topu seçti. En az seçilen araba oldu (2 öğrenci).',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      istatistik: 'Çetele ve sıklık tablosu: her çizgi bir öğrenci, beşinci çizgi dört çizginin üstünden geçer.',
+    },
+    ogretmenNotu: '1. sınıfta veri nesne grafiği, çetele ve sıklık tablosuyla gösterilir. Grafiği önce sınıfta gerçek oyuncaklarla ya da oyuncak kartlarıyla sıra sıra dizin, sonra ekrandakiyle karşılaştırın; resimler aynı boyda ve eşit aralıkla dizildiği için sıraların boyu karşılaştırılabilir. Çetelede beşinci çizginin dört çizginin üstünden geçtiğini gösterin. Tartışma: "En az seçilen oyuncağı hiç almazsak ne olur?"',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Oyuncak'],
+        [
+          ['Ada', 'Top'], ['Eymen', 'Araba'], ['Zehra', 'Ayıcık'], ['Yusuf', 'Top'], ['Asya', 'Uçurtma'],
+          ['Kerem', 'Top'], ['Nil', 'Ayıcık'], ['Alparslan', 'Top'], ['Ela', 'Uçurtma'], ['Göktuğ', 'Araba'],
+          ['Masal', 'Ayıcık'], ['Ömer Asaf', 'Top'], ['Selin', 'Ayıcık'], ['Toprak', 'Top'], ['Yağmur', 'Uçurtma'],
+        ],
+        ['etiket', 'etiket'],
+      ),
+  },
+  {
+    id: 'oyun',
+    ad: "2-A ve 2-B'nin en sevdiği oyun",
+    konu: 'sinif2',
+    sinif: 2,
+    kazanim: ['MAT.2.4.1'],
+    aciklama: 'Her şekil bir öğrenci; iki sınıfın şekilleri yan yana. Her sınıfın en sevdiği oyunu bulun, sonra karşılaştırın.',
+    onerilenGrafik: 'nokta',
+    varsayilanDegisken: 'Oyun',
+    renkDegisken: 'Sınıf',
+    grupla: 'Sınıf',
+    kategoriSirasi: { Oyun: ['Saklambaç', 'Körebe', 'İp atlama', 'Seksek'] },
+    daire: 'siklik',
+    acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false }, sutunModu: false },
+    sekilAnahtari: 'Her kare 1 öğrenciyi gösterir.',
+    hikaye: {
+      arastirmaSorusu: 'İki sınıfın en sevdiği teneffüs oyunu aynı mı?',
+      kim: "2-A ve 2-B'den 10'ar öğrenci (20 kişi)",
+      neZaman: 'Kasım 2025, teneffüs',
+      nasil: 'Her öğrenci en sevdiği oyunu söyledi; sınıf başkanları tahtaya çetele tuttu. Her satır bir öğrenci.',
+      n: 20,
+      cumle: "2-A ve 2-B'den 20 öğrenci Kasım 2025'te en sevdiği teneffüs oyununu söyledi; sınıf başkanları çetele tuttu, her satır bir öğrenci.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal sınıf verisi', not: 'İki sınıfta da 10 öğrenci var; sayılar doğrudan karşılaştırılabilir.' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'İki sınıfın en sevdiği oyun aynı mı olur, farklı mı? Tahmin et.',
+        cevap: 'Farklı olabilir: her sınıfın kendi oyun alışkanlığı var. Bunu anlamak için iki sınıfın şekillerini ayrı ayrı sayıp yan yana koymak gerekir.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: "Şekil grafiğinde 2-A'nın en uzun şekil sırası hangi oyunda? 2-B'ninki hangisinde?",
+        cevap: "2-A'da saklambaç (5 şekil), 2-B'de ip atlama (5 şekil): iki sınıfın en sevdiği oyun farklı.",
+        eylem: { tur: 'secenek', ac: ['etiketler'], etiket: 'Sayıları göster' },
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: 'Sıklık tablosunu aç. İki sınıf birlikte en çok hangi oyunu seçmiş? Kaç öğrenci?',
+        cevap: "Saklambaç: 2-A'dan 5, 2-B'den 2, toplam 7 öğrenci. İp atlamayı 6, sekseği 5, körebeyi 2 öğrenci seçti.",
+        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Sıklık tablosunu aç' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Teneffüste iki sınıf birlikte tek bir oyun oynayacak. Hangi oyunu seçmeliler? Neden?',
+        cevap: "Saklambaç: iki sınıfta toplam en çok öğrenci (7) onu seçti. Ama 2-B'de en çok ip atlama seçildi; ertesi gün ip atlama oynanabilir.",
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      istatistik: "Sınıf'a göre sıklık tablosu: satırlarda oyunlar, sütunlarda sınıflar; her çizgi bir öğrenci.",
+    },
+    ogretmenNotu: '2. sınıfta kategorik veriyle en çok iki veri grubu üzerinde çalışılır; veri şekil grafiği, çetele ve sıklık tablosuyla gösterilir. Şekil grafiğinde her kare bir öğrencidir: anahtarı birlikte okuyun. İki sınıfta da 10 öğrenci olduğu için sayılar doğrudan karşılaştırılabilir. Tartışma: "Toplamda en çok seçilen oyun, her sınıfın en sevdiği oyun mudur?"',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Sınıf', 'Oyun'],
+        [
+          ['Arda', '2-A', 'Saklambaç'], ['Beyza', '2-A', 'Seksek'], ['Can', '2-A', 'Saklambaç'], ['Duru', '2-A', 'İp atlama'],
+          ['Efe', '2-A', 'Saklambaç'], ['Fulya', '2-A', 'Seksek'], ['Hamza', '2-A', 'Körebe'], ['İpek', '2-A', 'Saklambaç'],
+          ['Kaan', '2-A', 'Seksek'], ['Lara', '2-A', 'Saklambaç'], ['Mina', '2-B', 'İp atlama'], ['Onur', '2-B', 'Saklambaç'],
+          ['Pelin', '2-B', 'İp atlama'], ['Rüzgar', '2-B', 'Seksek'], ['Sude', '2-B', 'İp atlama'], ['Taha', '2-B', 'Körebe'],
+          ['Umut', '2-B', 'Saklambaç'], ['Vera', '2-B', 'İp atlama'], ['Yiğit', '2-B', 'Seksek'], ['Zeynep', '2-B', 'İp atlama'],
+        ],
+        ['etiket', 'etiket', 'etiket'],
+      ),
+  },
+  {
+    id: 'gelis',
+    ad: "3-B'nin okula geliş biçimi",
+    konu: 'sinif3',
+    sinif: 3,
+    kazanim: ['MAT.3.4.1'],
+    aciklama: 'Her nokta bir öğrenci: en yüksek nokta sırasını bulun, sonra çetele ve sıklık tablosunda sayıları karşılaştırın.',
+    onerilenGrafik: 'nokta',
+    varsayilanDegisken: 'Geliş biçimi',
+    kategoriSirasi: { 'Geliş biçimi': ['Yürüyerek', 'Servisle', 'Arabayla', 'Bisikletle'] },
+    daire: 'siklik',
+    acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false }, sutunModu: false },
+    hikaye: {
+      arastirmaSorusu: 'Sınıfımızdaki öğrenciler okula nasıl geliyor?',
+      kim: '3-B sınıfındaki 18 öğrenci',
+      neZaman: 'Şubat 2026, bir sabah',
+      nasil: 'Sabah yoklamasında her öğrenci okula nasıl geldiğini söyledi; nöbetçi öğrenci çetele tuttu. Her satır bir öğrenci.',
+      n: 18,
+      cumle: "3-B'deki 18 öğrenci Şubat 2026'da bir sabah okula nasıl geldiğini söyledi; nöbetçi öğrenci çetele tuttu, her satır bir öğrenci.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal sınıf verisi', not: 'Okul önündeki düzenleme için kurgulandı.' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Tahmin et: sınıfımızda okula en çok hangi yolla geliniyor olabilir?',
+        cevap: 'Okula yakın oturanlar yürür, uzakta oturanlar servisle ya da arabayla gelir. Hangisinin en çok olduğunu nokta grafiğinde noktaları sayarak bulacağız.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Nokta grafiğinde en yüksek nokta sırası hangi geliş biçiminde? Kaç nokta var?',
+        cevap: 'Yürüyerek: 8 nokta, yani 8 öğrenci yürüyerek geliyor. Servisle 5, arabayla 3, bisikletle 2 öğrenci geliyor.',
+        eylem: { tur: 'secenek', ac: ['etiketler'], etiket: 'Sayıları göster' },
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: 'Sıklık tablosunu aç. Yürüyerek gelenler servisle gelenlerden kaç kişi fazla?',
+        cevap: '8 − 5 = 3: yürüyerek gelenler 3 kişi fazla. Sıklıkların toplamı 18: sınıftaki bütün öğrenciler.',
+        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Sıklık tablosunu aç' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Okul önüne yaya geçidi mi, bisiklet park yeri mi yapılmalı? Veriye göre karar ver.',
+        cevap: 'Yaya geçidi: en çok öğrenci (8) yürüyerek geliyor. Bisikletle yalnız 2 öğrenci geliyor; park yeri olursa bisikletle gelenler artabilir, bu da yeni bir araştırma sorusu.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      istatistik: 'Çetele ve sıklık tablosu: çetele çizgileri beşer beşer demetlenir; sıklıkların toplamı veri sayısıdır.',
+    },
+    ogretmenNotu: '3. sınıfta kategorik ve sayarak elde edilen veriyle tek veri grubu üzerinde çalışılır; veri çetele, sıklık tablosu ve nokta grafiğiyle gösterilir. Nokta grafiğinde her nokta bir öğrencidir; noktalar eşit aralıkla dizildiği için sıraların boyu karşılaştırılabilir. Tartışma: "Bu veriyle yağmurlu bir günde kaç öğrencinin yürüyeceğini bilebilir miyiz?"',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Geliş biçimi'],
+        [
+          ['Aybüke', 'Yürüyerek'], ['Batu', 'Servisle'], ['Cansu', 'Yürüyerek'], ['Deniz', 'Arabayla'], ['Ecrin', 'Yürüyerek'],
+          ['Ferhat', 'Servisle'], ['Gizem', 'Yürüyerek'], ['Halil', 'Bisikletle'], ['Işıl', 'Yürüyerek'], ['Kuzey', 'Servisle'],
+          ['Leyla', 'Yürüyerek'], ['Mert', 'Arabayla'], ['Nisa', 'Yürüyerek'], ['Oğuz', 'Servisle'], ['Pınar', 'Yürüyerek'],
+          ['Rıza', 'Bisikletle'], ['Serra', 'Servisle'], ['Tuna', 'Arabayla'],
+        ],
+        ['etiket', 'etiket'],
+      ),
+  },
+  {
+    id: 'gezi',
+    ad: "4-A ve 4-B'nin gezi tercihi",
+    konu: 'sinif4',
+    sinif: 4,
+    kazanim: ['MAT.4.4.2'],
+    aciklama: 'Her gezi yerinde iki sınıfın sütunları yan yana: her sınıfın en çok istediği yeri ve iki sınıfın toplamını bulun.',
+    onerilenGrafik: 'sutun',
+    varsayilanDegisken: 'Gezi yeri',
+    renkDegisken: 'Sınıf',
+    grupla: 'Sınıf',
+    kategoriSirasi: { 'Gezi yeri': ['Müze', 'Hayvanat bahçesi', 'Bilim merkezi', 'Orman'] },
+    daire: 'siklik',
+    acilis: { sekme: 'sutun' },
+    hikaye: {
+      arastirmaSorusu: 'Sınıf gezisi için hangi yer seçilmeli?',
+      kim: "4-A ve 4-B'den 12'şer öğrenci (24 kişi)",
+      neZaman: 'Mart 2026',
+      nasil: 'Her öğrenci dört gezi yerinden birini oy pusulasına yazdı; pusulalar sayılırken çetele tutuldu. Her satır bir öğrenci.',
+      n: 24,
+      cumle: "4-A ve 4-B'den 24 öğrenci Mart 2026'da dört gezi yerinden birini seçti; pusulalar sayılırken çetele tutuldu, her satır bir öğrenci.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal sınıf verisi', not: 'İki sınıfta da 12 öğrenci var; sayılar doğrudan karşılaştırılabilir.' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'İki sınıf birlikte geziye gidecek. Sence en çok hangi yer seçilmiştir? Tahmin et.',
+        cevap: 'Hayvanat bahçesi ya da bilim merkezi çok seçilmiş olabilir; iki sınıfın seçimleri de farklı olabilir. Bunu sütun grafiğinde iki sınıfın sütunlarını yan yana koyarak göreceğiz.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: "Sütun grafiğinde 4-A'nın en uzun sütunu hangi yerde? 4-B'ninki hangisinde?",
+        cevap: "4-A'da hayvanat bahçesi (5 öğrenci), 4-B'de bilim merkezi (6 öğrenci). İki sınıfın en çok istediği yer farklı.",
+        eylem: null,
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: 'Sıklık tablosunu aç. İki sınıfın toplamında en çok hangi yer seçilmiş? Kaç öğrenci?',
+        cevap: "Bilim merkezi: 4-A'dan 3, 4-B'den 6, toplam 9 öğrenci. Hayvanat bahçesini 7, müzeyi 5, ormanı 3 öğrenci seçti.",
+        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Sıklık tablosunu aç' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Gezi için tek bir yer seçilecek. Hangi yer seçilmeli? 4-A bu karara neden itiraz edebilir?',
+        cevap: "Bilim merkezi: iki sınıfta toplam en çok öğrenci (9) onu seçti. 4-A'da ise en çok hayvanat bahçesi seçildi (5); 4-A'dan yalnız 3 öğrenci bilim merkezini istedi.",
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      nokta: 'Her nokta bir öğrenci; her gezi yerinde iki sınıfın noktaları yan yana. Sütunlara dönüştürüp sütun grafiğiyle karşılaştırın.',
+      istatistik: "Sınıf'a göre sıklık tablosu: satırlarda gezi yerleri, sütunlarda sınıflar; her çizgi bir öğrenci.",
+    },
+    ogretmenNotu: '4. sınıfta kategorik ve sayarak elde edilen veriyle en çok iki veri grubu üzerinde çalışılır. Sütun grafiğinde iki sınıfın sütunları her gezi yerinde yan yana durur; sütunun boyu o yeri seçen öğrenci sayısıdır. Nokta grafiğinde "Sütunlara dönüştür" ile noktaların sütuna nasıl dönüştüğünü gösterin. Tartışma: "Toplamda en çok seçilen yer, iki sınıfın da en çok istediği yer midir?"',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Sınıf', 'Gezi yeri'],
+        [
+          ['Akın', '4-A', 'Hayvanat bahçesi'], ['Berra', '4-A', 'Bilim merkezi'], ['Cem', '4-A', 'Müze'], ['Dila', '4-A', 'Hayvanat bahçesi'],
+          ['Emre', '4-A', 'Bilim merkezi'], ['Gülce', '4-A', 'Orman'], ['Hakan', '4-A', 'Hayvanat bahçesi'], ['İnci', '4-A', 'Müze'],
+          ['Kemal', '4-A', 'Bilim merkezi'], ['Lal', '4-A', 'Hayvanat bahçesi'], ['Murat', '4-A', 'Orman'], ['Naz', '4-A', 'Hayvanat bahçesi'],
+          ['Alya', '4-B', 'Bilim merkezi'], ['Barış', '4-B', 'Müze'], ['Ceren', '4-B', 'Bilim merkezi'], ['Doğa', '4-B', 'Bilim merkezi'],
+          ['Erdem', '4-B', 'Hayvanat bahçesi'], ['Gökçe', '4-B', 'Bilim merkezi'], ['Harun', '4-B', 'Müze'], ['Işın', '4-B', 'Bilim merkezi'],
+          ['Koray', '4-B', 'Orman'], ['Lina', '4-B', 'Müze'], ['Melis', '4-B', 'Hayvanat bahçesi'], ['Nazlı', '4-B', 'Bilim merkezi'],
+        ],
+        ['etiket', 'etiket', 'etiket'],
+      ),
+  },
 ];
 
 export type OrnekKonusu = (typeof ORNEK_KONULARI)[number]['id'];
 
-/** Örnekler konu başlıklarına göre (menü sırası) */
-export function ornekKonulari(): { id: OrnekKonusu; ad: string; kisaAd: string; ornekler: OrnekVeri[] }[] {
-  return ORNEK_KONULARI.map((k) => ({ id: k.id, ad: k.ad, kisaAd: k.kisaAd, ornekler: ORNEK_VERILER.filter((o) => o.konu === k.id) }));
+/**
+ * Konu bu kademede görünür mü: Tüm araçlar'da bütün konular; İlkokul'da yalnız 1–4. sınıf konuları; ortaokul ve lisede
+ * (bugünkü davranış) 5–8. sınıf ve zenginleştirme konuları.
+ */
+function konuKademede(k: (typeof ORNEK_KONULARI)[number], kademe: KademeDuzeyi): boolean {
+  if (kademe === 'tum') return true;
+  return kademe === 'ilkokul' ? k.kademe === 'ilkokul' : k.kademe !== 'ilkokul';
+}
+
+/** Örnekler konu başlıklarına göre (menü sırası); `kademe` verilirse yalnız o kademenin konuları (varsayılan: hepsi) */
+export function ornekKonulari(kademe: KademeDuzeyi = 'tum'): { id: OrnekKonusu; ad: string; kisaAd: string; ornekler: OrnekVeri[] }[] {
+  return ORNEK_KONULARI.filter((k) => konuKademede(k, kademe)).map((k) => ({
+    id: k.id,
+    ad: k.ad,
+    kisaAd: k.kisaAd,
+    ornekler: ORNEK_VERILER.filter((o) => o.konu === k.id),
+  }));
+}
+
+/** Kademenin örnek galerisindeki örnekler (konu sırasıyla) */
+export function kademeOrnekleri(kademe: KademeDuzeyi): OrnekVeri[] {
+  return ornekKonulari(kademe).flatMap((k) => k.ornekler);
+}
+
+/** Örnek bu kademenin galerisinde mi (ilkokul örneği ortaokulda / lisede, 5–8. sınıf örneği ilkokulda yok) */
+export function ornekKademede(ornek: OrnekVeri, kademe: KademeDuzeyi): boolean {
+  if (kademe === 'tum') return true;
+  return kademe === 'ilkokul' ? ilkokulSinifi(ornek.sinif) : !ilkokulSinifi(ornek.sinif);
 }
 
 /** Kimliğe göre örnek; bilinmeyen ya da boş kimlikte undefined */

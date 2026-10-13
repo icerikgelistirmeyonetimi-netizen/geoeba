@@ -54,7 +54,8 @@ import {
   type RenkEslemesi,
 } from './kategorik';
 import { RenkLejanti, renkLejantiGenisligi } from './RenkLejanti';
-import type { OlcuKumesi } from './sinifKurallari';
+import type { NoktaSekli, OlcuKumesi } from './sinifKurallari';
+import { KareIsareti, NesneIsareti, nesneBul } from './nesneSimgeleri';
 
 /** Sınıfsız tabloda bütün ölçüler */
 const TUM_OLCULER: OlcuKumesi = { merkezi: true, aciklik: true, oms: true, standartSapma: true };
@@ -137,6 +138,13 @@ export interface NoktaGrafigiProps {
    * yığılmaz); nokta görünümü değişmez. Verilmezse parçalar yığılır (bugünkü davranış).
    */
   yanYanaParcalar?: boolean;
+  /**
+   * Kategorik değişkende her verinin işareti (ilkokul, sinifKurallari.ts: noktaSekli): nokta (daire), şekil (kare; şekil
+   * grafiği) ya da nesne (kategorinin resmi; nesne grafiği). Sayısal değişkende ve dağınık noktalarda hep nokta.
+   */
+  sekil?: NoktaSekli;
+  /** Nesne / şekil grafiğinin anahtarı ("Her resim 1 öğrenciyi gösterir."): üst satırda; yalnız şekil ya da nesneyle */
+  sekilAnahtari?: string;
 }
 
 /** Bu kadar noktadan sonra geçiş animasyonları kapanır (akıllı tahtada akıcılık) */
@@ -445,6 +453,8 @@ export function NoktaGrafigi({
   satirKarsiligi,
   yuzdesiz = false,
   yanYanaParcalar = false,
+  sekil = 'nokta',
+  sekilAnahtari,
 }: NoktaGrafigiProps) {
   /** Türetilmiş satırın asıl tablodaki satırı (karşılık yoksa kendisi) */
   const asil = (s: number) => (satirKarsiligi ? satirKarsiligi[s] ?? s : s);
@@ -469,6 +479,10 @@ export function NoktaGrafigi({
   const atanmis = sutun >= 0 && sutun < tablo.sutunlar.length;
   const kategorik = atanmis && tablo.sutunlar[sutun].tur === 'etiket';
   const sayisal = atanmis && !kategorik;
+  /** Veri işareti: şekil ve nesne yalnız kategorik değişkende (sayısal eksende hep nokta) */
+  const isaret: NoktaSekli = kategorik ? sekil : 'nokta';
+  /** Şekil / nesne grafiğinin anahtar yazısı (üst satır) */
+  const anahtarYazisi = isaret !== 'nokta' && sekilAnahtari ? sekilAnahtari : null;
   const sutunAdi = atanmis ? tablo.sutunlar[sutun].ad : '';
   /** Renk anahtarı bu grafiğin değişkeninden farklıysa noktalar onun renklerini alır ve lejant çizilir */
   const anahtar = renkEslemi && atanmis && renkEslemi.sutun !== sutun && renkEslemi.sutun >= 0 && renkEslemi.sutun < tablo.sutunlar.length ? renkEslemi : null;
@@ -608,7 +622,7 @@ export function NoktaGrafigi({
     const grupSatirPayi = yanAnahtar && sayisal && olcuKumesi.merkezi ? grupOlculeri.length * 20 : 0;
 
     // ── Üst satırlar: başlık / lejant, ölçü etiketleri, ortalama mutlak sapma ayracı ─────────
-    const baslikSatiri = !!baslik || !!anahtar;
+    const baslikSatiri = !!baslik || !!anahtar || !!anahtarYazisi;
     const baslikSonu = anahtar
       ? Math.min(W - SAG, (baslik ? SOL + baslik.length * HARF + 24 : SOL) + renkLejantiGenisligi(anahtar))
       : SOL + (baslik ? baslik.length * HARF : 0);
@@ -1122,6 +1136,7 @@ export function NoktaGrafigi({
     olcuKumesi,
     yuzdesiz,
     yanYanaParcalar,
+    anahtarYazisi,
   ]);
 
   const { SOL, UST, taban, alanG, alanY, eksen, olcek, konumlar, ondalik } = c;
@@ -1241,6 +1256,19 @@ export function NoktaGrafigi({
         </text>
       )}
       {anahtar && <RenkLejanti eslem={anahtar} x={baslik ? SOL + baslik.length * HARF + 24 : SOL} y={c.baslikY} sagSinir={W - SAG} />}
+      {anahtarYazisi && (() => {
+        // Nesne / şekil grafiğinin anahtarı: başlık ve lejant yoksa solda, varsa sağa yaslı (sığmazsa yazılmaz)
+        const solda = !baslik && !anahtar;
+        const lejantSonu = anahtar
+          ? (baslik ? SOL + baslik.length * HARF + 24 : SOL) + renkLejantiGenisligi(anahtar)
+          : SOL + (baslik ? baslik.length * HARF : 0);
+        if (!solda && lejantSonu + 16 + anahtarYazisi.length * HARF > W - SAG) return null;
+        return (
+          <text x={solda ? SOL : W - SAG} y={c.baslikY} fontSize={13} fontWeight={600} textAnchor={solda ? 'start' : 'end'} fill={RENK.solukMetin} data-sekil-anahtari>
+            {anahtarYazisi}
+          </text>
+        );
+      })()}
 
       {/* Yan yana görünüm: her grubun ölçüleri grubun renginde (bant, çizgiler; değerler grup satırlarında) */}
       {olcek &&
@@ -1542,17 +1570,33 @@ export function NoktaGrafigi({
           >
             {/* Dokunmatik hedefi büyüt (en az 22 px yarıçap) */}
             {!cokNokta && <circle r={Math.max(k.r, 22)} fill="transparent" />}
-            <circle
-              r={k.r}
-              fill={dolgu}
-              // "Beyaz" / "Siyah" gibi kart zemininde kaybolan dolguya metin renginde kenar
-              stroke={k.dagitik ? RENK.birincil : kenarGerekir(dolgu) ? RENK.metin : RENK.kart}
-              strokeWidth={k.dagitik ? 2 : kenarGerekir(dolgu) ? 1.5 : k.r < 3 ? 0 : 1}
-              style={{
-                transition: hareketsiz ? 'none' : 'r 200ms, fill 200ms',
-                animation: hareketsiz || k.dagitik ? undefined : `vg-nokta-gir 320ms ${GECIS}`,
-              }}
-            />
+            {isaret === 'nokta' || k.dagitik ? (
+              <circle
+                r={k.r}
+                fill={dolgu}
+                // "Beyaz" / "Siyah" gibi kart zemininde kaybolan dolguya metin renginde kenar
+                stroke={k.dagitik ? RENK.birincil : kenarGerekir(dolgu) ? RENK.metin : RENK.kart}
+                strokeWidth={k.dagitik ? 2 : kenarGerekir(dolgu) ? 1.5 : k.r < 3 ? 0 : 1}
+                style={{
+                  transition: hareketsiz ? 'none' : 'r 200ms, fill 200ms',
+                  animation: hareketsiz || k.dagitik ? undefined : `vg-nokta-gir 320ms ${GECIS}`,
+                }}
+              />
+            ) : (
+              // İlkokul şekil grafiği (kare) ve nesne grafiği (kategorinin resmi; resmi yoksa kare)
+              <g style={{ animation: hareketsiz ? undefined : `vg-nokta-gir 320ms ${GECIS}` }}>
+                {(() => {
+                  const nesne = isaret === 'nesne' ? nesneBul(k.kategori) : null;
+                  const kenar = kenarGerekir(dolgu) ? RENK.metin : RENK.kart;
+                  const kalinlik = kenarGerekir(dolgu) ? 1.5 : k.r < 3 ? 0 : 1;
+                  return nesne ? (
+                    <NesneIsareti nesne={nesne} r={k.r} dolgu={dolgu} kenar={kenar} kenarKalinligi={kalinlik} />
+                  ) : (
+                    <KareIsareti r={k.r} dolgu={dolgu} kenar={kenar} kenarKalinligi={kalinlik} />
+                  );
+                })()}
+              </g>
+            )}
             {secili && <circle data-yalniz-ekran data-secim-halkasi r={k.r + 3.5} fill="none" stroke={RENK.metin} strokeWidth={3} pointerEvents="none" />}
             <circle className="vg-odak" data-yalniz-ekran r={k.r + 7} fill="none" stroke={RENK.vurgu} strokeWidth={3} pointerEvents="none" />
             {halkaBurada && (

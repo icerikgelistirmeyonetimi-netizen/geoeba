@@ -780,5 +780,5 @@ export function surprizDunya(a: SurprizAyari, tohum: number): DunyaTanimi {
       bitkiler[i] = cevir(bitkiler[i]);
     }
   }
-  return { id: `surpriz-${tohum}`, ad: 'Sürpriz dünya', sinar: 'Her sınamada yeniden üretilir', bitkiler, depo: a.depo };
+  return { id: `surpriz-${tohum}`, ad: 'Sürpriz sıra', sinar: 'Her sınamada yeniden üretilir', bitkiler, depo: a.depo };
 }

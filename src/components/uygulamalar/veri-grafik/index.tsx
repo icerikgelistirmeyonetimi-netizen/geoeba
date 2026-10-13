@@ -47,6 +47,12 @@
  * şeridi, İstatistik), daire ve sütundaki yüzde / açı yazılarını süzer. 5–8. sınıfta "Karşılaştır" iki veri grubunu
  * tek grafikte, ikili gruplar hâlinde gösterir: Nokta'da yan yana yığınlar, Sütun'da yan yana sütun çiftleri,
  * Kök-yaprak'ta sırt sırta gösterim (ikiliGruplar.ts). Sınıfsız tabloda bugünkü davranış (alt alta paneller) sürer.
+ *
+ * Kademe (Çizim Stüdyosu'nun Kademe menüsü; hooks/useKademeDuzeyi): İlkokul seçiliyken uygulama 1. sınıf örneğiyle
+ * açılır, galeride yalnız 1–4. sınıf örnekleri durur ve 1–4. sınıf örneğine bağlı olmayan her tablo ilkokulun ortak
+ * kurallarını alır (sinifKurallari.ts: ölçü, yüzde ve açı yok; nesne / şekil / nokta grafiği, 4. sınıfta sütun grafiği,
+ * çetele ve sıklık tablosu). Kademe değişince değiştirilmemiş örnek kademenin açılış örneğine döner (durum.ts:
+ * kademeyeUyarla). Ortaokul, lise ve Tüm araçlar'da açılış ve kurallar değişmez (Tüm araçlar galeride 1–4'ü de gösterir).
  */
 import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { VeriTablosu as VeriTablosuBileseni, tabloDogalGenisligi } from './VeriTablosu';
@@ -61,7 +67,9 @@ import { DaireGrafigi } from './DaireGrafigi';
 import { IstatistikPaneli } from './IstatistikPaneli';
 import { KokYaprak } from './KokYaprak';
 import { grupEslemesi, ikiSeriTablosu, sutunCiftleri } from './ikiliGruplar';
-import { olcuDugmesiVar } from './sinifKurallari';
+import { olcuDugmesiVar, sekmeAdi } from './sinifKurallari';
+import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
+import type { KademeDuzeyi } from '@/components/workspace/kademeDuzeyleri';
 import { KategorikIstatistik, KategorikSutunGrafigi, frekansTablosu, kategorikFrekanslar } from './KategorikGrafikler';
 import { BosDurum, DaireBilgisi } from './BosDurum';
 import {
@@ -96,6 +104,7 @@ import { caprazSayim, degiskenSutunlari, kategoriRengi, renkEslemesi, satirRengi
 import {
   csvUret,
   gecerliDegerler,
+  ornekKademede,
   sayiHucreYaz,
   sayiYaz,
   sutunIndeksi,
@@ -110,6 +119,7 @@ import {
   baslangicDurumu,
   bosTabloAc,
   durumKurallari,
+  kademeyeUyarla,
   ornegiYukle,
   rehberEylemiUygula,
   tabloyuTemizle,
@@ -178,9 +188,13 @@ export function paneliDuzelt(d: Durum): Durum {
   return panelBaslangictaMi(d) ? { ...d, toplamaAcik: false } : d;
 }
 
-/** İlk durum: kayıt varsa o (yalnız istemcide; sunucu çiziminde ve testlerde varsayılan); eksen, sekme ve panel düzeltilmiş */
-function ilkDurum(): Durum {
-  return paneliDuzelt(sekmeDuzelt(eksenDuzelt(durumYukle() ?? baslangicDurumu())));
+/**
+ * İlk durum: kayıt varsa o (yalnız istemcide; sunucu çiziminde ve testlerde varsayılan), kademeye uyarlanmış (İlkokul'da
+ * değiştirilmemiş 5–8. sınıf örneği yerine 1. sınıf örneği); eksen, sekme ve panel düzeltilmiş
+ */
+function ilkDurum(kademe: KademeDuzeyi): Durum {
+  const d = kademeyeUyarla(durumYukle() ?? baslangicDurumu(kademe), kademe);
+  return paneliDuzelt(sekmeDuzelt(eksenDuzelt(d), kademe === 'ilkokul'));
 }
 
 /**
@@ -549,15 +563,27 @@ export interface VeriGrafikUygulamasiProps {
 }
 
 export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUygulamasiProps) {
+  /** Kademe menüsünün seçimi (İlkokul: 1–4. sınıf kuralları ve örnekleri) */
+  const [kademe] = useKademeDuzeyi();
+  const ilkokul = kademe === 'ilkokul';
+  const ilkokulRef = useRef(ilkokul);
+  ilkokulRef.current = ilkokul;
   // Uygulama yalnız istemcide (tembel) yüklenir: kayıt ilk çizimden önce okunur, varsayılan tablo bir kare bile görünmez
-  const [durum, setDurumHam] = useState<Durum>(ilkDurum);
+  const [durum, setDurumHam] = useState<Durum>(() => ilkDurum(kademe));
   /**
    * Bütün durum değişimleri buradan geçer: eksen her zaman geçerli bir değişkende kalır (eksenDuzelt) ve seçili
-   * grafik sekmesi tablonun veri türleriyle çizilebilir kalır (sekmeDuzelt; ör. Saçılım → Nokta)
+   * grafik sekmesi tablonun veri türleriyle ve kademenin kurallarıyla çizilebilir kalır (sekmeDuzelt; ör. Saçılım → Nokta)
    */
   const setDurum = useCallback((yeni: React.SetStateAction<Durum>) => {
-    setDurumHam((d) => sekmeDuzelt(eksenDuzelt(typeof yeni === 'function' ? yeni(d) : yeni)));
+    setDurumHam((d) => sekmeDuzelt(eksenDuzelt(typeof yeni === 'function' ? yeni(d) : yeni), ilkokulRef.current));
   }, []);
+  /** Kademe değişince: değiştirilmemiş örnek kademenin açılış örneğine döner, sekme kademenin kurallarına uyar */
+  const sonKademe = useRef(kademe);
+  useEffect(() => {
+    if (sonKademe.current === kademe) return;
+    sonKademe.current = kademe;
+    setDurum((d) => kademeyeUyarla(d, kademe));
+  }, [kademe, setDurum]);
   /**
    * Son çizilen durum: panelin tek seferlik işlemleri (plan uygulama, kapatma, tablo işlemi, deney silme) işlemden
    * önceki durumu [Geri al] için saklar ve sonucu doğrudan yazar
@@ -670,15 +696,21 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   }, []);
   const tostKapat = useCallback((kimlik: number) => setTost((t) => (t && t.kimlik === kimlik ? null : t)), []);
 
-  const { sekme, sutunModu, yuvarlamaAdimi, adimlariGoster, etkinKume } = durum;
+  const { sekme, yuvarlamaAdimi, adimlariGoster, etkinKume } = durum;
   const tablo = etkinTablo(durum);
   /**
-   * Sınıf düzeyinin kuralları (bağlı örneğin sınıfı; sınıfsız tabloda hepsi açık): görünen sekmeler, ölçüler, yüzde /
-   * açı yazıları, iki grubun tek grafikte karşılaştırılması
+   * Sınıf düzeyinin kuralları (bağlı örneğin sınıfı; sınıfsız tabloda hepsi açık; İlkokul kademesinde ilkokulun
+   * kuralları): görünen sekmeler ve adları, ölçüler, yüzde / açı yazıları, iki grubun tek grafikte karşılaştırılması,
+   * nesne / şekil grafiği, çetele
    */
-  const kurallar = useMemo(() => durumKurallari({ ornekId: durum.ornekId, etkinKume }), [durum.ornekId, etkinKume]);
+  const kurallar = useMemo(() => durumKurallari({ ornekId: durum.ornekId, etkinKume }, ilkokul), [durum.ornekId, etkinKume, ilkokul]);
   const tekGrafik = kurallar.tekGrafikteKarsilastir;
-  const gorunurSekmeler = useMemo(() => SEKMELER.filter((s) => kurallar.sekmeler.includes(s.id)), [kurallar]);
+  const gorunurSekmeler = useMemo(
+    () => SEKMELER.filter((s) => kurallar.sekmeler.includes(s.id)).map((s) => ({ ...s, ad: sekmeAdi(s.id, s.ad, kurallar) })),
+    [kurallar],
+  );
+  /** Sütun modu ("Sütunlara dönüştür"): sütun grafiği olmayan sınıfta (ilkokul 1–3) kayıtta açık olsa da kapalı çizilir */
+  const sutunModu = durum.sutunModu && kurallar.sutunaDonustur;
   /** Grafiklere giden seçenekler: sınıfta olmayan ölçü (ör. 6. sınıfta standart sapma) kayıtta açık olsa da çizilmez */
   const secenekler = useMemo(
     () => ({
@@ -740,8 +772,11 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
    * şeridi, deney verisi); bağ yoksa hepsi boş.
    */
   const toplama = useMemo(() => toplamaGorunumBilgisi(durum), [durum]);
-  /** Veri topla paneli açık mı */
-  const panelAcik = durum.toplamaAcik;
+  /**
+   * Veri topla paneli açık mı. İlkokulda Veri topla yolu yok (hazır sorular 5–8. sınıf kazanımlarına bağlı): kayıtta açık
+   * kalmış panel çizilmez (durum korunur, öteki kademede yerinde)
+   */
+  const panelAcik = durum.toplamaAcik && !ilkokul;
   /**
    * Panel kendi "Ne araştıralım?" görünümüne düşerse (araştırmanın bağı koptu, eski kayıt) o görünüm çizilmez: panel
    * saklanır ve pencere "Veri topla" adımında açılır (paneldeki ‹ ve "Yeni araştırma" da bu yola gider: onBaslangic).
@@ -892,6 +927,14 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const sutunSiklik = useMemo(
     () => (sekme === 'sutun' && etkinSutun >= 0 && !etkinKategorik && sutundaSiklikGerekli(noktaDegerler) ? degerSikligiTablosu(tablo, etkinSutun) : null),
     [sekme, etkinSutun, etkinKategorik, noktaDegerler, tablo],
+  );
+  /**
+   * İlkokul (çetele ve sıklık tablosu): sayısal değişkende (sayarak elde edilen veri, 3–4. sınıf) Sıklık tablosu
+   * değerlerin çetelesi ve sıklığıdır; ölçü kartı yok
+   */
+  const istatistikSiklik = useMemo(
+    () => (sekme === 'istatistik' && kurallar.cetele && etkinSutun >= 0 && !etkinKategorik ? degerSikligiTablosu(tablo, etkinSutun) : null),
+    [sekme, kurallar.cetele, etkinSutun, etkinKategorik, tablo],
   );
   /**
    * Sütun, 5–8. sınıf, karşılaştırma: iki veri grubu yan yana sütun çiftleri (1. maç: Selma, Yasemin; 7A-01 ile 7B-01).
@@ -1361,7 +1404,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
           ] as [Exclude<NoktaSecenegi, 'etiketler'>, string][]
         ).filter(([olcu]) => olcuDugmesiVar(olcu, kurallar))),
     ['etiketler', kategorikSecili ? 'Sayılar' : 'Etiketler'],
-    ['sutunModu', 'Sütunlara dönüştür'],
+    // Sütun grafiği olmayan sınıfta (ilkokul 1–3) "Sütunlara dönüştür" yok
+    ...(kurallar.sutunaDonustur ? ([['sutunModu', 'Sütunlara dönüştür']] as [NoktaSecenegi | 'sutunModu', string][]) : []),
   ];
   const DAIRE_SECIMLERI: [DaireModu, string][] = [
     ['satir', 'Her satır bir dilim'],
@@ -1393,8 +1437,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
           return g(s.etiket) > g(en) ? s.etiket : en;
         }, 'yok')
       : null;
-  /** Nokta şeridinde önce simgeye inen düğmeler: Etiketler (Sayılar) ve Sütunlara dönüştür (sondaki iki düğme) */
-  const seritIkincil = sekme === 'nokta' ? 2 : 0;
+  /** Nokta şeridinde önce simgeye inen düğmeler: Etiketler (Sayılar) ve (varsa) Sütunlara dönüştür (sondaki düğmeler) */
+  const seritIkincil = sekme === 'nokta' ? (kurallar.sutunaDonustur ? 2 : 1) : 0;
   const seritDuzeyi = seritDuzeyiBul(grafikGenislik, seritDugmeAdlari, enUzunAday, seritIkincil, metinOlcer);
   /** Düğmeler yalnız simge (adları title ve erişilebilir adda) */
   const seritDar = seritDuzeyi === 'dar' || seritDuzeyi === 'en-dar';
@@ -1437,7 +1481,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
     (sekme === 'cizgi' && grafikSutun >= 0) ||
     (sekme === 'daire' && daireSayisal && !bos) ||
     (sekme === 'sacilim' && sacilim !== null) ||
-    (sekme === 'istatistik' && etkinSutun >= 0 && !etkinKategorik && karsAdaylari.length > 0 && !bos);
+    (sekme === 'istatistik' && etkinSutun >= 0 && !etkinKategorik && !istatistikSiklik && karsAdaylari.length > 0 && !bos);
 
   /**
    * Çizgi, satırlar bir sıra değilken (öğrenci adları, kodlar): grafiğin üstünde kapatılabilir tek satırlık not. Kapatılan
@@ -1521,8 +1565,14 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const tabloBasligi = etkinKume === 'tablom' ? durum.tabloAdi : null;
   /** Keşif şeridi ya da kartı açık mı (yalnız bağlı örnekte çizilir) */
   const ipucuAcik = durum.ipucu !== 'kapali';
+  /**
+   * Keşif kartının örneği: İlkokul'da yalnız 1–4. sınıf örneğinin kartı. Değiştirilmiş (kademeyeUyarla'nın koruduğu)
+   * 5–8. sınıf örneğinin rehberi ve ipuçları ortalama, sapma ister; tablo kalır, kuralları ilkokulundur, kartı çizilmez.
+   * Öteki kademelerde bağlı örnek (bugünkü davranış).
+   */
+  const kesifOrnegi = ornek && (!ilkokul || ornekKademede(ornek, 'ilkokul')) ? ornek : undefined;
   /** Panel açıkken grafik sütununda şerit, not ya da kart yoktur (§0: yalnız sekmeler, grafik, tost, bant, şerit) */
-  const kesifGorunur = ornek !== undefined && ipucuAcik && !panelAcik;
+  const kesifGorunur = kesifOrnegi !== undefined && ipucuAcik && !panelAcik;
   /**
    * Soru şeridi (ipucu yuvası): araştırma Tablom'a bağlıyken panel kapalıysa görünür; panel açıkken soru panelin
    * başında olduğundan gizlidir (§0 S2). Gizlenince tablonun başlığındaki düğmeyle yeniden açılır.
@@ -1674,7 +1724,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
             {!ornekSimge && 'Örnek veri'}
           </button>
           {/* Veri topla: başlangıç penceresini "Ne araştıralım?" adımında açar (panel açıkken de: "Toplamaya dön" kartı
-              oradadır); basılı görünüm panelin açık olduğunu söyler, panel Bitti / × ile kapanır */}
+              oradadır); basılı görünüm panelin açık olduğunu söyler, panel Bitti / × ile kapanır. İlkokulda yok */}
+          {!ilkokul && (
           <button
             type="button"
             className={toplaSimge ? simgeDugmesi(panelAcik ? DUGME_BIRINCIL : DUGME) : panelAcik ? DUGME_BIRINCIL : DUGME}
@@ -1688,6 +1739,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
             <VeriToplaSimgesi className={toplaSimge ? 'h-5 w-5' : 'h-[18px] w-[18px]'} />
             {!toplaSimge && 'Veri topla'}
           </button>
+          )}
           {/* İndir menüsü: tablo (CSV) ve grafik (PNG) tek düğmede */}
           <div ref={indirMenu.kapRef} className="relative">
             <button
@@ -1923,13 +1975,13 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                 {tabloBasligi}
               </h2>
             )}
-            {(ornek || (soruSeridiVar && !panelAcik)) && (
+            {(kesifOrnegi || (soruSeridiVar && !panelAcik)) && (
               <button
                 type="button"
-                aria-label={ornek ? 'Keşif kartı' : 'Soru şeridi'}
+                aria-label={kesifOrnegi ? 'Keşif kartı' : 'Soru şeridi'}
                 aria-pressed={ipucuAcik}
                 title={
-                  ornek
+                  kesifOrnegi
                     ? ipucuAcik
                       ? 'Keşif kartını kapat'
                       : 'Keşif kartını aç: araştırma sorusu, verinin künyesi ve rehberli keşif'
@@ -1940,7 +1992,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                 className={`grid h-11 w-11 shrink-0 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   ipucuAcik ? 'bg-accent text-primary dark:text-[#9fe0d9]' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 }`}
-                onClick={() => ipucuDegistir(ipucuAcik ? 'kapali' : ornek ? 'kart' : 'serit')}
+                onClick={() => ipucuDegistir(ipucuAcik ? 'kapali' : kesifOrnegi ? 'kart' : 'serit')}
                 data-ipucu-dugmesi
               >
                 <svg viewBox="0 0 20 20" className="h-5 w-5" aria-hidden="true">
@@ -2040,10 +2092,10 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
           {soruSeridi && <SoruSeridi soru={soruSeridi.soru} altBilgi={soruSeridi.altBilgi} onKapat={() => ipucuDegistir('kapali')} />}
           {/* Keşif şeridi / kartı (ipucu yuvası; ikinci tam genişlik çubuk değil): bağlı örneğin araştırma sorusu,
               sekmeye duyarlı ipucu, künye ve rehberli keşif. Kapatılınca tablonun başlığındaki "i" ile yeniden açılır */}
-          {kesifGorunur && ornek && (
+          {kesifGorunur && kesifOrnegi && (
             <KesifKarti
-              key={`${ornek.id}-${ornekYuklemeNo}`}
-              ornek={ornek}
+              key={`${kesifOrnegi.id}-${ornekYuklemeNo}`}
+              ornek={kesifOrnegi}
               sekme={sekme}
               ozellikler={OZELLIKLER}
               gorunum={durum.ipucu === 'kart' ? 'kart' : 'serit'}
@@ -2151,6 +2203,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                     olcuKumesi={kurallar.olculer}
                     satirKarsiligi={yanYanaNokta.karsilik}
                     yuzdesiz={!kurallar.yuzdeVeAci}
+                    sekil={kurallar.noktaSekli}
+                    sekilAnahtari={ornek?.sekilAnahtari}
                   />
                 </div>
               )}
@@ -2186,6 +2240,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                     olcuKumesi={kurallar.olculer}
                     yuzdesiz={!kurallar.yuzdeVeAci}
                     yanYanaParcalar={tekGrafik}
+                    sekil={kurallar.noktaSekli}
+                    sekilAnahtari={ornek?.sekilAnahtari}
                   />
                   {ikiPanel && <PanelAyraci />}
                   {ikiPanel && (
@@ -2353,16 +2409,18 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                   </div>
                 ))}
               {!bos && sekme === 'istatistik' &&
-                (etkinKategorik ? (
+                (etkinKategorik || istatistikSiklik ? (
                   <KategorikIstatistik
-                    tablo={tablo}
+                    tablo={istatistikSiklik ? istatistikSiklik.tablo : tablo}
                     sutun={etkinSutun}
-                    sira={siraBul(etkinSutun)}
+                    sira={istatistikSiklik ? istatistikSiklik.sira : siraBul(etkinSutun)}
+                    turAdi={istatistikSiklik ? 'sayısal değişken' : undefined}
                     renkEslemi={renkEslemi}
                     deneyVerisi={toplama.deneyVerisi}
                     tepeDeger={kurallar.olculer.merkezi}
                     oranlar={kurallar.yuzdeVeAci}
                     tekYonluIleBirlikte={kurallar.tekYonluTabloIleBirlikte}
+                    cetele={kurallar.cetele}
                   />
                 ) : (
                   <IstatistikPaneli
@@ -2517,6 +2575,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
         {/* İstatistik, sayısal değişken: aynı birimli ikinci değişkenle iki sütunlu ölçü tablosu */}
         {sekme === 'istatistik' &&
           !etkinKategorik &&
+          !istatistikSiklik &&
           karsilastirSecimi(karsAdaylari, ikinciSayisal ? durum.ikinciDegisken ?? '' : '')}
       </div>
       )}
