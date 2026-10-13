@@ -200,12 +200,12 @@ describe('bütünlük: tarama kuralları (kendi sınaması)', () => {
   });
 });
 
-// ── 16 örnek × 6 sekme ───────────────────────────────────────────────────────────────────────────────────────
+// ── 16 örnek × 7 sekme ───────────────────────────────────────────────────────────────────────────────────────
 
-describe('bütünlük: 16 örnek × 6 sekme (uygulama kökü, sunucu çizimi)', () => {
-  it('16 örnek ve 6 sekme var (Nokta, Sütun, Çizgi, Daire, Saçılım, İstatistik)', () => {
+describe('bütünlük: 16 örnek × 7 sekme (uygulama kökü, sunucu çizimi)', () => {
+  it('16 örnek ve 7 sekme var (Nokta, Sütun, Çizgi, Kök-yaprak, Daire, Saçılım, İstatistik; Kök-yaprak yalnız 6. sınıfta görünür)', () => {
     expect(ORNEK_VERILER).toHaveLength(16);
-    expect(SEKMELER.map((s) => s.ad)).toEqual(['Nokta', 'Sütun', 'Çizgi', 'Daire', 'Saçılım', 'İstatistik']);
+    expect(SEKMELER.map((s) => s.ad)).toEqual(['Nokta', 'Sütun', 'Çizgi', 'Kök-yaprak', 'Daire', 'Saçılım', 'İstatistik']);
   });
 
   it('her örnek her sekmede (açılış görünümü; ölçüler + adımlar + şerit; sütun modu): NaN / undefined / Infinity, eski terim, emoji, bg-card/ yok', () => {
@@ -233,7 +233,7 @@ describe('bütünlük: 16 örnek × 6 sekme (uygulama kökü, sunucu çizimi)', 
         }
       }
     }
-    expect(cizim).toBe(16 * 6 * 3 + 16);
+    expect(cizim).toBe(16 * SEKMELER.length * 3 + 16);
     expect(hatalar).toEqual([]);
   });
 
@@ -241,9 +241,10 @@ describe('bütünlük: 16 örnek × 6 sekme (uygulama kökü, sunucu çizimi)', 
     const boy = ornegiYukle(baslangicDurumu(), 'boy')!.durum;
     const olculer = { ortalama: true, oms: true, etiketler: true, ortanca: true, standartSapma: true };
     const nokta = okunanMetin(uygulamaCiz({ ...boy, sekme: 'nokta', ipucu: 'serit', secenekler: olculer }));
-    expect(nokta).toMatch(/Ortalama = /);
+    expect(nokta).toMatch(/Aritmetik ortalama = /);
     expect(nokta).toMatch(/Ort\. mutlak sapma = /);
-    expect(nokta).toMatch(/Standart sapma [=≈] /);
+    // 7. sınıf örneği: standart sapma (lise ölçüsü) kayıtta açık olsa da çizilmez (sinifKurallari.ts)
+    expect(nokta).not.toMatch(/Standart sapma [=≈] /);
     expect(nokta).toMatch(/Ortanca/);
     expect(nokta).toContain(ORNEK_VERILER.find((o) => o.id === 'boy')!.hikaye.arastirmaSorusu);
     const ist = okunanMetin(uygulamaCiz({ ...boy, sekme: 'istatistik', adimlariGoster: true }));

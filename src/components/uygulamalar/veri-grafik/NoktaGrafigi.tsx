@@ -18,6 +18,11 @@
  *   daraltmaz; ortalama ve ortanca çizgisi eksen değil kendi değeri değiştiği için kayar.
  * - Seçim halkası, değer balonu, odak halkası ve yeni nokta halkası yalnız ekrandadır (`data-yalniz-ekran`).
  * - Ölçüler gerçek pikseldir (viewBox = kabın ölçüsü): yazılar 13 px kalır, alçak panelde yalnız noktalar küçülür.
+ * - Yan yana (`yanYana`, 5–8. sınıf örneklerinde karşılaştırma): renk anahtarının grupları aynı grafikte, ikili gruplar
+ *   hâlinde: her değerde (kategorik kutuda) grupların yığınları yan yana durur ("önce birinci grup, sonra ikinci grup"
+ *   değil). Ölçüler her grup için ayrı, grubun renginde çizilir; değerleri başlığın altındaki grup satırlarında yazar.
+ *   Sütun modunda her grubun sıklık sütunu yan yanadır. Uzaklık şeridi bu görünümde çizilmez.
+ * - Kategorinin ve grubun yanında veri sayısı yazılmaz (eksen adı, lejant, panel başlığı).
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { kartGosterimi, medyan, ortalama, ortalamaMutlakSapma, sayiMetni, standartSapma, temizle, type Eksen } from './istatistik';
@@ -42,7 +47,6 @@ import {
   BOS_KATEGORI_RENGI,
   kategoriRengi,
   kategoriler,
-  kategoriSayilari,
   kenarGerekir,
   kutuYerlesimi,
   satirRengi,
@@ -50,6 +54,10 @@ import {
   type RenkEslemesi,
 } from './kategorik';
 import { RenkLejanti, renkLejantiGenisligi } from './RenkLejanti';
+import type { OlcuKumesi } from './sinifKurallari';
+
+/** Sınıfsız tabloda bütün ölçüler */
+const TUM_OLCULER: OlcuKumesi = { merkezi: true, aciklik: true, oms: true, standartSapma: true };
 
 export interface NoktaSecenekleri {
   ortalama: boolean;
@@ -106,6 +114,29 @@ export interface NoktaGrafigiProps {
   vurguSatir?: number | null;
   /** Veri yokken eksen çizilir ve ortasında bu ipucu yazar ("İlk atışla noktalar burada belirir.") */
   bosIpucu?: string;
+  /**
+   * Yan yana karşılaştırma: renk anahtarının (`renkEslemi`) her grubu her değerde kendi yığınında, yığınlar yan yana;
+   * ölçüler grup grup. Anahtarı boş satırlar çizilmez.
+   */
+  yanYana?: boolean;
+  /**
+   * Sınıf düzeyinin ölçüleri (sinifKurallari.ts; verilmezse hepsi): sınıfta olmayan ölçünün satırına baştan yer
+   * ayrılmaz (5. sınıfta ölçü satırı yok, noktalar o kadar büyük); yan yana görünümde grup satırları yalnız merkezi
+   * eğilim ölçüsü varken ayrılır.
+   */
+  olcuKumesi?: OlcuKumesi;
+  /**
+   * Türetilmiş tabloda (iki sayısal değişken tek grafikte, ikiliGruplar.ts: ikiSeriTablosu) satır → asıl tablodaki satır:
+   * seçim ve yeni satır halkası asıl tablonun satırıyla eşleşir.
+   */
+  satirKarsiligi?: number[];
+  /** Kategorik "Sayılar"da yüzde yazılmaz (5. sınıf) */
+  yuzdesiz?: boolean;
+  /**
+   * Sütun modunda renk anahtarının parçaları üst üste değil yan yana (5–8. sınıf örnekleri: karşılaştırmalı sütunlar
+   * yığılmaz); nokta görünümü değişmez. Verilmezse parçalar yığılır (bugünkü davranış).
+   */
+  yanYanaParcalar?: boolean;
 }
 
 /** Bu kadar noktadan sonra geçiş animasyonları kapanır (akıllı tahtada akıcılık) */
@@ -207,6 +238,8 @@ interface SiklikSutunu {
   sutunTepe: number;
   /** kategorik "Sayılar" metni ("12 · %60" ya da dar kutuda "12") */
   metin: string;
+  /** sütun modunda parçalar yan yana (`yanYanaParcalar`): her parça kendi sütunu, sayısı üstünde */
+  yan?: boolean;
 }
 
 interface KategoriKutusu {
@@ -407,7 +440,14 @@ export function NoktaGrafigi({
   ortakYigin,
   vurguSatir = null,
   bosIpucu,
+  yanYana = false,
+  olcuKumesi = TUM_OLCULER,
+  satirKarsiligi,
+  yuzdesiz = false,
+  yanYanaParcalar = false,
 }: NoktaGrafigiProps) {
+  /** Türetilmiş satırın asıl tablodaki satırı (karşılık yoksa kendisi) */
+  const asil = (s: number) => (satirKarsiligi ? satirKarsiligi[s] ?? s : s);
   const svgRef = useRef<SVGSVGElement>(null);
   const [ustunde, setUstunde] = useState<number | null>(null);
   const [birakmaUzerinde, setBirakmaUzerinde] = useState(false);
@@ -437,6 +477,8 @@ export function NoktaGrafigi({
   const sutunlu = sutunModu && atanmis;
   /** Panelin tek rengi verildi (karşılaştırma ya da grup paneli): kategorik noktalar da kategori paleti yerine bu rengi alır */
   const panelRenkli = renk !== undefined || seriIndeksi !== undefined;
+  /** Yan yana görünümün grupları (renk anahtarı); yoksa tek yığın */
+  const yanAnahtar = yanYana && anahtar ? anahtar : null;
   /**
    * Eksen penceresi (değer uzayında yığın merkezleri; gruplamada grup başları): aynı değişken ve aynı grup genişliğinde
    * yalnız genişler. Değişken, grup genişliği ya da tablo (örnek yeniden yüklenince sütun kimliği) değişince, veri
@@ -447,8 +489,19 @@ export function NoktaGrafigi({
 
   const c = useMemo(() => {
     const altKume = satirAnahtari !== null ? new Set((satirlar ?? []).filter((s) => s >= 0 && s < tablo.satirlar.length)) : null;
-    const icinde = (s: number) => altKume === null || altKume.has(s);
+    const icinde = (s: number) => (altKume === null || altKume.has(s)) && (!yanAnahtar || yanAnahtar.satirKategorisi.has(s));
+    /** Yan yana görünümde satırın grubu (anahtar sırası) */
+    const K = yanAnahtar ? Math.max(1, yanAnahtar.kategoriler.length) : 1;
+    const grupNo = (s: number) => (yanAnahtar ? Math.max(0, yanAnahtar.kategoriler.indexOf(yanAnahtar.satirKategorisi.get(s) ?? '')) : 0);
+    /** Bir yığının (ya da kutunun) satırlarını gruplara ayırır: her grubun kendi sırası */
+    const grupla = (liste: number[]) => {
+      const g: number[][] = Array.from({ length: K }, () => []);
+      for (const s of liste) g[grupNo(s)].push(s);
+      return g;
+    };
     const satirSayisi = altKume ? altKume.size : tablo.satirlar.length;
+    /** Sütun modunda renk anahtarının parçaları yan yana (yan yana görünümde gruplar zaten ayrı sütun) */
+    const parcaYan = yanYanaParcalar && anahtar !== null && !yanAnahtar;
     const SOL = sutunlu ? SOL_SIKLIK : SOL_TEMEL;
     const alanG = Math.max(0, W - SOL - SAG);
     const siralama = anahtarSirasi(anahtar);
@@ -470,19 +523,23 @@ export function NoktaGrafigi({
       }
     }
     const ortakYukseklik = ortakYigin !== undefined && Number.isFinite(ortakYigin) ? Math.max(0, Math.floor(ortakYigin)) : 0;
-    const enYuksek = Math.max(enYuksekYigin(yiginlar), yiginlar.length > 0 ? ortakYukseklik : 0);
+    // Yan yana: en yüksek yığın bir grubun yığınıdır (grupların toplamı değil)
+    const yigindakiEnCok = (liste: number[]) => (yanAnahtar ? Math.max(0, ...grupla(liste).map((g) => g.length)) : liste.length);
+    const enYuksek = Math.max(
+      yanAnahtar ? Math.max(0, ...yiginlar.map((yg) => yigindakiEnCok(yg.ogeler.map((o) => o.satir)))) : enYuksekYigin(yiginlar),
+      yiginlar.length > 0 ? ortakYukseklik : 0,
+    );
 
     const metinler = kategorik ? sutunMetinleri(tablo, sutun).filter((m) => icinde(m.satir)) : [];
     const kats = kategorik ? kategoriler(metinler.map((m) => m.deger), kategoriSirasi) : [];
     const katSatirlari = new Map<string, number[]>(kats.map((k) => [k, []]));
     for (const m of metinler) katSatirlari.get(m.deger)?.push(m.satir);
     for (const liste of katSatirlari.values()) liste.sort(siralama);
-    const enCokKat = Math.max(0, ...[...katSatirlari.values()].map((l) => l.length), metinler.length > 0 ? ortakYukseklik : 0);
+    const enCokKat = Math.max(0, ...[...katSatirlari.values()].map((l) => yigindakiEnCok(l)), metinler.length > 0 ? ortakYukseklik : 0);
 
     const dolu = sayisal ? noktalar.length : metinler.length;
     const veriSayisi = dolu;
     const eksik = atanmis ? Math.max(0, satirSayisi - dolu) : 0;
-    const lejantSayilari = anahtar ? kategoriSayilari(anahtar, sayisal ? noktalar.map((n) => n.satir) : metinler.map((m) => m.satir)) : undefined;
 
     // ── Yatay eksen ─────────────────────────────────────────────────────────
     const hedefIsaret = Math.max(3, Math.floor(alanG / 70));
@@ -528,23 +585,34 @@ export function NoktaGrafigi({
     let enKucukUzaklik = Infinity;
     if (olcek) for (let i = 1; i < yiginlar.length; i++) enKucukUzaklik = Math.min(enKucukUzaklik, olcek.ileri(yiginlar[i].merkez) - olcek.ileri(yiginlar[i - 1].merkez));
 
-    const ortGoster = sayisal && secenekler.ortalama && ort !== null && olcek !== null;
-    const omsGoster = sayisal && secenekler.oms && ort !== null && oms !== null && olcek !== null;
-    const ssGoster = sayisal && secenekler.standartSapma === true && ort !== null && ss !== null && olcek !== null;
-    const ortancaGoster = sayisal && !!secenekler.ortanca && ortancaDeger !== null && olcek !== null;
+    const tekOlcu = !yanAnahtar;
+    const ortGoster = tekOlcu && sayisal && secenekler.ortalama && ort !== null && olcek !== null;
+    const omsGoster = tekOlcu && sayisal && secenekler.oms && ort !== null && oms !== null && olcek !== null;
+    const ssGoster = tekOlcu && sayisal && secenekler.standartSapma === true && ort !== null && ss !== null && olcek !== null;
+    const ortancaGoster = tekOlcu && sayisal && !!secenekler.ortanca && ortancaDeger !== null && olcek !== null;
     /** Ölçü düğmeleri kapalıyken de açılabilir mi: satırlarının yeri baştan ayrılır (açılınca noktalar küçülmez, kaymaz) */
-    const ortMumkun = sayisal && ort !== null && olcek !== null;
-    const omsMumkun = ortMumkun && oms !== null;
-    const ssMumkun = ortMumkun && ss !== null;
-    const ortancaMumkun = sayisal && ortancaDeger !== null && olcek !== null;
+    const ortMumkun = tekOlcu && olcuKumesi.merkezi && sayisal && ort !== null && olcek !== null;
+    const omsMumkun = tekOlcu && olcuKumesi.oms && sayisal && ort !== null && olcek !== null && oms !== null;
+    const ssMumkun = tekOlcu && olcuKumesi.standartSapma && sayisal && ort !== null && olcek !== null && ss !== null;
+    const ortancaMumkun = tekOlcu && olcuKumesi.merkezi && sayisal && ortancaDeger !== null && olcek !== null;
     const mx = ort !== null && olcek ? olcek.ileri(ort) : 0;
+    /** Yan yana görünümde her grubun ölçüleri (grubun rengiyle; değerler başlığın altındaki grup satırında) */
+    const grupOlculeri =
+      yanAnahtar && sayisal
+        ? yanAnahtar.kategoriler.map((k, gi) => {
+            const d = noktalar.filter((n) => grupNo(n.satir) === gi).map((n) => n.deger);
+            return { ad: k, renk: yanAnahtar.renkler.get(k) ?? BOS_KATEGORI_RENGI, ort: ortalama(d), oms: ortalamaMutlakSapma(d), ss: standartSapma(d), ortanca: medyan(d) };
+          })
+        : [];
+    /** Grup satırlarının yeri (ölçü düğmeleri kapalıyken de ayrılır: açılınca noktalar küçülmez) */
+    const grupSatirPayi = yanAnahtar && sayisal && olcuKumesi.merkezi ? grupOlculeri.length * 20 : 0;
 
     // ── Üst satırlar: başlık / lejant, ölçü etiketleri, ortalama mutlak sapma ayracı ─────────
     const baslikSatiri = !!baslik || !!anahtar;
     const baslikSonu = anahtar
-      ? Math.min(W - SAG, (baslik ? SOL + baslik.length * HARF + 24 : SOL) + renkLejantiGenisligi(anahtar, lejantSayilari))
+      ? Math.min(W - SAG, (baslik ? SOL + baslik.length * HARF + 24 : SOL) + renkLejantiGenisligi(anahtar))
       : SOL + (baslik ? baslik.length * HARF : 0);
-    const ortMetni = ort !== null ? olcuMetni('Ortalama', ort, ondalik) : '';
+    const ortMetni = ort !== null ? olcuMetni('Aritmetik ortalama', ort, ondalik) : '';
     const ortG = ortMetni.length * HARF + 18;
     const ortX = ortMumkun ? sinirla(mx - ortG / 2, 4, W - 4 - ortG) : 0;
     const omsMetni = oms !== null ? olcuMetni('Ort. mutlak sapma', oms, ondalik) : '';
@@ -580,6 +648,8 @@ export function NoktaGrafigi({
       const birlesik = baslikSatiri && olcuSatiri && olcuBasi > baslikSonu + 12;
       let ustY = 6;
       if (baslikSatiri) ustY += 22;
+      const grupSatirY = ustY;
+      ustY += grupSatirPayi;
       let olcuY = 0;
       if (olcuSatiri) {
         if (birlesik) olcuY = 6;
@@ -602,24 +672,15 @@ export function NoktaGrafigi({
       }
       const ayracY = omsAcik ? ustY + 10 : 0;
       if (omsAcik) ustY += 20;
-      return { omsX, olcuY, omsEtiketY, ssX, ssEtiketY, ayracY, UST: ustY + 8 };
+      return { omsX, olcuY, omsEtiketY, ssX, ssEtiketY, ayracY, grupSatirY, UST: ustY + 8 };
     };
-    const { omsX, olcuY, omsEtiketY, ssX, ssEtiketY, ayracY, UST } = ustDuzeni(ortGoster, omsGoster, ssGoster);
+    const { omsX, olcuY, omsEtiketY, ssX, ssEtiketY, ayracY, grupSatirY, UST } = ustDuzeni(ortGoster, omsGoster, ssGoster);
     const baslikY = 20;
 
     // ── Alt satırlar: işaretler, eksen adı (+ ortanca), ortanca, uzaklık şeridi ─────────────
     const grupNotu = gruplu ? `grup genişliği ${sayiMetni(aralik, gosterimOndaligi([aralik]))}` : '';
-    // Grup panelinin başlığı veri sayısını zaten yazıyorsa ("5-A (12 veri)") sağ altta yinelenmez
-    const baslikSayili = !!baslik && /\(\d+ veri\)\s*$/.test(baslik);
-    const adMetni = kategorik
-      ? baslik
-        ? baslikSayili
-          ? ''
-          : `${veriSayisi} veri`
-        : `${sutunAdi} · ${veriSayisi} veri`
-      : baslik
-        ? grupNotu
-        : `${sutunAdi}${grupNotu ? `  (${grupNotu})` : ''}`;
+    // Eksen adının yanında veri sayısı yazılmaz (uzman incelemesi, 4. tur); panel başlığı varken sayısal eksende yalnız grup notu
+    const adMetni = kategorik ? sutunAdi : baslik ? grupNotu : `${sutunAdi}${grupNotu ? `  (${grupNotu})` : ''}`;
     const eksikMetni = eksik > 0 && dolu > 0 ? `${eksik} satırda değer yok` : '';
     const ortancaMetni = ortancaDeger !== null ? olcuMetni('Ortanca', ortancaDeger, ondalik) : '';
     const ortancaG = ortancaMetni.length * HARF + 18;
@@ -657,8 +718,15 @@ export function NoktaGrafigi({
     // Komşu yığınlar çakışmaz: yarıçap en yakın iki yığının arasının yarısını aşmaz; tek yığında yalnız dikey alan sınırlar.
     // Geniş eksende (ör. toplama sırasında sabit tutulan 60–120 ölçüm penceresi, 1 birim ≈ 15 px) bu kural noktaları
     // okunmaz kılar: o durumda yarıçap OKUNUR_YARICAP'a kadar büyür, komşu yığınlar en çok aralığın ~%24'ü kadar örtüşür.
+    // Yan yana görünümde bu örtüşme payı yoktur: bir değerdeki grup yığınları komşu değerin yığınlarına binmez (dar
+    // pencerede 75'in 7-B noktası 80'in 7-A noktasının üstüne düşmesin; ikili gruplar karışmasın).
+    const yanUzaklik = enKucukUzaklik / K;
     const rYatay =
-      yiginlar.length > 1 ? Math.max(enKucukUzaklik / 2 - 0.5, Math.min(OKUNUR_YARICAP, enKucukUzaklik * 0.62)) : alanG / 2;
+      yiginlar.length > 1
+        ? yanAnahtar
+          ? Math.max(0.8, yanUzaklik / 2 - 0.5)
+          : Math.max(yanUzaklik / 2 - 0.5, Math.min(OKUNUR_YARICAP, yanUzaklik * 0.62))
+        : alanG / 2 / K;
     /** Verilen dikey alanda sayısal yığınların yarıçapı, adımı ve sıra genişliği */
     const yaricapBul = (dikeyAlan: number): { r: number; adim: number; yiginSutunu: number } => {
       if (!sayisalYigin) return { r: 8, adim: 17, yiginSutunu: 1 };
@@ -666,7 +734,7 @@ export function NoktaGrafigi({
       let r = Math.min(18, rYatay, rDikey);
       let adim = 2 * r + 1;
       let yiginSutunu = 1;
-      if (r < YOGUN_YARICAP && (gruplu || enYuksek > YAN_YANA_ESIGI)) {
+      if (r < YOGUN_YARICAP && !yanAnahtar && (gruplu || enYuksek > YAN_YANA_ESIGI)) {
         // Çok yüksek yığın (ör. 1000 ölçüm) ya da grup: noktalar yığın genişliğinde yan yana sıralara dizilir (TinkerPlots
         // gibi). Gruplamasız alçak yığında dizilmez: yandaki nokta başka bir değerde duruyormuş gibi okunur.
         const yer = kutuYerlesimi(enYuksek, Math.min(2 * Math.max(rYatay, aralikPx / 2), alanG) * 0.94, dikeyAlan, 6, 1.5);
@@ -713,7 +781,7 @@ export function NoktaGrafigi({
     const yiginSutunu = yer.yiginSutunu;
     // Uzaklık şeridi yalnız yığınların üstündeki boş yere sığıyorsa çizilir (noktalar onun için küçülmez); çizilince
     // eksen ve noktalar birlikte yukarı kayar
-    const seritAday = omsGoster && !sutunModu && noktalar.length > 0 && noktalar.length <= SERIT_EN_COK;
+    const seritAday = tekOlcu && omsGoster && !sutunModu && noktalar.length > 0 && noktalar.length <= SERIT_EN_COK;
     let seritYuksekligi = 0;
     if (seritAday && sayisalYigin) {
       const yiginPx = Math.ceil(enYuksek / yiginSutunu) * adim + 4;
@@ -734,12 +802,53 @@ export function NoktaGrafigi({
       // nokta kendi değerini sağına yazar (sığmıyorsa yığın başına sayı)
       const etiketG = noktalar.reduce((m, n) => Math.max(m, sayiMetni(n.deger, ondalik).length), 0) * HARF;
       etiketKaydir = etiketG + 6 > enKucukUzaklik;
-      const sagaSigar = gruplu && !yogun && adim >= 14 && aralikPx / 2 - r - 4 >= etiketG;
+      const sagaSigar = !yanAnahtar && gruplu && !yogun && adim >= 14 && aralikPx / 2 - r - 4 >= etiketG;
       yiginSayisi = yogun || (gruplu && !sagaSigar);
       siklik = siklikEkseni(enYuksek, hedefY);
       birimSutun = Math.max(0, alanY - 18) / siklik.max;
       const sutunG = Math.max(3, Math.min(Math.max(aralikPx, Math.min(enKucukUzaklik, alanG)) * 0.82, 64));
-      yiginlar.forEach((y, yiginIndeksi) => {
+      if (yanAnahtar) {
+        // Yan yana: her değerde grupların yığınları yan yana (grup sırasıyla, ortası değerin üstünde)
+        const yanAdim = 2 * r + 1;
+        const yanSutunG = Math.max(3, Math.min(Math.max(aralikPx, Math.min(enKucukUzaklik, alanG)) * 0.82 / K - 2, 40));
+        yiginlar.forEach((y, yiginIndeksi) => {
+          const x = olcek.ileri(y.merkez);
+          const gruplar = grupla(y.ogeler.map((o) => o.satir));
+          const enUzun = Math.max(...gruplar.map((g) => g.length));
+          const ustGrup = gruplar.findIndex((g) => g.length === enUzun);
+          const degerOf = new Map(y.ogeler.map((o) => [o.satir, o.deger]));
+          gruplar.forEach((liste, gi) => {
+            const gx = x + (gi - (K - 1) / 2) * (sutunModu ? yanSutunG + 2 : yanAdim);
+            liste.forEach((satir, sira) => {
+              const etiket = yiginSayisi ? undefined : gi === ustGrup && sira === liste.length - 1 ? 'ust' : undefined;
+              const deger = degerOf.get(satir) ?? 0;
+              konumlar.push(
+                sutunModu
+                  ? { satir, x: gx, y: taban - (sira + 0.5) * birimSutun, r, deger, dagitik: false, opaklik: 0, yiginIndeksi, etiket }
+                  : { satir, x: gx, y: taban - 4 - r - sira * adim, r, deger, dagitik: false, opaklik: 1, yiginIndeksi, etiket },
+              );
+            });
+            // Boş grubun sütunu ve "0" yazısı çizilmez (yer yine ayrılır: çiftler hizalı)
+            if (liste.length === 0) return;
+            const ad = yanAnahtar.kategoriler[gi];
+            const renk = yanAnahtar.renkler.get(ad) ?? BOS_KATEGORI_RENGI;
+            sutunlar.push({
+              anahtar: `sutun-${y.merkez}-${gi}`,
+              x: gx,
+              genislik: yanSutunG,
+              sayi: liste.length,
+              parcalar: [{ ad, sayi: liste.length, renk, alt: 0 }],
+              noktaTepe: taban - 4 - r - (liste.length - 1) * adim - r - 6,
+              sutunTepe: taban - liste.length * birimSutun - 6,
+              metin: String(liste.length),
+            });
+          });
+          const noktaTepe = taban - 4 - r - (enUzun - 1) * adim - r - 6;
+          yiginTepeleri.push({ x, y: noktaTepe, adet: y.ogeler.length });
+        });
+      }
+      // Tek yığın (yan yana görünüm yukarıda kuruldu)
+      (yanAnahtar ? [] : yiginlar).forEach((y, yiginIndeksi) => {
         const x = olcek.ileri(y.merkez);
         const adet = y.ogeler.length;
         for (const o of y.ogeler) {
@@ -778,6 +887,7 @@ export function NoktaGrafigi({
           noktaTepe,
           sutunTepe: taban - adet * birimSutun - 6,
           metin: String(adet),
+          yan: parcaYan || undefined,
         });
       });
     }
@@ -786,20 +896,24 @@ export function NoktaGrafigi({
     const kutular: KategoriKutusu[] = [];
     if (kategorik && kats.length > 0) {
       const kutuG = alanG / kats.length;
-      const rYatayK = kutuG * 0.42;
+      const rYatayK = (kutuG * 0.42) / K;
       const rDikey = enCokKat > 0 ? dikeyAlanR / enCokKat / 2 - 0.5 : 18;
       r = Math.min(18, rYatayK, rDikey);
       let adimK: number;
       let kutuSutunu = 1;
-      const blok = basamakla(Math.max(0.8, r)) < KATEGORIK_BLOK_YARICAP ? kategorikBlok(enCokKat, kutuG, dikeyAlanR) : null;
+      const blok = !yanAnahtar && basamakla(Math.max(0.8, r)) < KATEGORIK_BLOK_YARICAP ? kategorikBlok(enCokKat, kutuG, dikeyAlanR) : null;
       if (blok) {
         // Tek sütunda ince bir iplik olurdu (ör. 40 "Muz"): bütün kutularda aynı k'lık sıralar
         r = blok.r;
         adimK = blok.adim;
         kutuSutunu = blok.k;
-      } else if (r >= 2.5) {
-        r = basamakla(r);
+      } else if (r >= 2.5 || yanAnahtar) {
+        r = basamakla(Math.max(0.8, r));
         adimK = 2 * r + (r >= 4 ? 1 : 0.4);
+        if (yanAnahtar && enCokKat * adimK > dikeyAlanR && enCokKat > 0) {
+          adimK = dikeyAlanR / enCokKat;
+          r = Math.max(0.8, Math.min(r, adimK / 2 - 0.2));
+        }
       } else {
         // Çok kalabalık kutu (ör. 2000 atış): noktalar kutuda yan yana sıralara dizilir
         const yer = kutuYerlesimi(enCokKat, kutuG * 0.9, dikeyAlanR, 18, 1.5);
@@ -825,6 +939,35 @@ export function NoktaGrafigi({
         const liste = katSatirlari.get(k) ?? [];
         const adet = liste.length;
         const kullanilan = Math.min(kutuSutunu, Math.max(adet, 1));
+        if (yanAnahtar) {
+          // Yan yana: kutuda her grubun kendi yığını (grup sırasıyla), sütun modunda her grubun sütunu
+          const yanAdimK = 2 * r + 1;
+          const yanSutunG = Math.max(4, Math.min((kutuG * 0.8) / K - 2, 48));
+          grupla(liste).forEach((gListe, gi) => {
+            const gx = merkez + (gi - (K - 1) / 2) * (sutunModu ? yanSutunG + 2 : yanAdimK);
+            const ad = yanAnahtar.kategoriler[gi];
+            const gRenk = yanAnahtar.renkler.get(ad) ?? BOS_KATEGORI_RENGI;
+            gListe.forEach((satir, sira) => {
+              konumlar.push(
+                sutunModu
+                  ? { satir, x: gx, y: taban - (sira + 0.5) * birimSutun, r, deger: null, dagitik: false, opaklik: 0, yiginIndeksi: 0, kategori: k, renk: gRenk }
+                  : { satir, x: gx, y: taban - 4 - r - sira * adimK, r, deger: null, dagitik: false, opaklik: 1, yiginIndeksi: 0, kategori: k, renk: gRenk },
+              );
+            });
+            if (gListe.length === 0) return;
+            sutunlar.push({
+              anahtar: `kutu-${k}-${gi}`,
+              x: gx,
+              genislik: yanSutunG,
+              sayi: gListe.length,
+              parcalar: [{ ad, sayi: gListe.length, renk: gRenk, alt: 0 }],
+              noktaTepe: taban - 4 - r - (gListe.length - 1) * adimK - r - 6,
+              sutunTepe: taban - gListe.length * birimSutun - 6,
+              metin: String(gListe.length),
+            });
+          });
+          return;
+        }
         liste.forEach((satir, sira) => {
           const satirNo = Math.floor(sira / kutuSutunu);
           const sutunNo = sira % kutuSutunu;
@@ -856,7 +999,8 @@ export function NoktaGrafigi({
           parcalar: parcalar(liste, anahtar, kRengi),
           noktaTepe: adet > 0 ? taban - 4 - r - (Math.ceil(adet / kutuSutunu) - 1) * adimK - r - 6 : taban - 8,
           sutunTepe: taban - adet * birimSutun - 6,
-          metin: sigar ? yuzdeMetni : String(adet),
+          metin: sigar && !yuzdesiz ? yuzdeMetni : String(adet),
+          yan: parcaYan || undefined,
         });
       });
     }
@@ -947,7 +1091,8 @@ export function NoktaGrafigi({
       birimSutun,
       eksik,
       veriSayisi,
-      lejantSayilari,
+      grupOlculeri,
+      grupSatirY,
     };
   }, [
     satirAnahtari,
@@ -973,9 +1118,23 @@ export function NoktaGrafigi({
     atanmis,
     tekRenk,
     panelRenkli,
+    yanAnahtar,
+    olcuKumesi,
+    yuzdesiz,
+    yanYanaParcalar,
   ]);
 
   const { SOL, UST, taban, alanG, alanY, eksen, olcek, konumlar, ondalik } = c;
+  /**
+   * Yan parçalı sütunda (`yanYanaParcalar`) parçanın yuvası: anahtar sırasıyla, anahtarı boş satırlar en sağda; yuvalar
+   * bütün sütunlarda hizalıdır (parçası olmayan grubun yeri boş kalır)
+   */
+  const yanYuvaSayisi = Math.max(1, (anahtar?.kategoriler.length ?? 0) + (c.sutunlar.some((s) => s.yan && s.parcalar.some((p) => p.ad === '(boş)')) ? 1 : 0));
+  const yanParcaYeri = (s: SiklikSutunu, p: SutunParcasi) => {
+    const j = p.ad === '(boş)' ? yanYuvaSayisi - 1 : Math.max(0, anahtar?.kategoriler.indexOf(p.ad) ?? 0);
+    const genislik = Math.max(2, (s.genislik - (yanYuvaSayisi - 1) * 2) / yanYuvaSayisi);
+    return { x: s.x - s.genislik / 2 + j * (genislik + 2), genislik };
+  };
   const cokNokta = konumlar.length > COK_NOKTA;
   const hareketsiz = azaltilmisHareket || cokNokta || akis;
   /**
@@ -1017,7 +1176,7 @@ export function NoktaGrafigi({
   const noktaTusu = (e: React.KeyboardEvent, satir: number, secili: boolean) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      onSatirSec(secili ? null : satir);
+      onSatirSec(secili ? null : asil(satir));
       return;
     }
     const i = gezinme.indexOf(satir);
@@ -1081,9 +1240,55 @@ export function NoktaGrafigi({
           {baslik}
         </text>
       )}
-      {anahtar && (
-        <RenkLejanti eslem={anahtar} x={baslik ? SOL + baslik.length * HARF + 24 : SOL} y={c.baslikY} sagSinir={W - SAG} sayilar={c.lejantSayilari} />
-      )}
+      {anahtar && <RenkLejanti eslem={anahtar} x={baslik ? SOL + baslik.length * HARF + 24 : SOL} y={c.baslikY} sagSinir={W - SAG} />}
+
+      {/* Yan yana görünüm: her grubun ölçüleri grubun renginde (bant, çizgiler; değerler grup satırlarında) */}
+      {olcek &&
+        c.grupOlculeri.map((g, gi) => {
+          const ortX = g.ort !== null ? olcek.ileri(g.ort) : null;
+          const parcalarMetni = [
+            secenekler.ortalama && g.ort !== null ? olcuMetni('Aritmetik ortalama', g.ort, ondalik) : null,
+            secenekler.ortanca && g.ortanca !== null ? olcuMetni('Ortanca', g.ortanca, ondalik) : null,
+            secenekler.oms && g.oms !== null ? olcuMetni('Ort. mutlak sapma', g.oms, ondalik) : null,
+            secenekler.standartSapma && g.ss !== null ? olcuMetni('Standart sapma', g.ss, ondalik) : null,
+          ].filter((m): m is string => m !== null);
+          const satirY = c.grupSatirY + 14 + gi * 20;
+          return (
+            <g key={`grup-olcu-${g.ad}`} data-grup-olculeri={g.ad}>
+              {secenekler.standartSapma && ortX !== null && g.ss !== null && (
+                <g data-standart-sapma-bandi>
+                  <rect x={olcek.ileri(g.ort! - g.ss)} y={UST - 6} width={Math.max(0, olcek.ileri(g.ort! + g.ss) - olcek.ileri(g.ort! - g.ss))} height={Math.max(0, taban - UST + 6)} fill={g.renk} fillOpacity={0.07} />
+                  <line x1={olcek.ileri(g.ort! - g.ss)} x2={olcek.ileri(g.ort! - g.ss)} y1={UST - 6} y2={taban} stroke={g.renk} strokeWidth={1.5} strokeDasharray="2 3" />
+                  <line x1={olcek.ileri(g.ort! + g.ss)} x2={olcek.ileri(g.ort! + g.ss)} y1={UST - 6} y2={taban} stroke={g.renk} strokeWidth={1.5} strokeDasharray="2 3" />
+                </g>
+              )}
+              {secenekler.oms && ortX !== null && g.oms !== null && (
+                <g data-oms-bandi>
+                  <rect x={olcek.ileri(g.ort! - g.oms)} y={UST - 6} width={Math.max(0, olcek.ileri(g.ort! + g.oms) - olcek.ileri(g.ort! - g.oms))} height={Math.max(0, taban - UST + 6)} fill={g.renk} fillOpacity={0.12} rx={3} />
+                  <line x1={olcek.ileri(g.ort! - g.oms)} x2={olcek.ileri(g.ort! - g.oms)} y1={UST - 6} y2={taban} stroke={g.renk} strokeWidth={1.5} strokeDasharray="4 4" />
+                  <line x1={olcek.ileri(g.ort! + g.oms)} x2={olcek.ileri(g.ort! + g.oms)} y1={UST - 6} y2={taban} stroke={g.renk} strokeWidth={1.5} strokeDasharray="4 4" />
+                </g>
+              )}
+              {secenekler.ortalama && ortX !== null && (
+                <g data-ortalama-cizgisi>
+                  <line x1={ortX} x2={ortX} y1={UST - 6} y2={taban} stroke={RENK.kart} strokeWidth={5} strokeOpacity={0.9} />
+                  <line x1={ortX} x2={ortX} y1={UST - 6} y2={taban} stroke={g.renk} strokeWidth={2.5} />
+                </g>
+              )}
+              {secenekler.ortanca && g.ortanca !== null && (
+                <line data-ortanca-cizgisi x1={olcek.ileri(g.ortanca)} x2={olcek.ileri(g.ortanca)} y1={UST - 6} y2={taban} stroke={g.renk} strokeWidth={2.5} strokeDasharray="7 5" />
+              )}
+              {parcalarMetni.length > 0 && (
+                <g data-grup-olcu-satiri={g.ad} style={{ paintOrder: 'stroke', stroke: RENK.kart, strokeWidth: 3, strokeLinejoin: 'round' }}>
+                  <circle cx={SOL + 6} cy={satirY - 4.5} r={6} fill={g.renk} stroke="none" />
+                  <text x={SOL + 18} y={satirY} fontSize={13} fontWeight={700} fill={RENK.metin}>
+                    {`${g.ad}: ${parcalarMetni.join(' · ')}`}
+                  </text>
+                </g>
+              )}
+            </g>
+          );
+        })}
 
       {/* Bırakma alanı (eksen bandı) */}
       <rect
@@ -1190,19 +1395,21 @@ export function NoktaGrafigi({
         />
       )}
 
-      {/* Sıklık sütunları (sütun modu): yükseklik = sıklık × birim; renk anahtarına göre yığılır */}
+      {/* Sıklık sütunları (sütun modu): yükseklik = sıklık × birim; renk anahtarına göre yığılır (yan: parçalar yan yana) */}
       {atanmis &&
         c.sutunlar.map((s) => (
           <g key={s.anahtar} data-siklik-sutunu={s.anahtar} data-sayi={s.sayi} data-yukseklik={sutunModu ? (s.sayi * c.birimSutun).toFixed(2) : '0'}>
             {s.parcalar.map((p, k) => {
-              const alt = taban - p.alt * c.birimSutun;
-              const boy = Math.max(0.001, p.sayi * c.birimSutun - (k < s.parcalar.length - 1 ? 1.5 : 0));
+              const yer = s.yan ? yanParcaYeri(s, p) : null;
+              const alt = yer ? taban : taban - p.alt * c.birimSutun;
+              const boy = Math.max(0.001, p.sayi * c.birimSutun - (!yer && k < s.parcalar.length - 1 ? 1.5 : 0));
               return (
                 <g
                   key={p.ad || 'tek'}
-                  data-yigin-parcasi={p.ad || undefined}
+                  data-yigin-parcasi={yer ? undefined : p.ad || undefined}
+                  data-yan-parca={yer ? p.ad : undefined}
                   style={{
-                    transform: `translate(${s.x - s.genislik / 2}px, ${alt}px) scaleY(${sutunModu ? -boy : -0.001})`,
+                    transform: `translate(${yer ? yer.x : s.x - s.genislik / 2}px, ${alt}px) scaleY(${sutunModu ? -boy : -0.001})`,
                     transition: sutunGecis,
                     opacity: sutunModu ? 1 : 0,
                   }}
@@ -1210,7 +1417,7 @@ export function NoktaGrafigi({
                   <rect
                     x={0}
                     y={0}
-                    width={s.genislik}
+                    width={yer ? yer.genislik : s.genislik}
                     height={1}
                     fill={p.renk}
                     fillOpacity={0.92}
@@ -1296,12 +1503,12 @@ export function NoktaGrafigi({
 
       {/* Noktalar */}
       {konumlar.map((k) => {
-        const secili = seciliSatir === k.satir;
+        const secili = seciliSatir === asil(k.satir);
         const gorunur = k.opaklik > 0;
         const anahtarRengi = anahtar && !k.dagitik ? satirRengi(anahtar, k.satir) : undefined;
         const etiket = satirEtiketi(tablo, k.satir);
         const dolgu = k.dagitik ? RENK.kart : anahtarRengi ?? k.renk ?? tekRenk;
-        const halkaBurada = halka !== null && halka.satir === k.satir && gorunur;
+        const halkaBurada = halka !== null && halka.satir === asil(k.satir) && gorunur;
         return (
           <g
             key={tablo.satirlar[k.satir]?.id ?? k.satir}
@@ -1322,7 +1529,7 @@ export function NoktaGrafigi({
             }}
             onClick={() => {
               setOdak(k.satir);
-              onSatirSec(secili ? null : k.satir);
+              onSatirSec(secili ? null : asil(k.satir));
             }}
             onKeyDown={(e) => noktaTusu(e, k.satir, secili)}
             onPointerEnter={() => setUstunde(k.satir)}
@@ -1414,6 +1621,32 @@ export function NoktaGrafigi({
           const gorunur = (sutunModu || kategorikSayi) && hepsi.some((x) => x.sayi > 0);
           const metin = kategorik && secenekler.etiketler ? s.metin : String(s.sayi);
           const y = sutunModu ? s.sutunTepe : s.noktaTepe;
+          if (s.yan && sutunModu)
+            return (
+              <g key={`sayi-${s.anahtar}`} style={{ paintOrder: 'stroke', stroke: RENK.kart, strokeWidth: 3, strokeLinejoin: 'round' }}>
+                {s.parcalar.map((p) => {
+                  const yer = yanParcaYeri(s, p);
+                  // Dar sütunun sayısı komşusununkine biner: yazılmaz (sıklık ekseninden okunur; KategorikSutunGrafigi gibi)
+                  if (yer.genislik < 12) return null;
+                  return (
+                    <text
+                      key={p.ad}
+                      x={yer.x + yer.genislik / 2}
+                      y={Math.max(UST + 2, taban - p.sayi * c.birimSutun - 6)}
+                      fontSize={13}
+                      fontWeight={800}
+                      textAnchor="middle"
+                      fill={RENK.metin}
+                      data-siklik-etiketi={gorunur ? String(p.sayi) : undefined}
+                      data-yan-parca-sayisi={p.ad}
+                      style={{ opacity: gorunur ? 1 : 0 }}
+                    >
+                      {p.sayi}
+                    </text>
+                  );
+                })}
+              </g>
+            );
           return (
             <text
               key={`sayi-${s.anahtar}`}

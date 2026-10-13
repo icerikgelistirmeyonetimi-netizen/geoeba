@@ -11,7 +11,7 @@ import { dogrusalOlcek, gosterimOndaligi, payliGuzelEksen, yaziBoyu } from './gr
 import { satirEtiketi, sayiOku, type VeriTablosu } from './veri';
 import { sayiMetni } from './istatistik';
 import { GECIS, RENK, adVeBirim, birimli, metinGenisligi, metniSigdir } from './grafikOrtak';
-import { kategoriSayilari, kenarGerekir, satirRengi, type RenkEslemesi } from './kategorik';
+import { kenarGerekir, satirRengi, type RenkEslemesi } from './kategorik';
 import { RenkLejanti } from './RenkLejanti';
 
 export interface SacilimGrafigiProps {
@@ -195,7 +195,7 @@ export function SacilimGrafigi({
           <line x1={SOL} x2={W - SAG} y1={taban} y2={taban} stroke={RENK.metin} strokeWidth={1.5} />
           {/* Renk anahtarı lejantı: kategori, rengi ve çizilen nokta sayısı (gruplar tek grafikte ayırt edilsin) */}
           {renklendirme && (
-            <RenkLejanti eslem={renklendirme} x={SOL} y={lejantY} sagSinir={W - SAG} sayilar={kategoriSayilari(renklendirme, noktalar.map((n) => n.satir))} />
+            <RenkLejanti eslem={renklendirme} x={SOL} y={lejantY} sagSinir={W - SAG} />
           )}
 
           {/* Eksen adları: hangisinin yatay, hangisinin dikey olduğu okunsun */}

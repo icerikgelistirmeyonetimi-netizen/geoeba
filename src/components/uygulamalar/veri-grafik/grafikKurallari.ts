@@ -1,7 +1,8 @@
 /**
  * Veri ve Grafik — grafiklerin bağlanma kuralları (saf, React'siz; index.tsx'ten ayrılmış kabuk mantığı).
  * - Karşılaştır: sayısal değişkenler yalnız aynı birimle; kategorik değişkenler "(gruplara ayır)" (en çok 4 grup).
- * - Gruplara ayırma: her kategori için bir nokta grafiği paneli (satır alt kümesi ve "7-A (15 veri)" başlığı).
+ * - Gruplara ayırma: her kategori için bir nokta grafiği paneli (satır alt kümesi ve "7-A" başlığı); 5–8. sınıf
+ *   örneklerinde gruplar tek grafikte yan yana (ikiliGruplar).
  * - Daire: sayısal değişkende her satır bir dilim, değerlerin sıklığı ya da "uygun değil" bilgi kutusu.
  * - Sütun: çok veride (n > 40, en çok 30 farklı değer) değerlerin sıklığı çizilir.
  * - Çizgi: satırlar bir sıra (ay, hafta, tarih, sayı …) gibi görünmüyorsa uyarı notu.
@@ -45,43 +46,56 @@ function kategoriSayisi(tablo: VeriTablosu, sutun: number): number {
   return new Set(sutunMetinleri(tablo, sutun).map((m) => m.deger)).size;
 }
 
+/** Kök-yaprak gösteriminde sırt sırta en çok bu kadar grup karşılaştırılır */
+export const KOK_YAPRAK_GRUP_EN_COK = 2;
+
 /**
  * "Karşılaştır" listesinin seçenekleri (grafik türüne ve ana değişkene göre):
  * - Nokta, sayısal ana değişken: aynı birimli sayısal değişkenler (ikinci panel) ve kategorik değişkenler (gruplar);
  * - Nokta, kategorik ana değişken: öteki kategorik değişkenler (gruplar);
  * - Çizgi ve İstatistik, sayısal ana değişken: aynı birimli sayısal değişkenler.
+ * `tekGrafik` (5–8. sınıf örnekleri, sinifKurallari.ts): iki grup tek grafikte, ikili gruplar hâlinde karşılaştırılır;
+ * Sütun'da da (yan yana sütun çiftleri) ve Kök-yaprak'ta (sırt sırta, en çok iki grup) seçenek vardır, gruplar
+ * "(yan yana)" / "(sırt sırta)" adıyla listelenir.
  * Başka birimdeki sayısal değişken listede yoktur (ortak eksen yanıltır). 4'ten çok kategorili (ya da boş) kategorik
  * değişken listede pasiftir; nedeni `neden`de.
  */
-export function karsilastirmaAdaylari(tablo: VeriTablosu, anaId: string | null, sekme: Sekme): KarsilastirmaAdayi[] {
-  if (sekme !== 'nokta' && sekme !== 'cizgi' && sekme !== 'istatistik') return [];
+export function karsilastirmaAdaylari(tablo: VeriTablosu, anaId: string | null, sekme: Sekme, tekGrafik = false): KarsilastirmaAdayi[] {
+  const ekSekme = tekGrafik && (sekme === 'sutun' || sekme === 'kokYaprak');
+  if (sekme !== 'nokta' && sekme !== 'cizgi' && sekme !== 'istatistik' && !ekSekme) return [];
   const degiskenler = degiskenSutunlari(tablo);
   const ana = degiskenler.find((s) => s.id === anaId);
   if (!ana) return [];
+  if (ekSekme && ana.tur !== 'sayi') return [];
+  const kokYaprak = sekme === 'kokYaprak';
+  const enCok = kokYaprak ? KOK_YAPRAK_GRUP_EN_COK : GRUP_EN_COK;
+  const ek = kokYaprak ? 'sırt sırta' : tekGrafik ? 'yan yana' : 'gruplara ayır';
   const sonuc: KarsilastirmaAdayi[] = [];
   for (const s of degiskenler) {
     if (s.id === ana.id) continue;
     if (s.tur === 'sayi') {
       if (ana.tur !== 'sayi' || !birimUyumlu(ana.ad, s.ad)) continue;
       sonuc.push({ id: s.id, ad: s.ad, tur: 'sayi', etiket: s.ad, neden: null });
-    } else if (sekme === 'nokta') {
+    } else if (sekme === 'nokta' || ekSekme) {
       const sayi = kategoriSayisi(tablo, tablo.sutunlar.indexOf(s));
       const neden =
         sayi === 0
           ? `${s.ad} sütununda henüz değer yok.`
-          : sayi > GRUP_EN_COK
-            ? `En çok ${GRUP_EN_COK} gruba ayrılabilir; ${s.ad} sütununda ${sayi} farklı değer var.`
+          : sayi > enCok
+            ? kokYaprak
+              ? `Kök-yaprak gösteriminde en çok ${enCok} grup sırt sırta karşılaştırılır; ${s.ad} sütununda ${sayi} farklı değer var.`
+              : `En çok ${enCok} gruba ayrılabilir; ${s.ad} sütununda ${sayi} farklı değer var.`
             : null;
-      sonuc.push({ id: s.id, ad: s.ad, tur: 'grup', etiket: `${s.ad} (gruplara ayır)`, neden });
+      sonuc.push({ id: s.id, ad: s.ad, tur: 'grup', etiket: `${s.ad} (${ek})`, neden });
     }
   }
   return sonuc;
 }
 
 /** Seçili ikinci değişken bu grafikte geçerli bir karşılaştırma mı; geçerliyse türü (değilse null: karşılaştırma yok) */
-export function karsilastirmaTuru(tablo: VeriTablosu, anaId: string | null, ikinciId: string | null, sekme: Sekme): KarsilastirmaTuru | null {
+export function karsilastirmaTuru(tablo: VeriTablosu, anaId: string | null, ikinciId: string | null, sekme: Sekme, tekGrafik = false): KarsilastirmaTuru | null {
   if (!ikinciId || ikinciId === anaId) return null;
-  const aday = karsilastirmaAdaylari(tablo, anaId, sekme).find((a) => a.id === ikinciId);
+  const aday = karsilastirmaAdaylari(tablo, anaId, sekme, tekGrafik).find((a) => a.id === ikinciId);
   return aday && aday.neden === null ? aday.tur : null;
 }
 
@@ -91,7 +105,7 @@ export interface GrupPaneli {
   satirlar: number[];
   /** gruptaki geçerli veri sayısı (ana değişkende değeri olan satırlar) */
   veriSayisi: number;
-  /** panel başlığı: "7-A (15 veri)" */
+  /** panel başlığı: grubun adı ("7-A"; veri sayısı eksen adının yanında yazılmaz) */
   baslik: string;
 }
 
@@ -114,7 +128,7 @@ export function grupPanelleri(tablo: VeriTablosu, anaSutun: number, grupSutun: n
     .map((kategori) => {
       const satirlar = metinler.filter((m) => m.deger === kategori).map((m) => m.satir);
       const veriSayisi = satirlar.filter(degerVar).length;
-      return { kategori, satirlar, veriSayisi, baslik: `${kategori} (${veriSayisi} veri)` };
+      return { kategori, satirlar, veriSayisi, baslik: kategori };
     })
     .filter((g) => g.satirlar.length > 0);
 }

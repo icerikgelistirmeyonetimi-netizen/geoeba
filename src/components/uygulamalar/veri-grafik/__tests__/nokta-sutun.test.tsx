@@ -34,8 +34,8 @@ describe('Veri ve Grafik uygulaması (sunucu tarafı akıllı çizim)', () => {
     const atanmis = renderToStaticMarkup(
       <NoktaGrafigi {...ortak} sutun={1} secenekler={{ ortalama: true, oms: true, etiketler: true }} />,
     );
-    // Terim sözlüğü (M01, M02): "x-üst-çizgi = …" yerine "Ortalama = …", "OMS = …" yerine "Ort. mutlak sapma = …"
-    expect(atanmis).toContain('Ortalama = 17');
+    // Terim sözlüğü (M01, M02): "x-üst-çizgi = …" yerine "Aritmetik ortalama = …", "OMS = …" yerine "Ort. mutlak sapma = …"
+    expect(atanmis).toContain('Aritmetik ortalama = 17');
     expect(atanmis).toContain('Ort. mutlak sapma = 6,4');
     expect(atanmis).not.toContain('x\u0304');
     expect(atanmis).not.toContain('OMS =');
@@ -166,7 +166,9 @@ describe('renk anahtarı: kategoriye göre renklendirme (bütün grafikler, ista
     };
     const html = renderToStaticMarkup(<NoktaGrafigi {...ortak} sutun={3} renkEslemi={eslem} />);
     expect(html).toContain('data-renk-lejanti');
-    expect(html).toContain('A (10)');
+    // Lejantta veri sayısı yazılmaz (uzman incelemesi, 4. tur)
+    expect(html).not.toContain('A (10)');
+    expect(html).toMatch(/>A<\/text>/);
     const renkler = new Set(Array.from(html.matchAll(/<circle r="[\d.]+" fill="(#[0-9a-f]{6})"/gi), (e) => e[1].toLowerCase()));
     expect(renkler.has(eslem.renkler.get('A')!.toLowerCase())).toBe(true);
     expect(renkler.has(eslem.renkler.get('B')!.toLowerCase())).toBe(true);
@@ -183,7 +185,7 @@ describe('renk anahtarı: kategoriye göre renklendirme (bütün grafikler, ista
     expect(renkler).toEqual(new Set([eslem.renkler.get('A'), eslem.renkler.get('B')]));
   });
 
-  describe('iki kategorik değişken: yığılmış sütun, iki yönlü tablo, daire halkası', () => {
+  describe('iki kategorik değişken: yan yana (karşılaştırmalı) sütun, iki yönlü tablo, daire halkası', () => {
     const tk: Tablo = {
       sutunlar: [
         { id: 'renk', ad: 'Renk', tur: 'etiket' },
@@ -213,13 +215,29 @@ describe('renk anahtarı: kategoriye göre renklendirme (bütün grafikler, ista
       ]);
     });
 
-    it('sütun: anahtar başka değişkense her sütun anahtar kategorilerine göre yığılır', () => {
+    it('sütun: anahtar başka değişkense her kategoride anahtarın kategorileri yan yana birer sütun (üst üste yığılmaz)', () => {
       const ortak = { tablo: tk, sutun: 0, genislik: 600, yukseklik: 320, azaltilmisHareket: true };
       const html = renderToStaticMarkup(<KategorikSutunGrafigi {...ortak} renkEslemi={sonuc} />);
-      expect(html.match(/data-yigin-parcasi=/g)).toHaveLength(4);
-      expect(html).toContain('data-yigin-parcasi="(boş)"');
+      // Uzman incelemesi (4. tur): karşılaştırmalı sütun grafiğinde sütunlar yan yana; yığın parçası yok
+      expect(html).not.toContain('data-yigin-parcasi');
+      // Kırmızı ve Mavi'de Tura, Yazı ve (boş) birer sütun: 2 × 3
+      expect(html.match(/data-yan-sutun=/g)).toHaveLength(6);
+      expect(html).toContain('data-yan-sutun="(boş)"');
       expect(html).toContain('data-renk-lejanti');
-      expect(renderToStaticMarkup(<KategorikSutunGrafigi {...ortak} renkEslemi={renkEslemesi(tk, 0)} />)).not.toContain('data-yigin-parcasi');
+      // Hepsi tabandan başlar (aynı y), yan yana (farklı x); sayıları sütunların üstünde
+      const yerler = Array.from(html.matchAll(/data-yan-sutun="([^"]+)" data-sayi="(\d+)"><title>[^<]*<\/title><g style="transform:translate\(([\d.]+)px, ([\d.]+)px\)/g), (m) => ({
+        ad: m[1],
+        sayi: Number(m[2]),
+        x: Number(m[3]),
+        y: Number(m[4]),
+      }));
+      expect(yerler).toHaveLength(6);
+      expect(new Set(yerler.map((p) => p.y)).size).toBe(1);
+      expect(yerler[0].x).toBeLessThan(yerler[1].x);
+      expect(yerler[1].x).toBeLessThan(yerler[2].x);
+      expect(yerler.map((p) => p.sayi)).toEqual([1, 2, 0, 2, 0, 1]);
+      expect(html.match(/data-yan-sutun-sayisi/g)).toHaveLength(4);
+      expect(renderToStaticMarkup(<KategorikSutunGrafigi {...ortak} renkEslemi={renkEslemesi(tk, 0)} />)).not.toContain('data-yan-sutun');
     });
 
     it('istatistik: iki yönlü tablo', () => {
@@ -342,7 +360,7 @@ describe('D1: nokta, sütun ve kategorik grafikler (kabul ölçütleri)', () => 
     const html = noktaCiz(t, 1, { secenekler: { ortalama: true, oms: false, etiketler: false, ortanca: true } });
     expect(html).toContain('data-ortanca-cizgisi');
     expect(html).toContain('Ortanca = 12');
-    expect(html).toContain('Ortalama ≈ 18,57');
+    expect(html).toContain('Aritmetik ortalama ≈ 18,57');
     expect(html).toMatch(/data-ortanca-cizgisi="true"[^>]*stroke="#7f88c4"[^>]*stroke-dasharray/);
     const ortalamaY = Number(/data-ortalama-etiketi="true"><rect x="[\d.]+" y="([\d.]+)"/.exec(html)![1]);
     const ortancaY = Number(/data-ortanca-etiketi="true"><rect x="[\d.]+" y="([\d.]+)"/.exec(html)![1]);
@@ -438,7 +456,9 @@ describe('D1: nokta, sütun ve kategorik grafikler (kabul ölçütleri)', () => 
       <KategorikSutunGrafigi tablo={kat} sutun={0} sira={['Elma', 'Muz']} genislik={800} yukseklik={420} azaltilmisHareket bosIpucu="İlk cevapla sütunlar burada belirir." yEnAz={10} />,
     );
     expect(katHtml).toContain('İlk cevapla sütunlar burada belirir.');
-    expect(katHtml).toContain('Meyve · sıklık (0 veri)');
+    // Eksen adının yanında veri sayısı yazılmaz (uzman incelemesi, 4. tur)
+    expect(yazilar(katHtml)).toContain('Meyve · sıklık');
+    expect(katHtml).not.toMatch(/\(\d+ veri\)/);
     expect(yazilar(katHtml)).toContain('10');
   });
 
@@ -541,21 +561,22 @@ describe('D1: nokta, sütun ve kategorik grafikler (kabul ölçütleri)', () => 
     expect(r(ka)).toBe(r(kb));
   });
 
-  it('grup paneli: seriIndeksi 0 anahtarın 0. rengi, renk verilirse o; başlık veri sayısını yazıyorsa sağ altta yinelenmez', () => {
+  it('grup paneli: seriIndeksi 0 anahtarın 0. rengi, renk verilirse o; eksen adının yanında veri sayısı yazılmaz', () => {
     const t = sabitCalisma();
     // seriIndeksi verilmezse birincil renk; 0 verilirse anahtarın (SERI_RENKLERI) 0. rengi
     expect(noktaCiz(t, 2)).toContain('fill="hsl(var(--primary))"');
-    const sifir = noktaCiz(t, 2, { seriIndeksi: 0, baslik: '8-A (5 veri)' });
+    const sifir = noktaCiz(t, 2, { seriIndeksi: 0, baslik: '8-A' });
     expect(sifir).toContain(`fill="${seriRengi(0)}"`);
     expect(sifir).not.toContain('fill="hsl(var(--primary))"');
     expect(noktaCiz(t, 2, { seriIndeksi: 1, renk: '#bd5c8f' })).toContain('fill="#bd5c8f"');
-    // Kategorik panel: "5-A (12 veri)" başlığında sağ alttaki "12 veri" yazılmaz; sayısız başlıkta yazılır
+    // Kategorik panel ve tek grafik: eksen adı yalnız değişkenin adı ("Meyve"); "12 veri" yazılmaz (uzman incelemesi, 4. tur)
     const kat = kategorikTablo({ Elma: 7, Muz: 5 });
-    const sayili = noktaCiz(kat, 1, { baslik: '5-A (12 veri)' });
-    expect(yazilar(sayili)).toContain('5-A (12 veri)');
-    expect(yazilar(sayili)).not.toContain('12 veri');
-    expect(yazilar(noktaCiz(kat, 1, { baslik: 'Meyve' }))).toContain('12 veri');
-    expect(yazilar(noktaCiz(kat, 1))).toContain('Meyve · 12 veri');
+    const panelli = yazilar(noktaCiz(kat, 1, { baslik: '5-A' }));
+    expect(panelli).toContain('5-A');
+    expect(panelli).toContain('Meyve');
+    expect(panelli.some((m) => /veri/.test(m))).toBe(false);
+    expect(yazilar(noktaCiz(kat, 1))).toContain('Meyve');
+    expect(yazilar(noktaCiz(kat, 1)).some((m) => /veri/.test(m))).toBe(false);
   });
 
   it('viewBox gerçek boyuttur (küçültme yok); yazılar 13 px', () => {
@@ -655,12 +676,20 @@ describe('D1: nokta, sütun ve kategorik grafikler (kabul ölçütleri)', () => 
     expect(yuzdeVeAcilar([7, 6, 5, 4, 2]).acilar).toEqual([105, 90, 75, 60, 30]);
   });
 
-  it('kategorik sütun grafiği: başlık "Meyve · sıklık (24 veri)", sıklık ve yüzde etiketi', () => {
+  it('kategorik sütun grafiği: başlık "Meyve · sıklık" (veri sayısı yok), sıklık ve yüzde etiketi; eksenlerin ucunda ok; yuzdeGoster kapalıyken yalnız sıklık', () => {
     const t = kategorikTablo({ Elma: 7, Muz: 6, Çilek: 5, Kivi: 4, Nar: 2 });
     const html = renderToStaticMarkup(<KategorikSutunGrafigi tablo={t} sutun={1} genislik={800} yukseklik={420} azaltilmisHareket />);
-    expect(html).toContain('Meyve · sıklık (24 veri)');
+    expect(html).toMatch(/>Meyve · sıklık<\/text>/);
+    expect(html).not.toMatch(/\(\d+ veri\)/);
     expect(html).toContain('%29,2');
     expect(html).not.toMatch(/frekans|n = /);
+    // Eksenlerin ucunda ok (uzman incelemesi, 4. tur)
+    expect(html).toContain('data-eksen-oku="dikey"');
+    expect(html).toContain('data-eksen-oku="yatay"');
+    // 5. sınıf: sütunların üstünde yüzde yok
+    const yuzdesiz = renderToStaticMarkup(<KategorikSutunGrafigi tablo={t} sutun={1} genislik={800} yukseklik={420} azaltilmisHareket yuzdeGoster={false} />);
+    expect(yuzdesiz).not.toContain('%');
+    expect(yuzdesiz).toContain('data-siklik-yazisi="7"');
   });
 });
 
@@ -690,12 +719,12 @@ describe('onarım D: grafik bulguları', () => {
   it('sayı biçimi: Nokta ve Sütun da İstatistik gibi yazar (bölük boşluğu "35 000", gerçek eksi "−9,1"); yuvarlanan ölçü "≈"', () => {
     const nokta = noktaCiz(harcama(), 1, { genislik: 846, secenekler: { ortalama: true, oms: true, etiketler: false, ortanca: true } });
     expect(nokta).toContain(`>35${NB}000<`);
-    expect(nokta).toContain(`Ortalama ≈ 14${NB}285,71`);
+    expect(nokta).toContain(`Aritmetik ortalama ≈ 14${NB}285,71`);
     expect(nokta).toContain('Ort. mutlak sapma ≈ 8979,59');
     expect(nokta).toContain(`Ortanca = 10${NB}000`);
     expect(nokta).not.toMatch(/>\d{5,}</);
-    // Tam yazılabilen ölçü "=" ile (terim sözlüğü: "Ortalama = 17")
-    expect(noktaCiz(sabitMac(), 1, { secenekler: { ortalama: true, oms: true, etiketler: false } })).toContain('Ortalama = 17');
+    // Tam yazılabilen ölçü "=" ile (terim sözlüğü: "Aritmetik ortalama = 17")
+    expect(noktaCiz(sabitMac(), 1, { secenekler: { ortalama: true, oms: true, etiketler: false } })).toContain('Aritmetik ortalama = 17');
     const sutun = renderToStaticMarkup(
       <SutunGrafigi tablo={harcama()} sutun={1} seciliSatir={null} onSatirSec={bos} onDegerDegis={bos} yuvarlamaAdimi={1} genislik={846} yukseklik={438} azaltilmisHareket />,
     );

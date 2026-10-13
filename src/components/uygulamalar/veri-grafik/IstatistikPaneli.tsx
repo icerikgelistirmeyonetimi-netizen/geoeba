@@ -11,6 +11,9 @@
  * yuvarlanan her sonuçta "≈" yazılır. 30'dan çok veride adımlar sıklık tablosu biçimindedir.
  * `ikinciSutun` verilirse iki değişken yan yana karşılaştırılır (Ölçü | A | B) ve bir yorum satırı yazılır.
  * Renk anahtarı seçiliyse aynı ölçüler anahtarın her grubu için ayrıca ("Gruplara göre") karşılaştırılır.
+ * `olculer` sınıf düzeyine göre ölçüleri süzer (sinifKurallari.ts): 6. sınıfta ortalama mutlak sapma ve standart
+ * sapma, 7–8. sınıfta standart sapma yoktur (kart, karşılaştırma satırı, grup sütunu ve hesaplama adımı birlikte);
+ * hiçbir ölçü yoksa (5. sınıf) panel yalnız veri sayısını ve verilerin toplamını (parça-bütün) gösterir.
  */
 import React, { useMemo } from 'react';
 import {
@@ -30,6 +33,10 @@ import { gosterimOndaligi } from './grafik';
 import { gecerliDegerler, type DegerNoktasi, type VeriTablosu } from './veri';
 import { ONAY_KUTUSU, RenkNoktasi } from './ortak';
 import { renkGruplari, satirRengi, type RenkEslemesi } from './kategorik';
+import type { OlcuKumesi } from './sinifKurallari';
+
+/** Sınıfsız tabloda bütün ölçüler */
+const TUM_OLCULER: OlcuKumesi = { merkezi: true, aciklik: true, oms: true, standartSapma: true };
 
 export interface IstatistikProps {
   tablo: VeriTablosu;
@@ -42,6 +49,8 @@ export interface IstatistikProps {
   renkEslemi?: RenkEslemesi | null;
   /** Karşılaştırma: ikinci sayısal sütunun indeksi; verilirse iki sütunlu ölçü tablosu ve yorum satırı */
   ikinciSutun?: number | null;
+  /** Sınıf düzeyinin ölçüleri (verilmezse hepsi) */
+  olculer?: OlcuKumesi;
 }
 
 /** Karşılaştırmada iki değişkenin rengi (nokta grafiğindeki panellerle aynı: birincil, mercan) */
@@ -117,8 +126,9 @@ function cumleAdi(ad: string): string {
 }
 
 /**
- * Karşılaştırma yorumu (nötr dil; her veriye uyar: puan, sıcaklık, süre): ortalamalar (eşit ya da hangisi büyük) ve
- * ortalama mutlak sapması küçük olanın değerlerinin ortalamaya daha yakın olduğu. Değerler kartlardaki gibi
+ * Karşılaştırma yorumu (nötr dil; her veriye uyar: puan, sıcaklık, süre): aritmetik ortalamalar (eşit ya da hangisi
+ * büyük) ve ortalama mutlak sapması küçük olanın değerlerinin ortalamaya daha yakın olduğu; `yayilim` 'aciklik' ise
+ * (6. sınıf) açıklığı küçük olanın değerlerinin daha dar bir aralıkta olduğu. Değerler kartlardaki gibi
  * yuvarlanarak karşılaştırılır; yuvarlanan varsa "≈" karşılaştırmanın başına bir kez yazılır: "(≈ 6,13 < 8,79)".
  * Adların sonundaki birim ayracı cümlede yazılmaz. "İstikrarlı" gibi yoruma dayalı sözcükler örnek metinlerinde
  * kalır. Veri yoksa null.
@@ -127,12 +137,16 @@ export function karsilastirmaYorumu(
   a: { ad: string; ozet: Ozet },
   b: { ad: string; ozet: Ozet },
   ondalik: number,
+  yayilim: 'oms' | 'aciklik' = 'oms',
 ): string | null {
-  if (a.ozet.ortalama === null || b.ozet.ortalama === null || a.ozet.oms === null || b.ozet.oms === null) return null;
+  if (a.ozet.ortalama === null || b.ozet.ortalama === null) return null;
+  const ya = yayilim === 'oms' ? a.ozet.oms : a.ozet.aciklik;
+  const yb = yayilim === 'oms' ? b.ozet.oms : b.ozet.aciklik;
+  if (ya === null || yb === null) return null;
   const ma = kartGosterimi(a.ozet.ortalama, ondalik);
   const mb = kartGosterimi(b.ozet.ortalama, ondalik);
-  const oa = kartGosterimi(a.ozet.oms, ondalik);
-  const ob = kartGosterimi(b.ozet.oms, ondalik);
+  const oa = kartGosterimi(ya, ondalik);
+  const ob = kartGosterimi(yb, ondalik);
   const m = (g: Gosterim) => gosterimMetni(g);
   /** "(≈ 17,98 > 5,78)": yuvarlanan sayı varsa ≈ başta bir kez */
   const kars = (p: Gosterim, isaret: string, q: Gosterim) =>
@@ -141,10 +155,16 @@ export function karsilastirmaYorumu(
   const adB = cumleAdi(b.ad);
   const ortalamaCumlesi =
     ma.deger === mb.deger
-      ? `Ortalamalar eşit (${m(ma)})`
+      ? `Aritmetik ortalamalar eşit (${m(ma)})`
       : ma.deger > mb.deger
-        ? `Ortalaması büyük olan ${adA} ${kars(ma, '>', mb)}`
-        : `Ortalaması büyük olan ${adB} ${kars(mb, '>', ma)}`;
+        ? `Aritmetik ortalaması büyük olan ${adA} ${kars(ma, '>', mb)}`
+        : `Aritmetik ortalaması büyük olan ${adB} ${kars(mb, '>', ma)}`;
+  if (yayilim === 'aciklik') {
+    // 6. sınıf: yayılım açıklıkla konuşulur (ortalama mutlak sapma 7. sınıfta)
+    if (oa.deger === ob.deger) return `${ortalamaCumlesi}; açıklıklar da eşit (${m(oa)}): iki değişkenin verileri aynı genişlikte bir aralığa yayılıyor.`;
+    const [kk, bb, aa] = oa.deger < ob.deger ? [oa, ob, adA] : [ob, oa, adB];
+    return `${ortalamaCumlesi}; açıklığı küçük olan ${aa}: değerleri daha dar bir aralıkta ${kars(kk, '<', bb)}.`;
+  }
   if (oa.deger === ob.deger) return `${ortalamaCumlesi}; ortalama mutlak sapmalar da eşit (${m(oa)}): iki değişkenin verileri ortalama çevresinde aynı ölçüde dağılıyor.`;
   const [kucuk, buyuk, ad] = oa.deger < ob.deger ? [oa, ob, adA] : [ob, oa, adB];
   return `${ortalamaCumlesi}; ortalama mutlak sapması küçük olan ${ad}: değerleri ortalamaya daha yakın ${kars(kucuk, '<', buyuk)}.`;
@@ -189,13 +209,15 @@ function AciklikIfadesi({ ozet, ondalik, kucukYazi }: { ozet: Ozet; ondalik: num
   );
 }
 
-function OlcuKartlari({ ozet, ondalik }: { ozet: Ozet; ondalik: number }) {
+function OlcuKartlari({ ozet, ondalik, olculer }: { ozet: Ozet; ondalik: number; olculer: OlcuKumesi }) {
   const ort = ozetGosterim(ozet.ortalama, ondalik);
   const orn = ozetGosterim(ozet.medyan, ondalik);
   const oms = ozetGosterim(ozet.oms, ondalik);
   const ss = ozetGosterim(ozet.standartSapma, ondalik);
+  const yayilimVar = olculer.aciklik || olculer.oms || olculer.standartSapma;
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-3" data-olcu-kartlari>
+      {olculer.merkezi && (
       <OlcuGrubu baslik="Merkezi eğilim ölçüleri" soru="veriler nerede toplanıyor?" sinif="grow-[3] basis-[500px]">
         <Kart baslik="Aritmetik ortalama" aciklama="verilerin toplamı ÷ veri sayısı" veri="ortalama">
           {ort ? <Sayi g={ort} /> : '—'}
@@ -207,34 +229,66 @@ function OlcuKartlari({ ozet, ondalik }: { ozet: Ozet; ondalik: number }) {
           <span>{tepeMetni(ozet, ondalik)}</span>
         </Kart>
       </OlcuGrubu>
+      )}
+      {yayilimVar && (
       <OlcuGrubu baslik="Yayılım ölçüleri" soru="veriler ne kadar dağınık?" sinif="grow-[3] basis-[480px]">
-        <Kart baslik="Açıklık" aciklama="en büyük − en küçük" veri="aciklik">
-          <AciklikIfadesi ozet={ozet} ondalik={ondalik} />
-        </Kart>
-        <Kart baslik="Ortalama mutlak sapma" aciklama="ortalamaya uzaklıkların toplamı ÷ veri sayısı" veri="oms">
-          {oms ? <Sayi g={oms} /> : '—'}
-        </Kart>
+        {olculer.aciklik && (
+          <Kart baslik="Açıklık" aciklama="en büyük − en küçük" veri="aciklik">
+            <AciklikIfadesi ozet={ozet} ondalik={ondalik} />
+          </Kart>
+        )}
+        {olculer.oms && (
+          <Kart baslik="Ortalama mutlak sapma" aciklama="ortalamaya uzaklıkların toplamı ÷ veri sayısı" veri="oms">
+            {oms ? <Sayi g={oms} /> : '—'}
+          </Kart>
+        )}
         {/* Lise ölçüsü (9. sınıf): ortaokulun ortalama mutlak sapmasının yanında; örneklem, veri sayısı − 1 */}
-        <Kart
-          baslik="Standart sapma"
-          aciklama={ozet.n === 1 ? 'tek veriyle hesaplanmaz (veri sayısı − 1 = 0)' : 'kare uzaklıkların toplamı ÷ (veri sayısı − 1), karekökü'}
-          veri="standartSapma"
-        >
-          {ss ? <Sayi g={ss} /> : '—'}
-        </Kart>
+        {olculer.standartSapma && (
+          <Kart
+            baslik="Standart sapma"
+            aciklama={ozet.n === 1 ? 'tek veriyle hesaplanmaz (veri sayısı − 1 = 0)' : 'kare uzaklıkların toplamı ÷ (veri sayısı − 1), karekökü'}
+            veri="standartSapma"
+          >
+            {ss ? <Sayi g={ss} /> : '—'}
+          </Kart>
+        )}
       </OlcuGrubu>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Ölçüsüz sınıf düzeyi (5. sınıf): merkezi eğilim ve yayılım ölçüsü yok; verilerin toplamı (bütün: "24 saat",
+ * "100 000 TL") parça-bütün ilişkisi için (veri sayısı başlık satırında).
+ */
+function OlcusuzOzet({ degerler, ondalik }: { degerler: number[]; ondalik: number }) {
+  const toplam = degerler.reduce((t, d) => t + d, 0);
+  return (
+    <div className="space-y-3" data-olcusuz-ozet>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-2">
+        <Kart baslik="Verilerin toplamı" aciklama="bütün: parçaların hepsi" veri="toplam">
+          <Sayi g={kartGosterimi(toplam, ondalik)} />
+        </Kart>
+      </div>
+      <p className="rounded-[calc(var(--radius)-6px)] border border-border bg-card px-3 py-2 text-[13px] leading-snug text-muted-foreground" data-olcusuz-notu>
+        Veriyi Nokta, Sütun ve Daire grafikleriyle inceleyin: en büyük parça hangisi, bir parça bütünün ne kadarı?
+      </p>
     </div>
   );
 }
 
 // ── Karşılaştırma tablosu (ikinciSutun) ───────────────────────────────────
 
-function KarsilastirmaTablosu({ adlar, ozetler, ondalik }: { adlar: [string, string]; ozetler: [Ozet, Ozet]; ondalik: number }) {
+function KarsilastirmaTablosu({ adlar, ozetler, ondalik, olculer }: { adlar: [string, string]; ozetler: [Ozet, Ozet]; ondalik: number; olculer: OlcuKumesi }) {
   const omsler = ozetler.map((o) => (o.oms === null ? 0 : o.oms));
   const enBuyukOms = Math.max(...omsler, 0);
   const ssler = ozetler.map((o) => o.standartSapma ?? 0);
   const enBuyukSs = Math.max(...ssler, 0);
-  const yorum = karsilastirmaYorumu({ ad: adlar[0], ozet: ozetler[0] }, { ad: adlar[1], ozet: ozetler[1] }, ondalik);
+  const yorum =
+    olculer.merkezi && (olculer.oms || olculer.aciklik)
+      ? karsilastirmaYorumu({ ad: adlar[0], ozet: ozetler[0] }, { ad: adlar[1], ozet: ozetler[1] }, ondalik, olculer.oms ? 'oms' : 'aciklik')
+      : null;
   const hucre = 'h-10 px-3 text-right align-middle';
   const satirBasi = 'h-10 pr-3 text-left align-middle font-semibold text-foreground';
   const grupSatiri = (baslik: string) => (
@@ -278,7 +332,8 @@ function KarsilastirmaTablosu({ adlar, ozetler, ondalik }: { adlar: [string, str
                 </td>
               ))}
             </tr>
-            {grupSatiri('Merkezi eğilim ölçüleri')}
+            {olculer.merkezi && grupSatiri('Merkezi eğilim ölçüleri')}
+            {olculer.merkezi && (
             <tr>
               <th scope="row" className={satirBasi}>
                 Aritmetik ortalama
@@ -289,6 +344,8 @@ function KarsilastirmaTablosu({ adlar, ozetler, ondalik }: { adlar: [string, str
                 </td>
               ))}
             </tr>
+            )}
+            {olculer.merkezi && (
             <tr>
               <th scope="row" className={satirBasi}>
                 Ortanca
@@ -299,6 +356,8 @@ function KarsilastirmaTablosu({ adlar, ozetler, ondalik }: { adlar: [string, str
                 </td>
               ))}
             </tr>
+            )}
+            {olculer.merkezi && (
             <tr>
               <th scope="row" className={satirBasi}>
                 Tepe değer
@@ -309,7 +368,9 @@ function KarsilastirmaTablosu({ adlar, ozetler, ondalik }: { adlar: [string, str
                 </td>
               ))}
             </tr>
-            {grupSatiri('Yayılım ölçüleri')}
+            )}
+            {(olculer.aciklik || olculer.oms || olculer.standartSapma) && grupSatiri('Yayılım ölçüleri')}
+            {olculer.aciklik && (
             <tr>
               <th scope="row" className={satirBasi}>
                 Açıklık
@@ -322,6 +383,8 @@ function KarsilastirmaTablosu({ adlar, ozetler, ondalik }: { adlar: [string, str
                 </td>
               ))}
             </tr>
+            )}
+            {olculer.oms && (
             <tr data-oms-satiri>
               <th scope="row" className={satirBasi}>
                 Ortalama mutlak sapma
@@ -341,6 +404,8 @@ function KarsilastirmaTablosu({ adlar, ozetler, ondalik }: { adlar: [string, str
                 </td>
               ))}
             </tr>
+            )}
+            {olculer.standartSapma && (
             <tr data-standart-sapma-satiri>
               <th scope="row" className={satirBasi}>
                 Standart sapma
@@ -360,6 +425,7 @@ function KarsilastirmaTablosu({ adlar, ozetler, ondalik }: { adlar: [string, str
                 </td>
               ))}
             </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -423,9 +489,10 @@ interface AdimlarProps {
   anahtar: RenkEslemesi | null;
   /** karşılaştırmada her değişkenin adımlarının başlığı */
   baslik?: string;
+  olculer: OlcuKumesi;
 }
 
-function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, seciliSatir, onSatirSec, anahtar, baslik }: AdimlarProps) {
+function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, seciliSatir, onSatirSec, anahtar, baslik, olculer }: AdimlarProps) {
   const d = a.ondalik;
   const yaz = (v: number) => gosterimMetni(adimGosterimi(v, d));
   const terim = (v: number) => {
@@ -461,6 +528,7 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
     <div className="space-y-2" data-hesaplama-adimlari>
       {baslik && <h3 className="pt-1 text-base font-bold text-foreground">{baslik}</h3>}
       <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-2">
+        {olculer.merkezi && (
         <Adim no={1} baslik="Aritmetik ortalama" veri="ortalama">
           <Esitlik ad="Verilerin toplamı" ifade={toplamIfadesi(a.satirlar.map((s) => terim(s.deger)), 'veri')} sonuc={a.toplamGosterim} />
           <p className="text-muted-foreground">Aritmetik ortalama = verilerin toplamı ÷ veri sayısı</p>
@@ -471,7 +539,9 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
             not={m.yaklasik ? `(bölüm tam çıkmıyor: ${uzunOndalik(a.ortalama)})` : m.deger !== kartOrt.deger ? `(kartta ${gosterimMetni(kartOrt)})` : undefined}
           />
         </Adim>
+        )}
 
+        {olculer.merkezi && (
         <Adim no={2} baslik="Ortanca" veri="ortanca">
           <p className="text-muted-foreground">Veriler küçükten büyüğe sıralanır:</p>
           <p className="flex flex-wrap items-center gap-1 py-0.5" data-sirali-veriler>
@@ -489,7 +559,7 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
           </p>
           <p>
             {ortancaCift
-              ? `${a.n} veri var (çift): ${a.ortancaKonumlari[0]}. ve ${a.ortancaKonumlari[1]}. verinin ortalaması.`
+              ? `${a.n} veri var (çift): ortanca, ${a.ortancaKonumlari[0]}. ve ${a.ortancaKonumlari[1]}. verilerin toplamının yarısıdır.`
               : `${a.n} veri var (tek): ortadaki veri ${a.ortancaKonumlari[0]}. veri.`}
           </p>
           <Esitlik
@@ -502,7 +572,9 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
             sonuc={a.ortancaGosterim}
           />
         </Adim>
+        )}
 
+        {olculer.merkezi && (
         <Adim no={3} baslik="Tepe değer" veri="tepe">
           {a.sikliklar.length <= SAYIM_SINIRI ? (
             <>
@@ -517,7 +589,9 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
               </p>
             </>
           ) : (
-            <p className="text-muted-foreground">{`${a.sikliklar.length} farklı değer var; her birinin sıklığı 5. adımdaki tabloda.`}</p>
+            <p className="text-muted-foreground">
+              {olculer.oms ? `${a.sikliklar.length} farklı değer var; her birinin sıklığı 5. adımdaki tabloda.` : `${a.sikliklar.length} farklı değer var.`}
+            </p>
           )}
           <p>
             {a.tepe.degerler.length === 0 ? (
@@ -535,21 +609,25 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
             )}
           </p>
         </Adim>
+        )}
 
+        {olculer.aciklik && (
         <Adim no={4} baslik="Açıklık" veri="aciklik">
           <p>
             En küçük veri <strong>{yaz(a.enKucuk)}</strong>, en büyük veri <strong>{yaz(a.enBuyuk)}</strong>.
           </p>
           <Esitlik ad="Açıklık" ifade={`en büyük − en küçük = ${yaz(a.enBuyuk)} − ${terim(a.enKucuk)}`} sonuc={a.aciklikGosterim} />
         </Adim>
+        )}
 
+        {olculer.oms && (
         <Adim no={5} baslik="Ortalama mutlak sapma" veri="oms" genis>
           <p>
             Her veri için <strong>fark = değer − ortalama</strong>. Farkın işaretini atınca <strong>ortalamaya uzaklık</strong> kalır (farkın mutlak değeri).
           </p>
           {m.yaklasik && (
             <p className="text-muted-foreground" data-yuvarlama-notu>
-              {`Ortalama tam çıkmadığı için farkları yuvarlanmış ortalamayla (${mMetni}) hesapladık.`}
+              {`Aritmetik ortalama tam çıkmadığı için farkları yuvarlanmış ortalamayla (${mMetni}) hesapladık.`}
             </p>
           )}
           <div className="overflow-x-auto py-1">
@@ -649,8 +727,10 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
             not={a.omsGosterim.deger !== kartOms.deger || a.omsGosterim.yaklasik !== kartOms.yaklasik ? `(kartta ${gosterimMetni(kartOms)})` : undefined}
           />
         </Adim>
+        )}
 
         {/* Lise ölçüsü (9. sınıf): uzaklıkların karesi, toplamı ÷ (veri sayısı − 1), karekök; formül simgesi yerine sözle */}
+        {olculer.standartSapma && (
         <Adim no={6} baslik="Standart sapma" veri="standartSapma" genis>
           <p>
             Lise ölçüsü: her uzaklığın karesi alınır (<strong>kare uzaklık = uzaklık × uzaklık</strong>); büyük uzaklıklar daha çok ağırlık kazanır.
@@ -680,6 +760,7 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
             </>
           )}
         </Adim>
+        )}
       </div>
     </div>
   );
@@ -880,7 +961,20 @@ export function istatistikOndaligi(degerler: readonly number[]): number {
 
 // ── Panel ───────────────────────────────────────────────────────────────────
 
-export function IstatistikPaneli({ tablo, sutun, seciliSatir, onSatirSec, adimlariGoster, onAdimlariGoster, renkEslemi = null, ikinciSutun = null }: IstatistikProps) {
+export function IstatistikPaneli({
+  tablo,
+  sutun,
+  seciliSatir,
+  onSatirSec,
+  adimlariGoster: adimlariGosterSecimi,
+  onAdimlariGoster,
+  renkEslemi = null,
+  ikinciSutun = null,
+  olculer = TUM_OLCULER,
+}: IstatistikProps) {
+  /** Hiçbir ölçü yok (5. sınıf): kart, adım ve grup tablosu yerine veri sayısı ve toplam */
+  const olcusuz = !olculer.merkezi && !olculer.aciklik && !olculer.oms && !olculer.standartSapma;
+  const adimlariGoster = adimlariGosterSecimi && !olcusuz;
   const noktalar = useMemo(() => gecerliDegerler(tablo, sutun), [tablo, sutun]);
   const degerler = useMemo(() => noktalar.map((n) => n.deger), [noktalar]);
   const ikinci =
@@ -913,25 +1007,31 @@ export function IstatistikPaneli({ tablo, sutun, seciliSatir, onSatirSec, adimla
     return g ? <Sayi g={g} /> : '—';
   };
 
+  /** Grup tablosundaki yayılım sütunları */
+  const yayilimSayisi = [olculer.aciklik, olculer.oms, olculer.standartSapma].filter(Boolean).length;
   // Gruplara göre tablo: adımlar açıkken adımların altına iner (1366'da adımlar ilk ekranda başlasın)
   const grupBolumu =
-    anahtar && gruplar.length > 0 ? (
+    anahtar && gruplar.length > 0 && !olcusuz ? (
       <section className="mt-3 rounded-[calc(var(--radius)-6px)] border border-border bg-card p-3" data-grup-istatistikleri>
         <h3 className="mb-1 text-base font-bold text-foreground">
           Gruplara göre <span className="text-muted-foreground">({anahtar.ad})</span>
         </h3>
         <div className="overflow-x-auto">
-          <table className="min-w-[700px] text-[13px] tabular-nums text-foreground">
+          <table className={`${yayilimSayisi === 3 && olculer.merkezi ? 'min-w-[700px]' : 'min-w-[520px]'} text-[13px] tabular-nums text-foreground`}>
             <thead>
               <tr className="text-[12px] text-muted-foreground">
                 <th colSpan={2} />
-                <th colSpan={3} scope="colgroup" className="border-b border-border pb-0.5 text-center font-bold">
-                  Merkezi eğilim ölçüleri
-                </th>
-                <th className="w-3" />
-                <th colSpan={3} scope="colgroup" className="border-b border-border pb-0.5 text-center font-bold">
-                  Yayılım ölçüleri
-                </th>
+                {olculer.merkezi && (
+                  <th colSpan={3} scope="colgroup" className="border-b border-border pb-0.5 text-center font-bold">
+                    Merkezi eğilim ölçüleri
+                  </th>
+                )}
+                {olculer.merkezi && yayilimSayisi > 0 && <th className="w-3" />}
+                {yayilimSayisi > 0 && (
+                  <th colSpan={yayilimSayisi} scope="colgroup" className="border-b border-border pb-0.5 text-center font-bold">
+                    Yayılım ölçüleri
+                  </th>
+                )}
               </tr>
               <tr className="text-left text-muted-foreground">
                 <th scope="col" className="h-9 pr-4 font-bold">
@@ -940,25 +1040,35 @@ export function IstatistikPaneli({ tablo, sutun, seciliSatir, onSatirSec, adimla
                 <th scope="col" className="pr-4 text-right font-bold">
                   Veri sayısı
                 </th>
-                <th scope="col" className="pr-4 text-right font-bold">
-                  Ortalama
-                </th>
-                <th scope="col" className="pr-4 text-right font-bold">
-                  Ortanca
-                </th>
-                <th scope="col" className="pr-4 text-right font-bold">
-                  Tepe değer
-                </th>
-                <th />
-                <th scope="col" className="pr-4 text-right font-bold">
-                  Açıklık
-                </th>
-                <th scope="col" className="pr-4 text-right font-bold">
-                  Ort. mutlak sapma
-                </th>
-                <th scope="col" className="text-right font-bold">
-                  Standart sapma
-                </th>
+                {olculer.merkezi && (
+                  <>
+                    <th scope="col" className="pr-4 text-right font-bold">
+                      Aritmetik ortalama
+                    </th>
+                    <th scope="col" className="pr-4 text-right font-bold">
+                      Ortanca
+                    </th>
+                    <th scope="col" className="pr-4 text-right font-bold">
+                      Tepe değer
+                    </th>
+                  </>
+                )}
+                {olculer.merkezi && yayilimSayisi > 0 && <th />}
+                {olculer.aciklik && (
+                  <th scope="col" className="pr-4 text-right font-bold">
+                    Açıklık
+                  </th>
+                )}
+                {olculer.oms && (
+                  <th scope="col" className="pr-4 text-right font-bold">
+                    Ort. mutlak sapma
+                  </th>
+                )}
+                {olculer.standartSapma && (
+                  <th scope="col" className="text-right font-bold">
+                    Standart sapma
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -974,13 +1084,17 @@ export function IstatistikPaneli({ tablo, sutun, seciliSatir, onSatirSec, adimla
                     </span>
                   </td>
                   <td className="pr-4 text-right">{g.ozet.n}</td>
-                  <td className="pr-4 text-right">{grupHucresi(g.ozet.ortalama)}</td>
-                  <td className="pr-4 text-right">{grupHucresi(g.ozet.medyan)}</td>
-                  <td className="pr-4 text-right">{g.ozet.n === 0 ? '—' : tepeMetni(g.ozet, ondalik)}</td>
-                  <td />
-                  <td className="pr-4 text-right">{grupHucresi(g.ozet.aciklik)}</td>
-                  <td className="pr-4 text-right">{grupHucresi(g.ozet.oms)}</td>
-                  <td className="text-right">{grupHucresi(g.ozet.standartSapma)}</td>
+                  {olculer.merkezi && (
+                    <>
+                      <td className="pr-4 text-right">{grupHucresi(g.ozet.ortalama)}</td>
+                      <td className="pr-4 text-right">{grupHucresi(g.ozet.medyan)}</td>
+                      <td className="pr-4 text-right">{g.ozet.n === 0 ? '—' : tepeMetni(g.ozet, ondalik)}</td>
+                    </>
+                  )}
+                  {olculer.merkezi && yayilimSayisi > 0 && <td />}
+                  {olculer.aciklik && <td className="pr-4 text-right">{grupHucresi(g.ozet.aciklik)}</td>}
+                  {olculer.oms && <td className="pr-4 text-right">{grupHucresi(g.ozet.oms)}</td>}
+                  {olculer.standartSapma && <td className="text-right">{grupHucresi(g.ozet.standartSapma)}</td>}
                 </tr>
               ))}
             </tbody>
@@ -998,20 +1112,24 @@ export function IstatistikPaneli({ tablo, sutun, seciliSatir, onSatirSec, adimla
             Veri sayısı: {ozet.n}
           </span>
         )}
-        <label className="ml-auto inline-flex h-11 cursor-pointer items-center gap-2 rounded-[calc(var(--radius)-6px)] border border-border bg-card px-3 text-[13px] font-semibold text-foreground">
-          <input type="checkbox" className={ONAY_KUTUSU} checked={adimlariGoster} onChange={(e) => onAdimlariGoster(e.target.checked)} />
-          Hesaplama adımlarını göster
-        </label>
+        {!olcusuz && (
+          <label className="ml-auto inline-flex h-11 cursor-pointer items-center gap-2 rounded-[calc(var(--radius)-6px)] border border-border bg-card px-3 text-[13px] font-semibold text-foreground">
+            <input type="checkbox" className={ONAY_KUTUSU} checked={adimlariGoster} onChange={(e) => onAdimlariGoster(e.target.checked)} />
+            Hesaplama adımlarını göster
+          </label>
+        )}
       </div>
 
       {ozet.n === 0 && (ikinciOzet === null || ikinciOzet.n === 0) ? (
         <p className="rounded-[calc(var(--radius)-4px)] border border-border bg-card p-4 text-[13px] text-muted-foreground">
           Bu değişkende sayısal değer yok. Tabloya sayı girin ya da başka bir değişken seçin.
         </p>
+      ) : olcusuz ? (
+        <OlcusuzOzet degerler={degerler} ondalik={ondalik} />
       ) : ikinci !== null && ikinciOzet ? (
-        <KarsilastirmaTablosu adlar={[sutunAdi, ikinciAdi]} ozetler={[ozet, ikinciOzet]} ondalik={ondalik} />
+        <KarsilastirmaTablosu adlar={[sutunAdi, ikinciAdi]} ozetler={[ozet, ikinciOzet]} ondalik={ondalik} olculer={olculer} />
       ) : (
-        <OlcuKartlari ozet={ozet} ondalik={ondalik} />
+        <OlcuKartlari ozet={ozet} ondalik={ondalik} olculer={olculer} />
       )}
 
       {!adimlar && grupBolumu}
@@ -1028,6 +1146,7 @@ export function IstatistikPaneli({ tablo, sutun, seciliSatir, onSatirSec, adimla
             onSatirSec={onSatirSec}
             anahtar={anahtar}
             baslik={ikinci !== null ? `${sutunAdi}: hesaplama adımları` : undefined}
+            olculer={olculer}
           />
           {ikinci !== null && ikinciAdimlar && (
             <HesaplamaAdimlariBolumu
@@ -1040,6 +1159,7 @@ export function IstatistikPaneli({ tablo, sutun, seciliSatir, onSatirSec, adimla
               onSatirSec={onSatirSec}
               anahtar={anahtar && anahtar.sutun !== ikinci ? anahtar : null}
               baslik={`${ikinciAdi}: hesaplama adımları`}
+              olculer={olculer}
             />
           )}
         </div>
