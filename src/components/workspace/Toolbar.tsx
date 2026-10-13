@@ -74,6 +74,7 @@ import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { MathKeypad } from '@/components/workspace/MathKeypad';
 import { LayoutMode } from './PropertiesPanel';
 import { GorunumDuzeniPaneli } from './gorunumDuzenleri';
+import { DONUSUM_ADLARI, donusumTuru } from '@/math/insaYardimcilari';
 
 interface ToolbarProps {
   onSelectTool?: (tool: ToolMode) => void;
@@ -1079,6 +1080,7 @@ export function Toolbar({
                     const isSelected = selectedObjectId === obj.id;
                     const bicim = satirBicimi(obj);
                     const duzenleniyor = editingRowId === obj.id;
+                    const donusum = obj.type === 'point' ? donusumTuru(obj) : null;
 
                     return (
                       <div
@@ -1117,7 +1119,14 @@ export function Toolbar({
 
                             {/* Nesne Adı — alt indis ve üssü yazımla çizilir ("A_1" değil "A₁") */}
                             <span className="font-bold text-[13px] text-foreground shrink-0 yazim-payi">
-                              <MatematikMetni metin={obj.label || obj.type} ayar={yazim} />:
+                              <MatematikMetni metin={obj.label || obj.type} ayar={yazim} />
+                              {/* Dönüşüm görüntüsünün noktası: hangi dönüşüme ait olduğu yazılır (alan uzmanı, 4. tur) */}
+                              {donusum && (
+                                <span data-donusum={donusum} className="font-semibold text-[11px] text-muted-foreground">
+                                  {' '}({DONUSUM_ADLARI[donusum]})
+                                </span>
+                              )}
+                              :
                             </span>
 
                             {/* Konum / Boyut / İfade Bilgisi */}

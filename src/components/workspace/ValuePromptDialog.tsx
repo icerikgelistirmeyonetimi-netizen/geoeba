@@ -27,22 +27,31 @@ interface Props {
   onClose: () => void;
 }
 
+/** Pencere açıkken arka plana (tuvale) basılınca gösterilen uyarı. */
+export const ARKA_PLAN_UYARISI = 'Önce «Uygula» ya da «Vazgeç» düğmesine basın.';
+
 /**
  * Araçların sayı veya oran sorması için ortak pencere.
  *
  * "Uzunluğu verilen doğru parçası" ve "oranda böl" gibi araçlar tıklamadan sonra
  * bir değer ister. Her biri için ayrı pencere yazmak yerine doğrulamayı çağırana
  * bırakan tek bir pencere kullanılır.
+ *
+ * Pencere arka plana basılınca KAPANMAZ (alan uzmanı, atölye inceleme 4. tur): eskiden tuvale yapılan tıklama
+ * pencereyi kapatıp bekleyen parçayı (H) çizdirmeden iptal ediyor, sonraki tıklama yeni nokta açıyordu. Şimdi
+ * basış karartmada kalır, uyarı çıkar ve odak kutuya döner; pencere yalnız Uygula, Vazgeç ya da Esc ile kapanır.
  */
 export function ValuePromptDialog({ request, onClose }: Props) {
   const [deger, setDeger] = useState('');
   const [hata, setHata] = useState<string | null>(null);
+  const [uyari, setUyari] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!request) return;
     setDeger(request.initial ?? '');
     setHata(null);
+    setUyari(false);
     // Modal açıldıktan sonra odak ve tüm metni seçili getir
     const t = window.setTimeout(() => {
       inputRef.current?.focus();
@@ -67,6 +76,11 @@ export function ValuePromptDialog({ request, onClose }: Props) {
     <Modal
       isOpen
       onClose={onClose}
+      closeOnBackdrop={false}
+      onBackdropPress={() => {
+        setUyari(true);
+        inputRef.current?.focus();
+      }}
       overlayClassName="bg-ada-murekkep/60 backdrop-blur-sm select-none"
       className="bg-card border border-border w-full max-w-sm rounded-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-150"
     >
@@ -88,6 +102,7 @@ export function ValuePromptDialog({ request, onClose }: Props) {
               onChange={(e) => {
                 setDeger(e.target.value);
                 if (hata) setHata(null);
+                if (uyari) setUyari(false);
               }}
               aria-invalid={hata !== null}
               className={`flex-1 px-3 py-2 rounded-xl bg-background border text-sm font-mono outline-none focus:border-primary ${
@@ -98,8 +113,13 @@ export function ValuePromptDialog({ request, onClose }: Props) {
               <span className="text-xs font-bold text-muted-foreground shrink-0">{request.unit}</span>
             )}
           </div>
-          {request.hint && !hata && (
+          {request.hint && !hata && !uyari && (
             <p className="text-[11px] text-muted-foreground leading-snug">{request.hint}</p>
+          )}
+          {uyari && !hata && (
+            <p role="status" data-arka-plan-uyarisi className="text-[11px] text-ada-deniz-koyu dark:text-ada-lavanta font-semibold">
+              {ARKA_PLAN_UYARISI}
+            </p>
           )}
           {hata && (
             <p role="alert" className="text-[11px] text-destructive font-semibold">

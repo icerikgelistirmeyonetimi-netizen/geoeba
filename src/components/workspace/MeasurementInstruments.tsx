@@ -53,6 +53,7 @@ import {
   alanKoseKaymasi,
   alanModeliMenusu,
   alanModeliniYerlestir,
+  alanModeliEngelleri,
   alanOkumasi,
   cetvelBoyuSuruklemeden,
   cetvelBoyunuDegistir,
@@ -325,7 +326,8 @@ export function MeasurementInstruments({
       setSetsquareSize(boy);
       setSetsquarePos(konum);
     } else {
-      const { konum, sutun, satir } = alanModeliniYerlestir(t.sutun, t.satir, vp);
+      // Şekillerin ve ölçü etiketlerinin üstüne konmaz (alan uzmanı, 4. tur: ızgara A(ABC) etiketini kapatıyordu)
+      const { konum, sutun, satir } = alanModeliniYerlestir(t.sutun, t.satir, vp, alanModeliEngelleri(objects));
       setAreaCols(sutun);
       setAreaRows(satir);
       setAreaModelPos(konum);

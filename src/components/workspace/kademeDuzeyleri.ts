@@ -275,8 +275,20 @@ export function aracGorunurMu(duzey: KademeDuzeyi, arac: string): boolean {
 /** Araç listesini kademeye göre süzer (sıra korunur). */
 export function araclariSuz<T extends { id: string }>(araclar: readonly T[], duzey: KademeDuzeyi): T[] {
   const kume = gorunenAraclar(duzey);
-  return kume === null ? [...araclar] : araclar.filter((a) => kume.has(a.id));
+  const suzulmus = kume === null ? [...araclar] : araclar.filter((a) => kume.has(a.id));
+  const adlar = duzey === 'tum' ? undefined : KADEME_ARAC_ADLARI[duzey];
+  if (!adlar) return suzulmus;
+  return suzulmus.map((a) => (adlar[a.id] && 'name' in a ? { ...a, name: adlar[a.id] } : a));
 }
+
+/**
+ * Kademeye özel araç adları (panel, Araçlar menüsü, kılavuz bu süzülmüş listeden okur). Ortaokulda bütün ölçüler
+ * Ayarlar'daki varsayılan birimle (br) yazıldığı için "Uzunluk Ölç (cm)" birimini adından bırakır (alan uzmanı,
+ * atölye inceleme 4. tur: "tüm ölçülerde tek birim kullan"; olcuYuvarlama.ts). Diğer kademelerde ad değişmez.
+ */
+export const KADEME_ARAC_ADLARI: Partial<Record<KademeId, Readonly<Record<string, string>>>> = {
+  ortaokul: { measure_distance: 'Uzunluk Ölç' },
+};
 
 /**
  * Araç gruplarını kademeye göre süzer: her grupta yalnız görünen araçlar kalır, boşalan grup düşer.

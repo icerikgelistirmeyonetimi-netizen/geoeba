@@ -17,6 +17,20 @@ interface ModalProps {
   initialFocusRef?: React.RefObject<HTMLElement>;
   /** Arka plana tıklayınca kapansın mı (varsayılan: evet) */
   closeOnBackdrop?: boolean;
+  /**
+   * closeOnBackdrop kapalıyken arka plana basılınca çağrılır (ör. "önce Uygula ya da Vazgeç" uyarısı). Basış hiçbir
+   * durumda arkadaki tuvale ulaşmaz: karartma katmanı onu yutar.
+   */
+  onBackdropPress?: () => void;
+}
+
+/**
+ * Karartmaya (arka plana) basılınca ne olur: pencere kapanır, uyarılır ya da hiçbir şey olmaz. Basış pencerenin
+ * içindeyse (hedef karartmanın kendisi değilse) yok sayılır. Arkadaki tuvale hiçbir durumda ulaşmaz.
+ */
+export function arkaPlanEylemi(karartmaninKendisi: boolean, closeOnBackdrop: boolean): 'kapat' | 'uyar' | 'yok' {
+  if (!karartmaninKendisi) return 'yok';
+  return closeOnBackdrop ? 'kapat' : 'uyar';
 }
 
 const FOCUSABLE_SELECTOR =
@@ -36,6 +50,7 @@ export function Modal({
   overlayClassName = '',
   initialFocusRef,
   closeOnBackdrop = true,
+  onBackdropPress,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
@@ -134,9 +149,9 @@ export function Modal({
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${overlayClassName}`}
       onMouseDown={(e) => {
-        if (closeOnBackdrop && e.target === e.currentTarget) {
-          onClose();
-        }
+        const eylem = arkaPlanEylemi(e.target === e.currentTarget, closeOnBackdrop);
+        if (eylem === 'kapat') onClose();
+        else if (eylem === 'uyar') onBackdropPress?.();
       }}
     >
       <div

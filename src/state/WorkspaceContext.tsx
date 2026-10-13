@@ -98,6 +98,8 @@ import type { WorkspaceScene } from '@/types/workspaceScene';
 import type { Solid3DObject } from '@/types/workspace3d';
 import { ILKOKUL_EN_COK_KENAR, ilkokulGorunumu, ilkokulKipindeMi, ilkokulUzunlukMetni, useIlkokulKipindeMi } from '@/components/workspace/ilkokulKipi';
 import { kesirAyariniOku, kesirAyariniSinirla, kesirEtiketi } from '@/components/workspace/kesirModeli';
+import { tamSayiOlcuSimdi, uzunlukOlcuBirimiSimdi } from '@/components/workspace/olcuYuvarlama';
+import { ayniKonumdakiNokta, goruntuNoktaAdlari, kareKoseleri } from '@/math/insaYardimcilari';
 
 export { createId } from './ids';
 
@@ -191,7 +193,11 @@ interface WorkspaceContextType {
   moveObjectsZ: (objectIds: string[], dz: number, recordHistory?: boolean) => void;
   clearWorkspace: () => void;
   resetViewport: () => void;
-  handlePointClick: (pointId: string, objectsOverride?: MathObject[]) => void;
+  /**
+   * `pendingOverride`: bu tıklamadan önce seçilmiş sayılacak noktalar (bekleyen seçim yerine). Dik / Paralel
+   * Doğru'da tıklanan çizginin iki noktası, Uzunluk Ölç'te tıklanan kenarın ilk köşesi böyle verilir.
+   */
+  handlePointClick: (pointId: string, objectsOverride?: MathObject[], pendingOverride?: string[]) => void;
   handleCanvasClick: (worldPos: Point2D) => void;
   handlePointDrag: (pointId: string, newWorldPos: Point2D) => void;
   handleSliderChange: (sliderId: string, value: number) => void;
@@ -1079,22 +1085,30 @@ function oteleSekil(
   const noktaBul = (id: string) =>
     objs.find((o) => o.id === id && o.type === 'point') as PointObject | undefined;
 
-  /** Verilen nokta kimliklerinin ötelenmiş kopyalarını üretir; eşleme tablosuyla döner. */
+  /**
+   * Verilen nokta kimliklerinin ötelenmiş kopyalarını üretir; eşleme tablosuyla döner. Görüntü adı başka bir
+   * dönüşümde kullanılmışsa bir üs daha alır (A' doluysa A''; alan uzmanı, 4. tur).
+   */
   const kopyala = (ids: string[]): { yeniler: PointObject[]; esleme: Map<string, string> } | null => {
     const yeniler: PointObject[] = [];
     const esleme = new Map<string, string>();
-    for (const id of ids) {
-      const p = noktaBul(id);
-      if (!p) return null;
+    const kaynaklar = ids.map(noktaBul);
+    if (kaynaklar.some((p) => !p)) return null;
+    const adlar = goruntuNoktaAdlari(
+      (kaynaklar as PointObject[]).map((p) => p.label),
+      objs.filter((o) => o.type === 'point').map((o) => o.label)
+    );
+    (kaynaklar as PointObject[]).forEach((p, i) => {
       const yeni = noktaUret(p.x + vektor.x, p.y + vektor.y, '#9333ea');
-      yeni.label = `${p.label}'`;
+      yeni.label = adlar[i];
+      yeni.donusum = 'oteleme';
       yeniler.push(yeni);
-      esleme.set(id, yeni.id);
-    }
+      esleme.set(p.id, yeni.id);
+    });
     return { yeniler, esleme };
   };
 
-  const ortak = { visible: true, showLabel: true, createdAt: Date.now(), color: '#9333ea' };
+  const ortak = { visible: true, showLabel: true, createdAt: Date.now(), color: '#9333ea', donusum: 'oteleme' as const };
 
   if (hedef.type === 'polygon') {
     const k = kopyala(hedef.pointIds);
@@ -1470,6 +1484,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     studioDimension,
   });
   latest.current = { objects, activeTool, pendingPointIds, selectedObjectIds, viewport, studioDimension };
+  /** Araç işleyicilerinin bildirimi tuvaldeki yazımla aynı yuvarlansın diye güncel stil ayarları */
+  const stilRef = useRef(styleSettings);
+  stilRef.current = styleSettings;
 
   const setSelectedObjectId = useCallback((id: string | null) => {
     setSelectedObjectIds(id ? [id] : []);
@@ -3317,8 +3334,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   // nesne listesi ([...objects, ...yeniNoktalar] biçiminde olmalı).
   // -------------------------------------------------------------------------
   const handlePointClick = useCallback(
-    (pointId: string, objectsOverride?: MathObject[]) => {
-      const { activeTool: tool, pendingPointIds: pending, objects: currentObjects } = latest.current;
+    (pointId: string, objectsOverride?: MathObject[], pendingOverride?: string[]) => {
+      const { activeTool: tool, objects: currentObjects } = latest.current;
+      const pending = pendingOverride ?? latest.current.pendingPointIds;
       const objs = objectsOverride ?? currentObjects;
       // Henüz duruma yazılmamış (bu olayda yaratılan) nesneler
       const newlyCreated = objectsOverride ? objectsOverride.slice(currentObjects.length) : [];
@@ -3495,6 +3513,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           createdAt: Date.now(),
         };
       };
+      /**
+       * O konumda zaten bir nokta varsa yenisi açılmaz (alan uzmanı, 4. tur: Orta Nokta ile Orta Dikme aynı yerde
+       * iki ayrı nokta üretiyor, D ve F üst üste yazılıyordu). `yeni` false ise nokta sahnede vardır, eklenmez.
+       */
+      const noktaYaDaYeni = (x: number, y: number, renk?: string): { nokta: PointObject; yeni: boolean } => {
+        const var_ = ayniKonumdakiNokta([...objs, ...newlyCreated], x, y);
+        return var_ ? { nokta: var_, yeni: false } : { nokta: yardimciNokta(x, y, renk), yeni: true };
+      };
 
       /** Yay Ölç: aynı çemberin üzerindeki iki nokta arasındaki yay (çember bölünmez) */
       if (tool === 'measure_arc') {
@@ -3553,7 +3579,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
         if (tool === 'midpoint') {
           const m = midpoint(a, b);
-          const nokta = yardimciNokta(m.x, m.y);
+          const { nokta, yeni } = noktaYaDaYeni(m.x, m.y);
+          if (!yeni) {
+            // Orta noktada zaten bir nokta var (ör. orta dikmenin noktası): ikinci harf açılmaz
+            commitPendingOnly();
+            setHintMessage(nokta.label + ' zaten [' + a.label + b.label + '] parçasının orta noktası; yeni nokta eklenmedi.');
+            return;
+          }
           commitWith([nokta], nokta.label + ' orta noktası oluşturuldu');
           setHintMessage(nokta.label + ', [' + a.label + b.label + '] parçasının orta noktasıdır.');
           return;
@@ -3566,7 +3598,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             commitPendingOnly();
             return;
           }
-          const n1 = yardimciNokta(pb[0].x, pb[0].y, '#0f766e');
+          // Orta noktada nokta varsa (Orta Nokta aracı) orta dikme onu kullanır: aynı yerde ikinci harf olmaz
+          const orta = noktaYaDaYeni(pb[0].x, pb[0].y, '#0f766e');
+          const n1 = orta.nokta;
           const n2 = yardimciNokta(pb[1].x, pb[1].y, '#0f766e');
           const dogru: LineObject = {
             id: createId('line'),
@@ -3579,7 +3613,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             visible: true,
             createdAt: Date.now(),
           };
-          commitWith([n1, n2, dogru], dogru.label + ' oluşturuldu');
+          commitWith([...(orta.yeni ? [n1] : []), n2, dogru], dogru.label + ' oluşturuldu');
           return;
         }
 
@@ -4030,7 +4064,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       if (tool === 'measure_distance' || tool === 'unit_measure') {
         const nextPending = [...pending, pointId];
         const isCm = tool === 'measure_distance';
-        const unit = isCm ? 'cm' : 'br';
+        // Ortaokulda Uzunluk Ölç de br yazar: aynı kenar tuvalde cm, listede br görünmesin (alan uzmanı, 4. tur)
+        const unit = isCm ? uzunlukOlcuBirimiSimdi() : 'br';
 
         if (nextPending.length === 1) {
           commitPendingOnly();
@@ -4068,7 +4103,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             setHintMessageState(
               ilkokul
                 ? `${isCm ? 'Uzunluk' : 'Birim'} ölçümü: ${ilkokulUzunlukMetni(rawDist, unit)}`
-                : `${isCm ? 'Uzunluk' : 'Birim'} ölçümü: ${olcuMetni(uzunluk(p1, p2, rawDist, { birim: isCm ? 'cm' : 'br' }))}`
+                : `${isCm ? 'Uzunluk' : 'Birim'} ölçümü: ${olcuMetni(uzunluk(p1, p2, rawDist, { birim: unit }), {
+                    olcuYazimi: 'tam',
+                    aciYazimi: 'sapka',
+                    // Tuvaldeki etiketle aynı sayı: tam sayı ayarı kademeye göre (ortaokulda 2 ondalık)
+                    tamSayi: tamSayiOlcuSimdi(stilRef.current),
+                  })}`
             );
           } else {
             commitPendingOnly();
@@ -4415,9 +4455,57 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // 2-3. KARE / DİKDÖRTGEN ARACI (tıklama ile standart boyut)
-      if (tool === 'square' || tool === 'rectangle') {
-        const w = tool === 'square' ? 4 : 6;
+      // 2. KARE: tıklanan nokta sol alt köşedir, kenar uzunluğu sorulur (alan uzmanı, 4. tur: "ilk tıklama merkezli
+      // sabit 4×4'lük kare çiziyor, öğrenci kenar uzunluğunu belirleyemiyor"). Sürükleyerek çizim değişmedi.
+      // Aracın genel davranışıdır (kademeye özel içerik değil): her kademede aynı.
+      if (tool === 'square') {
+        const kose = { x: worldPos.x, y: worldPos.y };
+        setValuePrompt({
+          title: 'Kare',
+          label: 'Kenar uzunluğu',
+          unit: 'br',
+          initial: '4',
+          placeholder: 'örn. 3',
+          hint: 'Tıkladığınız nokta karenin sol alt köşesi olur; kare sağa ve yukarı çizilir. Köşeden sürükleyerek de çizebilirsiniz.',
+          onSubmit: (raw: string) => {
+            const kapsam: Record<string, number> = {};
+            for (const o of latest.current.objects) {
+              if (o.type === 'slider') kapsam[(o as SliderObject).variableName] = (o as SliderObject).value;
+            }
+            const okundu = evaluateNumericInput(raw, kapsam);
+            if (!okundu.ok) return okundu.error;
+            const kenar = okundu.value;
+            if (!(kenar > 0)) return 'Kenar uzunluğu sıfırdan büyük olmalı.';
+            if (kenar > 100) return 'Kenar uzunluğu en çok 100 br olabilir.';
+            const adlar = generateNextPointLabels(
+              latest.current.objects.filter((o) => o.type === 'point').map((o) => o.label || ''),
+              4
+            );
+            const pts = kareKoseleri(kose, kenar).map((k, i) => makePoint(adlar[i], k.x, k.y, '#3b82f6'));
+            const poly: PolygonObject = {
+              id: createId('poly'),
+              type: 'polygon',
+              label: 'Kare',
+              showLabel: true,
+              pointIds: pts.map((pt) => pt.id),
+              color: '#f43f5e',
+              fillColor: '#f43f5e',
+              fillOpacity: 0.18,
+              visible: true,
+              showArea: true,
+              showPerimeter: true,
+              createdAt: Date.now(),
+            };
+            addObjects([...pts, poly], `Kare oluşturuldu (a = ${formatTurkishNumber(kenar)} br)`);
+            return null;
+          },
+        });
+        return;
+      }
+
+      // 3. DİKDÖRTGEN ARACI (tıklama ile standart boyut)
+      if (tool === 'rectangle') {
+        const w = 6;
         const h = 4;
         const x1 = worldPos.x - w / 2;
         const y1 = worldPos.y - h / 2;
@@ -4436,11 +4524,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const poly: PolygonObject = {
           id: createId('poly'),
           type: 'polygon',
-          label: tool === 'square' ? 'Kare' : 'Dikdörtgen',
+          label: 'Dikdörtgen',
           showLabel: true,
           pointIds: pts.map((p) => p.id),
-          color: tool === 'square' ? '#f43f5e' : '#f59e0b',
-          fillColor: tool === 'square' ? '#f43f5e' : '#f59e0b',
+          color: '#f59e0b',
+          fillColor: '#f59e0b',
           fillOpacity: 0.18,
           visible: true,
           showArea: true,
@@ -4448,12 +4536,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           createdAt: Date.now(),
         };
 
-        addObjects(
-          [...pts, poly],
-          tool === 'square'
-            ? `Kare oluşturuldu (a = ${formatTurkishNumber(w)} br)`
-            : `Dikdörtgen oluşturuldu (${formatTurkishNumber(w)} x ${formatTurkishNumber(h)} br)`
-        );
+        addObjects([...pts, poly], `Dikdörtgen oluşturuldu (${formatTurkishNumber(w)} x ${formatTurkishNumber(h)} br)`);
         return;
       }
 
