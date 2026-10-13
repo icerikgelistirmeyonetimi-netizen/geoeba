@@ -20,6 +20,7 @@ import { sliderDisplay } from '@/math/sliderDisplay';
 import { yazimAyari, yaricap } from '@/math/matematikYazimi';
 import { cemberMerkezi, nesnedenNokta } from '@/math/olcuYazimlari';
 import { type PanelSatiri, metinSatiri, nesneSatirlari, olcuSatiri, panelYazimi } from '@/math/panelYazimlari';
+import { fonksiyonEtiketiYazimi, ifadeYazimi } from '@/math/fonksiyonYazimi';
 import { MatematikMetni } from '@/components/workspace/MatematikMetni';
 import { PanelOlcusu } from '@/components/workspace/PanelOlcusu';
 import { executeTurkishCommand, normalizeCommand } from '@/math/turkishCommands';
@@ -228,8 +229,9 @@ export function AlgebraView({
         };
       }
       case 'function': {
+        // Okunur yazım: başlık "f(x) = 2x + 1", değer "y = 2x + 1" (ham 2*x, x^2 değil; alan uzmanı, 4. tur)
         const fn = obj as FunctionObject;
-        return { header, ana: metinSatiri(`y = ${(fn as FunctionObject).expression}`) };
+        return { header: fonksiyonEtiketiYazimi(fn), ana: metinSatiri(`y = ${ifadeYazimi(fn.expression)}`) };
       }
       case 'line': {
         const line = obj as LineObject;

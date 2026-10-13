@@ -16,6 +16,7 @@ import { formatTurkishNumber } from '@/math/coordinates';
 import { validateMathExpression } from '@/math/parser';
 import { functionNameOwner, nextFunctionName } from '@/math/functionNames';
 import { Modal } from '@/components/ui/Modal';
+import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import {
   X,
   Hash,
@@ -94,6 +95,66 @@ function parseNumberInput(raw: string): number | null {
 
 const fmt = (n: number) => formatTurkishNumber(n, 2);
 
+/** Çember ve dairede "Ad" merkez noktasının adıdır: tuvalde görünen tek ad odur (alan uzmanı, 4. tur: "daire1" yazılıyor,
+ *  tuvalde merkezin adı "H" görünüyordu). Şeklin kendi adı uygulamanın kalıbıyla "M Merkezli Çember" olur. */
+const MERKEZ_ADLI: ReadonlySet<TabType> = new Set<TabType>(['circle', 'disk']);
+
+/** "Ad" alanının etiketi: adın nerede görüneceğini söyler */
+export function adAlaniEtiketi(sekme: TabType): string {
+  if (sekme === 'point') return 'Nokta adı';
+  if (MERKEZ_ADLI.has(sekme)) return 'Merkez noktasının adı (tuvalde görünür)';
+  if (sekme === 'function') return 'Fonksiyon adı';
+  return 'Ad (Nesneler listesinde görünür)';
+}
+
+/**
+ * Ortaokulda komut önizlemesi yerine eklenecek nesnenin düz cümleyle özeti (alan uzmanı, 4. tur: "Daire(daire1M, r=2)"
+ * kod dili ortaokul için ağır). Diğer kademelerde komut önizlemesi değişmez.
+ */
+export function nesneOzeti(
+  sekme: TabType,
+  d: { ad: string; x: number; y: number; z: number; r: number; w: number; h: number; d: number; aci: number; ifade: string }
+): string {
+  const n = (px: number, py: number) => `(${fmt(px)}; ${fmt(py)})`;
+  const merkez3 = `(${fmt(d.x)}; ${fmt(d.y)}; ${fmt(d.z)})`;
+  switch (sekme) {
+    case 'point':
+      return `${d.ad}${n(d.x, d.y)} noktası`;
+    case 'segment':
+      return `Uçları ${n(d.x, d.y)} ve ${n(d.x + d.w, d.y + d.h)} olan doğru parçası`;
+    case 'circle':
+      return `Merkezi ${d.ad}${n(d.x, d.y)}, yarıçapı ${fmt(d.r)} br olan çember`;
+    case 'disk':
+      return `Merkezi ${d.ad}${n(d.x, d.y)}, yarıçapı ${fmt(d.r)} br olan daire`;
+    case 'triangle':
+      return `Köşeleri ${n(d.x, d.y)}, ${n(d.x + d.w, d.y)} ve ${n(d.x + d.w / 2, d.y + d.h)} olan üçgen`;
+    case 'square':
+      return `Bir köşesi ${n(d.x, d.y)}, kenar uzunluğu ${fmt(d.w)} br olan kare`;
+    case 'rectangle':
+      return `Bir köşesi ${n(d.x, d.y)}, kenar uzunlukları ${fmt(d.w)} br ve ${fmt(d.h)} br olan dikdörtgen`;
+    case 'angle':
+      return `Köşesi ${n(d.x, d.y)}, ölçüsü ${fmt(d.aci)}° olan açı`;
+    case 'function':
+      return `${d.ad}(x) = ${d.ifade} fonksiyonunun grafiği`;
+    case 'cube':
+      return `Merkezi ${merkez3}, kenar uzunluğu ${fmt(d.w)} br olan küp`;
+    case 'sphere':
+      return `Merkezi ${merkez3}, yarıçapı ${fmt(d.r)} br olan küre`;
+    case 'cylinder':
+      return `Merkezi ${merkez3}, yarıçapı ${fmt(d.r)} br, yüksekliği ${fmt(d.h)} br olan silindir`;
+    case 'prism':
+      return `Merkezi ${merkez3}, ayrıtları ${fmt(d.w)} br, ${fmt(d.d)} br ve ${fmt(d.h)} br olan dikdörtgenler prizması`;
+    case 'triangular_prism':
+      return `Merkezi ${merkez3}, taban kenarı ${fmt(d.w)} br, derinliği ${fmt(d.d)} br, yüksekliği ${fmt(d.h)} br olan üçgen prizma`;
+    case 'cone':
+      return `Merkezi ${merkez3}, yarıçapı ${fmt(d.r)} br, yüksekliği ${fmt(d.h)} br olan koni`;
+    case 'pyramid':
+      return `Merkezi ${merkez3}, taban kenarı ${fmt(d.w)} br, yüksekliği ${fmt(d.h)} br olan kare piramit`;
+    default:
+      return '';
+  }
+}
+
 export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: AddObjectModalProps) {
   const { addObject, addObjects, addFunction, objects } = useWorkspace();
   const [selectedTab, setSelectedTab] = useState<TabType>(is3D ? DEFAULT_TAB_3D : DEFAULT_TAB_2D);
@@ -112,20 +173,31 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
   const [error, setError] = useState<string | null>(null);
 
   const visibleTabs = useMemo(() => TABS.filter((t) => t.dimension === (is3D ? '3D' : '2D')), [is3D]);
+  // Ortaokulda komut önizlemesi yerine düz cümle (nesneOzeti)
+  const [kademeDuzeyi] = useKademeDuzeyi();
+  const sadeOnizleme = kademeDuzeyi === 'ortaokul';
+
+  /** Sekmenin başlangıç adı: fonksiyonda boştaki ad (f varsa g …), çember / dairede boştaki nokta adı (merkez) */
+  const varsayilanAd = (sekme: TabType): string => {
+    if (sekme === 'function') return nextFunctionName(objects);
+    if (MERKEZ_ADLI.has(sekme)) return generateNextPointLabel(objects.filter((o) => o.type === 'point').map((o) => o.label));
+    return TABS.find((t) => t.id === sekme)?.defaultName ?? '';
+  };
 
   // Modal her açıldığında veya 2D/3D bağlamı değiştiğinde varsayılan sekmeye dön
   useEffect(() => {
     if (!isOpen) return;
     const defaultTab = is3D ? DEFAULT_TAB_3D : DEFAULT_TAB_2D;
     setSelectedTab(defaultTab);
-    setName(TABS.find((t) => t.id === defaultTab)?.defaultName ?? '');
+    setName(varsayilanAd(defaultTab));
     setError(null);
+    // Yalnız açılışta: nesneler değişince yazılan ad silinmesin
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, is3D]);
 
   const handleTabChange = (tab: TabItem) => {
     setSelectedTab(tab.id);
-    // Fonksiyon adı boştaki sıradaki ad olur (f varsa g …)
-    setName(tab.id === 'function' ? nextFunctionName(objects) : tab.defaultName);
+    setName(varsayilanAd(tab.id));
     setError(null);
   };
 
@@ -163,9 +235,9 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
       case 'segment':
         return `${name}A = ${p(x, y)}\n${name}B = ${p(x + w, y + h)}\n${name} = DoğruParçası(${name}A, ${name}B)`;
       case 'circle':
-        return `${name}M = ${p(x, y)}\n${name} = Çember(${name}M, r=${fmt(r)})`;
+        return `${name} = ${p(x, y)}\nÇember(${name}, r=${fmt(r)})`;
       case 'disk':
-        return `${name}M = ${p(x, y)}\n${name} = Daire(${name}M, r=${fmt(r)})`;
+        return `${name} = ${p(x, y)}\nDaire(${name}, r=${fmt(r)})`;
       case 'triangle':
         return `${name} = Üçgen(${p(x, y)}, ${p(x + w, y)}, ${p(x + w / 2, y + h)})`;
       case 'square':
@@ -200,6 +272,11 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
     const trimmedName = name.trim();
     if (!trimmedName) {
       setError('Ad boş olamaz.');
+      return;
+    }
+    if (MERKEZ_ADLI.has(selectedTab) && objects.some((o) => o.type === 'point' && o.label === trimmedName)) {
+      const oneri = generateNextPointLabel(objects.filter((o) => o.type === 'point').map((o) => o.label));
+      setError(`“${trimmedName}” adlı bir nokta zaten var. Merkez için başka bir ad yazın (örn. ${oneri}).`);
       return;
     }
 
@@ -312,11 +389,12 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
       };
       addObjects([a, b, seg], `${trimmedName} doğru parçası eklendi`);
     } else if (selectedTab === 'disk' || selectedTab === 'circle') {
-      const center = makePoint(x, y, nextLabel(), '#2563eb');
+      // Girilen ad merkez noktasının adıdır (tuvalde görünür); şekil "M Merkezli Çember / Daire" adını alır
+      const center = makePoint(x, y, trimmedName, '#2563eb');
       const circ: CircleObject = {
         id: createId('circ'),
         type: 'circle',
-        label: trimmedName,
+        label: `${trimmedName} Merkezli ${selectedTab === 'disk' ? 'Daire' : 'Çember'}`,
         showLabel: true,
         centerPointId: center.id,
         fixedRadius: r,
@@ -326,7 +404,7 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
         showArea: selectedTab === 'disk',
         createdAt: nextCreatedAt(),
       };
-      addObjects([center, circ], `${trimmedName} eklendi`);
+      addObjects([center, circ], `${circ.label} eklendi`);
     } else if (selectedTab === 'triangle' || selectedTab === 'square' || selectedTab === 'rectangle') {
       const sideH = selectedTab === 'square' ? w : h;
       const corners: [number, number][] =
@@ -479,7 +557,7 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
           {/* Ad Alanı */}
           <div className="space-y-1.5">
             <label className={LABEL_CLASS} htmlFor="add-object-name">
-              Ad
+              {adAlaniEtiketi(selectedTab)}
             </label>
             <input
               id="add-object-name"
@@ -524,8 +602,8 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
           {/* Konum */}
           {showsPosition && (
             <div className={`grid ${is3D ? 'grid-cols-3' : 'grid-cols-2'} gap-3 pt-1`}>
-              {numberField('add-object-x', selectedTab === 'angle' ? 'Köşe x' : is3D ? 'Merkez x' : 'Başlangıç x', startX, setStartX)}
-              {numberField('add-object-y', selectedTab === 'angle' ? 'Köşe y' : is3D ? 'Merkez y' : 'Başlangıç y', startY, setStartY)}
+              {numberField('add-object-x', selectedTab === 'angle' ? 'Köşe x' : is3D || MERKEZ_ADLI.has(selectedTab) ? 'Merkez x' : 'Başlangıç x', startX, setStartX)}
+              {numberField('add-object-y', selectedTab === 'angle' ? 'Köşe y' : is3D || MERKEZ_ADLI.has(selectedTab) ? 'Merkez y' : 'Başlangıç y', startY, setStartY)}
               {is3D && numberField('add-object-z', 'Merkez z', startZ, setStartZ)}
             </div>
           )}
@@ -545,11 +623,19 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
           {/* Açı Ölçüsü */}
           {selectedTab === 'angle' && numberField('add-object-angle', 'Açı Ölçüsü (°)', angleVal, setAngleVal)}
 
-          {/* Komut Önizleme Kutusu */}
-          <div className="space-y-1.5 pt-2">
-            <div className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">KOMUT ÖNİZLEME</div>
-            <div className="p-3.5 rounded-2xl bg-muted/60 border border-border font-mono text-xs text-foreground whitespace-pre-wrap leading-relaxed">
-              {commandPreview}
+          {/* Komut Önizleme Kutusu (ortaokulda düz cümleyle özet) */}
+          <div className="space-y-1.5 pt-2" data-nesne-onizleme={sadeOnizleme ? 'ozet' : 'komut'}>
+            <div className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">
+              {sadeOnizleme ? 'EKLENECEK' : 'KOMUT ÖNİZLEME'}
+            </div>
+            <div
+              className={`p-3.5 rounded-2xl bg-muted/60 border border-border text-xs text-foreground whitespace-pre-wrap leading-relaxed ${
+                sadeOnizleme ? 'font-semibold' : 'font-mono'
+              }`}
+            >
+              {sadeOnizleme
+                ? nesneOzeti(selectedTab, { ad: name.trim(), x, y, z, r, w, h, d, aci: ang, ifade: funcExpr.trim() })
+                : commandPreview}
             </div>
           </div>
 

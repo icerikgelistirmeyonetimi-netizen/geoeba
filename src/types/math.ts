@@ -115,6 +115,11 @@ export interface BaseMathObject {
    * Silinince kendi noktalarını GÖTÜRMEZ: noktalar kullanıcınındır.
    */
   olcumSekli?: boolean;
+  /**
+   * Dönüşüm görüntüsü (Yansıt / Öteleme araçları): Nesneler listesinde adın yanına türü yazılır
+   * (alan uzmanı, 4. tur: "yansıma ve öteleme görüntülerinin ikisi de A', B', C'").
+   */
+  donusum?: 'yansima' | 'oteleme';
 }
 
 export interface PointObject extends BaseMathObject {

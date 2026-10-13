@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { VARSAYILAN_GORUNUM_AYARLARI, useWorkspace } from '@/state/WorkspaceContext';
 import { useTheme } from '@/state/ThemeContext';
 import { DEFAULT_STYLE_SETTINGS, ToolMode } from '@/types/workspace';
@@ -10,11 +11,16 @@ import { parseProjectFile } from '@/math/projectFile';
 import { formatTurkishNumber, visibleGridStep } from '@/math/coordinates';
 import { workspaceOwnsKeyboard, TOOL_SHORTCUTS } from './toolShortcuts';
 import { TOOL_GROUPS } from './toolDefinitions';
+import { TREE_TOOL_GROUPS } from './treeToolDefinitions';
+import { GORUNUM_DUZENLERI, eskiDuzeniCevir } from './gorunumDuzenleri';
+import { YeniCalismaModal, calismaImzasi, yeniIcinSorulmaliMi } from './YeniCalismaModal';
+import { kilavuzBolumleri } from './kullanimKilavuzu';
+import { basligaGelince, basligaTiklayinca } from './menuGecisi';
 import { isAnyModalOpen, registerModalOpen, registerModalClose } from '@/components/ui/modalState';
 import { StylePanel } from './StylePanel';
 import { EsitUzunluklarSimgesi } from './EsitlikSimgeleri';
 import { KademeDuzeyiMenusu } from './KademeDuzeyiMenusu';
-import { aracGorunurMu, kademeEtiketi } from './kademeDuzeyleri';
+import { aracGorunurMu, aracSecilebilirMi, gruplariSuz, kademeEtiketi } from './kademeDuzeyleri';
 import { gorunenKisayol } from './ilkokulKipi';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import {
@@ -31,9 +37,6 @@ import {
   Clipboard,
   Trash2,
   CheckSquare,
-  LayoutGrid,
-  Columns2,
-  Box,
   Eye,
   Grid,
   Compass,
@@ -61,6 +64,7 @@ import {
   Settings,
   X,
   Check,
+  ChevronDown,
   ChevronRight,
   ExternalLink,
   Contrast,
@@ -68,6 +72,7 @@ import {
   Magnet,
   FileCode2,
   Grid2x2,
+  PlusSquare,
 } from 'lucide-react';
 
 export interface WorkspaceMenuBarProps {
@@ -78,11 +83,13 @@ export interface WorkspaceMenuBarProps {
   onOpenSliderDialog?: () => void;
   onOpenAddObjectDialog?: () => void;
   onOpenRegularPolygonDialog?: () => void;
+  /** Kullanılmıyor: Dosya > Yeni kendi onayını açar (YeniCalismaModal). Eski çağıranlar için tür korunur. */
   onClearAll?: () => void;
   onResetView?: () => void;
 }
 
 type MenuKey = 'dosya' | 'duzenle' | 'gorunum' | 'araclar' | 'ekle' | 'ayarlar' | 'yardim' | 'kademe' | null;
+type MenuBasligi = Exclude<MenuKey, null>;
 
 /**
  * Menüdeki araç kısayolu ipucu: harf elle yazılmaz, klavyenin gerçek bağından (TOOL_SHORTCUTS) okunur.
@@ -94,13 +101,46 @@ function AracKisayolu({ arac }: { arac: ToolMode }) {
   return harf ? <span className="text-[10px] text-muted-foreground whitespace-nowrap">{harf}</span> : null;
 }
 
+/** Araçlar menüsünde alt menüye çevrilen panel grupları. Eskiden ölçüm, dönüşüm ve geometri araçları birer gruplu
+ *  satırdı; satırın adı birkaç araç (ortaokulda olmayan teğet dahil) sayarken satır tek bir aracı açıyordu (alan uzmanı, 4. tur). */
+export const ARACLAR_MENUSU_ALT_GRUPLARI: readonly string[] = ['olcme', 'insa', 'donusum'];
+
+/**
+ * Menü çubuğunun iletişim kutuları (Ayarlar, Kısayollar, Kılavuz, Yeni) Atölye penceresinin köküne taşınır: menü çubuğu
+ * başlık şeridinin içindedir ve oradaki kutunun karartması pencere düğmelerinin (küçült, büyüt, kapat) altında
+ * kalıyordu (alan uzmanı, 4. tur). React olayları portaldan da başlık şeridine kabarcıklanır: sürükleme (pointerdown)
+ * ve çift tıklamayla büyütme kutunun içinde başlamasın diye burada durdurulur. Pencere dışında (tek sayfa) yerinde çizilir.
+ */
+function PencereKatmani({ kok, children }: { kok: Element | null; children: React.ReactNode }) {
+  const durdur = (e: React.SyntheticEvent) => e.stopPropagation();
+  const icerik = (
+    <div className="contents" onPointerDown={durdur} onDoubleClick={durdur}>
+      {children}
+    </div>
+  );
+  return kok ? createPortal(icerik, kok) : icerik;
+}
+
 export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const [activeMenu, setActiveMenu] = useState<MenuKey>(null);
   const [infoModalType, setInfoModalType] = useState<'shortcuts' | 'about' | 'guide' | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'stil' | 'duzlem' | 'genel'>('stil');
-  /** "Varsayılana Sıfırla" iki adımlıdır: ilk basış onay ister, 4 saniye içinde ikinci basış uygular. */
+  /** "Varsayılana Sıfırla" iki adımlıdır: ilk basış onay ister, ikinci basış uygular (pencere kapanınca onay düşer). */
   const [sifirlamaOnayi, setSifirlamaOnayi] = useState(false);
+  /** Sıfırlamanın sonucu: pencerenin altında bildirilir */
+  const [sifirlamaSonucu, setSifirlamaSonucu] = useState<string | null>(null);
+  useEffect(() => {
+    if (isSettingsModalOpen) return;
+    setSifirlamaOnayi(false);
+    setSifirlamaSonucu(null);
+  }, [isSettingsModalOpen]);
+  /** Dosya > Yeni onayı açık mı */
+  const [yeniSoruluyor, setYeniSoruluyor] = useState(false);
+  /** Son kaydedilen (ya da yeni açılan) çalışmanın imzası: değişmemişse Yeni sormadan açılır */
+  const kayitliImza = useRef<string | null>(null);
+  /** Menü çubuğunun içinde bulunduğu Atölye penceresi (iletişim kutuları buraya taşınır) */
+  const [pencereKoku, setPencereKoku] = useState<Element | null>(null);
   // Ayarlar > Düzlem > Izgara aralığı: özel değer kutusu
   const [ozelAralik, setOzelAralik] = useState('');
   const [ozelAralikHata, setOzelAralikHata] = useState<string | null>(null);
@@ -122,6 +162,9 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   }, []);
   const menuBarRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    setPencereKoku(menuBarRef.current?.closest('[data-pencere]') ?? null);
+  }, []);
 
   const BG_COLORS = [
     { color: '#ffffff', name: 'Beyaz' },
@@ -142,6 +185,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
     selectedObjectId,
     viewport,
     setViewport,
+    clearWorkspace,
     undoWorkspace: undo,
     redoWorkspace: redo,
     canUndoWorkspace: canUndo,
@@ -160,7 +204,6 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
     setIsAddObjectDialogOpen,
     openRegularPolygonDialog,
     activateTool,
-    requestClearAll,
     studioDimension,
     setStyleSettings,
   } = useWorkspace();
@@ -172,7 +215,6 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const onOpenSliderDialog = props.onOpenSliderDialog ?? (() => setIsSliderDialogOpen(true));
   const onOpenAddObjectDialog = props.onOpenAddObjectDialog ?? (() => setIsAddObjectDialogOpen(true));
   const onOpenRegularPolygonDialog = props.onOpenRegularPolygonDialog ?? openRegularPolygonDialog;
-  const onClearAll = props.onClearAll ?? (() => requestClearAll(studioDimension));
   const onResetView = props.onResetView ?? resetViewport;
   const hasSelection = studioDimension === '3D' ? !!sceneBridge?.selectedIds.length : selectedObjectIds.length > 0;
   // Silme her iki görünümde de seçili 2B nesneleri ve 3B cisimleri birlikte kapsar (deleteSelection)
@@ -180,8 +222,18 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   // Araçlar menüsü de araç paneli gibi seçili kademenin araçlarını gösterir (Kademe menüsü)
   const [kademeDuzeyi] = useKademeDuzeyi();
   const aracMenudeGorunur = (arac: ToolMode) => aracGorunurMu(kademeDuzeyi, arac);
+  /** Araçlar menüsünün alt menüleri: paneldeki Ölçme, İnşa ve Dönüşüm grupları (kademeye göre süzülmüş) */
+  const araclarAltGruplari = gruplariSuz(TREE_TOOL_GROUPS, kademeDuzeyi).filter((g) => ARACLAR_MENUSU_ALT_GRUPLARI.includes(g.id));
+  const ALT_GRUP_SIMGESI: Record<string, React.ReactNode> = {
+    olcme: <Ruler className="w-3.5 h-3.5 text-ada-altin" />,
+    insa: <Wrench className="w-3.5 h-3.5 text-ada-deniz" />,
+    donusum: <FlipHorizontal className="w-3.5 h-3.5 text-ada-mercan" />,
+  };
   // İlkokulda koordinat ekseni, nokta koordinatları ve bölge adları zemin seçeneklerinde sunulmaz (ilkokulKipi.ts)
   const ilkokul = kademeDuzeyi === 'ilkokul';
+  // Klavye Kısayolları penceresi yalnız çalışan kısayolları listeler: ortaokulda paneldeki araçlar (aracSecilebilirMi)
+  const kisayolAraclari = TOOL_GROUPS.flatMap((g) => g.tools).filter((tool) => aracSecilebilirMi(kademeDuzeyi, tool.id));
+  const kisayollarSuzuldu = kisayolAraclari.length < TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0);
 
   // Menü dışına tıklanınca kapat
   useEffect(() => {
@@ -205,15 +257,31 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
     };
   }, []);
 
-  const handleMenuHeaderClick = (menu: MenuKey) => {
-    setActiveMenu((prev) => (prev === menu ? null : menu));
+  // Başlıklar arası geçiş (menuGecisi.ts): menü açıkken başka başlığın üzerine gelmek ya da ona tıklamak menüyü doğrudan
+  // o başlığa geçirir; üzerine gelmeyle açılan menünün ilk tıklaması menüyü kapatmaz (alan uzmanı, 4. tur).
+  const uzerineGelinceAcilan = useRef<MenuBasligi | null>(null);
+  useEffect(() => {
+    // Menü başka bir yoldan değişti (seçim yapıldı, dışarı tıklandı): "üzerine gelmeyle açıldı" bilgisi düşer
+    if (activeMenu !== uzerineGelinceAcilan.current) uzerineGelinceAcilan.current = null;
+  }, [activeMenu]);
+
+  const handleMenuHeaderClick = (menu: MenuBasligi) => {
+    const yeni = basligaTiklayinca({ acik: activeMenu, uzerineGelinceAcilan: uzerineGelinceAcilan.current }, menu);
+    uzerineGelinceAcilan.current = yeni.uzerineGelinceAcilan;
+    setActiveMenu(yeni.acik);
   };
 
-  const handleMenuHeaderHover = (menu: MenuKey) => {
-    if (activeMenu !== null) {
-      setActiveMenu(menu);
-    }
+  const handleMenuHeaderHover = (menu: MenuBasligi) => {
+    const yeni = basligaGelince({ acik: activeMenu, uzerineGelinceAcilan: uzerineGelinceAcilan.current }, menu);
+    uzerineGelinceAcilan.current = yeni.uzerineGelinceAcilan;
+    if (yeni.acik !== activeMenu) setActiveMenu(yeni.acik);
   };
+
+  // Araçlar menüsünde açık alt menü (Ölçme / İnşa / Dönüşüm); menü kapanınca kapanır
+  const [acikAltMenu, setAcikAltMenu] = useState<string | null>(null);
+  useEffect(() => {
+    if (activeMenu !== 'araclar') setAcikAltMenu(null);
+  }, [activeMenu]);
 
   const closeMenu = () => setActiveMenu(null);
 
@@ -246,6 +314,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const handleSaveProject = () => {
     closeMenu();
     const projectData = { ...getProject(), timestamp: Date.now() };
+    kayitliImza.current = calismaImzasi(projectData.objects, projectData.solids);
     const blob = new Blob([JSON.stringify(projectData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -255,6 +324,24 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
     a.click();
     document.body.removeChild(a);
     window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  };
+
+  // Dosya > Yeni: 2B nesneler ve 3B cisimler silinir (geri alınabilir), görünüm orijin merkezli başlar; ayarlar korunur.
+  const yeniCalismaAc = () => {
+    setYeniSoruluyor(false);
+    const proje = getProject();
+    if (proje.objects.length > 0) clearWorkspace();
+    if (proje.solids.length > 0) sceneBridge?.setSolids([]);
+    resetViewport();
+    kayitliImza.current = calismaImzasi([], []);
+  };
+
+  // Kaydedilmemiş değişiklik varsa önce sorulur (Kaydet / Kaydetmeden Yeni / Vazgeç); yoksa doğrudan açılır.
+  const yeniIste = () => {
+    closeMenu();
+    const proje = getProject();
+    if (yeniIcinSorulmaliMi(proje.objects, proje.solids, kayitliImza.current)) setYeniSoruluyor(true);
+    else yeniCalismaAc();
   };
 
   // Proje dosyası açma (.geoeba JSON)
@@ -314,8 +401,8 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
     else resetViewport();
   };
 
-  const shortcutRef = useRef({ handleSaveProject, handlePrint, handleCopy, handleCut, handlePaste, handleDelete, handleSelectAll, undo, redo, canUndo, canRedo, onClearAll });
-  shortcutRef.current = { handleSaveProject, handlePrint, handleCopy, handleCut, handlePaste, handleDelete, handleSelectAll, undo, redo, canUndo, canRedo, onClearAll };
+  const shortcutRef = useRef({ handleSaveProject, handlePrint, handleCopy, handleCut, handlePaste, handleDelete, handleSelectAll, undo, redo, canUndo, canRedo, yeniIste });
+  shortcutRef.current = { handleSaveProject, handlePrint, handleCopy, handleCut, handlePaste, handleDelete, handleSelectAll, undo, redo, canUndo, canRedo, yeniIste };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!workspaceOwnsKeyboard(event, menuBarRef.current) || isAnyModalOpen() || event.altKey) return;
@@ -325,7 +412,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
       if (mod) {
         if (event.code === 'KeyZ') action = event.shiftKey ? () => { if (k.canRedo) k.redo(); } : () => { if (k.canUndo) k.undo(); };
         else if (!event.shiftKey) action = ({ KeyA: k.handleSelectAll, KeyC: k.handleCopy, KeyX: k.handleCut, KeyV: k.handlePaste,
-          KeyS: k.handleSaveProject, KeyO: () => fileInputRef.current?.click(), KeyN: k.onClearAll, KeyP: k.handlePrint,
+          KeyS: k.handleSaveProject, KeyO: () => fileInputRef.current?.click(), KeyN: k.yeniIste, KeyP: k.handlePrint,
           KeyY: () => { if (k.canRedo) k.redo(); } } as Record<string, () => void>)[event.code];
       } else if (event.key === 'Delete' || event.key === 'Backspace') action = k.handleDelete;
       if (action) { event.preventDefault(); action(); }
@@ -368,10 +455,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
             {activeMenu === 'dosya' && (
               <div className="absolute top-full left-0 mt-1 w-56 bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
                 <button
-                  onClick={() => {
-                    closeMenu();
-                    onClearAll();
-                  }}
+                  onClick={yeniIste}
                   className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
@@ -608,80 +692,29 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
               Görünüm
             </button>
             {activeMenu === 'gorunum' && (
-              <div className="absolute top-full left-0 mt-1 w-56 bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
+              <div className="absolute top-full left-0 mt-1 w-56 max-h-[calc(100vh-7rem)] overflow-y-auto bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
                 <div className="px-3 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                   Çalışma Alanı Düzenleri
                 </div>
 
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    onLayoutModeChange('2d_only');
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Maximize className="w-3.5 h-3.5 text-ada-deniz" />
-                    <span>Grafik Paneli (2D)</span>
-                  </div>
-                  {layoutMode === '2d_only' && <Check className="w-3.5 h-3.5 text-primary" />}
-                </button>
-
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    onLayoutModeChange('3d_only');
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Box className="w-3.5 h-3.5 text-ada-lavanta" />
-                    <span>3B Görünüm</span>
-                  </div>
-                  {layoutMode === '3d_only' && <Check className="w-3.5 h-3.5 text-primary" />}
-                </button>
-
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    onLayoutModeChange('2d_3d');
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Columns2 className="w-3.5 h-3.5 text-ada-deniz" />
-                    <span>2D + 3D Çift Görünüm</span>
-                  </div>
-                  {layoutMode === '2d_3d' && <Check className="w-3.5 h-3.5 text-primary" />}
-                </button>
-
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    onLayoutModeChange('algebra_2d');
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <LayoutGrid className="w-3.5 h-3.5 text-ada-vurgu" />
-                    <span>Cebir Paneli + 2D</span>
-                  </div>
-                  {layoutMode === 'algebra_2d' && <Check className="w-3.5 h-3.5 text-primary" />}
-                </button>
-
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    onLayoutModeChange('three_col');
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <Columns2 className="w-3.5 h-3.5 text-ada-altin" />
-                    <span>Hesap / 3 Sütun (Cebir+2D+3D)</span>
-                  </div>
-                  {layoutMode === 'three_col' && <Check className="w-3.5 h-3.5 text-primary" />}
-                </button>
+                {/* Yerleşimler araç panelinin Görünümler sekmesiyle aynı listeden gelir: ad, sıra ve sayı aynı */}
+                {GORUNUM_DUZENLERI.map(({ mode, ad, Simge, renk }) => (
+                  <button
+                    key={mode}
+                    onClick={() => {
+                      closeMenu();
+                      onLayoutModeChange(mode);
+                    }}
+                    data-gorunum-duzeni={mode}
+                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Simge className={`w-3.5 h-3.5 ${renk}`} />
+                      <span>{ad}</span>
+                    </div>
+                    {eskiDuzeniCevir(layoutMode) === mode && <Check className="w-3.5 h-3.5 text-primary" />}
+                  </button>
+                ))}
 
                 <div className="my-1 border-t border-border/60" />
 
@@ -746,7 +779,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
               Araçlar
             </button>
             {activeMenu === 'araclar' && (
-              <div className="absolute top-full left-0 mt-1 w-56 bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
+              <div className="absolute top-full left-0 mt-1 w-64 max-h-[calc(100vh-7rem)] overflow-y-auto bg-popover text-popover-foreground rounded-xl shadow-2xl border border-border/90 py-1.5 z-[999] animate-in fade-in-0 zoom-in-95 duration-100">
                 <button
                   onClick={() => {
                     closeMenu();
@@ -756,7 +789,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                 >
                   <div className="flex items-center gap-2">
                     <MousePointer className="w-3.5 h-3.5 text-ada-deniz" />
-                    <span>Seçim</span>
+                    <span>Seç ve Taşı</span>
                   </div>
                   <AracKisayolu arac="select" />
                 </button>
@@ -788,7 +821,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   >
                     <div className="flex items-center gap-2">
                       <Minus className="w-3.5 h-3.5 text-ada-deniz" />
-                      <span>Doğru / Parça</span>
+                      <span>Doğru Parçası</span>
                     </div>
                     <AracKisayolu arac="segment" />
                   </button>
@@ -826,57 +859,53 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   </button>
                 )}
 
-                {(['measure_distance', 'reflect', 'perpendicular'] as const).some(aracMenudeGorunur) && (
-                  <div className="my-1 border-t border-border/60" />
-                )}
+                {/* Gruplu satırlar alt menüdür: içindeki her araç paneldeki adı ve kısayoluyla, kademe süzgecinden geçmiş
+                    listeden (gruplariSuz) gelir. Dokunmatik tahtada da çalışsın diye alt menü tıklamayla açılır, yerinde genişler. */}
+                {araclarAltGruplari.length > 0 && <div className="my-1 border-t border-border/60" />}
 
-                {aracMenudeGorunur('measure_distance') && (
-                  <button
-                    onClick={() => {
-                      closeMenu();
-                      onSelectTool('measure_distance');
-                    }}
-                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Ruler className="w-3.5 h-3.5 text-ada-altin" />
-                      <span>Ölçüm (Uzunluk / Açı)</span>
+                {araclarAltGruplari.map((grup) => {
+                  const acik = acikAltMenu === grup.id;
+                  return (
+                    <div key={grup.id} data-arac-alt-menusu={grup.id}>
+                      <button
+                        type="button"
+                        aria-expanded={acik}
+                        onClick={() => setAcikAltMenu(acik ? null : grup.id)}
+                        className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2">
+                          {ALT_GRUP_SIMGESI[grup.id]}
+                          <span>{grup.name}</span>
+                        </div>
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          {grup.tools.length}
+                          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${acik ? 'rotate-180' : ''}`} />
+                        </span>
+                      </button>
+                      {acik && (
+                        <div role="group" aria-label={grup.name} className="ml-4 border-l border-border/70 pl-1">
+                          {grup.tools.map((arac) => (
+                            <button
+                              key={arac.id}
+                              type="button"
+                              onClick={() => {
+                                closeMenu();
+                                onSelectTool(arac.id as ToolMode);
+                              }}
+                              className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                            >
+                              <div className={`flex items-center gap-2 min-w-0 [&_svg]:w-3.5 [&_svg]:h-3.5 ${arac.iconColor}`}>
+                                <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0">{arac.icon}</span>
+                                <span className="truncate text-foreground">{arac.name}</span>
+                              </div>
+                              <AracKisayolu arac={arac.id as ToolMode} />
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <AracKisayolu arac="measure_distance" />
-                  </button>
-                )}
-
-                {aracMenudeGorunur('reflect') && (
-                  <button
-                    onClick={() => {
-                      closeMenu();
-                      onSelectTool('reflect');
-                    }}
-                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2">
-                      <FlipHorizontal className="w-3.5 h-3.5 text-ada-mercan" />
-                      <span>Dönüşüm (Simetri / Öteleme)</span>
-                    </div>
-                    <AracKisayolu arac="reflect" />
-                  </button>
-                )}
-
-                {aracMenudeGorunur('perpendicular') && (
-                  <button
-                    onClick={() => {
-                      closeMenu();
-                      onSelectTool('perpendicular');
-                    }}
-                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Wrench className="w-3.5 h-3.5 text-ada-deniz" />
-                      <span>Geometri Araçları (Dikme/Teğet)</span>
-                    </div>
-                    <AracKisayolu arac="perpendicular" />
-                  </button>
-                )}
+                  );
+                })}
 
                 {kademeDuzeyi !== 'tum' && (
                   <div className="mx-3 mt-1 pt-1.5 border-t border-border/60 text-[11px] leading-snug text-muted-foreground">
@@ -916,18 +945,23 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   <AracKisayolu arac="text" />
                 </button>
 
-                <button
-                  onClick={() => {
-                    closeMenu();
-                    fileInputRef.current?.click();
-                  }}
-                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <ImageIcon className="w-3.5 h-3.5 text-ada-murekkep-2 dark:text-ada-kum" />
-                    <span>Görsel</span>
-                  </div>
-                </button>
+                {/* Görsel Ekle aracını seçer (tuvale dokunulan yere görsel konur). Eskiden proje dosyası seçicisini (.geoeba)
+                    açıyordu. Araç panelde olmayan kademede (ortaokul) madde de gösterilmez. */}
+                {aracMenudeGorunur('image') && (
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      onSelectTool('image');
+                    }}
+                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="w-3.5 h-3.5 text-ada-murekkep-2 dark:text-ada-kum" />
+                      <span>Görsel</span>
+                    </div>
+                    <AracKisayolu arac="image" />
+                  </button>
+                )}
 
                 <button
                   onClick={() => {
@@ -965,8 +999,8 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2">
-                    <Box className="w-3.5 h-3.5 text-ada-lavanta" />
-                    <span>Medya & 3D Cisim</span>
+                    <PlusSquare className="w-3.5 h-3.5 text-ada-lavanta" />
+                    <span>Nesne Ekle (Koordinatla)</span>
                   </div>
                 </button>
 
@@ -1243,10 +1277,25 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
         </div>
       </div>
 
+      {/* İLETİŞİM KUTULARI: Atölye penceresinin köküne taşınır (PencereKatmani), karartma pencere düğmelerini de örter */}
+      <PencereKatmani kok={pencereKoku}>
+      {/* Dosya > Yeni: kaydedilmemiş değişiklik onayı */}
+      <YeniCalismaModal
+        isOpen={yeniSoruluyor}
+        nesneSayisi={objects.length}
+        cisimSayisi={sceneBridge?.solids.length ?? 0}
+        onKaydet={() => {
+          handleSaveProject();
+          yeniCalismaAc();
+        }}
+        onKaydetmeden={yeniCalismaAc}
+        onVazgec={() => setYeniSoruluyor(false)}
+      />
+
       {/* BİLGİLENDİRME MODALLARI (Kısayollar, Hakkında, Kılavuz) */}
       {infoModalType && (
         <div className="fixed inset-0 z-[1000] bg-ada-murekkep/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div role="dialog" aria-modal="true" aria-label="Stüdyo yardımı" className="bg-card border border-border/80 rounded-2xl shadow-2xl w-full max-w-md p-5 space-y-4 animate-in fade-in-0 zoom-in-95 duration-150">
+          <div role="dialog" aria-modal="true" aria-label="Stüdyo yardımı" className={`bg-card border border-border/80 rounded-2xl shadow-2xl w-full ${infoModalType === 'guide' ? 'max-w-lg' : 'max-w-md'} p-5 space-y-4 animate-in fade-in-0 zoom-in-95 duration-150`}>
             {/* Modal Başlık */}
             <div className="flex items-center justify-between border-b border-border/70 pb-3">
               <div className="flex items-center gap-2">
@@ -1270,6 +1319,11 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
             {/* Modal İçerik */}
             {infoModalType === 'shortcuts' && (
               <div className="space-y-2.5 max-h-[60vh] overflow-y-auto text-xs pr-1">
+                {kisayollarSuzuldu && (
+                  <p className="text-[11px] text-muted-foreground" data-kisayol-notu>
+                    {kademeEtiketi(kademeDuzeyi)} araç panelindeki {kisayolAraclari.length} aracın kısayolları gösteriliyor.
+                  </p>
+                )}
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { key: 'Ctrl + Z', desc: 'Geri Al' },
@@ -1283,7 +1337,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     { key: 'Ctrl + N', desc: 'Yeni Çalışma' },
                     { key: 'Ctrl + P', desc: 'Çizimi Yazdır' },
                     { key: 'Ctrl + K', desc: 'Türkçe Komutlar' },
-                    ...TOOL_GROUPS.flatMap(group => group.tools.map(tool => ({ key: TOOL_SHORTCUTS[tool.id], desc: tool.name }))),
+                    ...kisayolAraclari.map((tool) => ({ key: TOOL_SHORTCUTS[tool.id], desc: tool.name })),
                     { key: TOOL_SHORTCUTS.pan, desc: 'Görünümü Kaydır' },
                   ].map((s) => (
                     <div
@@ -1313,19 +1367,23 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
             )}
 
             {infoModalType === 'guide' && (
-              <div className="space-y-2.5 max-h-[60vh] overflow-y-auto text-xs text-muted-foreground leading-relaxed pr-1">
-                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 space-y-1">
-                  <h4 className="font-bold text-foreground">1. Sol Menü (Araçlar, Nesneler, Bağlamlar)</h4>
-                  <p>Sol taraftaki ağaç menüden dilediğiniz çizim aracını seçebilir, nesneler sekmesinden koordinatları inceleyebilirsiniz.</p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 space-y-1">
-                  <h4 className="font-bold text-foreground">2. 2D ve 3D Görünümler</h4>
-                  <p>Üstteki Görünüm menüsünden veya sol taraftaki Görünümler sekmesinden 2D, 3D veya yan yana çoklu görünümleri seçebilirsiniz.</p>
-                </div>
-                <div className="p-2.5 rounded-xl bg-muted/40 border border-border/60 space-y-1">
-                  <h4 className="font-bold text-foreground">3. Çalışma Alanı ve Düzlem Ayarları</h4>
-                  <p>Üst menüdeki Ayarlar seçeneğinden ızgara, koordinat eksenleri, bölge isimleri, dik açı stili, çizim kalınlıkları ve arkaplan ayarlarını kontrol edebilirsiniz.</p>
-                </div>
+              <div className="space-y-2.5 max-h-[60vh] overflow-y-auto text-xs text-muted-foreground leading-relaxed pr-1" data-kilavuz>
+                {/* Bölümler kullanimKilavuzu.ts'te: araç grupları seçili kademenin panelinden üretilir */}
+                {kilavuzBolumleri(kademeDuzeyi).map((bolum) => (
+                  <div key={bolum.baslik} className="p-2.5 rounded-xl bg-muted/40 border border-border/60 space-y-1">
+                    <h4 className="font-bold text-foreground">{bolum.baslik}</h4>
+                    {bolum.metin.map((paragraf) => (
+                      <p key={paragraf}>{paragraf}</p>
+                    ))}
+                    {bolum.maddeler && (
+                      <ul className="list-disc pl-4 space-y-0.5">
+                        {bolum.maddeler.map((madde) => (
+                          <li key={madde}>{madde}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
 
@@ -1871,21 +1929,38 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
               )}
             </div>
 
+            {/* Sıfırlamanın sonucu */}
+            {sifirlamaSonucu && (
+              <p role="status" className="px-5 py-2 border-t border-primary/20 bg-primary/10 text-[11px] font-semibold text-primary flex items-center gap-1.5 shrink-0">
+                <Check className="w-3.5 h-3.5 shrink-0" />
+                <span>{sifirlamaSonucu}</span>
+              </p>
+            )}
+
             {/* Modal Alt Butonlar */}
             <div className="px-5 py-3 border-t border-border/70 bg-muted/20 flex items-center justify-between gap-3 shrink-0">
-              {/* Bütün ayarları varsayılana döndürür; yanlışlıkla basmaya karşı iki adımlıdır.
+              {/* Bütün sekmelerin ayarlarını (zemin, ızgara, eksen, nokta / yazı boyutu, dik açı, siyah-beyaz) varsayılana
+                  döndürür ve sonucu bildirir; yanlışlıkla basmaya karşı iki adımlıdır. Onay süreyle düşmez (eskiden 4 saniye
+                  sonra kendiliğinden düşüyor, geç basılan onay hiçbir şey yapmıyordu), pencere kapanınca düşer.
                   Çizime bakış (yakınlaştırma, kaydırma) korunur; nesneler silinmez. */}
               <button
                 type="button"
                 onClick={() => {
                   if (!sifirlamaOnayi) {
                     setSifirlamaOnayi(true);
-                    window.setTimeout(() => setSifirlamaOnayi(false), 4000);
+                    setSifirlamaSonucu(null);
                     return;
                   }
                   setSifirlamaOnayi(false);
                   setStyleSettings(DEFAULT_STYLE_SETTINGS);
                   setViewport((prev) => ({ ...prev, ...VARSAYILAN_GORUNUM_AYARLARI }));
+                  setOzelAralik('');
+                  setOzelAralikHata(null);
+                  setSifirlamaSonucu(
+                    ilkokul
+                      ? 'Ayarlar varsayılana döndü: beyaz zemin, kareli ızgara; nokta, çizgi ve yazı boyutları ilk değerinde.'
+                      : 'Ayarlar varsayılana döndü: beyaz zemin, ızgara ve eksenler açık; nokta, çizgi ve yazı boyutları ilk değerinde.'
+                  );
                 }}
                 aria-label="Bütün ayarları varsayılana döndür"
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-colors cursor-pointer ${
@@ -1907,6 +1982,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
           </div>
         </div>
       )}
+      </PencereKatmani>
     </>
   );
 }

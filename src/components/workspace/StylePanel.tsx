@@ -7,6 +7,8 @@ import { DEFAULT_STYLE_SETTINGS, StyleSettings } from '@/types/workspace';
 import { formatTurkishNumber } from '@/math/coordinates';
 import type { AciYazimi, OlcuYazimi, YazimAyari } from '@/math/matematikYazimi';
 import { MatematikMetni } from '@/components/workspace/MatematikMetni';
+import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
+import { tamSayiAyarAnahtari } from './olcuYuvarlama';
 
 interface AyarKaydiriciProps {
   etiket: string;
@@ -151,6 +153,9 @@ const ACI_SECENEKLERI: readonly AyarSecenegi<AciYazimi>[] = [
 export function StylePanel() {
   const { styleSettings, setStyleSettings, viewport, setViewport } = useWorkspace();
   const [yaziAcik, setYaziAcik] = useState(false);
+  // "Ölçüleri tam sayı yaz" ortaokulda kendi ayarını açar (varsayılan kapalı: 2 ondalık; olcuYuvarlama.ts)
+  const [kademe] = useKademeDuzeyi();
+  const tamSayiAnahtari = tamSayiAyarAnahtari(kademe);
 
   const guncelle = (alan: keyof StyleSettings, v: number | boolean | string) =>
     setStyleSettings((prev) => ({ ...prev, [alan]: v }));
@@ -294,9 +299,9 @@ export function StylePanel() {
           />
           <AyarOnay
             etiket="Ölçüleri tam sayı yaz"
-            ipucu="Uzunluk, açı, alan ve çevre tam sayı yazılır; yuvarlanan değerin önünde ≈ durur. Alan ve çevre ekranda görünen tam sayılardan hesaplanır (dikdörtgende görünen kenarların çarpımı, çevrede görünen kenarların toplamı); bir çokgenin bütün iç açıları ölçülmüşse toplamları korunur. Tam sayılardan çıkan kesin sonuç virgüllü olabilir (3 × 5 ÷ 2 = 7,5)."
-            isaretli={styleSettings.tamSayiOlcu}
-            onChange={(v) => guncelle('tamSayiOlcu', v)}
+            ipucu={`Uzunluk, açı, alan ve çevre tam sayı yazılır; yuvarlanan değerin önünde ≈ durur. Alan ve çevre ekranda görünen tam sayılardan hesaplanır (dikdörtgende görünen kenarların çarpımı, çevrede görünen kenarların toplamı); bir çokgenin bütün iç açıları ölçülmüşse toplamları korunur. Tam sayılardan çıkan kesin sonuç virgüllü olabilir (3 × 5 ÷ 2 = 7,5).${kademe === 'ortaokul' ? ' Ortaokulda kapalı gelir: ölçüler virgülden sonra 2 basamakla yazılır.' : ''}`}
+            isaretli={styleSettings[tamSayiAnahtari] === true}
+            onChange={(v) => guncelle(tamSayiAnahtari, v)}
           />
           <p className="text-[10px] text-muted-foreground leading-snug">
             Yazı ölçtüğü kenarın ya da açının yanındayken yalnızca değer yazılır (5 br); etiketi

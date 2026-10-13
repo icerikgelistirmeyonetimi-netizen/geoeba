@@ -12,7 +12,10 @@
  * Kullanıcıya gösterilen ve menüde seçilen değerler matematik derecesidir (saat yönünün tersi +),
  * yani `normalizeDeg(-donusSvg)`. Açıölçerin tabanı zaten matematik derecesidir.
  */
-import type { AngleObject, MathObject, Point2D, PointObject, SegmentObject, ViewportTransform } from '@/types/math';
+import type {
+  AngleObject, ArcObject, CircleObject, EllipseObject, MathObject, Point2D, PointObject, PolygonObject, SectorObject, SegmentObject,
+  ViewportTransform,
+} from '@/types/math';
 import { formatTurkishNumber, screenToWorld, worldToScreen } from '@/math/coordinates';
 import { generateNextPointLabels } from '@/math/geometry';
 
@@ -319,12 +322,140 @@ export function gonyeDonusunuDegistir(konum: Point2D, boy: number, eskiDonus: nu
 
 // Alan modeli ----------------------------------------------------------------
 
-/** Alan modeli yalnız sığmıyorsa küçülür (genişliğin %75'i, yüksekliğin %70'i); konum sol alt köşedir. */
-export function alanModeliniYerlestir(tercihSutun: number, tercihSatir: number, vp: Gorunum): { konum: Point2D; sutun: number; satir: number } {
+/** Dünya koordinatında kutu (y yukarı; x0 < x1, y0 < y1). */
+export interface DunyaKutusu {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/**
+ * Alan modeli yalnız sığmıyorsa küçülür (genişliğin %75'i, yüksekliğin %70'i); konum sol alt köşedir.
+ *
+ * `engeller` verilirse model şekillerin ve ölçü etiketlerinin ÜSTÜNE konmaz (alan uzmanı, atölye inceleme 4. tur:
+ * "Alanı Modelle ızgarası üçgenin 'A(ABC)' etiketini kapatıyor"): görünen ortadan başlayarak tam birimlik
+ * kaydırmalarla, ekrana sığan ve hiçbir engele değmeyen en yakın yer seçilir. Boş yer yoksa ortada kalır.
+ */
+export function alanModeliniYerlestir(
+  tercihSutun: number, tercihSatir: number, vp: Gorunum, engeller: readonly DunyaKutusu[] = [],
+): { konum: Point2D; sutun: number; satir: number } {
   const sutun = clamp(Math.min(tercihSutun, Math.floor((0.75 * vp.width) / vp.zoom)), ALAN_MIN, ALAN_MAX);
   const satir = clamp(Math.min(tercihSatir, Math.floor((0.7 * vp.height) / vp.zoom)), ALAN_MIN, ALAN_MAX);
   const m = gorunurMerkez(vp);
-  return { sutun, satir, konum: { x: m.x - sutun / 2, y: m.y - satir / 2 } };
+  const ortada = { x: m.x - sutun / 2, y: m.y - satir / 2 };
+  if (!engeller.length) return { sutun, satir, konum: ortada };
+  const solAlt = screenToWorld({ x: 0, y: vp.height }, vp as ViewportTransform);
+  const sagUst = screenToWorld({ x: vp.width, y: 0 }, vp as ViewportTransform);
+  // Modelin kendi yazıları (üstte "4 br", solda "3 br", altta "4 × 3 = 12 br²") ızgaranın dışında durur: ~24 px pay
+  const pay = 24 / vp.zoom;
+  const sigar = (k: Point2D) =>
+    k.x - pay >= solAlt.x && k.y - pay >= solAlt.y && k.x + sutun <= sagUst.x && k.y + satir + pay <= sagUst.y;
+  const bos = (k: Point2D) =>
+    !engeller.some((e) => k.x - pay < e.x1 && e.x0 < k.x + sutun && k.y - pay < e.y1 && e.y0 < k.y + satir + pay);
+  const enCok = Math.ceil(Math.max(sagUst.x - solAlt.x, sagUst.y - solAlt.y));
+  for (let d = 0; d <= enCok; d++) {
+    const halka: Point2D[] = [];
+    for (let dx = -d; dx <= d; dx++) {
+      for (let dy = -d; dy <= d; dy++) if (Math.max(Math.abs(dx), Math.abs(dy)) === d) halka.push({ x: dx, y: dy });
+    }
+    halka.sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y));
+    for (const k of halka) {
+      const aday = { x: ortada.x + k.x, y: ortada.y + k.y };
+      if (sigar(aday) && bos(aday)) return { sutun, satir, konum: aday };
+    }
+  }
+  return { sutun, satir, konum: ortada };
+}
+
+/** Şeklin altındaki alan/çevre etiketlerinin kapladığı yükseklik (dünya birimi, yakınlık 44 px/br'de ~2 satır). */
+const KART_PAYI = 1.6;
+
+/**
+ * Alan modelinin kaçınacağı yerler: görünen noktalar (adlarıyla), çokgen, çember, yay, dilim, elips ve doğru
+ * parçaları. Alan/çevre etiketi açık şekillerde etiketlerin durduğu alt şerit de eklenir. Sonsuz doğrular sayılmaz.
+ */
+export function alanModeliEngelleri(objects: readonly MathObject[]): DunyaKutusu[] {
+  const noktalar = new Map<string, PointObject>();
+  for (const o of objects) if (o.type === 'point') noktalar.set(o.id, o as PointObject);
+  const kutu = (ps: readonly Point2D[], pay: number, altPay = 0): DunyaKutusu | null => {
+    if (!ps.length) return null;
+    const xs = ps.map((p) => p.x);
+    const ys = ps.map((p) => p.y);
+    return { x0: Math.min(...xs) - pay, y0: Math.min(...ys) - pay - altPay, x1: Math.max(...xs) + pay, y1: Math.max(...ys) + pay };
+  };
+  const nokta = (id: string | undefined) => (id ? noktalar.get(id) : undefined);
+  const out: DunyaKutusu[] = [];
+  const ekle = (k: DunyaKutusu | null) => { if (k) out.push(k); };
+  for (const o of objects) {
+    if (o.visible === false) continue;
+    switch (o.type) {
+      case 'point': {
+        const p = o as PointObject;
+        // Ad noktanın çevresinde durur
+        out.push({ x0: p.x - 0.5, y0: p.y - 0.5, x1: p.x + 0.7, y1: p.y + 0.7 });
+        break;
+      }
+      case 'polygon': {
+        const poly = o as PolygonObject;
+        const ks = poly.pointIds.map(nokta).filter((p): p is PointObject => !!p);
+        ekle(kutu(ks, 0.3, poly.showArea || poly.showPerimeter ? KART_PAYI : 0));
+        break;
+      }
+      case 'segment': {
+        const seg = o as SegmentObject;
+        ekle(kutu([nokta(seg.startPointId), nokta(seg.endPointId)].filter((p): p is PointObject => !!p), 0.3));
+        break;
+      }
+      case 'circle': {
+        const c = o as CircleObject;
+        const m = nokta(c.centerPointId);
+        const yari = nokta(c.radiusPointId);
+        const r = m && yari ? Math.hypot(yari.x - m.x, yari.y - m.y) : c.fixedRadius ?? 0;
+        if (m && r > 0) {
+          const kartli = c.showArea || c.showPerimeter || c.showRadius;
+          out.push({ x0: m.x - r - 0.2, y0: m.y - r - 0.2 - (kartli ? KART_PAYI : 0), x1: m.x + r + 0.2, y1: m.y + r + 0.2 });
+        }
+        break;
+      }
+      case 'arc':
+      case 'sector': {
+        const a = o as ArcObject | SectorObject;
+        const m = nokta(a.centerPointId);
+        const bas = nokta(a.startPointId);
+        if (m && bas) {
+          // Ölçü etiketleri yayın dışında durur: yarıçapa bir etiket payı eklenir
+          const r = Math.hypot(bas.x - m.x, bas.y - m.y) + 1;
+          out.push({ x0: m.x - r, y0: m.y - r, x1: m.x + r, y1: m.y + r });
+        }
+        break;
+      }
+      case 'ellipse': {
+        const e = o as EllipseObject;
+        const m = nokta(e.centerPointId);
+        if (m) {
+          const r = Math.max(Math.abs(e.radiusX), Math.abs(e.radiusY));
+          out.push({ x0: m.x - r - 0.2, y0: m.y - r - 0.2 - KART_PAYI, x1: m.x + r + 0.2, y1: m.y + r + 0.2 });
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return out;
+}
+
+/**
+ * Tuvalde ÇİZİLMİŞ bir ölçü etiketinin ekran kutusu (px, tuvalin sol üstüne göre; y aşağı) → dünya kutusu. Alan
+ * modelinin kaçındığı yerlere etiketlerin GERÇEK yerleri de eklenir: çakışma önleyici dilim/yay etiketlerini
+ * şeklin dışına itebildiği için yalnız şekilden tahmin edilen kutu yetmiyordu (denetim, 4. tur: ızgara dilimin
+ * m(IĤJ) ve A(IHJ dilimi) etiketlerini kapatıyordu).
+ */
+export function ekranKutusuDunyaya(k: { x0: number; y0: number; x1: number; y1: number }, vp: Gorunum): DunyaKutusu {
+  const a = screenToWorld({ x: k.x0, y: k.y1 }, vp as ViewportTransform);
+  const b = screenToWorld({ x: k.x1, y: k.y0 }, vp as ViewportTransform);
+  return { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
 }
 
 /** Menüden boyut değişince: yeni model ekrana sığıyorsa sol alt köşe yerinde kalır, taşıyorsa merkez sabit tutulur. */

@@ -321,7 +321,7 @@ export function parseProjectFile(input: unknown): ProjectFile {
     out.camera3D = c as Camera3D;
   }
   if (data.layoutMode !== undefined) {
-    if (!['default', 'algebra_2d', '2d_3d', 'three_col', 'algebra_3d', '2d_only', '3d_only'].includes(data.layoutMode)) fail('çalışma düzeni geçersiz');
+    if (!['default', 'algebra_only', 'algebra_2d', '2d_3d', 'three_col', 'algebra_3d', '2d_only', '3d_only'].includes(data.layoutMode)) fail('çalışma düzeni geçersiz');
     out.layoutMode = data.layoutMode;
   }
   return out;

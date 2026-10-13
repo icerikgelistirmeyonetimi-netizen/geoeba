@@ -9,6 +9,7 @@ import {
   calculateSlope,
 } from '@/math/geometry';
 import { formatTurkishNumber } from '@/math/coordinates';
+import { ifadeYazimi } from '@/math/fonksiyonYazimi';
 import {
   type Olcu, type YazimAyari, alan, cemberCevresi, cevre, daireAlani, dilimAlani, dilimCevresi,
   egim, elipsAlani, elipsCevresi, kiris, koordinat, olcuMetni, uzunluk, yaricap, yayUzunlugu,
@@ -172,7 +173,8 @@ export function nesneSatirlari(obj: MathObject, objects: readonly MathObject[], 
     case 'measurement':
       return olcumSatirlari(obj as MeasurementObject, objects, nokta);
     case 'function':
-      return [metinSatiri(`y = ${(obj as FunctionObject).expression}`)];
+      // Okunur yazım: "y = 2x + 1", "y = x² − 4" (ham 2*x, x^2 değil; alan uzmanı, 4. tur)
+      return [metinSatiri(`y = ${ifadeYazimi((obj as FunctionObject).expression)}`)];
     case 'slider': {
       const s = obj as SliderObject;
       return [metinSatiri(`${s.variableName || s.label} = ${formatTurkishNumber(s.value)}`)];

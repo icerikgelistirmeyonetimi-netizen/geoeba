@@ -237,7 +237,7 @@ describe('project file validation', () => {
   it('preserves 3D scene, camera, styles and plane settings in a JSON round trip', () => {
     const file = { version: '2.0', objects: [], solids: [{ id: 'cube', type: 'cube', name: 'Küp', position: { x: 1, y: 2, z: 3 }, rotation: { x: 0, y: 30, z: 0 }, dimensions: { width: 3, height: 3, depth: 3 }, color: '#123456', opacity: 0.8, unfoldProgress: 0.5, showFaces: true, showWireframe: true, showVertices: false, selectedFaceIndex: null }],
       camera3D: { rotX: 25, rotY: -40, zoom: 55, panX: 0, panY: 30, perspective: 700, showAxes: true, showGrid: false, showCoordinates: false },
-      styleSettings: { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, showLabelBoxes: true, hideFills: false, olcuYazimi: 'kisa', aciYazimi: 'isaret', tamSayiOlcu: false, yaziAltSiniri: 0.4 },
+      styleSettings: { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, showLabelBoxes: true, hideFills: false, olcuYazimi: 'kisa', aciYazimi: 'isaret', tamSayiOlcu: false, tamSayiOlcuOrtaokul: false, yaziAltSiniri: 0.4 },
       layoutMode: '3d_only', viewport: { zoom: 88, panX: 42, panY: 0, showCoordinates: false } };
     expect(parseProjectFile(JSON.parse(JSON.stringify(file)))).toEqual(file);
   });
@@ -245,7 +245,7 @@ describe('project file validation', () => {
     const eski = { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideFills: false };
     // Eski dosyanın hideLabelBoxes: false değeri yalnızca eski varsayılandı: dosya kutusuz açılır.
     expect(parseProjectFile({ objects: [], styleSettings: { ...eski, hideLabelBoxes: false } }).styleSettings)
-      .toEqual({ ...eski, showLabelBoxes: false, olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayiOlcu: true, yaziAltSiniri: 0.7 });
+      .toEqual({ ...eski, showLabelBoxes: false, olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayiOlcu: true, tamSayiOlcuOrtaokul: false, yaziAltSiniri: 0.7 });
   });
   it('uzaklaşınca yazı alt sınırı 0–1 arası bir orandır; dışı reddedilir', () => {
     const stil = { strokeScale: 1, fontScale: 1, pointRadius: 6, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideFills: false };
