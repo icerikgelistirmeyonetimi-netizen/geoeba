@@ -299,6 +299,29 @@ describe('[181] uygulama kökü: İlkokul kademesi', () => {
     expect(metin(orta)).toMatch(/Aritmetik ortalama/);
   });
 
+  it('denetim: İlkokul\'da değiştirilmiş 7-C örneğinin Keşif şeridi / kartı ve "i" düğmesi yok (rehberi ortalama, sapma ister); ortaokulda var', () => {
+    const boy = baslangicDurumu();
+    const degisik = tabloDuzenle(boy, hucreYaz(boy.tablo, 0, 1, '150'));
+    for (const ipucu of ['serit', 'kart'] as const) {
+      for (const sekme of ['nokta', 'sutun', 'istatistik'] as const) {
+        const html = uygulamaCiz({ ...degisik, ipucu, sekme }, 'ilkokul');
+        expect(tabloAdi(html), `${ipucu}/${sekme}`).toBe('7-C öğrencilerinin boy uzunlukları');
+        expect(html, `${ipucu}/${sekme}`).not.toContain('data-ornek-ipucu');
+        expect(html, `${ipucu}/${sekme}`).not.toContain('data-ipucu-dugmesi');
+        expect(metin(html), `${ipucu}/${sekme}`).not.toMatch(/ortalama|ortanca|sapma|açıklık/i);
+      }
+      // Ortaokul: bugünkü gibi Keşif ve "i" düğmesi
+      const orta = uygulamaCiz({ ...degisik, ipucu, sekme: 'nokta' }, 'ortaokul');
+      expect(orta, ipucu).toContain(`data-ornek-ipucu="${ipucu}"`);
+      expect(orta, ipucu).toContain('data-ipucu-dugmesi');
+    }
+    // İlkokul örneğinin Keşif'i İlkokul'da (değiştirilmiş olsa da) yerinde
+    const oyuncak = yukle('oyuncak', { ipucu: 'serit' });
+    const html = uygulamaCiz(tabloDuzenle(oyuncak, hucreYaz(oyuncak.tablo, 0, 1, 'Araba')), 'ilkokul');
+    expect(html).toContain('data-ornek-ipucu="serit"');
+    expect(html).toContain('data-ipucu-dugmesi');
+  });
+
   it('2. sınıf: şekil grafiği (her veri bir kare), iki sınıf yan yana, anahtar; sıklık tablosunda çetele', () => {
     const d = yukle('oyun');
     const html = uygulamaCiz(d, 'ilkokul');

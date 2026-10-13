@@ -106,7 +106,7 @@ describe('örnek veri: sıcaklık ve sıcak çikolata satışı (saçılım)', (
   });
 });
 
-// ── 16 örnek × 6 sekme: açılış yamasıyla (uygulamanın örnek yüklemesi gibi) her sekmenin grafiği ─────────────
+// ── 20 örnek × 6 sekme: açılış yamasıyla (uygulamanın örnek yüklemesi gibi) her sekmenin grafiği ─────────────
 
 const SEKMELER: GrafikTuru[] = ['nokta', 'sutun', 'cizgi', 'daire', 'sacilim', 'istatistik'];
 const HEPSI: ReadonlySet<Ozellik> = new Set(TUM_OZELLIKLER);
@@ -212,7 +212,7 @@ function sekmeCiz(tablo: VeriTablosuModeli, yama: AcilisYamasi, sekme: GrafikTur
   return cikti;
 }
 
-describe('örnekler: 16 örnek × 6 sekme (açılış yamasıyla, özellikli ve özelliksiz)', () => {
+describe('örnekler: 20 örnek × 6 sekme (açılış yamasıyla, özellikli ve özelliksiz)', () => {
   it('her örnek her sekmede NaN / undefined / Infinity yazmadan çizilir; açılış sekmesinde grafik var', () => {
     let toplam = 0;
     for (const o of ORNEK_VERILER) {

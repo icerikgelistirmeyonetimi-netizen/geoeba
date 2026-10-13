@@ -104,6 +104,7 @@ import { caprazSayim, degiskenSutunlari, kategoriRengi, renkEslemesi, satirRengi
 import {
   csvUret,
   gecerliDegerler,
+  ornekKademede,
   sayiHucreYaz,
   sayiYaz,
   sutunIndeksi,
@@ -1564,8 +1565,14 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const tabloBasligi = etkinKume === 'tablom' ? durum.tabloAdi : null;
   /** Keşif şeridi ya da kartı açık mı (yalnız bağlı örnekte çizilir) */
   const ipucuAcik = durum.ipucu !== 'kapali';
+  /**
+   * Keşif kartının örneği: İlkokul'da yalnız 1–4. sınıf örneğinin kartı. Değiştirilmiş (kademeyeUyarla'nın koruduğu)
+   * 5–8. sınıf örneğinin rehberi ve ipuçları ortalama, sapma ister; tablo kalır, kuralları ilkokulundur, kartı çizilmez.
+   * Öteki kademelerde bağlı örnek (bugünkü davranış).
+   */
+  const kesifOrnegi = ornek && (!ilkokul || ornekKademede(ornek, 'ilkokul')) ? ornek : undefined;
   /** Panel açıkken grafik sütununda şerit, not ya da kart yoktur (§0: yalnız sekmeler, grafik, tost, bant, şerit) */
-  const kesifGorunur = ornek !== undefined && ipucuAcik && !panelAcik;
+  const kesifGorunur = kesifOrnegi !== undefined && ipucuAcik && !panelAcik;
   /**
    * Soru şeridi (ipucu yuvası): araştırma Tablom'a bağlıyken panel kapalıysa görünür; panel açıkken soru panelin
    * başında olduğundan gizlidir (§0 S2). Gizlenince tablonun başlığındaki düğmeyle yeniden açılır.
@@ -1968,13 +1975,13 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                 {tabloBasligi}
               </h2>
             )}
-            {(ornek || (soruSeridiVar && !panelAcik)) && (
+            {(kesifOrnegi || (soruSeridiVar && !panelAcik)) && (
               <button
                 type="button"
-                aria-label={ornek ? 'Keşif kartı' : 'Soru şeridi'}
+                aria-label={kesifOrnegi ? 'Keşif kartı' : 'Soru şeridi'}
                 aria-pressed={ipucuAcik}
                 title={
-                  ornek
+                  kesifOrnegi
                     ? ipucuAcik
                       ? 'Keşif kartını kapat'
                       : 'Keşif kartını aç: araştırma sorusu, verinin künyesi ve rehberli keşif'
@@ -1985,7 +1992,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                 className={`grid h-11 w-11 shrink-0 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   ipucuAcik ? 'bg-accent text-primary dark:text-[#9fe0d9]' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 }`}
-                onClick={() => ipucuDegistir(ipucuAcik ? 'kapali' : ornek ? 'kart' : 'serit')}
+                onClick={() => ipucuDegistir(ipucuAcik ? 'kapali' : kesifOrnegi ? 'kart' : 'serit')}
                 data-ipucu-dugmesi
               >
                 <svg viewBox="0 0 20 20" className="h-5 w-5" aria-hidden="true">
@@ -2085,10 +2092,10 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
           {soruSeridi && <SoruSeridi soru={soruSeridi.soru} altBilgi={soruSeridi.altBilgi} onKapat={() => ipucuDegistir('kapali')} />}
           {/* Keşif şeridi / kartı (ipucu yuvası; ikinci tam genişlik çubuk değil): bağlı örneğin araştırma sorusu,
               sekmeye duyarlı ipucu, künye ve rehberli keşif. Kapatılınca tablonun başlığındaki "i" ile yeniden açılır */}
-          {kesifGorunur && ornek && (
+          {kesifGorunur && kesifOrnegi && (
             <KesifKarti
-              key={`${ornek.id}-${ornekYuklemeNo}`}
-              ornek={ornek}
+              key={`${kesifOrnegi.id}-${ornekYuklemeNo}`}
+              ornek={kesifOrnegi}
               sekme={sekme}
               ozellikler={OZELLIKLER}
               gorunum={durum.ipucu === 'kart' ? 'kart' : 'serit'}
