@@ -27,6 +27,7 @@ import { SIRA_SUTUNLARI, degiskenSutunlari } from './kategorik';
 import { arastirmaBagli, arastirmaDogrula, arastirmaTurleriniOnar, type Arastirma } from './arastirma';
 import { OZET_SUTUNU, fiil, fiilCogul, ozetTablosu } from './deney';
 import { acilisYamasi, eylemYamasi, type EylemYamasi } from './rehber';
+import { sinifKurallari, sinifSekmesi, type SinifKurallari } from './sinifKurallari';
 
 export type Sekme = GrafikTuru;
 
@@ -34,13 +35,14 @@ export const SEKMELER: { id: Sekme; ad: string }[] = [
   { id: 'nokta', ad: 'Nokta' },
   { id: 'sutun', ad: 'Sütun' },
   { id: 'cizgi', ad: 'Çizgi' },
+  { id: 'kokYaprak', ad: 'Kök-yaprak' },
   { id: 'daire', ad: 'Daire' },
   { id: 'sacilim', ad: 'Saçılım' },
   { id: 'istatistik', ad: 'İstatistik' },
 ];
 
-/** Grafiğin veri türü gereksinimi: çizgi en az bir, saçılım en az iki sayısal değişken ister */
-export const GEREKEN_SAYISAL: Partial<Record<Sekme, number>> = { cizgi: 1, sacilim: 2 };
+/** Grafiğin veri türü gereksinimi: çizgi ve kök-yaprak en az bir, saçılım en az iki sayısal değişken ister */
+export const GEREKEN_SAYISAL: Partial<Record<Sekme, number>> = { cizgi: 1, kokYaprak: 1, sacilim: 2 };
 
 /** Sekme bu tablonun veri türleriyle çizilebilir mi (sayısal değişken sayısına göre) */
 export function sekmeKullanilabilir(sekme: Sekme, sayisalDegiskenSayisi: number): boolean {
@@ -597,7 +599,17 @@ export function sayisalDegiskenSayisi(tablo: VeriTablosu): number {
  * sütun silme ve tür değiştirme yollarının hepsinde grafik çizilebilir kalır. Değişiklik yoksa aynı nesne döner.
  */
 export function sekmeDuzelt(d: Durum): Durum {
+  const sinifta = sinifSekmesi(d.sekme, durumKurallari(d));
+  if (sinifta !== d.sekme) return { ...d, sekme: sinifta };
   return sekmeKullanilabilir(d.sekme, sayisalDegiskenSayisi(etkinTablo(d))) ? d : { ...d, sekme: 'nokta' };
+}
+
+/**
+ * Etkin tablonun sınıf düzeyi kuralları (sinifKurallari.ts): Tablom bir örneğe bağlıysa örneğin sınıfı (5–8), değilse
+ * (kendi tablonuz, araştırma, Deney özeti) sınıfsız bütün davranış. Sekmeler, ölçüler ve karşılaştırma buna göre süzülür.
+ */
+export function durumKurallari(d: Pick<Durum, 'ornekId' | 'etkinKume'>): SinifKurallari {
+  return sinifKurallari(d.etkinKume === 'tablom' ? bagliOrnek(d)?.sinif ?? null : null);
 }
 
 // ── Tablo güvenliği: önceki tablo ──

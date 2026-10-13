@@ -33,6 +33,7 @@ export const GRAFIK_ADLARI: Record<Sekme, string> = {
   nokta: 'Nokta grafiği',
   sutun: 'Sütun grafiği',
   cizgi: 'Çizgi grafiği',
+  kokYaprak: 'Kök-yaprak gösterimi',
   daire: 'Daire grafiği',
   sacilim: 'Saçılım grafiği',
   istatistik: 'İstatistik',

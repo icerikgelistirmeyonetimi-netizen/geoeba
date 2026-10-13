@@ -49,7 +49,7 @@ export interface AcilisYamasi {
 }
 
 /** Grafik türünün istediği en az sayısal değişken (durum.ts'teki GEREKEN_SAYISAL ile aynı; test karşılaştırır) */
-const GEREKEN_SAYISAL: Partial<Record<GrafikTuru, number>> = { cizgi: 1, sacilim: 2 };
+const GEREKEN_SAYISAL: Partial<Record<GrafikTuru, number>> = { cizgi: 1, kokYaprak: 1, sacilim: 2 };
 
 /** Örneğin açılış sekmesi: `acilis.sekme`, yoksa önerilen grafik, yoksa nokta */
 export function onerilenSekme(ornek: OrnekVeri): GrafikTuru {
@@ -118,6 +118,7 @@ const GRAFIK_ADLARI: Record<GrafikTuru, string> = {
   nokta: 'Nokta',
   sutun: 'Sütun',
   cizgi: 'Çizgi',
+  kokYaprak: 'Kök-yaprak',
   daire: 'Daire',
   sacilim: 'Saçılım',
   istatistik: 'İstatistik',

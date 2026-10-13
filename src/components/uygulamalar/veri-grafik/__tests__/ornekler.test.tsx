@@ -359,10 +359,10 @@ describe('Keşif kartı (SSR)', () => {
   it('özelliğe bağlı eylem: sinav 3. adım grupla yokken yedek düğme; kitap 3. adım ortanca yokken düğmesiz; sürükleme yazı', () => {
     const sinav = ornekBul('sinav')!;
     expect(metin(kart(sinav, { ilkAdim: 2, ozellikler: HICBIRI }))).toContain('Gruplara göre tabloyu aç');
-    expect(metin(kart(sinav, { ilkAdim: 2, ozellikler: HEPSI }))).toContain('Ortalama ve sapmayı aç');
+    expect(metin(kart(sinav, { ilkAdim: 2, ozellikler: HEPSI }))).toContain('Aritmetik ortalama ve sapmayı aç');
     const kitap = ornekBul('kitap')!;
     expect(kart(kitap, { ilkAdim: 2, ozellikler: HICBIRI })).not.toContain('data-rehber-eylemi');
-    expect(metin(kart(kitap, { ilkAdim: 2, ozellikler: HEPSI }))).toContain('Ortanca ve ortalamayı aç');
+    expect(metin(kart(kitap, { ilkAdim: 2, ozellikler: HEPSI }))).toContain('Ortanca ve aritmetik ortalamayı aç');
     // Sürükleme eylemi düğme değil, yol gösteren yazı
     const gun = kart(ornekBul('gun')!, { ilkAdim: 3 });
     expect(gun).toMatch(/<span[^>]*data-rehber-eylemi="surukle"/);
