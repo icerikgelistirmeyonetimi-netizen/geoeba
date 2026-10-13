@@ -116,7 +116,7 @@ describe('7. sınıf', () => {
       ].join('\n')
     );
     expect(sozdeKod(gorev('s7-denklem-5').baslangic as Program)).toBe(
-      ['BAŞLA', '    sulanan ← 0', '    depo ≤ 5 OLANA KADAR TEKRARLA', '        İLERİ GİT', '        SULA', '        sulanan ← sulanan + 1', '    TEKRAR SONU', 'BİTİR'].join('\n')
+      ['BAŞLA', '    sulanan ← 0', '    depo ≤ 5 OLANA KADAR TEKRARLA', '        İLERİ GİT', '        SULA (2 litre)', '        sulanan ← sulanan + 1', '    TEKRAR SONU', 'BİTİR'].join('\n')
     );
   });
 });

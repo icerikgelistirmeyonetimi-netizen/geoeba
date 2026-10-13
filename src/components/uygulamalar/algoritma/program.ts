@@ -13,6 +13,7 @@
  * Değişkenler (5. sınıftan): `ata` bloğu bir değişkene ifade değerini verir (sayaç ← sayaç + 1).
  * İfade: sayı · değişken · ölçüm (buradaki domatesin kütlesi, depo, x, y) · iki ifade arasında işlem.
  */
+import { SULAMA_LITRE } from './dunya';
 
 export type EylemTuru =
   | 'ileri'
@@ -709,11 +710,16 @@ export function duzMetin(p: Program, girinti = 0): string {
   return satirlar.join('\n');
 }
 
+/**
+ * Sözde kod eylemleri. SULA suyun miktarını da yazar: depo koşullu döngüler ("depo < 2 olana kadar") ve
+ * "depoda kaç litre kalır" soruları sözde koddan okunabilsin (uzman 4. tur, 7. sınıf 1–2. ünite: "Sözde kod
+ * gözden geçirilmeli", "her saksıya ne kadar su harcandığı verilmeli").
+ */
 const SOZDE_EYLEM: Record<EylemTuru, string> = {
   ileri: 'İLERİ GİT',
   sagaDon: 'SAĞA DÖN',
   solaDon: 'SOLA DÖN',
-  sula: 'SULA',
+  sula: `SULA (${SULAMA_LITRE} litre)`,
   topla: 'TOPLA',
   gubreVer: 'GÜBRE VER',
   boya: 'BOYA',

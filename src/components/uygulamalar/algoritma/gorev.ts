@@ -7,6 +7,7 @@
 import type { BlokSablonu, OlcumTuru, Program } from './program';
 import type { DunyaTanimi, Hedef } from './dunya';
 import type { Iz } from './yorumlayici';
+import type { SahneAdi } from './sahneAdi';
 import { KAZANIM_LISTESI } from './kazanimlar';
 
 /** yaz: kodu yaz · kurgu: aynı kodu yeni kurguda düzelt · hata: hazır koddaki hatayı bul · tahmin: çalıştırmadan önce sonucu tahmin et */
@@ -156,8 +157,18 @@ export interface Atolye {
   kazanimlar: string[];
   /** İpucu olarak gösterilen kalıp kartı */
   kalip: string;
-  /** Tek ipucu: strateji (çözümü söylemez) */
+  /** İlk ipucu: strateji (çözümü söylemez) */
   ipucu: string;
+  /**
+   * Sonraki ipuçları, sırayla daha somut ("Bir ipucu daha"); yoksa yalnız `ipucu` (uzman 4. tur: Merdiven tarla
+   * "ipuçları yetersiz"). İlk ipucu genel kalır; sonrakiler adım adım yönlendirir.
+   */
+  ipuclari?: readonly string[];
+  /**
+   * Sınama sahnelerinin ekrandaki adı ("1. tarlada çalışsın", "4 caddenin hepsinde"). Yazılmamışsa yansız
+   * "sahne" (tek sahneli 1–2. sınıf projeleri). Uzman 4. tur: "Dünya kelimelerini tarla / cadde / … ile değiştirelim".
+   */
+  sahne?: SahneAdi;
   /** Kutu ve ekran görünümü: sınıfın görünümüyle aynı (kart · blok · ifade) */
   gorunum: 'kart' | 'blok' | 'ifade';
 }

@@ -68,7 +68,8 @@ const IFADE_GOREVLERI: Gorev[] = [
     id: 's7-ifade-1',
     tur: 'tahmin',
     baslik: 'Akış şemasını oku',
-    yonerge: 'Kod panelinde akış şeması açık. Robotun yolunu oklarla izle: çıkışa varınca depoda kaç litre su kalır? Önce tahmin et, sonra çalıştır.',
+    // Uzman (4. tur, satır 127): her saksı için ne kadar su harcandığı soruda verilmeli
+    yonerge: 'Kod panelinde akış şeması açık. Depoda 20 litre su var; robot her kuru saksıya 2 litre su verir. Robotun yolunu oklarla izle: çıkışa varınca depoda kaç litre kalır? Önce tahmin et, sonra çalıştır.',
     ilkGorunum: 'akis',
     dunya: SERA_SULAMA,
     hedef: { kurulariSula: true, cikistaBitir: true },
@@ -81,7 +82,7 @@ const IFADE_GOREVLERI: Gorev[] = [
       'Kaç saksıda "evet" kolu çalışır? Kuru saksıları say; her sulama 2 litre.',
     ],
     tahmin: {
-      metin: 'Robot çıkışa varınca depoda kaç litre su kalır?',
+      metin: 'Depoda 20 litre var; her kuru saksıya 2 litre gider. Robot çıkışa varınca depoda kaç litre su kalır?',
       birim: 'litre',
       cevap: (iz) => izOzeti(iz).kalanSu,
       sonrasi: 'Her kuru saksıya 2 litre: 20 − 5 × 2 = 10.',
@@ -362,7 +363,8 @@ const PRIZMA_GOREVLERI: Gorev[] = [
       'Sırayı kuran kodla geri dönüş kodunu birlikte "2 kez tekrarla" içine al.',
     ],
     basari: (iz) => `Oldu! ${prizmaCumlesi(iz)}`,
-    soru: { metin: 'Aynı tabanla 5 katlı bir prizma kaç küp olurdu?', birim: 'küp', cevap: (iz) => prizmaOlculeri(iz).en * prizmaOlculeri(iz).boy * 5, sonrasi: '3 × 2 × 5 = 30: taban alanı × yükseklik.' },
+    // Uzman (4. tur, satır 129): sorunun yazımı
+    soru: { metin: 'Aynı tabana sahip 5 katlı bir prizma elde etmek için kaç küpe ihtiyacımız olurdu?', birim: 'küp', cevap: (iz) => prizmaOlculeri(iz).en * prizmaOlculeri(iz).boy * 5, sonrasi: '3 × 2 × 5 = 30: taban alanı × yükseklik.' },
     kazanimlar: ['MAT.7.4.3', 'MAT.7.4.4'],
   },
   {
@@ -427,7 +429,7 @@ const PRIZMA_GOREVLERI: Gorev[] = [
     tur: 'yaz',
     zorlu: true,
     baslik: 'Formülle prizma',
-    yonerge: 'en, boy ve yükseklik değişkenleri hazır. Tekrar sayılarını bu değişkenlerle yaz; sonunda hacim ← en × boy × yükseklik hesapla.',
+    yonerge: 'Değişkenler hazır: en, boy ve yükseklik. Tekrar sayılarını bu değişkenlerle yaz; sonunda hacim ← en × boy × yükseklik hesapla.',
     dunya: PRIZMA_5,
     hedef: { yapiyiKur: true, cikistaBitir: false, degiskenler: { hacim: 24 } },
     bitkiAdi: 'bitki',

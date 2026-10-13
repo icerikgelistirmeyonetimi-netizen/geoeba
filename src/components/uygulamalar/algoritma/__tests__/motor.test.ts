@@ -49,7 +49,7 @@ describe('program modeli: değişken, değilse, komut', () => {
   it('sözde kod: atama, değilse, komut tanımı BAŞLA öncesinde', () => {
     const p = programKur([['tanim', 'KARE', [['kez', 4, ['ileri', 'sagaDon']]]], ['ata', 'toplam', 0], ['eger', ['toplam', '<', 5], [['cagir', 'KARE']], ['sula']]]);
     expect(sozdeKod(p)).toBe(
-      ['TANIMLA KARE', '    4 KEZ TEKRARLA', '        İLERİ GİT', '        SAĞA DÖN', '    TEKRAR SONU', 'TANIM SONU', 'BAŞLA', '    toplam ← 0', '    EĞER toplam < 5 İSE', '        KARE', '    DEĞİLSE', '        SULA', '    EĞER SONU', 'BİTİR'].join('\n')
+      ['TANIMLA KARE', '    4 KEZ TEKRARLA', '        İLERİ GİT', '        SAĞA DÖN', '    TEKRAR SONU', 'TANIM SONU', 'BAŞLA', '    toplam ← 0', '    EĞER toplam < 5 İSE', '        KARE', '    DEĞİLSE', '        SULA (2 litre)', '    EĞER SONU', 'BİTİR'].join('\n')
     );
     expect(sozdeSatirlar(p).find((s) => s.metin === 'KARE' && s.girinti === 2)?.blokId).toBe('p7');
   });

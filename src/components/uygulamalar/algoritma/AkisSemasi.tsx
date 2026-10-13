@@ -12,6 +12,7 @@
  */
 import React from 'react';
 import { EYLEM_ADI, atamaMetni, kezMetni, kosulMetni, type Blok, type Program } from './program';
+import { SULAMA_LITRE } from './dunya';
 import { KATEGORI_RENGI, kategori, type AktifDurum } from './BlokDuzenleyici';
 
 const ARA = 26;
@@ -156,7 +157,8 @@ function dizi(liste: Blok[], bg: Baglam): Yapi {
 function yapi(b: Blok, bg: Baglam): Yapi {
   switch (b.tur) {
     case 'eylem':
-      return kutu(EYLEM_ADI[b.eylem], b, bg, 'islem');
+      // Sulama suyun miktarını da yazar (sözde koddaki gibi): "depoda kaç litre kalır" şemadan okunur
+      return kutu(b.eylem === 'sula' ? `${EYLEM_ADI.sula} (${SULAMA_LITRE} litre)` : EYLEM_ADI[b.eylem], b, bg, 'islem');
     case 'ata':
       return kutu(atamaMetni(b), b, bg, 'islem');
     case 'cagir':

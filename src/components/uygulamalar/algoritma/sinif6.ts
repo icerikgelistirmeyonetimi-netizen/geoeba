@@ -238,7 +238,7 @@ const KAT_GOREVLERI: Gorev[] = [
     baslangic: k([['ata', 'sıra', 0], 'ileri', ['kadar', 'cikistayim', [['ata', 'sıra', ['sıra', '+', 1]], 'ileri']]], 's6k1b-'),
     cozum: katKodu(3, 's6k1-'),
     ipuclari: [
-      'sıra, robotun önündeki saksının numarası. Hangi numaralar 3’ün katı?',
+      'Değişken sıra, robotun önündeki saksının numarası. Hangi numaralar 3’ün katı?',
       'Bir sayı 3’e kalansız bölünüyorsa 3’ün katıdır: sıra mod 3 = 0.',
       '"eğer sıra mod 3 = 0 ise" bloğunu "sıra ← sıra + 1"in altına koy, içine "gübre ver".',
     ],
@@ -474,7 +474,9 @@ const TERIM_GOREVLERI: Gorev[] = [
     hedef: { yapiyiKur: true, cikistaBitir: false, degiskenler: { toplam: 9 } },
     bitkiAdi: 'bitki',
     aracKutusu: TERIM_KUTUSU_2,
-    baslangic: 'onceki',
+    // Uzman (4. tur, satır 122): "5/5'te ipuçları yetersiz". Ön adım: görev, 4. görevin (i ← 0, 2 × i + 1) kodu yerine
+    // 1. görevin bildik kuleleriyle (i ← 1, 2 × i − 1) açılır; araç kutusundaki toplama bloğu bu terimle aynıdır.
+    baslangic: terimKodu(1, TEK, 's6t5b-'),
     cozum: k(
       [
         ['ata', 'i', 1],
@@ -483,7 +485,11 @@ const TERIM_GOREVLERI: Gorev[] = [
       ],
       's6t5-'
     ),
-    ipuclari: ['Başta toplam 0. Her kulede o kulenin küp sayısı toplama eklenir.', '"toplam ← toplam + (2 × i − 1)" bloğunu i artmadan önce koy. Kodunda genel terim 2 × i + 1 ise işareti ona göre değiştir.'],
+    ipuclari: [
+      'Kuleler 1, 3 ve 5 küp. Program bitince toplam 1 + 3 + 5 olmalı: her kule kurulunca o kulenin küpleri toplama eklenir.',
+      'Döngüden önce "toplam ← 0" koy. Döngünün içinde, kule kurulduktan sonra "toplam ← toplam + (2 × i − 1)" koy: 2 × i − 1, o kulenin küp sayısıdır.',
+      'Toplama bloğu "i ← i + 1"den önce gelmeli; sonra gelirse bir sonraki kulenin küpleri eklenir. Çalıştır: toplam 9 olmalı.',
+    ],
     basari: (iz) => `Oldu! toplam = ${kuleler(iz).join(' + ')} = ${deger(iz, 'toplam')} = ${kuleler(iz).length} × ${kuleler(iz).length}.`,
     soru: {
       metin: 'İlk 4 tek sayının toplamı kaç? (1 + 3 + 5 + 7)',
@@ -629,7 +635,7 @@ const EN_GOREVLERI: Gorev[] = [
     ipuclari: ['Her domateste sor: şimdiye kadarkilerin hepsinden ağır mı?'],
     basari: (iz) => `enBüyük: ${degisim(iz, 'enBüyük')}. Baştaki 0’dan sonra ${degerleri(iz, 'enBüyük').length - 1} kez değişti.`,
     tahmin: {
-      metin: 'enBüyük, baştaki 0’dan sonra kaç kez değişecek?',
+      metin: 'Değişken enBüyük, baştaki 0’dan sonra kaç kez değişecek?',
       birim: 'kez',
       cevap: (iz) => degerleri(iz, 'enBüyük').length - 1,
       sonrasi: '100, 140, 160 ve 190: dört rekor.',

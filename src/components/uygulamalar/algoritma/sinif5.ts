@@ -461,7 +461,8 @@ const TARLA_GOREVLERI: Gorev[] = [
       metin: 'Tarlanın çevresine tel çekilecek. Kaç birim tel gerekir?',
       birim: 'birim',
       cevap: (iz) => 2 * (tarla(iz).en + tarla(iz).boy),
-      sonrasi: 'Çevre = 7 + 4 + 7 + 4 = 22 birim. Alan içi ölçer (28 birim kare), çevre kenarı.',
+      // Uzman (4. tur, satır 115): parantez içi açıklama "alan yüzey büyüklüğünü, çevre kenar uzunluklarını ölçer"
+      sonrasi: 'Çevre = 7 + 4 + 7 + 4 = 22 birim. Alan yüzeyin büyüklüğünü ölçer (28 birim kare), çevre ise kenar uzunluklarını ölçer (22 birim).',
       yonlendirme: 'Çevre, dört kenarın uzunlukları toplamıdır: 7 + 4 + 7 + 4.',
     },
     kazanimlar: ['MAT.5.4.3', 'MAT.5.4.4'],
@@ -502,7 +503,8 @@ const KURAL_GOREVLERI: Gorev[] = [
     id: 's5-kural-1',
     tur: 'yaz',
     baslik: 'Büyüyen kuleler',
-    yonerge: 'Dron 1, 2, 3 ve 4 küplük kuleler kuracak. kat değişkeni bir kulede kaç küp olacağını tutsun; her kuleden sonra kat 1 artsın.',
+    // Uzman (4. tur, satır 116): noktadan sonra küçük harfle ("kat değişkeni") başlıyordu
+    yonerge: 'Dron 1, 2, 3 ve 4 küplük kuleler kuracak. Bir kulede kaç küp olacağını kat değişkeni tutsun; her kuleden sonra kat 1 artsın.',
     dunya: KULE_1234,
     hedef: KULE_HEDEFI,
     bitkiAdi: 'bitki',
@@ -555,7 +557,7 @@ const KURAL_GOREVLERI: Gorev[] = [
     aracKutusu: KURAL_KUTUSU,
     baslangic: 'onceki',
     cozum: kuleKodu(5, '-', 1, 5, 's5k3-'),
-    ipuclari: ['kat kaçtan başlamalı? Her kuleden sonra kat artmalı mı, azalmalı mı?', '"kat ← kat + 2" bloğundaki + işaretine dokun, − yap; sayıyı da 1 yap.'],
+    ipuclari: ['İlk kulede kat kaç olmalı? Her kuleden sonra kat artmalı mı, azalmalı mı?', '"kat ← kat + 2" bloğundaki + işaretine dokun, − yap; sayıyı da 1 yap.'],
     basari: (iz) => `Oldu! Kuleler ${liste(kuleler(iz))} küp: ${kuralMetni(kuleler(iz))}. Toplam ${izOzeti(iz).kup} küp.`,
     kazanimlar: ['MAT.5.2.3'],
     degiskenler: ['kat'],
@@ -594,7 +596,7 @@ const KURAL_GOREVLERI: Gorev[] = [
       birim: 'küp',
       cevap: (iz) => izOzeti(iz).kup,
       sonrasi: '3 + 4 + 5 + 6 = 18 küp.',
-      yonlendirme: 'kat 3’ten başlıyor ve her kuleden sonra 1 artıyor. Dört kule var: 3 + 4 + 5 + 6.',
+      yonlendirme: 'Değişken kat 3’ten başlıyor ve her kuleden sonra 1 artıyor. Dört kule var: 3 + 4 + 5 + 6.',
     },
     soru: {
       metin: 'Program bitince kat kaç olur?',
