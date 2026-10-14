@@ -79,7 +79,35 @@ import { cismiGorunurKil, cizimOlculeri } from './cisimYerlesimi';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { gizliSecimBirakilir, kademe2BNesneleri3BdeGosterir, kademe3BEksenleriGosterir, type AyrimDurumu } from './kademeDuzeyleri3B';
 import { ILKOKUL_3B_DONUS_YONLERI, ilkokulOlcekNotu, ilkokulOzellikMetni } from './ilkokul3B';
-import { ilkokulUzunlukMetni } from './ilkokulKipi';
+import {
+  EtiketDokuOnbellegi,
+  ACIK_TEMA_3B,
+  ayritOlcusuYazisi,
+  dokuAnahtari,
+  dokuPikseli,
+  eksenEtiketleri3B,
+  eksenSayisiKaymasi,
+  eksenSayisiKati,
+  ekranPikseliOlcegi,
+  etiketiCiz,
+  etiketOlcusu3B,
+  noktaAdiBoslugu,
+  noktaAdiCizimi,
+  pikseleOturt,
+  spriteMerkezi,
+  temaRenkleri3B,
+  yuzAlaniYazisi,
+  type EtiketBilgisi3B,
+  type EtiketCapasi,
+  type EtiketCizimi,
+  type OlcuYazisi3B,
+  type Tema3B,
+} from './etiket3B';
+import { turYaziBoyu, yakinlikOlceklenir, yaziOlcegi3B, type YaziBoyuAyarlari } from '@/math/etiketStandardi';
+import { yazimAyari } from '@/math/matematikYazimi';
+import { DEFAULT_STYLE_SETTINGS } from '@/types/workspace';
+import { tamSayiOlcuEtkin } from './olcuYuvarlama';
+import { MatematikEtiketi } from './MatematikEtiketi';
 import {
   surukleAcisi,
   halkaAcisi,
@@ -96,7 +124,6 @@ import {
   ayritiDegistir,
   ayritAnahtari,
   ayritOlcusu,
-  uzunlukMetni,
   turkceSayiOku,
   turkceSayiYaz,
   ONCE_CISIM_SECIN,
@@ -122,6 +149,12 @@ const ORBIT_SPEED = 0.45;
 const DEFAULT_SOLID_COLOR = '#3b82f6';
 
 const AXIS_COLORS = { x: '#ef4444', y: '#10b981', z: '#3b82f6' } as const;
+/** Eksenlerin artı / eksi uzunluğu (dünya birimi): çizgi, ok ucu ve etiketler bunu kullanır */
+const EKSEN_UZUNLUKLARI = {
+  x: { arti: AXIS_LEN, eksi: AXIS_LEN },
+  y: { arti: AXIS_LEN, eksi: AXIS_LEN },
+  z: { arti: AXIS_Z_POS, eksi: AXIS_Z_NEG },
+} as const;
 /** 2B nesneler için taşıma gizmosunun ok uzunluğu (dünya birimi) */
 const MATH_GIZMO_LEN = 1.8;
 const yuvarla2 = (n: number) => Number(n.toFixed(2));
@@ -201,46 +234,167 @@ function clampZoom(z: number): number {
 /*  Yazı etiketleri (Sprite)                                                   */
 /* -------------------------------------------------------------------------- */
 
-const textureCache = new Map<string, THREE.CanvasTexture>();
-
-function getTextTexture(text: string, color: string, bold: boolean): THREE.CanvasTexture {
-  const key = `${text}|${color}|${bold ? 'b' : 'n'}`;
-  const cached = textureCache.get(key);
-  if (cached) return cached;
-
-  const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 64;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.clearRect(0, 0, 128, 64);
-    ctx.font = `${bold ? '900' : '700'} ${bold ? 34 : 30}px ui-monospace, monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.strokeText(text, 64, 34);
-    ctx.fillStyle = color;
-    ctx.fillText(text, 64, 34);
-  }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.needsUpdate = true;
-  textureCache.set(key, tex);
-  return tex;
+/**
+ * Etiket kurulumunun ortak girdileri: biçim 2B ile aynı standarttan (etiket3B.ts, etiketStandardi.ts) gelir.
+ * Dokular tuval örneğinin önbelleğindedir (anahtar: dokuAnahtari); sahne yeniden kurulunca `etiketDokulariniSupur`
+ * kullanılmayanları siler.
+ */
+interface EtiketBaglami {
+  onbellek: EtiketDokuOnbellegi<THREE.Texture>;
+  /** Stil > Yazı Boyutları (StyleSettings) */
+  stil: YaziBoyuAyarlari;
+  tema: Tema3B;
+  /** Renderer'ın piksel oranı (doku pikseli = ekran pikseli) */
+  pikselOrani: number;
+  /** Yazı tipi yüklendikçe artar: yedek yazı tipiyle çizilmiş dokular yenilenir */
+  yaziSurumu: number;
 }
 
-function makeLabelSprite(text: string, color: string, size: number, bold = false): THREE.Sprite {
+/**
+ * 2B standardında etiket sprite'ı. Ekranda sabit piksel boydadır (sizeAttenuation: false); ölçeği, merkezi (çapası) ve
+ * eksen sayılarının seyrekliği her karede `etiketleriYerlestir` ile ayarlanır. depthTest kapalı (eskisi gibi): etiket
+ * cismin arkasında kalsa da okunur — 2B'deki etiketler de şekillerin üstünde çizilir.
+ */
+function makeLabelSprite(b: EtiketBaglami, cizim: EtiketCizimi, capa: EtiketCapasi): THREE.Sprite {
+  const anahtar = dokuAnahtari(cizim, b.pikselOrani, b.yaziSurumu);
+  const olcu = etiketOlcusu3B(cizim, b.pikselOrani);
+  const map = b.onbellek.al(anahtar, () => {
+    const canvas = document.createElement('canvas');
+    const piksel = dokuPikseli(olcu, b.pikselOrani);
+    canvas.width = piksel.genislik;
+    canvas.height = piksel.yukseklik;
+    const ctx = canvas.getContext('2d');
+    if (ctx) etiketiCiz(ctx, cizim, olcu, b.pikselOrani);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    // Doku ekran pikseline birebir düşer (ölçek 1); küçülürken de en çok 0,67'ye iner: mipmap gerekmez, yazı keskin kalır
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+    return tex;
+  });
   const material = new THREE.SpriteMaterial({
-    map: getTextTexture(text, color, bold),
+    map,
     transparent: true,
     depthTest: false,
     depthWrite: false,
+    sizeAttenuation: false,
   });
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(size * 2, size, 1);
   sprite.renderOrder = 5;
+  const bilgi: EtiketBilgisi3B = { anahtar, tur: cizim.tur, olcu, capa };
+  sprite.userData.etiket3B = bilgi;
   return sprite;
+}
+
+/** Sahnedeki etiketlerin kullanmadığı dokuları GPU'dan siler (stil / tema / ad değişince eskiler birikmesin). */
+function etiketDokulariniSupur(scene: THREE.Object3D, onbellek: EtiketDokuOnbellegi<THREE.Texture>): number {
+  const kullanilan = new Set<string>();
+  scene.traverse((o) => {
+    const e = o.userData?.etiket3B as EtiketBilgisi3B | undefined;
+    if (e) kullanilan.add(e.anahtar);
+  });
+  return onbellek.supur(kullanilan);
+}
+
+const _etiketKonumu = new THREE.Vector3();
+const _etiketFarki = new THREE.Vector3();
+
+/**
+ * Her karede (render'dan hemen önce) etiket sprite'larını ekrana oturtur:
+ * - boy: dokunun CSS boyu × yazı ölçeği (nokta adı ve ölçüde yaziOlcegi3B, eksenlerde 1) → ekranda 2B ile aynı piksel;
+ * - çapa: nokta adı kürenin ekran yarıçapı + 4 px sağ üstte, orijin rozeti 8 px sağ altta, eksen sayısı eksenin yanında;
+ * - eksen sayıları: komşular üst üste binmesin diye 2B'deki gibi seyreltilir;
+ * - sol üst köşe cihaz pikseline oturur (ölçek 1'de yazı bulanıklaşmaz).
+ */
+function etiketleriYerlestir(
+  scene: THREE.Scene,
+  basis: CameraBasis,
+  width: number,
+  height: number,
+  pikselOrani: number,
+  yaziOlcegi: number
+) {
+  const cam = basis.camera;
+  const k = ekranPikseliOlcegi(height, FOV_DEG);
+  const tanYarim = Math.tan((FOV_DEG * Math.PI) / 360);
+  const etiketler: { sprite: THREE.Sprite; e: EtiketBilgisi3B }[] = [];
+  const enBuyuk: Record<Axis, { w: number; h: number }> = { x: { w: 0, h: 0 }, y: { w: 0, h: 0 }, z: { w: 0, h: 0 } };
+  scene.traverse((o) => {
+    const e = o.userData?.etiket3B as EtiketBilgisi3B | undefined;
+    if (!e || !(o as THREE.Sprite).isSprite) return;
+    etiketler.push({ sprite: o as THREE.Sprite, e });
+    if (e.capa.tur === 'eksen') {
+      const m = enBuyuk[e.capa.eksen];
+      m.w = Math.max(m.w, e.olcu.icGenislik);
+      m.h = Math.max(m.h, e.olcu.icYukseklik);
+    }
+  });
+  if (etiketler.length === 0) return;
+
+  // Eksenlerin orijindeki ekran doğrultusu ve birim aralığı (px)
+  const orijin = projectToScreen({ x: 0, y: 0, z: 0 }, cam, width, height);
+  const eksenler = {} as Record<Axis, { yon: { x: number; y: number }; kat: number }>;
+  (['x', 'y', 'z'] as Axis[]).forEach((ax) => {
+    const u = projectToScreen({ x: ax === 'x' ? 1 : 0, y: ax === 'y' ? 1 : 0, z: ax === 'z' ? 1 : 0 }, cam, width, height);
+    const yon = { x: u.x - orijin.x, y: u.y - orijin.y };
+    const birimPx = Math.hypot(yon.x, yon.y);
+    const kat = orijin.behind || u.behind ? Number.POSITIVE_INFINITY : eksenSayisiKati(birimPx, yon, enBuyuk[ax].w, enBuyuk[ax].h);
+    eksenler[ax] = { yon, kat };
+  });
+
+  for (const { sprite, e } of etiketler) {
+    const s = yakinlikOlceklenir(e.tur) ? yaziOlcegi : 1;
+    const W = e.olcu.genislik * s;
+    const H = e.olcu.yukseklik * s;
+    sprite.scale.set(W * k, H * k, 1);
+    sprite.updateWorldMatrix(true, false);
+    _etiketKonumu.setFromMatrixPosition(sprite.matrixWorld);
+    const ekran = projectToScreen(_etiketKonumu, cam, width, height);
+    let merkez: { x: number; y: number };
+    if (e.capa.tur === 'noktaSagUst') {
+      const derinlik = _etiketFarki.copy(_etiketKonumu).sub(cam.position).dot(basis.forward);
+      const birimPx = derinlik > 1e-6 ? height / 2 / (derinlik * tanYarim) : 0;
+      merkez = spriteMerkezi(e, s, { bosluk: noktaAdiBoslugu(e.capa.dunyaYaricapi, birimPx) });
+    } else if (e.capa.tur === 'eksen') {
+      const d = eksenler[e.capa.eksen];
+      sprite.visible = Number.isFinite(d.kat) && Math.abs(Math.round(e.capa.deger)) % d.kat === 0;
+      merkez = spriteMerkezi(e, s, { kayma: eksenSayisiKaymasi(d.yon, e.olcu.icGenislik * s, e.olcu.icYukseklik * s) });
+    } else {
+      merkez = spriteMerkezi(e, s);
+    }
+    if (!ekran.behind) merkez = pikseleOturt(merkez, ekran, W, H, pikselOrani);
+    sprite.center.set(merkez.x, merkez.y);
+  }
+}
+
+/** "(2; 3; 0,5)" — 2B'nin formatCoordinate(pt, 1) biçiminin 3B karşılığı */
+const koordinat3B = (x: number, y: number, z: number) =>
+  `(${formatTurkishNumber(x, 1)}; ${formatTurkishNumber(y, 1)}; ${formatTurkishNumber(z, 1)})`;
+
+/**
+ * Yazı tipinin (Manrope, Roboto Mono) yüklenme sürümü. Tuval 2D yazısı yüklenmemiş yazı tipini yedekle çizer;
+ * yüklenince sürüm artar, dokular (anahtarında sürüm var) yeniden çizilir.
+ */
+const ETIKET_YAZI_TIPLERI = ['700 12px Manrope', '900 12px Manrope', '400 10px Manrope', "900 11px 'Roboto Mono'"];
+function useEtiketYaziSurumu(): number {
+  const [surum, setSurum] = useState(0);
+  useEffect(() => {
+    const fonts = typeof document !== 'undefined' ? document.fonts : undefined;
+    if (!fonts || typeof fonts.load !== 'function') return;
+    let iptal = false;
+    Promise.all(ETIKET_YAZI_TIPLERI.map((f) => fonts.load(f).catch(() => [])))
+      .then(() => fonts.ready)
+      .then(() => {
+        if (!iptal) setSurum((s) => s + 1);
+      })
+      .catch(() => {});
+    return () => {
+      iptal = true;
+    };
+  }, []);
+  return surum;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -257,7 +411,8 @@ function makeLabelSprite(text: string, color: string, size: number, bold = false
  *   kaynak yalnızca bir kez dispose edilir.
  * - Sprite'lar three.js içinde MODÜL DÜZEYİNDE ortak bir geometri paylaşır; onu
  *   dispose etmek sonraki tüm etiketleri bozar, bu yüzden atlanır.
- * - Material.dispose() haritayı (texture) serbest bırakmaz; textureCache geçerli kalır.
+ * - Material.dispose() haritayı (texture) serbest bırakmaz: etiket dokuları tuvalin önbelleğindedir (EtiketDokuOnbellegi),
+ *   sahne yeniden kurulunca kullanılmayanlar etiketDokulariniSupur ile silinir.
  */
 function disposeObject(obj: THREE.Object3D) {
   const seen = new Set<THREE.BufferGeometry | THREE.Material>();
@@ -326,7 +481,7 @@ function buildGrid(isDark: boolean): THREE.Group {
   return group;
 }
 
-function buildAxes(isDark: boolean): THREE.Group {
+function buildAxes(b: EtiketBaglami): THREE.Group {
   const group = new THREE.Group();
 
   const makeAxis = (dir: Axis, posLen: number, negLen: number) => {
@@ -357,28 +512,9 @@ function buildAxes(isDark: boolean): THREE.Group {
     cone.position.set(...vec(posLen));
     group.add(cone);
 
-    // Eksen adları
-    const posLabel = makeLabelSprite(`+${dir}`, color, 0.55, true);
-    posLabel.position.set(...vec(posLen + 0.9));
-    group.add(posLabel);
-    const negLabel = makeLabelSprite(`-${dir}`, color, 0.45);
-    negLabel.position.set(...vec(-negLen - 0.8));
-    group.add(negLabel);
-
-    // Sayısal işaretler
-    for (let i = -negLen + 1; i <= posLen - 1; i++) {
-      if (i === 0) continue;
-      const tick = makeLabelSprite(String(i), color, 0.3);
-      const p = vec(i);
-      tick.position.set(p[0] + (dir === 'y' ? -0.45 : 0), p[1] + (dir === 'x' ? -0.45 : 0), p[2] + (dir === 'z' ? 0 : 0));
-      if (dir === 'z') tick.position.x -= 0.5;
-      group.add(tick);
-    }
   };
 
-  makeAxis('x', AXIS_LEN, AXIS_LEN);
-  makeAxis('y', AXIS_LEN, AXIS_LEN);
-  makeAxis('z', AXIS_Z_POS, AXIS_Z_NEG);
+  (['x', 'y', 'z'] as Axis[]).forEach((ax) => makeAxis(ax, EKSEN_UZUNLUKLARI[ax].arti, EKSEN_UZUNLUKLARI[ax].eksi));
 
   // Orijin
   const origin = new THREE.Mesh(
@@ -386,9 +522,13 @@ function buildAxes(isDark: boolean): THREE.Group {
     new THREE.MeshBasicMaterial({ color: '#2563eb' })
   );
   group.add(origin);
-  const originLabel = makeLabelSprite('(0; 0; 0)', isDark ? '#e2e8f0' : '#1e293b', 0.42);
-  originLabel.position.set(0.9, -0.9, -0.15);
-  group.add(originLabel);
+
+  // Eksen adı rozetleri, eksen sayıları ve orijin rozeti: 2B standardında (etiket3B.eksenEtiketleri3B)
+  eksenEtiketleri3B(b.stil, b.tema, AXIS_COLORS, EKSEN_UZUNLUKLARI).forEach((e) => {
+    const sprite = makeLabelSprite(b, e.cizim, e.capa);
+    sprite.position.set(...e.konum);
+    group.add(sprite);
+  });
 
   return group;
 }
@@ -763,7 +903,8 @@ function mathGizmoMerkezi(objects: MathObject[], ids: string[]) {
 function buildMathObjects3D(
   objects: MathObject[],
   selectedObjectIds: string[],
-  isDark: boolean
+  isDark: boolean,
+  etiket: EtiketBaglami & { koordinatGoster: boolean }
 ): THREE.Group {
   const group = new THREE.Group();
   const pointsById = new Map(
@@ -816,9 +957,12 @@ function buildMathObjects3D(
         mesh.position.set(pt.x, pt.y, pz);
         ptGroup.add(mesh);
 
-        if (pt.label) {
-          const sprite = makeLabelSprite(pt.label, isDark ? '#f8fafc' : '#0f172a', 0.9, true);
-          sprite.position.set(pt.x + 0.35, pt.y + 0.35, pz + 0.15);
+        // Nokta adı 2B ile aynı: "Etiketi göster" (showLabel) kapalıysa yazılmaz; ön plan rengi, kalın, alt indis (A₁),
+        // kesme işareti (B′), hafif gölge; koordinat açıksa yanında soluk "(x; y; z)". Seçimde rengi değişmez (2B'de de).
+        if (pt.showLabel && pt.label) {
+          const cizim = noktaAdiCizimi(pt.label, etiket.stil, etiket.tema, etiket.koordinatGoster ? koordinat3B(pt.x, pt.y, pz) : null);
+          const sprite = makeLabelSprite(etiket, cizim, { tur: 'noktaSagUst', dunyaYaricapi: r });
+          sprite.position.set(pt.x, pt.y, pz);
           ptGroup.add(sprite);
         }
         // Havadaki noktadan zemine kesikli dikme: yüksekliği okumayı kolaylaştırır (tıklanmaz)
@@ -1272,6 +1416,22 @@ export function Canvas3D(props: Canvas3DProps) {
 
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 1200, height: 700 });
   const [isDark, setIsDark] = useState(false);
+
+  /* ----- Etiket biçimi: 2B ile aynı ayarlar (Stil > Yazı Boyutları, "Uzaklaşınca yazılar en az", etiket kutuları,
+     ölçüleri / koordinatları göster, ölçülerin tam sayı kuralı) ----- */
+  const stil = workspace?.styleSettings ?? DEFAULT_STYLE_SETTINGS;
+  const etiketStili = useMemo<YaziBoyuAyarlari>(
+    () => ({ fontScale: stil.fontScale, pointLabelScale: stil.pointLabelScale, measurementScale: stil.measurementScale, axisScale: stil.axisScale }),
+    [stil.fontScale, stil.pointLabelScale, stil.measurementScale, stil.axisScale]
+  );
+  const olculerGorunur = workspace?.viewport.showMeasurements !== false;
+  const koordinatGoster = !!workspace?.viewport.showCoordinates && olculerGorunur;
+  // Nokta adı ve ölçü yakınlaşınca büyür (en çok %5), uzaklaşınca alt sınırda kalır; 3B %100'de (zoom 55) 1
+  const yaziOlcegi = yaziOlcegi3B(camera.zoom, stil.yaziAltSiniri);
+  const olcuYazim = useMemo(() => ({ ...yazimAyari(stil), tamSayi: tamSayiOlcuEtkin(stil, kademeDuzeyi) }), [stil, kademeDuzeyi]);
+  const yaziSurumu = useEtiketYaziSurumu();
+  const [pikselOrani] = useState(() => (typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1));
+  const [tema, setTema] = useState<Tema3B>(ACIK_TEMA_3B);
   const [webglError, setWebglError] = useState<string | null>(null);
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   /** Dokunmadan gelen basma: boş alanda kutu yerine görünüm döndürme seçilir (handleMouseDown çağrısı boyunca true). */
@@ -1316,6 +1476,8 @@ export function Canvas3D(props: Canvas3DProps) {
     raycaster: THREE.Raycaster;
     builtSolids: Map<string, BuiltSolid>;
     frame: number | null;
+    /** Etiket dokuları (tuval örneği başına; kullanılmayan doku sahne her kurulduğunda silinir) */
+    etiketDokulari: EtiketDokuOnbellegi<THREE.Texture>;
   } | null>(null);
 
   const basis = useMemo(() => buildCameraBasis(camera, dimensions.width, dimensions.height), [camera, dimensions]);
@@ -1344,6 +1506,8 @@ export function Canvas3D(props: Canvas3DProps) {
     onDragCancel,
     onDragSolidsTransform,
     workspace,
+    yaziOlcegi,
+    pikselOrani,
   });
   latest.current = {
     solids,
@@ -1368,6 +1532,8 @@ export function Canvas3D(props: Canvas3DProps) {
     onDragCancel,
     onDragSolidsTransform,
     workspace,
+    yaziOlcegi,
+    pikselOrani,
   };
 
   const setInteractionBoth = useCallback((next: Interaction | null) => {
@@ -1449,7 +1615,10 @@ export function Canvas3D(props: Canvas3DProps) {
     if (!t || t.frame !== null) return;
     t.frame = requestAnimationFrame(() => {
       t.frame = null;
-      t.renderer.render(t.scene, latest.current.basis.camera);
+      const l = latest.current;
+      // Etiketler ekranda sabit piksel boyda: her karede kameraya göre ölçeklenir ve çapalanır
+      etiketleriYerlestir(t.scene, l.basis, l.dimensions.width, l.dimensions.height, l.pikselOrani, l.yaziOlcegi);
+      t.renderer.render(t.scene, l.basis.camera);
     });
   }, []);
 
@@ -1462,6 +1631,12 @@ export function Canvas3D(props: Canvas3DProps) {
     observer.observe(root, { attributes: true, attributeFilter: ['class'] });
     return () => observer.disconnect();
   }, []);
+
+  // Etiket renkleri tuvalin kapsayıcısındaki tema belirteçlerinden (fill-foreground, zemin halesi)
+  useEffect(() => {
+    const yeni = temaRenkleri3B(containerRef.current, isDark);
+    setTema((onceki) => (onceki.yazi === yeni.yazi && onceki.soluk === yeni.soluk && onceki.zemin === yeni.zemin ? onceki : yeni));
+  }, [isDark]);
 
   /* ---------------------------- Boyut takibi --------------------------- */
   useEffect(() => {
@@ -1530,6 +1705,7 @@ export function Canvas3D(props: Canvas3DProps) {
       axesGroup: null,
       raycaster: new THREE.Raycaster(),
       builtSolids: new Map(),
+      etiketDokulari: new EtiketDokuOnbellegi<THREE.Texture>(),
       frame: null,
     };
 
@@ -1542,12 +1718,16 @@ export function Canvas3D(props: Canvas3DProps) {
       clearGroup(t.gizmoGroup);
       if (t.gridGroup) disposeObject(t.gridGroup);
       if (t.axesGroup) disposeObject(t.axesGroup);
+      t.etiketDokulari.hepsiniAt();
       t.renderer.dispose();
       threeRef.current = null;
     };
   }, []);
 
-  /* --------------------- Izgara ve eksenler (tema) --------------------- */
+  /* ------------- Izgara ve eksenler (tema, etiket yazı ayarları) ------------- */
+  // Yeniden kurulan grup görünürlük ayarını korusun (eskiden tema değişince gizli eksenler geri geliyordu)
+  const gorunurlukRef = useRef({ izgara: camera.showGrid, eksen: camera.showAxes && eksenlerGorunur });
+  gorunurlukRef.current = { izgara: camera.showGrid, eksen: camera.showAxes && eksenlerGorunur };
   useEffect(() => {
     const t = threeRef.current;
     if (!t) return;
@@ -1560,10 +1740,18 @@ export function Canvas3D(props: Canvas3DProps) {
       disposeObject(t.axesGroup);
     }
     t.gridGroup = buildGrid(isDark);
-    t.axesGroup = buildAxes(isDark);
+    t.axesGroup = buildAxes({ onbellek: t.etiketDokulari, stil: etiketStili, tema, pikselOrani, yaziSurumu });
+    t.gridGroup.visible = gorunurlukRef.current.izgara;
+    t.axesGroup.visible = gorunurlukRef.current.eksen;
     t.scene.add(t.gridGroup, t.axesGroup);
+    etiketDokulariniSupur(t.scene, t.etiketDokulari);
     requestRender();
-  }, [isDark, requestRender]);
+  }, [isDark, etiketStili, tema, pikselOrani, yaziSurumu, requestRender]);
+
+  // "Uzaklaşınca yazılar en az" değişince (kamera oynamadan) etiketler yeni ölçekle çizilsin
+  useEffect(() => {
+    requestRender();
+  }, [yaziOlcegi, requestRender]);
 
   useEffect(() => {
     const t = threeRef.current;
@@ -1623,12 +1811,20 @@ export function Canvas3D(props: Canvas3DProps) {
     const t = threeRef.current;
     if (!t) return;
     clearGroup(t.mathObjectsGroup);
-    const group = buildMathObjects3D(objects, selectedObjectIds, isDark);
+    const group = buildMathObjects3D(objects, selectedObjectIds, isDark, {
+      onbellek: t.etiketDokulari,
+      stil: etiketStili,
+      tema,
+      pikselOrani,
+      yaziSurumu,
+      koordinatGoster,
+    });
     while (group.children.length > 0) {
       t.mathObjectsGroup.add(group.children[0]);
     }
+    etiketDokulariniSupur(t.scene, t.etiketDokulari);
     requestRender();
-  }, [objects, selectedObjectIds, isDark, requestRender]);
+  }, [objects, selectedObjectIds, isDark, etiketStili, tema, pikselOrani, yaziSurumu, koordinatGoster, requestRender]);
 
   /* ---------------- Yeni cisme odak (uzman 4. tur [173]) ---------------- */
   // Bu çizimde İLK KEZ görünen ve seçili gelen cisim (Tıkla Ekle, Ekle penceresi, yansıtma / öteleme kopyası,
@@ -2620,7 +2816,7 @@ export function Canvas3D(props: Canvas3DProps) {
       }
     }
 
-    let faceBadge: { x: number; y: number; label: string; area: string } | null = null;
+    let faceBadge: { x: number; y: number; label: string; yazi: OlcuYazisi3B; renk: string } | null = null;
     const inspected = solids.find((s) => s.selectedFaceIndex !== null && s.selectedFaceIndex !== undefined);
     if (inspected && inspected.selectedFaceIndex !== null) {
       const mesh = generateSolidMesh(inspected);
@@ -2634,18 +2830,20 @@ export function Canvas3D(props: Canvas3DProps) {
         centroid.divideScalar(Math.max(1, face.vertexIndices.length));
         const p = projectToScreen(centroid, cam, width, height);
         if (!p.behind) {
+          // 2B'deki adsız alan yazımı: "Alan = 12 br²" (ölçülerin tam sayı kuralı kademeye göre)
           faceBadge = {
             x: p.x,
             y: p.y,
             label: face.label || 'Yüz',
-            area: `${formatTurkishNumber(computeFaceArea(mesh.vertices, face.vertexIndices))} br²`,
+            yazi: yuzAlaniYazisi(computeFaceArea(mesh.vertices, face.vertexIndices), olcuYazim),
+            renk: inspected.color || DEFAULT_SOLID_COLOR,
           };
         }
       }
     }
 
-    // Uzunluk Ölçme etiketleri: ayrıtın orta noktasında "3 br"
-    const edgeLabels: { key: string; x: number; y: number; text: string }[] = [];
+    // Uzunluk Ölçme etiketleri: ayrıtın orta noktasında, 2B'deki adsız uzunluk yazımıyla ("≈ 3,46 br", "4 br")
+    const edgeLabels: { key: string; x: number; y: number; yazi: OlcuYazisi3B; renk: string }[] = [];
     olculenAyritlar.forEach((a) => {
       const solid = solids.find((s) => s.id === a.solidId);
       if (!solid) return;
@@ -2653,11 +2851,13 @@ export function Canvas3D(props: Canvas3DProps) {
       if (!olcu) return;
       const p = projectToScreen(olcu.orta, cam, width, height);
       // İlkokulda ayrıt tam sayı birim; tam değilse "yaklaşık" (2B ile aynı kural, 4. tur [176])
-      if (!p.behind) edgeLabels.push({ key: ayritAnahtari(a), x: p.x, y: p.y, text: ilkokul3B ? ilkokulUzunlukMetni(olcu.uzunluk, 'br') : uzunlukMetni(olcu.uzunluk) });
+      if (!p.behind) {
+        edgeLabels.push({ key: ayritAnahtari(a), x: p.x, y: p.y, yazi: ayritOlcusuYazisi(olcu.uzunluk, olcuYazim, ilkokul3B), renk: solid.color || DEFAULT_SOLID_COLOR });
+      }
     });
 
     return { gizmoLabels, coordBadges, faceBadge, edgeLabels };
-  }, [solids, effectiveSelectedIds, activeTool, basis, dimensions, objects, selectedObjectIds, olculenAyritlar, interaction, ilkokul3B]);
+  }, [solids, effectiveSelectedIds, activeTool, basis, dimensions, objects, selectedObjectIds, olculenAyritlar, interaction, ilkokul3B, olcuYazim]);
 
   /**
    * Ekran üstü bindirmeler (ipucu şeritleri, kapsüller, araç çubukları) kök
@@ -2830,24 +3030,50 @@ export function Canvas3D(props: Canvas3DProps) {
           {b.text}
         </div>
       ))}
-      {/* Seçili yüz: yalnız alan, küçük ve açık zeminli; yüzün adı alt şeritte yazar */}
-      {overlays.faceBadge && !ilkokul3B && (
-        <div
-          className="absolute z-10 -translate-x-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-md bg-card/85 backdrop-blur-sm text-foreground text-[10px] font-mono font-semibold border border-border/70 shadow-sm whitespace-nowrap pointer-events-none"
-          style={{ left: overlays.faceBadge.x, top: overlays.faceBadge.y }}
+      {/* Ölçü yazıları (yüz alanı, ayrıt uzunluğu): 2B'nin AYNI bileşeni (MatematikEtiketi) — Manrope kalın, fs(11, 'measure')
+          × yazı ölçeği, ön plan rengi, kutusuzken zemin halesi; "Etiket kutularını kaldır" kapalıysa beyaz kutu ve cismin
+          renginde çerçeve. "Ölçümleri göster" kapalıysa (2B ile aynı) yazılmaz. Yüzün adı alt şeritte yazar. */}
+      {olculerGorunur && (overlays.edgeLabels.length > 0 || (overlays.faceBadge && !ilkokul3B)) && (
+        <svg
+          className="absolute inset-0 z-10 w-full h-full overflow-visible pointer-events-none"
+          width={dimensions.width}
+          height={dimensions.height}
+          data-olcu-yazilari-3b=""
         >
-          {overlays.faceBadge.area}
-        </div>
+          {overlays.faceBadge && !ilkokul3B && (
+            <g data-yuz-alani="">
+              <MatematikEtiketi
+                olcek={yaziOlcegi}
+                satirlar={overlays.faceBadge.yazi.satirlar}
+                x={overlays.faceBadge.x}
+                y={overlays.faceBadge.y}
+                px={turYaziBoyu('olcu', etiketStili)}
+                renk="on"
+                kutu={{ dolgu: '#ffffff', dolguOpakligi: 0.92, cizgi: overlays.faceBadge.renk, cizgiKalinligi: 1.2, rx: 8, sinif: 'shadow-sm dark:fill-card' }}
+                kutuGizli={!stil.showLabelBoxes}
+                sesli={overlays.faceBadge.yazi.sesli}
+                ipucu={overlays.faceBadge.yazi.ipucu}
+              />
+            </g>
+          )}
+          {overlays.edgeLabels.map((e) => (
+            <g key={`el-${e.key}`} data-ayrit-olcusu={e.yazi.metin}>
+              <MatematikEtiketi
+                olcek={yaziOlcegi}
+                satirlar={e.yazi.satirlar}
+                x={e.x}
+                y={e.y}
+                px={turYaziBoyu('olcu', etiketStili)}
+                renk="on"
+                kutu={{ dolgu: '#ffffff', dolguOpakligi: 0.92, cizgi: e.renk, cizgiKalinligi: 1.2, sinif: 'dark:fill-card' }}
+                kutuGizli={!stil.showLabelBoxes}
+                sesli={e.yazi.sesli}
+                ipucu={e.yazi.ipucu}
+              />
+            </g>
+          ))}
+        </svg>
       )}
-      {overlays.edgeLabels.map((e) => (
-        <div
-          key={`el-${e.key}`}
-          className="absolute z-10 -translate-x-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-md bg-card/90 backdrop-blur-sm text-foreground text-[10px] font-mono font-semibold border border-ada-altin/60 shadow-sm whitespace-nowrap pointer-events-none"
-          style={{ left: e.x, top: e.y }}
-        >
-          {e.text}
-        </div>
-      ))}
 
       {/* Canlı hacim / yüzey alanı rozeti (seçili tek cisim, her araçta) */}
       {seciliCisim && (
