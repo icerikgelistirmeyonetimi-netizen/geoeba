@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { UNITELER } from '../mufredat';
 import { DunyaSemasi } from '../DunyaSemasi';
+import { BlokDuzenleyici } from '../BlokDuzenleyici';
 import { baslangicDurumu, cizgiUclari, izgara } from '../dunya';
 import { calistir } from '../yorumlayici';
 import { sonucIletisi } from '../degerlendirme';
@@ -58,6 +59,20 @@ describe('uzman 5. tur: 7. sınıf 3. ünite Küplerle prizma (satır 129)', () 
     const basari = g.basari(calistir(g.cozum, g.dunya, g.hedef));
     expect(basari).toBe('Oldu! Hacim = 2 × 3 × 4 = 24; dron da 24 küp koydu. Formül ile sayım aynı sonucu verdi.');
     for (const m of [g.baslik, g.yonerge, ...g.ipuclari, basari, g.dunya.sinar!]) expect(m, m).not.toMatch(KUCUK_BAS);
+  });
+
+  it('5/5: 2. ipucu değişkenin değiştiği yeri doğru söyler (BLOKLAR kutusunda değil, koddaki blokta)', () => {
+    const g = gorev('s7-prizma-5');
+    expect(g.ipuclari[1]).toBe('Koduna eklediğin "en kez tekrarla" bloğundaki değişkene dokunup onu boy ya da yükseklik yapabilirsin.');
+    const ciz = (program: Program) =>
+      renderToStaticMarkup(<BlokDuzenleyici program={program} onDegis={() => {}} aracKutusu={g.aracKutusu} degiskenler={g.degiskenler} />);
+    // Kod boşken BLOKLAR kutusunda "en kez tekrarla" var ama değişkeni değiştirilecek düğme yok
+    const bos = ciz([]);
+    expect(bos).toContain('kez tekrarla');
+    expect(bos).not.toContain('data-islenen');
+    // Koda eklenen blokta değişken dokunulup değiştirilir
+    const tekrar = g.cozum.find((b) => b.tur === 'tekrarlaKez')!;
+    expect(ciz([tekrar])).toMatch(/aria-label="(en|boy|yükseklik): değiştir"[^>]*data-islenen/);
   });
 
   it('3. ve 4. ünitenin bütün öğrenci metinlerinde (başarı cümleleri, tırnakla başlayan cümleler dahil) cümle küçük harfle başlamaz', () => {

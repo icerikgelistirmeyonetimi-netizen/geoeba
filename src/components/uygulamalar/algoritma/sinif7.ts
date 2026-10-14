@@ -441,7 +441,8 @@ const PRIZMA_GOREVLERI: Gorev[] = [
     degiskenler: ['en', 'boy', 'yükseklik', 'hacim'],
     ipuclari: [
       'Önceki kodun aynısı, ama her sayının yerinde bir değişken var. Hangi sayı en, hangisi boy?',
-      'Bloklardaki "en kez tekrarla" bloğunda değişkene dokunup onu boy ya da yükseklik yapabilirsin.',
+      // Değişken yalnız koddaki blokta değişir (BLOKLAR kutusundaki şablon düzenlenmez; denetçi, 5. tur)
+      'Koduna eklediğin "en kez tekrarla" bloğundaki değişkene dokunup onu boy ya da yükseklik yapabilirsin.',
     ],
     basari: (iz) => {
       const v = izOzeti(iz).degiskenler;
