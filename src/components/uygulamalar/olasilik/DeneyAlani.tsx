@@ -279,33 +279,32 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
     </div>
   );
 
-  if (!birikim)
-    return (
-      <>
-        {kart}
-        {canli}
-      </>
-    );
-  // Galton: sahnenin altında küçük anahtar (renkler, ölçek, teorik eğri anahtarı)
+  // Ağaç yapısı her şablonda AYNI olmalı (sarmalayıcı + kart + canlı bölge [+ Galton anahtarı]): three'nin tuvali kart
+  // içindeki kapRef div'ine elle eklenir. Önceden Galton sarmalayıcıyla, öbür şablonlar parçayla (<>) dönüyordu; React
+  // geçişte DOM düğümlerini konumla yeniden kullanıp siliyordu ve sahne Galton'dayken kurulduysa (laboratuvar Galton'da
+  // yeniden açılınca, tema değişince) başka şablona geçişte tuval belgeden kopuyordu: sayı küpü / para kartı boş kalıyordu.
+  // canli sr-only (mutlak konumlu): sarmalayıcıda boşluk eklemez.
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5" data-deney-alani-kabi>
       {kart}
       {canli}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[13px] text-muted-foreground" data-galton-anahtar>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full" style={{ background: '#d9805f' }} aria-hidden="true" />
-          Son bilye
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full" style={{ background: '#2a9d94' }} aria-hidden="true" />
-          {olcek?.oranli ? `Birikim (1 bilye ≈ ${temsilMetni(olcek.temsil)} deneme)` : 'Birikim (1 bilye = 1 deneme)'}
-        </span>
-        <label className="ml-auto inline-flex min-h-[44px] cursor-pointer items-center gap-2 font-semibold text-foreground">
-          <input type="checkbox" className="h-5 w-5 accent-[#b9884a]" checked={teorikEgri} onChange={(e) => setTeorikEgri(e.target.checked)} data-teorik-egri />
-          <span className="inline-block w-5 border-t-2 border-dashed border-[#b9884a]" aria-hidden="true" />
-          Teorik eğri
-        </label>
-      </div>
+      {birikim && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[13px] text-muted-foreground" data-galton-anahtar>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded-full" style={{ background: '#d9805f' }} aria-hidden="true" />
+            Son bilye
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded-full" style={{ background: '#2a9d94' }} aria-hidden="true" />
+            {olcek?.oranli ? `Birikim (1 bilye ≈ ${temsilMetni(olcek.temsil)} deneme)` : 'Birikim (1 bilye = 1 deneme)'}
+          </span>
+          <label className="ml-auto inline-flex min-h-[44px] cursor-pointer items-center gap-2 font-semibold text-foreground">
+            <input type="checkbox" className="h-5 w-5 accent-[#b9884a]" checked={teorikEgri} onChange={(e) => setTeorikEgri(e.target.checked)} data-teorik-egri />
+            <span className="inline-block w-5 border-t-2 border-dashed border-[#b9884a]" aria-hidden="true" />
+            Teorik eğri
+          </label>
+        </div>
+      )}
     </div>
   );
 });

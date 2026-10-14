@@ -11,6 +11,7 @@ import { DeneySahnesi, ZAR_YUZLERI, zarGorunenYuzler, zarYuzQuaternion } from '.
 import { DeneyAlani, gosterilenSonuc } from '../DeneyAlani';
 import { SvgSayiKupu, svgZarlari } from '../SayiKupu2B';
 import { varsayilanSablon, type Sablon, type Sonuc } from '../olasilik';
+import { GORUNEN_SABLON_TURLERI } from '../durum';
 
 describe('deney kartında gösterilen sonuç', () => {
   const zar = varsayilanSablon('zar') as Sablon;
@@ -82,6 +83,29 @@ describe('2B sayı küpü (WebGL yoksa): «?» kutusu değil, gerçek küp', () 
       expect(h).not.toContain('?');
       const cizgi = (h.match(/<rect/g) ?? []).length;
       expect(cizgi).toBe([y.ust, y.on, y.sag].filter((r) => r === 6).length);
+    }
+  });
+});
+
+describe('3B tuvalin kabı şablon değişince silinmez (denetçi: asıl neden)', () => {
+  // three'nin tuvali kapRef div'ine elle eklenir. Galton sarmalayıcı div, öbür şablonlar parça (<>) döndürünce React
+  // geçişte düğümleri konumla yeniden kullanıp siliyordu: laboratuvar Galton'da açıldıysa sayı küpü / para kartı boş.
+  const ciz = (tur: (typeof GORUNEN_SABLON_TURLERI)[number]) =>
+    renderToStaticMarkup(
+      React.createElement(DeneyAlani, { sablon: varsayilanSablon(tur), koyu: false, azHareket: false, onBitti: () => undefined, sonSonuc: null, animasyonda: false })
+    );
+  /** Kök → kart → tuval kabı yolunun açılış etiketleri (kartın yüksekliği şablona göre değişir; style atılır). */
+  const yol = (h: string) => [...h.matchAll(/<div[^>]*>/g)].slice(0, 3).map((m) => m[0].replace(/ style="[^"]*"/, ''));
+
+  it('her görünen şablonda aynı sarmalayıcı, ilk çocuk kart, kartın ilk çocuğu tuval kabı', () => {
+    const galton = yol(ciz('galton'));
+    expect(galton[0]).toContain('data-deney-alani-kabi');
+    expect(galton[1]).toContain('data-deney-alani');
+    expect(galton[2]).toBe('<div class="absolute inset-0">');
+    for (const tur of GORUNEN_SABLON_TURLERI) {
+      const h = ciz(tur);
+      expect(yol(h), tur).toEqual(galton);
+      expect(h.includes('data-galton-anahtar'), tur).toBe(tur === 'galton');
     }
   });
 });
