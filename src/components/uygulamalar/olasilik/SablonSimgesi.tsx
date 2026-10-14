@@ -5,7 +5,8 @@
  * Dış çizgiler currentColor'dır; sekme seçiliyken (bg-primary, beyaz yazı) açık, değilken koyu görünür.
  * Dolgular ada paletinden gelir: fener altını, fildişi, mercan, deniz, turkuaz, sıcak kraft.
  */
-import React, { useId } from 'react';
+import React from 'react';
+import { PARA_RENKLERI } from './madeniPara';
 import type { SablonTuru } from './olasilik';
 
 const RENK = {
@@ -27,10 +28,9 @@ export interface SablonSimgesiProps {
 }
 
 export function SablonSimgesi({ tur, className }: SablonSimgesiProps) {
-  const kimlik = useId().replace(/:/g, '');
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false" fill="none" strokeLinecap="round" strokeLinejoin="round">
-      {tur === 'para' && <Para maskeKimligi={`para-hilal-${kimlik}`} />}
+      {tur === 'para' && <Para />}
       {tur === 'zar' && <Zar />}
       {tur === 'cark' && <Cark />}
       {tur === 'torba' && <Torba />}
@@ -40,20 +40,15 @@ export function SablonSimgesi({ tur, className }: SablonSimgesiProps) {
   );
 }
 
-/** Madeni para: altın gövde, iç kabartma halkası, ay-yıldız. */
-function Para({ maskeKimligi }: { maskeKimligi: string }) {
+/** Madeni para (1 TL gibi): altın sarısı halka, gümüş gri göbek, ortada «1» (3B ve 2B parayla aynı renkler). */
+function Para() {
   return (
     <>
-      <defs>
-        <mask id={maskeKimligi}>
-          <rect width="24" height="24" fill="#fff" />
-          <circle cx="12.35" cy="12" r="2.55" fill="#000" />
-        </mask>
-      </defs>
-      <circle cx="12" cy="12" r="9.2" fill={RENK.altin} stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="12" cy="12" r="6.6" stroke={RENK.altinKoyu} strokeWidth="1.1" opacity="0.85" />
-      <circle cx="11.2" cy="12" r="3.1" fill={RENK.fildisi} mask={`url(#${maskeKimligi})`} />
-      <path d="M15 10.9l.33 1 1.05 0-.85.62.33 1-.86-.62-.85.62.32-1-.85-.62 1.05 0z" fill={RENK.fildisi} />
+      <circle cx="12" cy="12" r="9.2" fill={PARA_RENKLERI.halka.orta} stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="12" cy="12" r="5.9" fill={PARA_RENKLERI.gobek.orta} stroke={RENK.altinKoyu} strokeWidth="0.9" />
+      <text x="12" y="15.1" textAnchor="middle" fontSize="8.6" fontWeight="800" fontFamily="Manrope, system-ui, sans-serif" fill={RENK.murekkep}>
+        1
+      </text>
     </>
   );
 }

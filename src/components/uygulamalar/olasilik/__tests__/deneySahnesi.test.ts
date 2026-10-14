@@ -206,3 +206,21 @@ describe('çark', () => {
     expect(m.carkDilimi(-m.IKI_PI * 5, DILIMLER)).toBe(m.carkDilimi(0, DILIMLER));
   });
 });
+
+describe('renkli çark dilim rengi (uzman 5. tur: «Renkli çark»)', () => {
+  it('dilim malzemesi seçilen rengi taşır ve ton eşlemeden muaftır (AgX dilimleri soldurmasın)', async () => {
+    const { RENK_SECENEKLERI } = await import('../olasilik');
+    for (const r of RENK_SECENEKLERI) {
+      const mal = m.carkDilimMalzemesi(r.renk);
+      expect(mal.toneMapped).toBe(false);
+      expect(`#${mal.color.getHexString()}`).toBe(r.renk.toLowerCase());
+      mal.dispose();
+    }
+  });
+
+  it('para malzemeleri ortam yansımasız: metallik düşük, para kararmaz', () => {
+    expect(m.PARA_METALLIK).toBeLessThanOrEqual(0.5);
+    expect(m.PARA_ISILTI).toBeGreaterThan(0);
+    expect(m.PARA_ISILTI).toBeLessThan(0.5);
+  });
+});
