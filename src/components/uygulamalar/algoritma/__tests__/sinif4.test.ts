@@ -143,9 +143,9 @@ describe('4. sınıf: tahminler, sorular ve başarı cümleleri', () => {
   it('başarı cümleleri matematiği izden hesaplar', () => {
     const cumle = (id: string) => gorev(id).basari(cozumIzi(gorev(id)));
     expect(cumle('s4-aci-1')).toBe('Oldu! Robot köşede döndü: 1 × 90° = 90°. Köşedeki açı bir dik açı.');
-    expect(cumle('s4-aci-5')).toBe('Doğru! 4 × 90° = 360°: robot bir tam tur döndü ve yine başladığı yöne bakıyor.');
+    expect(cumle('s4-aci-5')).toBe('Doğru! 4 × 90° = 360°: Robot bir tam tur döndü ve yine başladığı yöne bakıyor.');
     expect(cumle('s4-sekil-1')).toBe('Oldu! 4 kenar × 3 birim = 12 birim: karenin çevresi 12 birim.');
-    expect(cumle('s4-sekil-6')).toBe('Doğru! Bir turda 3 + 1 = 4 birim, 2 turda 2 × 4 = 8 birim: çevre 8 birim.');
+    expect(cumle('s4-sekil-6')).toBe('Doğru! Bir turda 3 + 1 = 4 birim, 2 turda 2 × 4 = 8 birim: Çevre 8 birim.');
     expect(cumle('s4-icice-3')).toBe('Doğru! Dış döngü 3 tur × iç döngü 4 kez = 12 küp.');
     expect(cumle('s4-icice-5')).toBe('Oldu! İç döngü 3 × 4 = 12 kez çalıştı. Ortak kenarlar iki kez çizildiği için sahada 10 çizgi var.');
     expect(cumle('s4-simetri-5')).toBe('Buldun! Üstteki karolar çizgiye 2 sıra uzak; simetrikleri de 2 sıra uzakta. 2 karo boyandı.');

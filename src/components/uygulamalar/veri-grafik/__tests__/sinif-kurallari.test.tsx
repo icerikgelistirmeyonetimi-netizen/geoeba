@@ -390,7 +390,7 @@ describe('grafikler: eksen okları, yan yana sütun çiftleri, açısız daire, 
     const kars = panel(sinifKurallari(6).olculer, { ikinciSutun: 2, adimlariGoster: false });
     expect(kars).not.toContain('data-oms-satiri');
     expect(kars).not.toContain('data-standart-sapma-satiri');
-    expect(metin(kars)).toContain('Aritmetik ortalamalar eşit (17); açıklığı küçük olan Yasemin: değerleri daha dar bir aralıkta (4 < 27).');
+    expect(metin(kars)).toContain('Aritmetik ortalamalar eşit (17); açıklığı küçük olan Yasemin: Değerleri daha dar bir aralıkta (4 < 27).');
     const yedi = panel(sinifKurallari(7).olculer);
     expect(yedi).toContain('data-istatistik-karti="oms"');
     expect(yedi).toContain('data-hesap-adimi="oms"');
@@ -471,7 +471,7 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     const ist = uygulamaCiz({ ...kitap, sekme: 'istatistik', adimlariGoster: true });
     expect(metin(ist)).not.toMatch(/Ortalama mutlak sapma|Standart sapma/);
     // Ortanca: 10. ve 11. verilerin toplamının yarısı (6-B kitap etkinliği)
-    expect(metin(ist)).toContain('20 veri var (çift): ortanca, 10. ve 11. verilerin toplamının yarısıdır.');
+    expect(metin(ist)).toContain('20 veri var (çift): Ortanca, 10. ve 11. verilerin toplamının yarısıdır.');
     expect(metin(ist)).toContain('Ortanca = (3 + 3) ÷ 2 = 3');
     // Kayıtta açık kalmış standart sapma 6. sınıfta çizilmez
     const kayitli = uygulamaCiz({ ...kitap, sekme: 'nokta', secenekler: { ortalama: true, oms: true, etiketler: false, ortanca: false, standartSapma: true } });

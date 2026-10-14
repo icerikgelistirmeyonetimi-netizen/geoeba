@@ -989,7 +989,7 @@ describe('Deney çalıştırma motoru', () => {
       motor.tekAtis(a());
       saat.bitir();
     }
-    expect(olay.bildirim[olay.bildirim.length - 1]).toBe('Torba boşaldı: bu deneyde 5 top çekilebildi.');
+    expect(olay.bildirim[olay.bildirim.length - 1]).toBe('Torba boşaldı: Bu deneyde 5 top çekilebildi.');
   });
 
   it('dokunuşla tek atışlar bir çalışmada birikir; sonraki deneyde Deney sütunu eklenir', () => {

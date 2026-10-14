@@ -599,7 +599,7 @@ describe('araştırma: plan tablosu ve satırlar', () => {
     const a = hazirSoruUygula('nabiz')!;
     expect(beklenenUyarisi(a, 84)).toBeNull();
     expect(beklenenUyarisi(a, 124)).toBeNull();
-    expect(beklenenUyarisi(a, 130)).toBe('Bu değer beklenen aralığın dışında (60–120): doğru mu?');
+    expect(beklenenUyarisi(a, 130)).toBe('Bu değer beklenen aralığın dışında (60–120): Doğru mu?');
     expect(beklenenUyarisi(a, 50)).not.toBeNull();
     expect(beklenenUyarisi({ ...a, olcum: { ...a.olcum, beklenen: null } }, 500)).toBeNull();
   });
@@ -986,7 +986,7 @@ describe('araştırma: adım notları, grafik önerileri, tartışma soruları',
     // Plan başka bir araştırmaya dönüşünce (çark yerine para) hazır sorunun rozeti kullanılmaz
     const orneklem = hazirSoruUygula('anket-orneklem')!;
     expect(adimNotu({ ...orneklem, deney: { ...orneklem.deney, nesne: 'para' } }, 'topla').rozet).toBe('MAT.6.6.1');
-    expect(adimNotu(anket, 'topla').metin).toBe('Her dokunuş bir cevaptır: tabloya bir satır, grafiğe bir nokta ekler.');
+    expect(adimNotu(anket, 'topla').metin).toBe('Her dokunuş bir cevaptır: Tabloya bir satır, grafiğe bir nokta ekler.');
     expect(adimNotu(deney, 'topla').metin).toBe('Her atış tabloya bir satır, grafiğe bir nokta ekler.');
     expect(adimNotu({ ...deney, deney: { ...deney.deney, kayit: 'gercek' } }, 'topla').metin).toBe('Sınıfta atın; her dokunuş tabloya bir satır ekler.');
     expect(adimNotu(deney, 'duzenle')).toEqual({ metin: 'Göreli sıklığı teorik olasılıkla karşılaştırırız.', rozet: 'MAT.7.7.1 · 8.7.1' });
@@ -1113,7 +1113,7 @@ describe('araştırma: yorum cümleleri (yorumCumleleri)', () => {
     expect(yorumCumleleri(t, a)).toEqual([
       '10 ölçüm yaptık. En küçük 145 cm, en büyük 159 cm; açıklık 14 cm.',
       'Aritmetik ortalama 152,2 cm; ortanca 152 cm.',
-      'Ortalama mutlak sapma 3 cm: değerler ortalamadan ortalama 3 cm uzakta.',
+      'Ortalama mutlak sapma 3 cm: Değerler ortalamadan ortalama 3 cm uzakta.',
       'Tahminimiz 150 cm idi; ortalamadan 2,2 cm uzak.',
     ]);
     const uzak = planVerisi(a, [...BOYLAR.map((b) => [String(b)]), ['124']]);
@@ -1198,7 +1198,7 @@ describe('araştırma: yorum cümleleri (yorumCumleleri)', () => {
       },
     };
     const c = yorumCumleleri(planTablosu(seri), seri);
-    expect(c[0]).toBe('Her deneyde 20 kişiye sorduk (simülasyon, 3 deney): toplam 34 kişi “evet” dedi (%56,7); okulda “evet” diyenler %60.');
+    expect(c[0]).toBe('Her deneyde 20 kişiye sorduk (simülasyon, 3 deney): Toplam 34 kişi “evet” dedi (%56,7); okulda “evet” diyenler %60.');
     expect(c).toContain('Deneylerde “evet” sayısı: 11 · 13 · 10 (en az 10, en çok 13).');
     expect(c.join(' ')).not.toMatch(/çevirme/);
     const p = uygulanmis({ ...hazirSoruUygula('penalti')!, tahmin: '7' });

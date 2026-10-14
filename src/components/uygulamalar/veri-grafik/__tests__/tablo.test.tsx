@@ -177,7 +177,7 @@ describe('tablo: yerleşim, seçili satır ve satır silme', () => {
     const t = tabloOlustur(['Ad', 'Cinsiyet'], [['Ali', 'Erkek'], ['Ayşe', 'Kız']]);
     const html = renderToStaticMarkup(<VeriTablosu tablo={t} seciliSatir={null} onSatirSec={bos} onTablo={bos} />);
     expect(t.sutunlar[1].tur).toBe('sayi');
-    expect(html).toContain('Cinsiyet: değerler sayı değil');
+    expect(html).toContain('Cinsiyet: Değerler sayı değil');
     expect(html).toContain('>Kategorik yap</button>');
   });
 });

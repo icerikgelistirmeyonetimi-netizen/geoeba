@@ -134,7 +134,7 @@ describe('3. sınıf: tahminler, sorular ve başarı cümleleri', () => {
     expect(cumle('s3-izle-3')).toBe('Oldu! 6 saksı × 2 litre = 12 litre. Depo tam yetti: 12 ÷ 2 = 6.');
     expect(cumle('s3-izle-6')).toBe('Buldun! 4 × 2 = 8 litre: depodaki 8 litrenin hepsi kuru saksılara gitti.');
     expect(cumle('s3-simetri-3')).toBe('Oldu! Evin iki yarısı eş: her yarıda 7 çizgi, bütün evde 7 + 7 = 14 çizgi.');
-    expect(cumle('s3-kadar-4')).toBe('Buldun! 7 saksı için 8 adım: adım sayısı saksı sayısından 1 fazla. Çıkış sulanmadı.');
+    expect(cumle('s3-kadar-4')).toBe('Buldun! 7 saksı için 8 adım: Adım sayısı saksı sayısından 1 fazla. Çıkış sulanmadı.');
     expect(cumle('s3-kadar-5')).toBe('Oldu! Kod saymadan 10 saksıyı suladı: 10 × 2 = 20 litre, depo tam yetti.');
   });
 });

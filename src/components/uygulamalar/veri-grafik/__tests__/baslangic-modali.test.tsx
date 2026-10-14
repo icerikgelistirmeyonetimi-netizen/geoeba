@@ -180,7 +180,7 @@ describe('başlangıç penceresi (SSR): adımlar', () => {
   it('veri topla: "Ne araştıralım?" (18 hazır soru, üç grup, "Kendi sorunu yaz") ‹ ve × ile; genişte üç sütun; bağlı araştırma kartı', () => {
     const html = modal({ baslangic: 'topla' });
     expect(html).toContain('data-baslangic-modali="topla"');
-    expect(html).toContain('aria-label="Veri topla: ne araştıralım?"');
+    expect(html).toContain('aria-label="Veri topla: Ne araştıralım?"');
     expect(html).toContain('data-adim="soru"');
     expect(html).toContain('Ne araştıralım?');
     expect(html.match(/data-hazir-soru=/g)).toHaveLength(HAZIR_SORULAR.length);

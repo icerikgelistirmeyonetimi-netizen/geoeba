@@ -149,7 +149,7 @@ describe('5. sınıf', () => {
   });
 
   it('başarı cümleleri matematiği izden gösterir', () => {
-    expect(basari('s5-sayac-1')).toBe('Oldu! Robot 6 domatese baktı. sayaç = 4: sırada 4 olgun domates var.');
+    expect(basari('s5-sayac-1')).toBe('Oldu! Robot 6 domatese baktı. sayaç = 4: Sırada 4 olgun domates var.');
     expect(basari('s5-toplam-1')).toBe('Oldu! Sepetteki domatesler: 120 + 150 + 130 + 100 = 500 gram.');
     expect(basari('s5-toplam-2')).toBe('Oldu! 10 domatesten 7 tanesi toplandı: 250 + 300 + 350 + 200 + 400 + 250 + 250 = 2000 gram.');
     expect(basari('s5-tarla-1')).toBe('Oldu! Robot 10 kareye tohum ekti: 5 × 2 = 10.');

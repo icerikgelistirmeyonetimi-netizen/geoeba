@@ -667,7 +667,7 @@ describe('D1: nokta, sütun ve kategorik grafikler (kabul ölçütleri)', () => 
     expect(deney).toContain('teorik olasılığa');
     // Bütün kategoriler eşit sayıda: tepe değer yok, satır vurgusu yok
     const esit = renderToStaticMarkup(<KategorikIstatistik tablo={kategorikTablo({ Yazı: 3, Tura: 3 })} sutun={1} />);
-    expect(esit).toContain('bütün değerler eşit sayıda: tepe değer yok');
+    expect(esit).toContain('bütün değerler eşit sayıda: Tepe değer yok');
     expect(esit).not.toContain('data-tepe-satiri');
     // Yuvarlanan yüzdeler ve açılar toplamı %100 ve 360°
     const { yuzdeler, acilar } = yuzdeVeAcilar([1, 1, 1]);

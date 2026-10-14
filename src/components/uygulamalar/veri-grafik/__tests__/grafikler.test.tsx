@@ -311,7 +311,7 @@ describe('istatistik paneli: ders kitabı düzeni, adımlar ve karşılaştırma
     toplamiTutar(calisma, 'Uzaklıkların toplamı');
     expect(metin(calisma)).toContain('Ortalama mutlak sapma = 45,5 ÷ 20 = 2,275');
     expect(metin(calisma)).toContain('(kartta ≈ 2,28)');
-    expect(metin(calisma)).toContain('20 veri var (çift): ortanca, 10. ve 11. verilerin toplamının yarısıdır.');
+    expect(metin(calisma)).toContain('20 veri var (çift): Ortanca, 10. ve 11. verilerin toplamının yarısıdır.');
     expect(calisma).toContain('data-fark-toplami="true">0<');
   });
 
@@ -332,10 +332,10 @@ describe('istatistik paneli: ders kitabı düzeni, adımlar ve karşılaştırma
     expect(html).toContain('data-siklik-tablosu');
     expect(html).not.toContain('data-oms-tablosu');
     expect(metin(html)).toMatch(/Verilerin toplamı = 30 \+ 60 \+ 90 \+ … \(40 veri\) = 4950/);
-    expect(metin(html)).toContain('40 veri var (çift): ortanca, 20. ve 21. verilerin toplamının yarısıdır.');
+    expect(metin(html)).toContain('40 veri var (çift): Ortanca, 20. ve 21. verilerin toplamının yarısıdır.');
     for (const b of ['Değer × sıklık', 'Ortalamaya uzaklık', 'Sıklık × uzaklık']) expect(html).toContain(b);
     // Sıklık tablosunda fark sütunu yok: denge iki yanın uzaklık toplamlarıyla anlatılır
-    expect(metin(html)).toContain('Ortalamanın altındaki verilerin uzaklıkları toplamı 993,75, üstündekilerinki 993,75: iki yan dengede (farkların toplamı 0).');
+    expect(metin(html)).toContain('Ortalamanın altındaki verilerin uzaklıkları toplamı 993,75, üstündekilerinki 993,75: İki yan dengede (farkların toplamı 0).');
     expect(metin(html)).not.toContain('Farkların toplamı 0:');
   });
 
@@ -352,9 +352,9 @@ describe('istatistik paneli: ders kitabı düzeni, adımlar ve karşılaştırma
 
   it('tepe değer: eşit sıklıkta "yok", birden çoksa " ve " ile', () => {
     const esit = metin(panel(tabloOlustur(['A', 'B'], [['a', 1], ['b', 1], ['c', 2], ['d', 2]]), 1));
-    expect(esit).toContain('tepe değer yok');
+    expect(esit).toContain('kez): Tepe değer yok');
     const iki = metin(panel(tabloOlustur(['A', 'B'], [['a', 1], ['b', 1], ['c', 2], ['d', 2], ['e', 3]]), 1));
-    expect(iki).toContain('tepe değer 1 ve 2');
+    expect(iki).toContain('kez): Tepe değer 1 ve 2');
   });
 
   it('ikinciSutun: iki sütunlu karşılaştırma tablosu, ortalama mutlak sapma çubukları ve yorum satırı', () => {
@@ -369,7 +369,7 @@ describe('istatistik paneli: ders kitabı düzeni, adımlar ve karşılaştırma
     expect(metin(oms)).toContain('1,2');
     expect(oms).toContain('width:100%');
     expect(oms).toContain(`width:${(1.2 / 6.4) * 100}%`);
-    expect(metin(html)).toContain('Aritmetik ortalamalar eşit (17); ortalama mutlak sapması küçük olan Yasemin: değerleri ortalamaya daha yakın (1,2 < 6,4).');
+    expect(metin(html)).toContain('Aritmetik ortalamalar eşit (17); ortalama mutlak sapması küçük olan Yasemin: Değerleri ortalamaya daha yakın (1,2 < 6,4).');
     // adımlar her iki değişken için ayrı başlıkla
     const adimli = panel(sabitMac(), 1, { ikinciSutun: 2 });
     expect(adimli).toContain('Selma: hesaplama adımları');
@@ -417,16 +417,16 @@ describe('istatistik paneli: ders kitabı düzeni, adımlar ve karşılaştırma
   it('karşılaştırma yorumu: ortalaması büyük olanı ve sapmaları eşit durumu yazar (nötr dil, birim ayracı yok, ≈ başta bir kez)', () => {
     const a = { ad: 'A', ozet: ozetHesapla([10, 20]) };
     const b = { ad: 'B', ozet: ozetHesapla([14, 15]) };
-    expect(karsilastirmaYorumu(a, b, 2)).toBe('Aritmetik ortalaması büyük olan A (15 > 14,5); ortalama mutlak sapması küçük olan B: değerleri ortalamaya daha yakın (0,5 < 5).');
+    expect(karsilastirmaYorumu(a, b, 2)).toBe('Aritmetik ortalaması büyük olan A (15 > 14,5); ortalama mutlak sapması küçük olan B: Değerleri ortalamaya daha yakın (0,5 < 5).');
     // 6. sınıf: yayılım açıklıkla (ortalama mutlak sapma yok)
-    expect(karsilastirmaYorumu(a, b, 2, 'aciklik')).toBe('Aritmetik ortalaması büyük olan A (15 > 14,5); açıklığı küçük olan B: değerleri daha dar bir aralıkta (1 < 10).');
+    expect(karsilastirmaYorumu(a, b, 2, 'aciklik')).toBe('Aritmetik ortalaması büyük olan A (15 > 14,5); açıklığı küçük olan B: Değerleri daha dar bir aralıkta (1 < 10).');
     expect(karsilastirmaYorumu(a, { ad: 'E', ozet: ozetHesapla([5, 15]) }, 2, 'aciklik')).toContain('açıklıklar da eşit (10)');
     // iklim: sıcaklıkta "istikrarlı" denmez; "(°C)" cümlede yazılmaz; yuvarlanan sayılarda "≈" bir kez, başta
     const izmir = { ad: 'İzmir (°C)', ozet: ozetHesapla([9.2, 9.9, 12.1, 15.9, 20.6, 25.3, 27.8, 27.5, 23.6, 19, 14.2, 10.6]) };
     const erzurum = { ad: 'Erzurum (°C)', ozet: ozetHesapla([-9.1, -7.6, -2.3, 5.4, 10.7, 14.9, 19.2, 19.6, 14.8, 8.2, 1.2, -5.7]) };
     const iklim = karsilastirmaYorumu(izmir, erzurum, 2)!;
     expect(iklim).not.toMatch(/istikrarlı|\(°C\)/);
-    expect(iklim).toMatch(/^Aritmetik ortalaması büyük olan İzmir \(≈ [\d,]+ > [\d,]+\); ortalama mutlak sapması küçük olan İzmir: değerleri ortalamaya daha yakın \(≈ [\d,]+ < [\d,]+\)\.$/);
+    expect(iklim).toMatch(/^Aritmetik ortalaması büyük olan İzmir \(≈ [\d,]+ > [\d,]+\); ortalama mutlak sapması küçük olan İzmir: Değerleri ortalamaya daha yakın \(≈ [\d,]+ < [\d,]+\)\.$/);
     expect(iklim.match(/≈/g)).toHaveLength(2);
     expect(karsilastirmaYorumu(a, { ad: 'C', ozet: ozetHesapla([0, 10]) }, 2)).toContain('ortalama mutlak sapmalar da eşit (5)');
     expect(karsilastirmaYorumu(a, { ad: 'D', ozet: ozetHesapla([]) }, 2)).toBeNull();

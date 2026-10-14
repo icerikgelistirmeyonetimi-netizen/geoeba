@@ -100,7 +100,7 @@ describe('kategorik yardımcılar', () => {
     expect(mod(['A'])).toEqual(['A']);
     // Verilen sıradaki görülmemiş kategori (sıklık 0) eşitliği bozar: 3 · 3 · 0 → ilk ikisi
     expect(mod(['Elma', 'Muz', 'Elma', 'Muz', 'Elma', 'Muz'], ['Elma', 'Muz', 'Çilek'])).toEqual(['Elma', 'Muz']);
-    expect(TEPE_DEGER_YOK).toBe('bütün değerler eşit sayıda: tepe değer yok');
+    expect(TEPE_DEGER_YOK).toBe('bütün değerler eşit sayıda: Tepe değer yok');
   });
 
   it('yönelme eki: ünlü uyumu, kaynaştırma ve birim ayracı', () => {

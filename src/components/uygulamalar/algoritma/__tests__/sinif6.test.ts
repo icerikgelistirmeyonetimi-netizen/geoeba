@@ -171,7 +171,7 @@ describe('6. sınıf', () => {
   });
 
   it('başarı cümleleri matematiği izden gösterir', () => {
-    expect(basari('s6-formul-1')).toBe('Oldu! n = 5: robot n = 5 saksıyı suladı ve n + 1 = 6 adım attı.');
+    expect(basari('s6-formul-1')).toBe('Oldu! n = 5: Robot n = 5 saksıyı suladı ve n + 1 = 6 adım attı.');
     expect(basari('s6-formul-2')).toBe('Oldu! Kodun n’yi okuyor: n = 8 saksı, n + 1 = 9 adım, 2 × n = 16 litre su.');
     expect(basari('s6-kat-1')).toBe('Oldu! Gübre alan saksılar: 3, 6 ve 9. Hepsi 3’ün katı: 3 × 1, 3 × 2, 3 × 3.');
     expect(basari('s6-kat-3')).toBe('Oldu! Gübre alan saksılar: 6 ve 12. Hepsi 6’nın katı: 6 × 1, 6 × 2. Bunlar 2’nin ve 3’ün ortak katlarıdır.');

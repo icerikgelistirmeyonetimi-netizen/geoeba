@@ -281,7 +281,7 @@ describe('[165] Varsayılana Sıfırla ve iletişim kutusu örtüsü', () => {
     const menu = oku('WorkspaceMenuBar.tsx');
     expect(menu).not.toContain('window.setTimeout(() => setSifirlamaOnayi(false), 4000)');
     expect(menu).toMatch(/setStyleSettings\(DEFAULT_STYLE_SETTINGS\);\s*\n\s*setViewport\(\(prev\) => \(\{ \.\.\.prev, \.\.\.VARSAYILAN_GORUNUM_AYARLARI \}\)\);/);
-    expect(menu).toContain("'Ayarlar varsayılana döndü: beyaz zemin, ızgara ve eksenler açık; nokta, çizgi ve yazı boyutları ilk değerinde.'");
+    expect(menu).toContain("'Ayarlar varsayılana döndü: Beyaz zemin, ızgara ve eksenler açık; nokta, çizgi ve yazı boyutları ilk değerinde.'");
   });
 
   it('menü çubuğunun kutuları pencere köküne taşınır; stüdyonun kutuları başlık şeridini de örter', () => {

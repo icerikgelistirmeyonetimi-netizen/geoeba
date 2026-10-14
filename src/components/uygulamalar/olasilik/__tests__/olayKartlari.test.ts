@@ -162,7 +162,7 @@ describe('olay kartları: nitel dönüt', () => {
       dogru: true,
       sinif: 'imkansiz',
       gozlem: 'Hiç kırmızı bilye çekilmedi.',
-      karar: 'Kararın doğru: bu olay imkânsız.',
+      karar: 'Kararın doğru: Bu olay imkânsız.',
       gerekce: 'Torbada hiç kırmızı bilye yok. Bu torbadan kırmızı bilye çekilemez.',
     });
     expect(dogru?.ek).toBeUndefined();
@@ -172,7 +172,7 @@ describe('olay kartları: nitel dönüt', () => {
 
   it('kesin çark: gözlem "her seferinde"; olabilir torba: "bazen"', () => {
     const c = kart('yesil-carkta-yesil');
-    expect(donut(c, dene(c, tahminEt(BOS_KART_DURUMU, 'kesin'), COK_KEZ))).toMatchObject({ dogru: true, gozlem: 'Ok her seferinde yeşil dilimde durdu.', karar: 'Kararın doğru: bu olay kesin.' });
+    expect(donut(c, dene(c, tahminEt(BOS_KART_DURUMU, 'kesin'), COK_KEZ))).toMatchObject({ dogru: true, gozlem: 'Ok her seferinde yeşil dilimde durdu.', karar: 'Kararın doğru: Bu olay kesin.' });
     const t = kart('karisik-torbadan-mavi');
     const d = dene(t, tahminEt(BOS_KART_DURUMU, 'kesin'), 30);
     expect(gozlem(d)).toBe('bazen');

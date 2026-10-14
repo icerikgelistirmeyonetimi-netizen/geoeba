@@ -741,14 +741,14 @@ describe('deney: arayüz metinleri', () => {
   });
 
   it('tost metinleri', () => {
-    expect(tabloDoluMetni('para')).toBe('Tablo dolu (2000 satır): yeni atışlar yalnız Deney özetine yazılır.');
-    expect(tabloDoluMetni('torba')).toBe('Tablo dolu (2000 satır): yeni çekişler yalnız Deney özetine yazılır.');
+    expect(tabloDoluMetni('para')).toBe('Tablo dolu (2000 satır): Yeni atışlar yalnız Deney özetine yazılır.');
+    expect(tabloDoluMetni('torba')).toBe('Tablo dolu (2000 satır): Yeni çekişler yalnız Deney özetine yazılır.');
     expect(tamamlandiMetni(plan('para'), 20, 11)).toBe('20 atış tamamlandı: Tura 11 (%55).');
     expect(tamamlandiMetni(plan('zar'), 30, 5)).toBe('30 atış tamamlandı: 6 sayısı 5 kez geldi (%16,7).');
     expect(tamamlandiMetni(plan('iki-zar'), 100, 17)).toBe('100 atış tamamlandı: toplam 7, 17 kez geldi (%17).');
     expect(tamamlandiMetni(plan('cark', { izlenen: 'Mavi' }), 20, 6)).toBe('20 çevirme tamamlandı: Mavi 6 (%30).');
     expect(durdurulduMetni('para', { n: 14, etiket: '2. deney (14)' })).toBe('Durduruldu: 14 atış. Deney “2. deney (14)” olarak kaydedildi.');
-    expect(torbaBosaldiMetni(5)).toBe('Torba boşaldı: bu deneyde 5 top çekilebildi.');
+    expect(torbaBosaldiMetni(5)).toBe('Torba boşaldı: Bu deneyde 5 top çekilebildi.');
     expect(calismaSilindiMetni('para', { no: 2, n: 50, etiket: '2. deney (50)', gercek: false })).toBe('2. deney silindi (50 atış).');
     expect(calismaSilindiMetni('para', { no: 0, n: 27, etiket: 'Gerçek atışlar', gercek: true })).toBe('Gerçek atışlar silindi (27 atış).');
     expect(seriBittiMetni(7)).toBe('Seri tamamlandı: 7 deney özete yazıldı.');

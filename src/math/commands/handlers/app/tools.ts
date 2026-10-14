@@ -51,7 +51,7 @@ export const TOOLS: ToolInfo[] = [
   { id: 'midpoint', name: 'Orta Nokta', description: 'İki noktaya tıklayın; aralarındaki orta nokta oluşur.', aliases: [/\borta nokta\b/] },
   { id: 'divide_ratio', name: 'Oranda Böl', description: 'İki noktaya tıklayın, sonra m:n oranını girin (örn. 2:1).', aliases: [/\boranda bol(?:me)?\b/, /\boran(?:la)? bol(?:me)?\b/] },
   { id: 'perp_bisector', name: 'Orta Dikme', description: 'İki noktaya tıklayın; orta noktadan geçen dik doğru çizilir.', aliases: [/\borta dikme\b/] },
-  { id: 'angle_bisector', name: 'Açıortay', description: 'Açının bir kolu, köşesi ve diğer kolu: üç noktaya sırayla tıklayın.', aliases: [/\baci ?ortay\b/] },
+  { id: 'angle_bisector', name: 'Açıortay', description: 'Açının bir kolu, köşesi ve diğer kolu: Üç noktaya sırayla tıklayın.', aliases: [/\baci ?ortay\b/] },
   { id: 'perpendicular', name: 'Dik Doğru', description: 'Bir doğru (ya da doğrultuyu veren iki nokta), sonra doğrunun geçeceği nokta seçilir.', aliases: [/\bdik dogru\b/, /\bdikme\b/] },
   { id: 'parallel', name: 'Paralel Doğru', description: 'Bir doğru (ya da doğrultuyu veren iki nokta), sonra doğrunun geçeceği nokta seçilir.', aliases: [/\bparalel dogru\b/, /\bparalel\b/] },
   { id: 'compass', name: 'Pergel', description: 'İğneyi saplayın, açıklığı ayarlayın, yayın başlangıcını istediğiniz yere bırakın ve iki yöne de çizin.', aliases: [/\bpergel\b/], bare: /\bpergel(?:i|e|le|imi)?\b/ },

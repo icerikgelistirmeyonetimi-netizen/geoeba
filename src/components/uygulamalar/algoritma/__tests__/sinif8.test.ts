@@ -77,8 +77,8 @@ describe('8. sınıf', () => {
     expect(cumle('s8-dogrusal-4')).toBe('Buldun! y = x + 2 doğrusunda eğim 1: her adımda 1 birim yukarı. 2 yalnız başlangıç yüksekliği: (0, 2).');
     expect(cumle('s8-dogrusal-5')).toBe('Oldu! x 1 artınca y 2 azalıyor: eğim −2. Doğru x eksenini (3, 0) noktasında kesiyor.');
     expect(cumle('s8-dogrusal-6')).toBe('Oldu! Kural y = 3x + 1: x = 10 iken y = 3 × 10 + 1 = 31.');
-    expect(cumle('s8-oteleme-1')).toBe('Oldu! ŞEKİL (1, 1) ve (5, 1) noktalarında çağrıldı: her nokta 4 birim sağa ötelendi, (x, y) → (x + 4, y).');
-    expect(cumle('s8-oteleme-2')).toBe('Oldu! ŞEKİL (1, 1) ve (4, 3) noktalarında çağrıldı: her nokta 3 birim sağa, 2 birim yukarı ötelendi, (x, y) → (x + 3, y + 2).');
+    expect(cumle('s8-oteleme-1')).toBe('Oldu! ŞEKİL (1, 1) ve (5, 1) noktalarında çağrıldı: Her nokta 4 birim sağa ötelendi, (x, y) → (x + 4, y).');
+    expect(cumle('s8-oteleme-2')).toBe('Oldu! ŞEKİL (1, 1) ve (4, 3) noktalarında çağrıldı: Her nokta 3 birim sağa, 2 birim yukarı ötelendi, (x, y) → (x + 3, y + 2).');
     expect(cumle('s8-oteleme-4')).toBe('Buldun! AYNA’da her dönüş tersine döndü. Direğin dibi (2, 1), görüntüsü (6, 1): dikey aynada (x, y) → (8 − x, y).');
     expect(cumle('s8-oteleme-5')).toBe('Oldu! Direğin dibi (2, 4), görüntüsü (2, 3): yatay aynada (x, y) → (x, 7 − y). Bayrak aşağı doğru çizildi.');
     expect(cumle('s8-us-1')).toBe('Oldu! Kuleler 1, 2, 4, 8 küp: 2⁰, 2¹, 2², 2³. Toplam 15 küp: bir sonraki kuleden 1 eksik, 2⁴ − 1.');
