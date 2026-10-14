@@ -201,6 +201,14 @@ export interface OlculenAyrit {
 
 export const ayritAnahtari = (a: OlculenAyrit) => `${a.solidId}:${a.edgeIdx}`;
 
+/** Gizli ölçülere yeni bir ayrıt eklemek görünürlüğü açar; mevcut ölçüyü kaldırmak açmaz. */
+export function ayritOlcumuGorunurlukIster(
+  liste: readonly OlculenAyrit[], ayrit: OlculenAyrit, olculerGorunur: boolean | undefined
+): boolean {
+  return olculerGorunur === false && !liste.some((a) => ayritAnahtari(a) === ayritAnahtari(ayrit));
+}
+
+
 /** Listede varsa çıkarır, yoksa ekler (aynı ayrıta ikinci tıklama etiketi kaldırır). */
 export function ayritiDegistir(liste: OlculenAyrit[], ayrit: OlculenAyrit): OlculenAyrit[] {
   const anahtar = ayritAnahtari(ayrit);

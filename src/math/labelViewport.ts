@@ -22,8 +22,19 @@ export function labelZoomScale(vp: ViewportTransform): number {
  * yerleşim uzayındaki kutu boyları bu oranla çarpılır (olcuYazimlari.olcumKartKutulari, Canvas.yaziOrani).
  */
 export function labelFontScale(vp: ViewportTransform, altSinir = 0): number {
+  return yaziOlcegiOrandan(labelZoomScale(vp), altSinir);
+}
+
+/** Yazı ölçeğinin tavanı: yakınlaşınca yazı normal boyun en çok %5 üzerine çıkar. */
+export const YAZI_OLCEGI_TAVANI = 1.05;
+
+/**
+ * Yakınlık oranından (varsayılan görünümde 1) yazı ölçeği: oranla küçülür, `altSinir`ın altına inmez, tavanı aşmaz.
+ * 2B tuval (labelFontScale: zoom / 44) ve 3B sahne (etiketStandardi.yaziOlcegi3B: kamera zoom / 55) bu tek kuralı paylaşır.
+ */
+export function yaziOlcegiOrandan(oran: number, altSinir = 0): number {
   const sinir = Number.isFinite(altSinir) ? Math.min(1, Math.max(0, altSinir)) : 0;
-  return Math.min(1.05, Math.max(sinir, labelZoomScale(vp)));
+  return Math.min(YAZI_OLCEGI_TAVANI, Math.max(sinir, oran));
 }
 
 /** Sabit yerleşim pikseli (x = dünya x · 44, y = −dünya y · 44) → gerçek ekran pikseli. */

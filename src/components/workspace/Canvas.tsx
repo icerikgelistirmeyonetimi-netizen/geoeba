@@ -117,6 +117,7 @@ import { contextMenuSelection } from './contextMenuSelection';
 import { contextMenuTargets } from './contextMenuTargets';
 import { etiketReferansi, labelAnchorPointIds, shapeAnchorCenter, anchoredLabelPosition } from '@/math/labelAnchors';
 import { LABEL_LAYOUT_ZOOM, labelFontScale, labelLayoutViewport, labelZoomScale, projectLabelPoint } from '@/math/labelViewport';
+import { etiketYaziBoyu, eksenSayisiHaleKalinligi, type EtiketGrubu } from '@/math/etiketStandardi';
 import { sliderIsBound, snapSliderValue } from '@/math/sliderBindings';
 import { sliderDisplay } from '@/math/sliderDisplay';
 import { etiketHizalama } from './etiketHizalama';
@@ -1407,17 +1408,10 @@ export function Canvas({
   /**
    * Yazı boyutu: temel değer, genel `fontScale` ve gruba ait ayrıntılı ölçekle çarpılır.
    * Böylece "hepsini birden büyüt" ile "yalnızca ölçüm kutularını büyüt" aynı anda mümkün.
+   * Kural 3B sahneyle ortaktır (etiketStandardi.etiketYaziBoyu; Canvas3D etiketleri aynı işlevi çağırır).
    */
   const fs = useCallback(
-    (base: number, kind: 'label' | 'measure' | 'axis' = 'measure') => {
-      const grup =
-        kind === 'label'
-          ? styleSettings.pointLabelScale
-          : kind === 'axis'
-          ? styleSettings.axisScale
-          : styleSettings.measurementScale;
-      return Number((base * styleSettings.fontScale * grup).toFixed(2));
-    },
+    (base: number, kind: EtiketGrubu = 'measure') => etiketYaziBoyu(base, kind, styleSettings),
     [styleSettings]
   );
 
@@ -4804,7 +4798,7 @@ export function Canvas({
   // Sayıların zemin renginde halesi: ızgara çizgileri ve şekiller üstünde okunur kalır (özel zemin, koyu tema, zemin-acik)
   const eksenSayiHalesi = {
     stroke: tuvalZemini || 'hsl(var(--background))',
-    strokeWidth: Math.min(6, Math.max(2.5, fs(3, 'axis'))),
+    strokeWidth: eksenSayisiHaleKalinligi(styleSettings),
     strokeLinejoin: 'round' as const,
     paintOrder: 'stroke',
   };
