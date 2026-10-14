@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
  */
 const KOK = path.resolve(__dirname, '..');
 const kaynak = readFileSync(path.join(KOK, 'Canvas3D.tsx'), 'utf8');
+const etiketKaynagi = readFileSync(path.join(KOK, 'etiket3B.ts'), 'utf8');
 
 /** `baslangic` satırından sonraki ilk dengeli { ... } bloğu */
 function blok(baslangic: string): string {
@@ -37,9 +38,11 @@ describe('Canvas3D Mıknatıs bağlantısı', () => {
     expect(kaynak).toMatch(/aria-pressed=\{yapisma3B\.acik\}/);
   });
 
-  it('etiket kodu (getTextTexture, makeLabelSprite) ve Interaction birliği yapışmaya dokunmaz', () => {
-    expect(blok('function getTextTexture(')).not.toMatch(/yapis|kilavuz/i);
+  it('etiket modülü, sprite kodu ve Interaction birliği yapışmaya dokunmaz', () => {
+    expect(etiketKaynagi).not.toMatch(/yapis|kilavuz/i);
     expect(blok('function makeLabelSprite(')).not.toMatch(/yapis|kilavuz/i);
+    expect(blok('function etiketDokulariniSupur(')).not.toMatch(/yapis|kilavuz/i);
+    expect(blok('function etiketleriYerlestir(')).not.toMatch(/yapis|kilavuz/i);
     const birlik = kaynak.slice(kaynak.indexOf('type Interaction ='), kaynak.indexOf('function SayiGirisi('));
     expect(birlik.length).toBeGreaterThan(500);
     expect(birlik).not.toMatch(/yapis/i);
