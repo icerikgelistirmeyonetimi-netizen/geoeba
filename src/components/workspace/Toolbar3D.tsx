@@ -28,6 +28,7 @@ import {
 import { gruplari3BSuz, grupAcikliklari3B } from './kademeDuzeyleri3B';
 import { ilkokulCisimOzellikleri } from './ilkokul3B';
 import { GorunumDuzeniPaneli } from './gorunumDuzenleri';
+import { useYapisma3B } from './yapisma3BDurumu';
 import {
   Box,
   Check,
@@ -339,6 +340,8 @@ export function Toolbar3D({
   const [kademeDuzeyi, setKademeDuzeyi] = useKademeDuzeyi();
   const aracGruplari = useMemo(() => gruplari3BSuz(TREE_TOOL_GROUPS_3D, kademeDuzeyi), [kademeDuzeyi]);
   const tumAraclaraDon = () => setKademeDuzeyi('tum');
+  // Mıknatıs (YAP3B): «Taşı»nın altındaki anahtar satırı; tuvalin köşe düğmesiyle aynı durum (yapisma3BDurumu)
+  const yapisma = useYapisma3B();
 
   // Panel kapalılık tercihi (2B panelle aynı anahtar; dar ekranda kapalı açılır)
   useEffect(() => {
@@ -465,7 +468,8 @@ export function Toolbar3D({
         return;
       }
       case 'toggle': {
-        if (arac.id === 'show_grid') toggleShowGrid?.();
+        if (arac.id === 'yapisma') yapisma.degistir();
+        else if (arac.id === 'show_grid') toggleShowGrid?.();
         else if (arac.id === 'show_axes') toggleShowAxes?.();
         else if (arac.id === 'show_vertices') toggleShowVertices();
         else if (arac.id === 'show_edges') toggleShowEdges();
@@ -500,6 +504,7 @@ export function Toolbar3D({
       case 'solid':
         return !arac.preset && creationMethod === 'draw' && activeTool === `create_${arac.solidType}`;
       case 'toggle':
+        if (arac.id === 'yapisma') return yapisma.acik;
         if (arac.id === 'show_grid') return showGrid;
         if (arac.id === 'show_axes') return showAxes;
         return arac.id === 'show_vertices' ? showVertices : arac.id === 'show_edges' ? showEdges : showFaces;

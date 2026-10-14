@@ -17,6 +17,7 @@ import {
   Eye,
   Axis3d,
   Grid3x3,
+  Magnet,
 } from 'lucide-react';
 import { EksenSimgesi } from './GrafikMenuSimgeleri';
 import type { Solid3DType, Tool3DMode } from '@/types/workspace3d';
@@ -54,6 +55,8 @@ export type Tool3DTreeId =
   | 'show_faces'
   | 'show_grid'
   | 'show_axes'
+  /** Mıknatıs (YAP3B): taşırken yan yana / üst üste yapıştırma anahtarı (araç kipi değil) */
+  | 'yapisma'
   | 'view_front'
   | 'view_top'
   | 'view_right'
@@ -104,6 +107,7 @@ export const TREE_TOOL_GROUPS_3D: TreeTool3DGroup[] = [
     defaultExpanded: true,
     tools: [
       { id: 'select_move', kind: 'tool', name: 'Taşı', description: 'Cisme tıklayıp sürükleyerek zeminde taşıyın; yönü ve yeri değişir, biçimi değişmez.', icon: <MousePointer className="w-4 h-4" />, iconColor: R.temel },
+      { id: 'yapisma', kind: 'toggle', name: 'Mıknatıs', description: 'Açıkken taşınan cisim yanındaki cismin yüzüne dayanır, üstüne konunca oturur, iç içe girmez; kareli zemine hizalanır. Sürüklerken Alt basılı tutulursa geçici olarak kapanır.', icon: <Magnet className="w-4 h-4" />, iconColor: R.temel },
       { id: 'orbit', kind: 'tool', name: 'Döndür ve İncele', description: 'Boşlukta sürükleyerek sahneyi her yönden çevirin ve cisimleri inceleyin.', icon: <Orbit className="w-4 h-4" />, iconColor: R.temel },
       { id: 'pan', kind: 'tool', name: 'Görünümü Kaydır', description: 'Kamera bakış noktasını sürükleyerek kaydırın.', icon: <Hand className="w-4 h-4" />, iconColor: R.temel },
       { id: 'delete', kind: 'tool', name: 'Sil', description: 'Silmek istediğiniz cisme tıklayın; seçili cisim varsa hemen silinir.', icon: <Trash2 className="w-4 h-4" />, iconColor: R.tehlike },

@@ -380,3 +380,22 @@ describe('Üçgen prizma taban türü ve 2B - 3B ayrımı (uzman 4. tur [172], [
     expect(baglam(kup)).not.toContain('Taban üçgeni');
   });
 });
+
+/* YAP3B (14.10.2026): «Mıknatıs» anahtar satırı Temel grubunda «Taşı»nın altında, her kademede açık çizilir. */
+describe('3B Mıknatıs satırı', () => {
+  it('ilkokul, ortaokul, lise ve Tüm araçlarda çizilir ve basılıdır (varsayılan açık)', () => {
+    for (const duzey of ['ilkokul', 'ortaokul', 'lise', 'tum'] as const) {
+      kademe.duzey = duzey;
+      const html = ciz();
+      expect(html, duzey).toMatch(/aria-label="Mıknatıs" aria-pressed="true"/);
+    }
+  });
+  it("ağaçta Temel grubunda Taşı'nın hemen altında, anahtar türünde; ilkokul listesinde var", () => {
+    const temel = TREE_TOOL_GROUPS_3D.find((g) => g.id === 'temel_3b')!;
+    const sira = temel.tools.map((a) => a.id);
+    expect(sira.indexOf('yapisma')).toBe(sira.indexOf('select_move') + 1);
+    expect(temel.tools.find((a) => a.id === 'yapisma')?.kind).toBe('toggle');
+    expect(ILKOKUL_3B_ARACLARI).toContain('yapisma');
+    expect(TUM_3B_ARACLAR.length).toBeLessThanOrEqual(30);
+  });
+});
