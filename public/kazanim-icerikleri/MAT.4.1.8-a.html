@@ -900,7 +900,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/60ac28ac727837ed.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-13 11:55
+  montaj: 2026-10-14 23:42
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-19 22:31
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-19 22:27
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-19 22:27
@@ -3194,8 +3194,9 @@ window.SAYFA_INIT[3] = function (kok) {
     </div>
   </div>
   <div class="kontrol-eylem">
-    <!-- Uzman 3. tur: «4. oyun tekrarı yapılamamaktadır» → yeniden başlatma düğmesi -->
-    <button type="button" class="buton" id="s4-sifirla-btn">Yeniden Başla</button>
+    <!-- Uzman 3./5. tur: «4. oyun tekrarı yapılamamaktadır» → her an kullanılabilen yeniden başlatma düğmesi;
+         oyun bitince birincil olur, basınca yeni tur (kartlar karışık, kamera ilk açıda) -->
+    <button type="button" class="buton" id="s4-sifirla-btn">Yeniden Başlat</button>
   </div>
 </section>
 <style>
@@ -3321,6 +3322,8 @@ window.SAYFA_INIT[4] = function (kok) {
   controls.maxDistance = 14;
   controls.maxPolarAngle = Math.PI / 2 - 0.05;
   controls.target.set(0, 0.3, 0);
+  controls.update();
+  controls.saveState();   // Yeniden Başlat kamerayı bu ilk açıya döndürür
 
   var dirLight = new THREE.DirectionalLight(0xfff5e6, 1.8);
   dirLight.position.set(5, 9, 6);
@@ -3611,11 +3614,16 @@ window.SAYFA_INIT[4] = function (kok) {
   gruplar.forEach(function (grp) {
     var surahi = surahiUret();
     surahi.position.set(grp.x, 0, -1.5);
+    // Uzman 5. tur (tekrar oynanamıyor): kart grubun HER kabına (sürahi, bütün bardaklar, halka) bırakılabilir;
+    // önceden yalnız halkadaki öndeki bardak hedefti, arkadaki bardaklara ya da sahne döndürülünce görünen
+    // bardaklara bırakılan kart «Kartı bardağın üzerine bırak.» ile geri dönüyordu.
+    surahi.userData = { payGrubu: grp.id };
     scene.add(surahi);
+    etkilesimHedefleri.push(surahi);
 
     var hedefGrup = new THREE.Group();
     hedefGrup.position.set(grp.x, 0, 0.8);
-    hedefGrup.userData = { payGrubu: grp.id };
+    hedefGrup.userData = { payGrubu: grp.id, ana: true };
 
     var hMat = new THREE.MeshStandardMaterial({
       color: 0xdbd6d1,
@@ -3653,7 +3661,9 @@ window.SAYFA_INIT[4] = function (kok) {
     grp.digerBardaklar.forEach(function (pos) {
       var digerBardak = bardakUret(grp.siviY, grp.icUst, grp.icAlt);
       digerBardak.position.set(pos[0], pos[1], pos[2]);
+      digerBardak.userData = { payGrubu: grp.id };
       scene.add(digerBardak);
+      etkilesimHedefleri.push(digerBardak);
     });
   });
 
@@ -3688,6 +3698,9 @@ window.SAYFA_INIT[4] = function (kok) {
       if (sonucKutusu) {
         sonucKutusu.style.display = "block";
       }
+      // Oyun bitti: yeniden oynama yolu öne çıkar
+      var btn = kok.querySelector("#s4-sifirla-btn");
+      if (btn) btn.classList.add("birincil");
     }
   }
 
@@ -3804,7 +3817,24 @@ window.SAYFA_INIT[4] = function (kok) {
   });
   temizleyiciler.push(dropTarget);
 
-  // Uzman 3. tur: etkinlik baştan oynanabilsin — kartlar, halkalar ve sonuç kutusu ilk hâline döner.
+  // Uzman 3./5. tur: etkinlik baştan oynanabilsin — kartlar, halkalar, sonuç kutusu ve kamera ilk hâline
+  // döner; kartların sırası değişir (yeni tur), kısa bir uyarı yeni turun başladığını söyler.
+  var kartAlani = kok.querySelector(".s4-kart-alani");
+  function kartlariKaristir() {
+    if (!kartAlani) return;
+    var dizi = Array.prototype.slice.call(kartlar);
+    var eski = dizi.map(function (k) { return k.dataset.pay; }).join();
+    var yeni = dizi.slice();
+    for (var deneme = 0; deneme < 10; deneme++) {
+      for (var i = yeni.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = yeni[i]; yeni[i] = yeni[j]; yeni[j] = tmp;
+      }
+      if (yeni.map(function (k) { return k.dataset.pay; }).join() !== eski) break;
+    }
+    yeni.forEach(function (k) { kartAlani.appendChild(k); });
+    kartlar = kok.querySelectorAll(".s4-kart");
+  }
   var sifirlaBtn = kok.querySelector("#s4-sifirla-btn");
   if (sifirlaBtn) {
     sifirlaBtn.addEventListener("click", function () {
@@ -3822,6 +3852,14 @@ window.SAYFA_INIT[4] = function (kok) {
         mat.emissiveIntensity = 0;
       });
       if (sonucKutusu) sonucKutusu.style.display = "none";
+      // Kamera ilk açıya: sönümlemenin kalan dönüşü önce boşaltılır, yoksa sıfırlamadan sonra kayar.
+      controls.enableDamping = false;
+      controls.update();
+      controls.reset();
+      controls.enableDamping = true;
+      kartlariKaristir();
+      sifirlaBtn.classList.remove("birincil");
+      window.SABLON_TOAST("Yeni tur: Kartları yeniden bardaklara sürükle.");
     });
   }
 
