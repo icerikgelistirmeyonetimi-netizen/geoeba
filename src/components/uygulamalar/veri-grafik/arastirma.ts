@@ -1948,7 +1948,7 @@ function olcumCumleleri(tablo: VeriTablosu, a: Arastirma): string[] {
   }
   if (duzen.uzaklar.length > 0) {
     const uzak = temizListe(duzen.uzaklar.map((p) => yaz(p.deger)));
-    cumleler.push(`${veListesi(uzak)} ötekilerden çok uzak: ortalamayı etkiliyor, ortancayı daha az etkiliyor.`);
+    cumleler.push(`${veListesi(uzak)} ötekilerden çok uzak: Ortalamayı etkiliyor, ortancayı daha az etkiliyor.`);
   }
   const g = a.olcum.grup;
   const k = arastirmaSutunu(tablo, a, 'grup');

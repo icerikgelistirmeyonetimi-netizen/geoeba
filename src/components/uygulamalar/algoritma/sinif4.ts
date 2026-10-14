@@ -207,7 +207,7 @@ const SEKIL_GOREVLERI: Gorev[] = [
     ipuclari: ['Bir kenarı ve bir köşeyi çizen blokları bul: 3 kez ileri git, 1 kez sağa dön.', 'Bu parçayı "tekrarla" bloğunun içine koy, sayıyı 4 yap.'],
     basari: (iz) => {
       const o = izOzeti(iz);
-      return `Oldu! 4 kenar × ${o.cizgi / 4} birim = ${o.cizgi} birim: karenin çevresi ${o.cizgi} birim.`;
+      return `Oldu! 4 kenar × ${o.cizgi / 4} birim = ${o.cizgi} birim: Karenin çevresi ${o.cizgi} birim.`;
     },
     soru: {
       metin: 'Karenin çevresi kaç birim?',

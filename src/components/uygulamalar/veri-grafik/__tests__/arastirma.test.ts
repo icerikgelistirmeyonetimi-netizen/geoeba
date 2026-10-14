@@ -1117,7 +1117,7 @@ describe('araştırma: yorum cümleleri (yorumCumleleri)', () => {
       'Tahminimiz 150 cm idi; ortalamadan 2,2 cm uzak.',
     ]);
     const uzak = planVerisi(a, [...BOYLAR.map((b) => [String(b)]), ['124']]);
-    expect(yorumCumleleri(uzak, a)).toContain('124 cm ötekilerden çok uzak: ortalamayı etkiliyor, ortancayı daha az etkiliyor.');
+    expect(yorumCumleleri(uzak, a)).toContain('124 cm ötekilerden çok uzak: Ortalamayı etkiliyor, ortancayı daha az etkiliyor.');
     expect(yorumCumleleri(planVerisi(a, [['152']]), { ...a, tahmin: '152' })).toEqual(['1 ölçüm yaptık: 152 cm.', 'Tahminimiz 152 cm idi; ortalamayla aynı çıktı.']);
     const gruplu = uygulanmis({ ...a, tahmin: '', olcum: { ...a.olcum, grup: varsayilanGrup() } });
     const gt = planVerisi(gruplu, [['150', '6-A'], ['152', '6-A'], ['156', '6-B']]);

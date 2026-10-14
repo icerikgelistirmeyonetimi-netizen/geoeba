@@ -53,7 +53,7 @@ describe('Olasılık: ilkokulda «olay kartları»', () => {
     expect(m).toContain('Torbanın içi');
     expect(m).toContain('Bir bilye çek');
     expect(m).toContain('Çok kez çek');
-    expect(m).toContain('Önce karar ver: bu olay imkânsız mı, olabilir mi, kesin mi?');
+    expect(m).toContain('Önce karar ver: Bu olay imkânsız mı, olabilir mi, kesin mi?');
     // Önce karar: deney düğmeleri sınıflandırmadan önce kapalı
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*data-olay-dene="bir"/);
     expect(html).toMatch(/<button[^>]*disabled=""[^>]*data-olay-dene="cok"/);

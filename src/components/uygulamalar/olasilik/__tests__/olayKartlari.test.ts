@@ -119,7 +119,7 @@ describe('olay kartları: önce karar, sonra deney', () => {
     const k = OLAY_KARTLARI[0];
     expect(deneyAcikMi(BOS_KART_DURUMU)).toBe(false);
     expect(dene(k, BOS_KART_DURUMU, 5)).toBe(BOS_KART_DURUMU);
-    expect(yonlendirme(k, BOS_KART_DURUMU)).toBe('Önce karar ver: bu olay imkânsız mı, olabilir mi, kesin mi?');
+    expect(yonlendirme(k, BOS_KART_DURUMU)).toBe('Önce karar ver: Bu olay imkânsız mı, olabilir mi, kesin mi?');
   });
 
   it('karar deneyden önce değiştirilebilir; deney başlayınca kilitlenir', () => {

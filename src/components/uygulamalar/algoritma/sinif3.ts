@@ -173,7 +173,7 @@ const IZLE_GOREVLERI: Gorev[] = [
     ipuclari: ['8 litre kaç saksıya yeter? 8 ÷ 2 = ?', 'Kuru saksılar ilk 4 saksı. Döngü 4 kez dönsün; sonra robot sulamadan çıkışa yürüsün.'],
     basari: (iz) => {
       const o = izOzeti(iz);
-      return `Buldun! ${o.sulama} × 2 = ${o.harcananSu} litre: depodaki ${iz.baslangic.depo} litrenin hepsi kuru saksılara gitti.`;
+      return `Buldun! ${o.sulama} × 2 = ${o.harcananSu} litre: Depodaki ${iz.baslangic.depo} litrenin hepsi kuru saksılara gitti.`;
     },
     kazanimlar: ['MAT.3.2.4', 'MAT.3.3.5'],
   },

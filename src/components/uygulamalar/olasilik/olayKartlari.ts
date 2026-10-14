@@ -225,7 +225,7 @@ export function siradakiKart(aktif: number, tamamlanan: readonly boolean[]): num
 
 /** Deneyden önceki yönlendirme metni (sınıflandırma yok / deney az) */
 export function yonlendirme(kart: OlayKarti, d: KartDurumu): string {
-  if (d.tahmin === null) return 'Önce karar ver: bu olay imkânsız mı, olabilir mi, kesin mi?';
+  if (d.tahmin === null) return 'Önce karar ver: Bu olay imkânsız mı, olabilir mi, kesin mi?';
   const fiil = kart.sablon.tur === 'torba' ? 'bilye çek' : 'çarkı çevir';
   if (d.deneme === 0) return `Şimdi ${fiil}, kararını deneyle sına.`;
   return `Birkaç kez daha ${fiil}; sonra ne gördüğüne bak.`;
