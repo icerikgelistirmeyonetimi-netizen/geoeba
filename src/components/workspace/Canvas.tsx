@@ -2403,7 +2403,7 @@ export function Canvas({
     // 1) İğne
     if (!p) {
       setPergel({ merkez: d, yaricap: null, baslangic: null, tarama: 0, sonHamAci: 0 });
-      setHintMessage('Açıklığı ayarlayın: imleci iğneden uzaklaştırıp tıklayın.');
+      setHintMessage('Açıklığı ayarlayın: İmleci iğneden uzaklaştırıp tıklayın.');
       return;
     }
 
@@ -2424,7 +2424,7 @@ export function Canvas({
         sonHamAci: 0,
       });
       setHintMessage(
-        `Açıklık ${formatTurkishNumber(r)} br. Şimdi yayın BAŞLANGICINI istediğiniz yere bırakın: imleci çemberin çevresinde gezdirip tıklayın.`
+        `Açıklık ${formatTurkishNumber(r)} br. Şimdi yayın BAŞLANGICINI istediğiniz yere bırakın: İmleci çemberin çevresinde gezdirip tıklayın.`
       );
       return;
     }
@@ -3384,7 +3384,7 @@ export function Canvas({
           fazlasi += Math.max(0, g.options.length - grupSiniri);
         });
         if (fazlasi > 0) {
-          alt.push({ id: 'yay-olc-fazlasi', label: `${fazlasi} yay daha var: diğer noktaya sağ tıklayıp oradan seçin`, disabled: true, separatorBefore: true });
+          alt.push({ id: 'yay-olc-fazlasi', label: `${fazlasi} yay daha var: Diğer noktaya sağ tıklayıp oradan seçin`, disabled: true, separatorBefore: true });
         }
         maddeler.push({ id: 'yay-olc', label: 'Yay ölç', separatorBefore: true, submenu: alt });
       }
@@ -3531,7 +3531,7 @@ export function Canvas({
           submenu: [
             ...yayCiftleri.slice(0, YAY_MENU_SINIRI).map(yayMaddesi),
             ...(fazlasi > 0
-              ? [{ id: 'yay-olc-fazlasi', label: `${fazlasi} yay daha var: bir noktaya sağ tıklayıp oradan seçin`, disabled: true, separatorBefore: true }]
+              ? [{ id: 'yay-olc-fazlasi', label: `${fazlasi} yay daha var: Bir noktaya sağ tıklayıp oradan seçin`, disabled: true, separatorBefore: true }]
               : []),
           ],
         });
@@ -3924,7 +3924,7 @@ export function Canvas({
 
     // Yay Ölç noktalarla çalışır: çembere (ya da başka bir şekle) tıklanınca yol göster
     if (activeTool === 'measure_arc' && obj.type !== 'point') {
-      setHintMessage('Yay Ölç: çemberin kendisine değil, üzerindeki NOKTALARA tıklayın.');
+      setHintMessage('Yay Ölç: Çemberin kendisine değil, üzerindeki NOKTALARA tıklayın.');
       return;
     }
 

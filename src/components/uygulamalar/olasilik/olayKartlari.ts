@@ -203,7 +203,7 @@ export function donut(kart: OlayKarti, d: KartDurumu): Donut | null {
   const sinif = olaySinifi(kart.sablon);
   const dogru = d.tahmin === sinif;
   const sinifAdi = kucuk(OLAY_SINIFI_ADLARI[sinif]);
-  const karar = dogru ? `Kararın doğru: bu olay ${sinifAdi}.` : `Sen «${OLAY_SINIFI_ADLARI[d.tahmin]}» dedin. Bu olay ${sinifAdi}.`;
+  const karar = dogru ? `Kararın doğru: Bu olay ${sinifAdi}.` : `Sen «${OLAY_SINIFI_ADLARI[d.tahmin]}» dedin. Bu olay ${sinifAdi}.`;
   const ek =
     sinif === 'olabilir' && g !== 'bazen'
       ? kart.sablon.tur === 'torba'

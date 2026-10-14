@@ -152,7 +152,7 @@ const TEKRAR_GOREVLERI: Gorev[] = [
       metin: 'Robot ikişer sayıyor: 2, 4, 6. Bir saksı daha olsaydı robot ona kaç adımda varırdı?',
       birim: 'adım',
       cevap: () => 8,
-      sonrasi: '2, 4, 6, 8: ikişer sayınca her seferinde 2 artıyor.',
+      sonrasi: '2, 4, 6, 8: İkişer sayınca her seferinde 2 artıyor.',
       yonlendirme: 'Ayak izlerine bak ve 2 kare daha say: 7, 8.',
     },
     kazanimlar: ['MAT.2.1.4', 'MAT.2.2.4'],
@@ -245,7 +245,7 @@ const DESEN_GOREVLERI: Gorev[] = [
       metin: 'Merdiven 5 basamak olsaydı robot kaç adım atardı?',
       birim: 'adım',
       cevap: () => 10,
-      sonrasi: '2, 4, 6, 8, 10: her basamak 2 adım.',
+      sonrasi: '2, 4, 6, 8, 10: Her basamak 2 adım.',
       yonlendirme: 'Her basamak 2 adım. İkişer say.',
     },
     kazanimlar: ['MAT.2.1.5'],
@@ -278,7 +278,7 @@ const DESEN_GOREVLERI: Gorev[] = [
     baslangic: k([['kez', 3, ['ileri', 'sagaDon', 'ileri', 'solaDon']]], 's2d4h-'),
     cozum: k([['kez', 3, ['ileri', 'solaDon', 'ileri', 'sagaDon']]], 's2d4c-'),
     enCokBlok: 5,
-    ipuclari: ['İlk basamakta robot hangi yana dönmeli?', 'Dönüş kartlarının yerini değiştir: önce sola dön, sonra sağa dön.'],
+    ipuclari: ['İlk basamakta robot hangi yana dönmeli?', 'Dönüş kartlarının yerini değiştir: Önce sola dön, sonra sağa dön.'],
     basari: (iz) => `Buldun! Yukarı çıkarken önce sola, sonra sağa. ${merdivenCumlesi(iz)}`,
     kazanimlar: ['MAT.2.3.6'],
   },
@@ -581,7 +581,7 @@ export const SINIF2: readonly Unite[] = [
       yanilgilar: [
         {
           ad: 'Tekrar sayısına adım sayısını yazmak',
-          metin: '6 adım var diye "6 kez" yazmak; oysa tekrarın içinde 3 adım vardır ve 2 tur yeter. 4. görev bunu hedefler: robot iki saksıyı sular, 3. turda çite çarpar.',
+          metin: '6 adım var diye "6 kez" yazmak; oysa tekrarın içinde 3 adım vardır ve 2 tur yeter. 4. görev bunu hedefler: Robot iki saksıyı sular, 3. turda çite çarpar.',
         },
         {
           ad: 'Kartı tekrarın dışında bırakmak',
@@ -599,7 +599,7 @@ export const SINIF2: readonly Unite[] = [
         '4 kez 3 adım kaç adım eder?',
       ],
       celdiriciler:
-        'Tekrarla kartı hep 2 ile gelir; doğru sayıyı çocuk bulur. 1. görevde "sula" kartı yoktur, sonra gelir. Altı ayrı "ileri" kartı işi yapsa da görevi bitirmez (en çok blok sınırı): tekrarla kartı istenir.',
+        'Tekrarla kartı hep 2 ile gelir; doğru sayıyı çocuk bulur. 1. görevde "sula" kartı yoktur, sonra gelir. Altı ayrı "ileri" kartı işi yapsa da görevi bitirmez (en çok blok sınırı): Tekrarla kartı istenir.',
     },
   },
   {
@@ -778,7 +778,7 @@ export const SINIF2: readonly Unite[] = [
         },
         {
           ad: 'İlerlemeden koymak',
-          metin: 'Tekrarın içinde "küp koy" kartını "ileri"den önce koymak: dron ilk küpü başladığı boş kareye koyar. İleti "burada küp olmayacaktı" der.',
+          metin: 'Tekrarın içinde "küp koy" kartını "ileri"den önce koymak: Dron ilk küpü başladığı boş kareye koyar. İleti "burada küp olmayacaktı" der.',
         },
       ],
       sorular: [

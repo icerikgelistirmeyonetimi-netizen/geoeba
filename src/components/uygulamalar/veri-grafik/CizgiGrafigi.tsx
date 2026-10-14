@@ -503,7 +503,7 @@ export function CizgiGrafigi({
           fill="transparent"
           role="slider"
           tabIndex={0}
-          aria-label="Satır seçimi: sağ ve sol ok tuşlarıyla satırlar arasında gezin"
+          aria-label="Satır seçimi: Sağ ve sol ok tuşlarıyla satırlar arasında gezin"
           aria-valuemin={1}
           aria-valuemax={tablo.satirlar.length}
           aria-valuenow={(seciliSatir ?? 0) + 1}

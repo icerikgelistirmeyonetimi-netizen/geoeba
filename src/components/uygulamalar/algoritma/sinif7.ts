@@ -69,7 +69,7 @@ const IFADE_GOREVLERI: Gorev[] = [
     tur: 'tahmin',
     baslik: 'Akış şemasını oku',
     // Uzman (4. tur, satır 127): her saksı için ne kadar su harcandığı soruda verilmeli
-    yonerge: 'Kod panelinde akış şeması açık. Depoda 20 litre su var; robot her kuru saksıya 2 litre su verir. Robotun yolunu oklarla izle: çıkışa varınca depoda kaç litre kalır? Önce tahmin et, sonra çalıştır.',
+    yonerge: 'Kod panelinde akış şeması açık. Depoda 20 litre su var; robot her kuru saksıya 2 litre su verir. Robotun yolunu oklarla izle: Çıkışa varınca depoda kaç litre kalır? Önce tahmin et, sonra çalıştır.',
     ilkGorunum: 'akis',
     dunya: SERA_SULAMA,
     hedef: { kurulariSula: true, cikistaBitir: true },
@@ -78,7 +78,7 @@ const IFADE_GOREVLERI: Gorev[] = [
     baslangic: SULAMA_KODU,
     cozum: SULAMA_KODU,
     ipuclari: [
-      'Eşkenar dörtgen bir karardır. Geri dönen ok döngüdür: robot her saksıda karara yeniden gelir.',
+      'Eşkenar dörtgen bir karardır. Geri dönen ok döngüdür: Robot her saksıda karara yeniden gelir.',
       'Kaç saksıda "evet" kolu çalışır? Kuru saksıları say; her sulama 2 litre.',
     ],
     tahmin: {
@@ -98,7 +98,7 @@ const IFADE_GOREVLERI: Gorev[] = [
     id: 's7-ifade-2',
     tur: 'yaz',
     baslik: 'Adımları koda çevir',
-    yonerge: 'Adımları koda çevir. 1) olgun ← 0, ham ← 0. 2) İlerle. 3) Çıkışa varana kadar: kırmızıysa topla ve olgun 1 artsın, değilse ham 1 artsın; ilerle.',
+    yonerge: 'Adımları koda çevir. 1) olgun ← 0, ham ← 0. 2) İlerle. 3) Çıkışa varana kadar: Kırmızıysa topla ve olgun 1 artsın, değilse ham 1 artsın; ilerle.',
     dunya: HASAT_SIRA,
     hedef: hasatHedefi(5, 3),
     bitkiAdi: 'bitki',
@@ -109,7 +109,7 @@ const IFADE_GOREVLERI: Gorev[] = [
     ipuclari: [
       'Her numaralı adım bir blok ya da blok grubudur. 3. adım bir döngü; içinde bir karar ve bir "ileri git" var.',
       '"eğer domates kırmızıysa … değilse" bloğunu döngünün içine koy; "ileri git" döngünün sonunda olsun.',
-      'Sözde kod görünümüne geç: satırlar adımlarla aynı sırada mı?',
+      'Sözde kod görünümüne geç: Satırlar adımlarla aynı sırada mı?',
     ],
     basari: (iz) => {
       const olgun = deger(iz, 'olgun');
@@ -141,7 +141,7 @@ const IFADE_GOREVLERI: Gorev[] = [
       metin: 'Olgun domates sayısı ham domates sayısının kaç katı?',
       birim: 'kat',
       cevap: (iz) => deger(iz, 'olgun') / deger(iz, 'ham'),
-      sonrasi: '8 ÷ 4 = 2: her ham domatese 2 olgun domates düşüyor.',
+      sonrasi: '8 ÷ 4 = 2: Her ham domatese 2 olgun domates düşüyor.',
     },
     kazanimlar: ['MAT.7.2.4'],
   },
@@ -149,7 +149,7 @@ const IFADE_GOREVLERI: Gorev[] = [
     id: 's7-ifade-4',
     tur: 'hata',
     baslik: 'Sözde kodu izle',
-    yonerge: 'Sözde kodu satır satır izle: robot domatesleri sayıyor ama sayımlardan biri yanlış çıkıyor. Hatayı bul, bloklarda düzelt.',
+    yonerge: 'Sözde kodu satır satır izle: Robot domatesleri sayıyor ama sayımlardan biri yanlış çıkıyor. Hatayı bul, bloklarda düzelt.',
     ilkGorunum: 'sozde',
     dunya: HASAT_HATA,
     hedef: hasatHedefi(4, 3),
@@ -210,7 +210,7 @@ const DENKLEM_GOREVLERI: Gorev[] = [
     baslangic: 'bos',
     cozum: depoKodu(['@depo', '<', 2], 's7d1-'),
     ipuclari: [
-      'Kaç saksı olduğunu bilmen gerekmiyor: döngü depoya baksın.',
+      'Kaç saksı olduğunu bilmen gerekmiyor: Döngü depoya baksın.',
       '"depo < 2 olana kadar tekrarla" bloğunun içine ilerle, sula ve sulanan ← sulanan + 1 koy.',
       'Döngüden önce sulanan ← 0 olsun.',
     ],
@@ -238,7 +238,7 @@ const DENKLEM_GOREVLERI: Gorev[] = [
       const kalan = izOzeti(iz).kalanSu;
       return `Oldu! ${x} saksı × 2 litre + ${kalan} litre yedek = ${iz.baslangic.depo} litre: 2x + ${kalan} = ${iz.baslangic.depo}.`;
     },
-    soru: { metin: '2x + 3 = 15 denkleminde x kaç?', birim: '', cevap: (iz) => deger(iz, 'sulanan'), sonrasi: '2x = 12, x = 6: robot 6 saksı suladı.' },
+    soru: { metin: '2x + 3 = 15 denkleminde x kaç?', birim: '', cevap: (iz) => deger(iz, 'sulanan'), sonrasi: '2x = 12, x = 6: Robot 6 saksı suladı.' },
     kazanimlar: ['MAT.7.2.2', 'MAT.7.2.4'],
   },
   {
@@ -286,14 +286,14 @@ const DENKLEM_GOREVLERI: Gorev[] = [
     id: 's7-denklem-5',
     tur: 'tahmin',
     baslik: 'Denklemi kur',
-    yonerge: 'Kodu oku: depoda 21 litre var, her sulama 2 litre, döngü depo ≤ 5 olunca bitiyor. Kaç saksı sulanır? Denklemi kur, tahmin et, sonra çalıştır.',
+    yonerge: 'Kodu oku: Depoda 21 litre var, her sulama 2 litre, döngü depo ≤ 5 olunca bitiyor. Kaç saksı sulanır? Denklemi kur, tahmin et, sonra çalıştır.',
     ilkGorunum: 'sozde',
     dunya: DEPO_21,
     hedef: sulananHedefi(8),
     aracKutusu: DEPO_ARACLARI,
     baslangic: depoKodu(['@depo', '≤', 5], 's7d5-'),
     cozum: depoKodu(['@depo', '≤', 5], 's7d5-'),
-    ipuclari: ['Sonda depoda 5 litre kalır. Sulamalara kaç litre gider?', '2x + 5 = 21: iki yandan 5 çıkar, sonra 2’ye böl.'],
+    ipuclari: ['Sonda depoda 5 litre kalır. Sulamalara kaç litre gider?', '2x + 5 = 21: İki yandan 5 çıkar, sonra 2’ye böl.'],
     tahmin: { metin: '2x + 5 = 21 ise x kaç? Kaç saksı sulanır?', birim: 'saksı', cevap: (iz) => deger(iz, 'sulanan'), sonrasi: '2x = 16, x = 8.', yonlendirme: 'Sulamalara 21 − 5 = 16 litre gider. Her saksı 2 litre.' },
     basari: (iz) => {
       const x = deger(iz, 'sulanan');
@@ -333,7 +333,7 @@ function prizmaOlculeri(iz: Iz) {
 }
 const prizmaCumlesi = (iz: Iz) => {
   const p = prizmaOlculeri(iz);
-  return `${p.en} × ${p.boy} × ${p.h} = ${p.kup} küp: prizmanın hacmi ${p.kup} birim küp.`;
+  return `${p.en} × ${p.boy} × ${p.h} = ${p.kup} küp: Prizmanın hacmi ${p.kup} birim küp.`;
 };
 
 const PRIZMA_1 = insaatAlani('s7-prizma-3x2x2', 'Prizma 3 × 2 × 2', ['.....', 'B222.', '.222.', '.....'], { sinar: 'Üç iç içe döngü' });
@@ -358,7 +358,7 @@ const PRIZMA_GOREVLERI: Gorev[] = [
     baslangic: k([['kez', 3, ['ileri', ['kez', 2, ['koy']]]]], 's7p1b-'),
     cozum: k(prizma(2, 3, 2), 's7p1-'),
     ipuclari: [
-      'Kule → sıra → prizma: her biri bir tekrar. Kaç tekrar iç içe olmalı?',
+      'Kule → sıra → prizma: Her biri bir tekrar. Kaç tekrar iç içe olmalı?',
       'Sıra bitince dron sıranın sonunda. Geri dönmek için iki kez sağa dön, 3 ileri git; sonra sola dön, 1 ileri git, yine sola dön.',
       'Sırayı kuran kodla geri dönüş kodunu birlikte "2 kez tekrarla" içine al.',
     ],
@@ -387,7 +387,7 @@ const PRIZMA_GOREVLERI: Gorev[] = [
     id: 's7-prizma-3',
     tur: 'hata',
     baslik: 'Yanlış yere küp',
-    yonerge: 'Dron 3 × 2 tabanlı prizmayı kurarken küpü yanlış yere koydu. Kodu izle: hangi tekrar neyi sayıyor? Hatayı bul, düzelt.',
+    yonerge: 'Dron 3 × 2 tabanlı prizmayı kurarken küpü yanlış yere koydu. Kodu izle: Hangi tekrar neyi sayıyor? Hatayı bul, düzelt.',
     dunya: PRIZMA_3,
     hedef: YAPIYI_KUR,
     bitkiAdi: 'bitki',
@@ -416,7 +416,7 @@ const PRIZMA_GOREVLERI: Gorev[] = [
     aracKutusu: PRIZMA_ARACLARI,
     baslangic: 'onceki',
     cozum: k(prizma(3, 4, 2), 's7p4-'),
-    ipuclari: ['Önden görünümde kaç sütun ve kaç kat var? Bunlar en ve yükseklik.', 'Yandan görünümdeki sütun sayısı boydur: kaç sıra olduğunu söyler.'],
+    ipuclari: ['Önden görünümde kaç sütun ve kaç kat var? Bunlar en ve yükseklik.', 'Yandan görünümdeki sütun sayısı boydur: Kaç sıra olduğunu söyler.'],
     basari: (iz) => {
       const p = prizmaOlculeri(iz);
       return `Oldu! Önden ${p.en} × ${p.h}, yandan ${p.boy} × ${p.h} görünen prizma: ${p.en} × ${p.boy} × ${p.h} = ${p.kup} küp.`;
@@ -536,7 +536,7 @@ const YANSIMA_GOREVLERI: Gorev[] = [
     id: 's7-yansima-1',
     tur: 'yaz',
     baslik: 'Aynadaki şekil',
-    yonerge: 'Hazır kod soldaki şekli çiziyor. Aynadaki görüntüsünü çiz: kalemi kaldırıp başlangıç noktasının yansımasına git, kalemi indir, şekli yansıt.',
+    yonerge: 'Hazır kod soldaki şekli çiziyor. Aynadaki görüntüsünü çiz: Kalemi kaldırıp başlangıç noktasının yansımasına git, kalemi indir, şekli yansıt.',
     dunya: AYNA_1,
     hedef: CIZIMI_TAMAMLA,
     bitkiAdi: 'bitki',
@@ -545,7 +545,7 @@ const YANSIMA_GOREVLERI: Gorev[] = [
     cozum: k(['kalemKaldir', ['kez', 6, ['ileri']], 'sagaDon', 'sagaDon', 'kalemIndir', 'ileri', 'ileri', 'solaDon', 'ileri', 'ileri', 'solaDon', 'ileri'], 's7y1-'),
     ipuclari: [
       'Başlangıç noktası aynaya kaç birim uzak? Görüntüsü aynanın öbür yanında o kadar uzakta.',
-      'Yansımada yön de değişir: robot doğuya bakıyordu; görüntüde batıya bakmalı.',
+      'Yansımada yön de değişir: Robot doğuya bakıyordu; görüntüde batıya bakmalı.',
       'Görüntüyü çizerken aynı adımları at, ama her "sağa dön"ü "sola dön" yap.',
     ],
     basari: (iz) => {
@@ -589,7 +589,7 @@ const YANSIMA_GOREVLERI: Gorev[] = [
     aracKutusu: AYNA_ARACLARI,
     baslangic: k(['solaDon', ['kez', 4, ['ileri']], 'sagaDon', 'kalemIndir', 'ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'ileri'], 's7y3h-'),
     cozum: k(['kalemKaldir', 'solaDon', ['kez', 4, ['ileri']], 'sagaDon', 'kalemIndir', 'ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'ileri'], 's7y3-'),
-    ipuclari: ['Robot yola çıkarken kalemi nerede?', 'Aynadaki başlangıca çizmeden gitmeli: yola çıkmadan önce "kalemi kaldır".'],
+    ipuclari: ['Robot yola çıkarken kalemi nerede?', 'Aynadaki başlangıca çizmeden gitmeli: Yola çıkmadan önce "kalemi kaldır".'],
     basari: (iz) => {
       const c = kalemSayimi(iz);
       return `Buldun! Kalem kalkıkken robot ${c.kalkik} birim çizmeden gitti; sonra ${izOzeti(iz).cizgi} çizgilik görüntüyü çizdi.`;
@@ -609,7 +609,7 @@ const YANSIMA_GOREVLERI: Gorev[] = [
     cozum: k(['kalemKaldir', ['kez', 6, ['ileri']], 'sagaDon', 'sagaDon', 'kalemIndir', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri'], 's7y4-'),
     ipuclari: [
       'Görüntünün ilk çizgisinden sonra robot hangi yöne döndü? Aynada hangi yöne dönmeliydi?',
-      'Aynada sağ ile sol yer değiştirir: görüntüyü çizen kısımdaki her dönüşü tersine çevir.',
+      'Aynada sağ ile sol yer değiştirir: Görüntüyü çizen kısımdaki her dönüşü tersine çevir.',
     ],
     basari: (iz) => {
       const c = kalemSayimi(iz);
@@ -641,7 +641,7 @@ export const SINIF7: readonly Unite[] = [
       amac: 'Aynı algoritmayı adım adım yazı, sözde kod ve akış şemasıyla ifade etmek; üçünün aynı işi anlattığını görmek.',
       sure: '20 dakika',
       roller: [
-        'Sınıf üç gruba ayrılır: yazarlar adımları numaralı cümlelerle yazar, kodcular sözde kodu yazar, çizerler akış şemasını kartlarla kurar.',
+        'Sınıf üç gruba ayrılır: Yazarlar adımları numaralı cümlelerle yazar, kodcular sözde kodu yazar, çizerler akış şemasını kartlarla kurar.',
         'Bir öğrenci robot olur; yalnız akış şemasındaki okları izleyerek hareket eder.',
       ],
       adimlar: [
@@ -650,7 +650,7 @@ export const SINIF7: readonly Unite[] = [
         'Kodcular aynı algoritmayı ÇIKIŞA VARANA KADAR TEKRARLA … TEKRAR SONU biçiminde sözde kodla yazar.',
         'Çizerler BAŞLA, İŞLEM, KARAR ve BİTİR kartlarını tahtaya dizip oklarla bağlar; döngü geri dönen bir oktur.',
         'Robot akış şemasını izler; her sulamada 2 pul verir. Sınıf sonunda kalan pulları sayar.',
-        'Üç grup gösterimlerini eşleştirir: hangi cümle hangi satıra, hangi karta karşılık geliyor?',
+        'Üç grup gösterimlerini eşleştirir: Hangi cümle hangi satıra, hangi karta karşılık geliyor?',
       ],
       hazirlik:
         'Akış şeması kartlarını (BAŞLA, BİTİR, İŞLEM, KARAR, DEĞİLSE, DEĞİŞKEN) ve saksı kartlarını kesin. Okları tahtaya tebeşirle çizin. Robot yalnız BAK kartı gelince önündeki saksı kartını çevirir.',
@@ -683,7 +683,7 @@ export const SINIF7: readonly Unite[] = [
       yanilgilar: [
         {
           ad: 'Çıkışı da saymak',
-          metin: 'Döngünün başında ilerleyen robot son turda çıkışa varır ve orada da EĞER’e bakar; DEĞİLSE kolu çıkışı ham domates sayar. 4. görev bunu hedefler: sözde kodda İLERİ GİT satırının yerine bakılır.',
+          metin: 'Döngünün başında ilerleyen robot son turda çıkışa varır ve orada da EĞER’e bakar; DEĞİLSE kolu çıkışı ham domates sayar. 4. görev bunu hedefler: Sözde kodda İLERİ GİT satırının yerine bakılır.',
         },
         {
           ad: 'Geri dönen oku görmemek',
@@ -700,7 +700,7 @@ export const SINIF7: readonly Unite[] = [
         'Robot çıkışa varınca EĞER’e bakmalı mı? Neden?',
         'Bir algoritmayı arkadaşına anlatmak için hangi gösterimi seçerdin? Neden?',
       ],
-      celdiriciler: 'Araç kutusundaki "8 kez tekrarla" çeldiricidir: ilk sırada doğru sayar gibi görünür, uzun sırada (3. görev) yetmez.',
+      celdiriciler: 'Araç kutusundaki "8 kez tekrarla" çeldiricidir: İlk sırada doğru sayar gibi görünür, uzun sırada (3. görev) yetmez.',
     },
   },
   {
@@ -709,7 +709,7 @@ export const SINIF7: readonly Unite[] = [
     no: 2,
     ad: 'Denklem ve eşitsizlik',
     tema: 'Sera',
-    yeniKavram: 'Eşitsizlikle sınırlanan döngü: kaynak yettiği sürece tekrarla',
+    yeniKavram: 'Eşitsizlikle sınırlanan döngü: Kaynak yettiği sürece tekrarla',
     oncedenBilinen: 'Karşılaştırma koşulu, sayaç değişkeni (5–6. sınıf); algoritma gösterimleri (1. ünite)',
     kalip: 'sinir',
     kazanimlar: ['MAT.7.2.2', 'MAT.7.2.4'],
@@ -728,7 +728,7 @@ export const SINIF7: readonly Unite[] = [
         'On iki saksı kartı yere bir sıra hâlinde dizilir.',
         'Tahtaya "depo < 2 olana kadar tekrarla: ilerle, sula" kartları dizilir.',
         'Robot her sulamada 2 pul verir; bekçi her turdan önce "depoda 2 puldan az mı var?" diye sorar.',
-        'Robot durunca sınıf sorar: kaç saksı sulandı, kaç pul kaldı? Tahtaya 2x ≤ 15 yazılır ve çözülür.',
+        'Robot durunca sınıf sorar: Kaç saksı sulandı, kaç pul kaldı? Tahtaya 2x ≤ 15 yazılır ve çözülür.',
         'Oyun "depoda 3 pul yedek kalsın" kuralıyla yeniden oynanır; sınıf 2x + 3 = 15 denklemini kurar.',
       ],
       hazirlik: 'Saksı kartlarını kesin; 15 pul ya da kâğıt bardak hazırlayın. KARAR kartının arkasına koşulu yazın: "depo < 2".',
@@ -768,7 +768,7 @@ export const SINIF7: readonly Unite[] = [
         '"depo < 2" ile "depo ≤ 1" aynı mı? "depo ≤ 0" ile?',
         'Döngünün kaç kez döneceğini çalıştırmadan nasıl bulursun?',
       ],
-      celdiriciler: 'Araç kutusundaki "çıkışa varana kadar tekrarla" çeldiricidir: sıra uzun, su azdır; robot sıranın ortasında depoyu boşaltır.',
+      celdiriciler: 'Araç kutusundaki "çıkışa varana kadar tekrarla" çeldiricidir: Sıra uzun, su azdır; robot sıranın ortasında depoyu boşaltır.',
     },
   },
   {
@@ -798,7 +798,7 @@ export const SINIF7: readonly Unite[] = [
         'Programcılar önce tek kuleyi (TEKRARLA 2: KÜP KOY), sonra bir sırayı (TEKRARLA 3), sonra bütün prizmayı (TEKRARLA 2) kartlarla kurar.',
         'Dron kartları uygular; sınıf her kulede ve her sırada küpleri sayar.',
         'Çizim grubu yapının önden ve yandan görünümünü kareli kâğıda çizer.',
-        'Sınıf sorar: kaç küp kullandık? 3 × 2 × 2 = 12 mi? Tabanı 2 × 3 kursaydık ne değişirdi?',
+        'Sınıf sorar: Kaç küp kullandık? 3 × 2 × 2 = 12 mi? Tabanı 2 × 3 kursaydık ne değişirdi?',
       ],
       hazirlik: 'Her grup için 30 birim küp (ya da şeker küp) ve kareli kâğıt hazırlayın. Üç TEKRARLA kartını farklı boylarda kesmek iç içe oluşlarını gösterir.',
       kartlar: [
@@ -827,7 +827,7 @@ export const SINIF7: readonly Unite[] = [
         'Önden ve yandan görünüm yapıyı her zaman tek biçimde belirler mi?',
         'Hacmi 24 birim küp olan başka hangi prizmaları kurabilirsin?',
       ],
-      celdiriciler: 'Bu ünitede çeldirici blok yoktur; zorluk tekrar sayılarını doğru yere yazmaktadır. Dönüş bloklarının ikisi de kutudadır: geri dönüşte hangisinin gerektiğini çocuk bulur.',
+      celdiriciler: 'Bu ünitede çeldirici blok yoktur; zorluk tekrar sayılarını doğru yere yazmaktadır. Dönüş bloklarının ikisi de kutudadır: Geri dönüşte hangisinin gerektiğini çocuk bulur.',
     },
   },
   {
@@ -836,7 +836,7 @@ export const SINIF7: readonly Unite[] = [
     no: 4,
     ad: 'Yansıma',
     tema: 'Spor sahası',
-    yeniKavram: 'Yansıma dönüşümü: başlangıç, yön ve dönüşler yansır',
+    yeniKavram: 'Yansıma dönüşümü: Başlangıç, yön ve dönüşler yansır',
     oncedenBilinen: 'Simetri ve aynada sağ ile sol (3–4. sınıf), kalemi kaldırıp indirmek',
     kalip: 'yansit',
     kazanimlar: ['MAT.7.3.1'],
@@ -851,7 +851,7 @@ export const SINIF7: readonly Unite[] = [
         'Yere kare ızgara ve ortasına bir ayna doğrusu çizilir.',
         'Birinci robot doğrunun solunda, doğruya 3 kare uzakta başlar; kartlarla küçük bir şekil yürür.',
         'İkinci robot doğrunun sağında, 3 kare uzakta ve ters yöne bakarak başlar.',
-        'Sınıf birinci robotun kartlarını ikinci robot için kopyalar: sağa dönüşler sola, sola dönüşler sağa döner.',
+        'Sınıf birinci robotun kartlarını ikinci robot için kopyalar: Sağa dönüşler sola, sola dönüşler sağa döner.',
         'İki robotun yolu tebeşirle çizilir ve karşılaştırılır. Ayna doğrusu yatay olunca oyun yeniden oynanır.',
       ],
       hazirlik: 'Yere bantla ızgara ve ayna doğrusu çizin. Robotun elinde tebeşir olabilir: KALEMİ KALDIR kartında tebeşir yerden kalkar.',
@@ -864,10 +864,10 @@ export const SINIF7: readonly Unite[] = [
       ],
     },
     ogretmenNotu: {
-      hedef: 'Öğrenci bir şeklin doğruya göre yansımasını kodla çizer: kalemi kaldırıp başlangıç noktasının görüntüsüne gider, yönü yansıtır ve dönüşleri yer değiştirir.',
+      hedef: 'Öğrenci bir şeklin doğruya göre yansımasını kodla çizer: Kalemi kaldırıp başlangıç noktasının görüntüsüne gider, yönü yansıtır ve dönüşleri yer değiştirir.',
       dersler: [{ baslik: '1 ders', metin: 'Fişsiz "Ayna yürüyüşü" (10 dk), ardından 1–2. görevler (dikey ve yatay ayna), 3–4. görevler (hatayı bul) ikişerli.' }],
       yanilgilar: [
-        { ad: 'Kalemi kaldırmayı unutmak', metin: 'Görüntünün başlangıcına giderken kalemi yerde bırakmak: robot şekilde olmayan bir çizgi çeker. 3. görev bunu hedefler.' },
+        { ad: 'Kalemi kaldırmayı unutmak', metin: 'Görüntünün başlangıcına giderken kalemi yerde bırakmak: Robot şekilde olmayan bir çizgi çeker. 3. görev bunu hedefler.' },
         { ad: 'Dönüşleri aynen kopyalamak', metin: 'Yansımayı öteleme gibi yapmak: aynı kodu başka yerde çalıştırmak. Aynada sağ ile sol yer değiştirir; 4. görev bunu hedefler.' },
         { ad: 'Yönü yansıtmamak', metin: 'Dikey aynada doğuya bakan robotun görüntüsünün batıya baktığını unutmak. Yatay aynada ise doğu doğu kalır (2. görev).' },
       ],

@@ -299,9 +299,9 @@ export function adayiSina(koseler: readonly Point2D[], d: Dogru): SinamaSonucu {
 export function sinamaBildirimi(sonuc: SinamaSonucu): string {
   switch (sonuc) {
     case 'dogru':
-      return 'Evet! İki yarı tam örtüştü: bu bir simetri doğrusu.';
+      return 'Evet! İki yarı tam örtüştü: Bu bir simetri doğrusu.';
     case 'yanlis':
-      return 'İki yarı örtüşmedi: renkli bölgeler üst üste gelmiyor. Bu bir simetri doğrusu değil; başka bir doğru dene.';
+      return 'İki yarı örtüşmedi: Renkli bölgeler üst üste gelmiyor. Bu bir simetri doğrusu değil; başka bir doğru dene.';
     case 'disinda':
       return 'Doğru şeklin içinden geçmiyor. Simetri doğrusu şekli iki parçaya ayırır.';
   }

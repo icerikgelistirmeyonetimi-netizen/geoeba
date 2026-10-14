@@ -1962,8 +1962,8 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   setOzelAralikHata(null);
                   setSifirlamaSonucu(
                     ilkokul
-                      ? 'Ayarlar varsayılana döndü: beyaz zemin, kareli ızgara; nokta, çizgi ve yazı boyutları ilk değerinde.'
-                      : 'Ayarlar varsayılana döndü: beyaz zemin, ızgara ve eksenler açık; nokta, çizgi ve yazı boyutları ilk değerinde.'
+                      ? 'Ayarlar varsayılana döndü: Beyaz zemin, kareli ızgara; nokta, çizgi ve yazı boyutları ilk değerinde.'
+                      : 'Ayarlar varsayılana döndü: Beyaz zemin, ızgara ve eksenler açık; nokta, çizgi ve yazı boyutları ilk değerinde.'
                   );
                 }}
                 aria-label="Bütün ayarları varsayılana döndür"

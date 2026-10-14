@@ -534,7 +534,7 @@ export function deneyDurumMetni(c: Pick<DeneyCalismasi, 'no' | 'gercek' | 'etike
 
 /** Tablo dolu bildirimi: "Tablo dolu (2000 satır): yeni atışlar yalnız Deney özetine yazılır." */
 export function tabloDoluMetni(nesne: DeneyNesnesi): string {
-  return `Tablo dolu (${EN_COK_TABLO_SATIRI} satır): yeni ${fiilCogul(fiil(nesne))} yalnız Deney özetine yazılır.`;
+  return `Tablo dolu (${EN_COK_TABLO_SATIRI} satır): Yeni ${fiilCogul(fiil(nesne))} yalnız Deney özetine yazılır.`;
 }
 
 /**
@@ -557,7 +557,7 @@ export function durdurulduMetni(nesne: DeneyNesnesi, c: Pick<DeneyCalismasi, 'n'
 
 /** Geri atmadan torba boşaldı: "Torba boşaldı: bu deneyde 5 top çekilebildi." */
 export function torbaBosaldiMetni(n: number): string {
-  return `Torba boşaldı: bu deneyde ${n} top çekilebildi.`;
+  return `Torba boşaldı: Bu deneyde ${n} top çekilebildi.`;
 }
 
 /** Son deneyi geri al: "2. deney silindi (50 atış)." · "Gerçek atışlar silindi (27 atış)." */

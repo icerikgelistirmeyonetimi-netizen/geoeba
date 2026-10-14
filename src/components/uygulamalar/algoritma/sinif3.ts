@@ -59,7 +59,7 @@ const IZLE_GOREVLERI: Gorev[] = [
     aracKutusu: IZLE_ARACLARI,
     baslangic: IZLE_1,
     cozum: IZLE_1,
-    ipuclari: ['Döngünün içini bir kez oku: robot bir adım gidiyor, bir saksı suluyor.', 'Döngü 4 kez dönüyor: 2 + 2 + 2 + 2 ya da 4 × 2.'],
+    ipuclari: ['Döngünün içini bir kez oku: Robot bir adım gidiyor, bir saksı suluyor.', 'Döngü 4 kez dönüyor: 2 + 2 + 2 + 2 ya da 4 × 2.'],
     tahmin: {
       metin: 'Robot kaç litre su harcayacak?',
       birim: 'litre',
@@ -77,7 +77,7 @@ const IZLE_GOREVLERI: Gorev[] = [
     id: 's3-izle-2',
     tur: 'tahmin',
     baslik: 'Depoda ne kalır?',
-    yonerge: 'Depoda 20 litre su var. Kodu satır satır izle: robot hangi saksıları suluyor? Sonunda depoda kaç litre kalır? Tahmin et, sonra çalıştır.',
+    yonerge: 'Depoda 20 litre su var. Kodu satır satır izle: Robot hangi saksıları suluyor? Sonunda depoda kaç litre kalır? Tahmin et, sonra çalıştır.',
     dunya: sera('s3-izle-2', 'Aralıklı sera', 'K N K N K N', 20),
     hedef: SULA_VE_CIK,
     bitkiAdi: 'saksı',
@@ -145,7 +145,7 @@ const IZLE_GOREVLERI: Gorev[] = [
     id: 's3-izle-5',
     tur: 'hata',
     baslik: 'Fazla tur',
-    yonerge: 'Bu kod 5 saksıyı sulayıp çıkışa gitmeli. Kodu izle: döngü kaç kez dönüyor? Çalıştır, hatayı bul ve düzelt.',
+    yonerge: 'Bu kod 5 saksıyı sulayıp çıkışa gitmeli. Kodu izle: Döngü kaç kez dönüyor? Çalıştır, hatayı bul ve düzelt.',
     dunya: sera('s3-izle-5', 'Beş saksı', 'K K K K K', 20),
     hedef: SULA_VE_CIK,
     bitkiAdi: 'saksı',
@@ -163,7 +163,7 @@ const IZLE_GOREVLERI: Gorev[] = [
     id: 's3-izle-6',
     tur: 'hata',
     baslik: 'Biten depo',
-    yonerge: 'Depoda 8 litre su var. Kuru saksıları sula, nemlileri sulama, sonra çıkışa git. Bu kodda bir hata var: çalıştır, izle ve düzelt.',
+    yonerge: 'Depoda 8 litre su var. Kuru saksıları sula, nemlileri sulama, sonra çıkışa git. Bu kodda bir hata var: Çalıştır, izle ve düzelt.',
     dunya: sera('s3-izle-6', 'Az su', 'K K K K N N', 8),
     hedef: SULA_VE_CIK,
     bitkiAdi: 'saksı',
@@ -212,15 +212,15 @@ const SIMETRI_GOREVLERI: Gorev[] = [
     id: 's3-simetri-1',
     tur: 'yaz',
     baslik: 'Aynadaki yarım',
-    yonerge: 'Şeklin sol yarısı çizili. Hazır kod sol yarıyı çizen kod: robot çizginin üstünden geçer. Kodu değiştir: robot aynadaki sağ yarıyı çizsin.',
+    yonerge: 'Şeklin sol yarısı çizili. Hazır kod sol yarıyı çizen kod: Robot çizginin üstünden geçer. Kodu değiştir: Robot aynadaki sağ yarıyı çizsin.',
     dunya: AYNA_U,
     hedef: CIZ,
     bitkiAdi: 'bitki',
     aracKutusu: AYNA_ARACLARI,
     baslangic: k(['solaDon', 'ileri', 'sagaDon', 'ileri', 'ileri'], 's3s1h-'),
     cozum: k(['sagaDon', 'ileri', 'solaDon', 'ileri', 'ileri'], 's3s1-'),
-    ipuclari: ['Kodu çalıştır ve izle: robot ilk önce hangi yana döndü?', 'Aynada adımlar aynı kalır, dönüşler yer değiştirir: "sola dön" yerine "sağa dön", "sağa dön" yerine "sola dön".'],
-    basari: (iz) => `Oldu! Aynı ${izOzeti(iz).ileri} adım, ters dönüşler: sağ yarı, sol yarının aynadaki görüntüsü.`,
+    ipuclari: ['Kodu çalıştır ve izle: Robot ilk önce hangi yana döndü?', 'Aynada adımlar aynı kalır, dönüşler yer değiştirir: "sola dön" yerine "sağa dön", "sağa dön" yerine "sola dön".'],
+    basari: (iz) => `Oldu! Aynı ${izOzeti(iz).ileri} adım, ters dönüşler: Sağ yarı, sol yarının aynadaki görüntüsü.`,
     kazanimlar: ['MAT.3.3.8', 'MAT.3.3.7'],
   },
   {
@@ -279,7 +279,7 @@ const SIMETRI_GOREVLERI: Gorev[] = [
     id: 's3-simetri-5',
     tur: 'yaz',
     baslik: 'Yatay ayna',
-    yonerge: 'Bu kez ayna yatay: dikdörtgenin üst yarısı çizili. Robot aynanın sol ucunda, sağa bakıyor. Alt yarıyı çiz.',
+    yonerge: 'Bu kez ayna yatay: Dikdörtgenin üst yarısı çizili. Robot aynanın sol ucunda, sağa bakıyor. Alt yarıyı çiz.',
     dunya: AYNA_YATAY,
     hedef: CIZ,
     bitkiAdi: 'bitki',
@@ -287,12 +287,12 @@ const SIMETRI_GOREVLERI: Gorev[] = [
     baslangic: 'bos',
     cozum: k(['sagaDon', 'ileri', 'solaDon', ['kez', 4, ['ileri']], 'solaDon', 'ileri'], 's3s5-'),
     ipuclari: ['Üst yarıyı çizen kodu düşün: sola dön, ileri, sağa dön, 4 adım, sağa dön, ileri.', 'Aynada dönüşleri tersine çevir: sağa dön, ileri, sola dön, 4 adım, sola dön, ileri.'],
-    basari: (iz) => `Oldu! Alt yarıda da ${izOzeti(iz).cizgi} çizgi var: dikdörtgenin iki yarısı eş.`,
+    basari: (iz) => `Oldu! Alt yarıda da ${izOzeti(iz).cizgi} çizgi var: Dikdörtgenin iki yarısı eş.`,
     soru: {
       metin: 'Bu dikdörtgenin kaç simetri doğrusu var?',
       birim: 'doğru',
       cevap: () => 2,
-      sonrasi: 'Yatay doğru ve dikey doğru: ikisi de dikdörtgeni iki eş parçaya ayırır.',
+      sonrasi: 'Yatay doğru ve dikey doğru: İkisi de dikdörtgeni iki eş parçaya ayırır.',
       yonlendirme: 'Şekli yatay katladın. Ortadan dikey katlasan iki yarı yine üst üste gelir mi?',
     },
     kazanimlar: ['MAT.3.3.6', 'MAT.3.3.7', 'MAT.3.3.8'],
@@ -351,7 +351,7 @@ const KADAR_GOREVLERI: Gorev[] = [
     id: 's3-kadar-3',
     tur: 'kurgu',
     baslik: 'Sulayarak yürü',
-    yonerge: 'Bu sıradaki saksıların hepsi kuru. Robot her saksıyı sulasın ve çıkışta dursun. Çıkışta saksı yok: orayı sulama!',
+    yonerge: 'Bu sıradaki saksıların hepsi kuru. Robot her saksıyı sulasın ve çıkışta dursun. Çıkışta saksı yok: Orayı sulama!',
     dunya: sera('s3-kadar-3', 'Kuru sıra', 'K K K K', 20),
     hedef: SULA_VE_CIK,
     bitkiAdi: 'saksı',
@@ -385,7 +385,7 @@ const KADAR_GOREVLERI: Gorev[] = [
     ],
     basari: (iz) => {
       const o = izOzeti(iz);
-      return `Buldun! ${o.sulama} saksı için ${o.ileri} adım: adım sayısı saksı sayısından 1 fazla. Çıkış sulanmadı.`;
+      return `Buldun! ${o.sulama} saksı için ${o.ileri} adım: Adım sayısı saksı sayısından 1 fazla. Çıkış sulanmadı.`;
     },
     kazanimlar: ['MAT.3.2.5'],
   },
@@ -462,7 +462,7 @@ export const SINIF3: readonly Unite[] = [
       ],
       adimlar: [
         'Yere 6 saksı kartı bir sıra hâlinde dizilir; sıranın sonuna ÇIKIŞ yazılır.',
-        'Tahtaya "4 kez TEKRARLA: İLERİ, SULA" programı dizilir. Sınıf çalıştırmadan önce tahmin eder: kaç litre su harcanacak?',
+        'Tahtaya "4 kez TEKRARLA: İLERİ, SULA" programı dizilir. Sınıf çalıştırmadan önce tahmin eder: Kaç litre su harcanacak?',
         'Robot programı uygular; her SULA kartında depocudan bir jeton alıp saksıya koyar. Sınıf jetonları sayar: 4 × 2 = 8 litre.',
         'Depocuya 6 jeton (12 litre) verilir. Sınıf depo kaç saksıya yeter diye hesaplar ve programı buna göre düzeltir.',
         'Tekrar sayısı 7 yapılır. Robot çıkış kartına gelince ne olur? Sınıf tartışır.',
@@ -478,7 +478,7 @@ export const SINIF3: readonly Unite[] = [
     ogretmenNotu: {
       hedef: 'Öğrenci hazır bir kodu çalıştırmadan satır satır izler, sonucunu (harcanan ve kalan su) çarpma ve çıkarmayla tahmin eder; depodaki suyun kaç saksıya yettiğini bölmeyle bulup koda aktarır.',
       dersler: [
-        { baslik: '1. ders', metin: 'Fişsiz "Su taşıyan robot" (15 dk), ardından 1–2. görevler (tahmin et) sınıfça: önce herkes tahminini yazar, sonra çalıştırılır. 3. görev bireysel.' },
+        { baslik: '1. ders', metin: 'Fişsiz "Su taşıyan robot" (15 dk), ardından 1–2. görevler (tahmin et) sınıfça: Önce herkes tahminini yazar, sonra çalıştırılır. 3. görev bireysel.' },
         { baslik: '2. ders', metin: '4. görev (yeni kurgu) bireysel; 5–6. görevler (hatayı bul) ikişerli. Ders "depo kaç saksıya yeter?" sorusuyla kapanır.' },
       ],
       yanilgilar: [
@@ -493,7 +493,7 @@ export const SINIF3: readonly Unite[] = [
         'Aralıklı serada döngü 3 kez döndü ama robot 7 adım attı. Neden?',
       ],
       celdiriciler:
-        'Araç kutusundaki "4 kez tekrarla" bloğunun sayısı çoğu görevde bilerek yanlıştır: öğrenci sayıyı saksı ve depo miktarından hesaplayıp değiştirir. Tahmin görevlerinde kod değiştirilmez.',
+        'Araç kutusundaki "4 kez tekrarla" bloğunun sayısı çoğu görevde bilerek yanlıştır: Öğrenci sayıyı saksı ve depo miktarından hesaplayıp değiştirir. Tahmin görevlerinde kod değiştirilmez.',
     },
   },
   {
@@ -502,12 +502,12 @@ export const SINIF3: readonly Unite[] = [
     no: 2,
     ad: 'Simetriyi tamamla',
     tema: 'Spor sahası',
-    yeniKavram: 'Simetri: aynada adımlar aynı kalır, sağa ve sola dönüşler yer değiştirir',
+    yeniKavram: 'Simetri: Aynada adımlar aynı kalır, sağa ve sola dönüşler yer değiştirir',
     oncedenBilinen: 'Adımlar ve dönüşler (1–2. sınıf)',
     kalip: 'ayna',
     kazanimlar: ['MAT.3.3.8', 'MAT.3.3.7', 'MAT.3.3.6'],
     sure: '2 ders saati',
-    uygunluk: 'Çizgi robotu nokta ağında çizer. Öbür yarı gizlidir: öğrenci şekli aynaya bakarak tamamlar. Simetri doğrusu tuvalde çizilidir.',
+    uygunluk: 'Çizgi robotu nokta ağında çizer. Öbür yarı gizlidir: Öğrenci şekli aynaya bakarak tamamlar. Simetri doğrusu tuvalde çizilidir.',
     gorevler: SIMETRI_GOREVLERI,
     fissiz: {
       ad: 'Ayna dansı',
@@ -517,9 +517,9 @@ export const SINIF3: readonly Unite[] = [
       adimlar: [
         'Yere bantla düz bir çizgi yapıştırın: ayna doğrusu. İki robot çizginin üstünde yan yana durur.',
         'Birinci robot tahtadaki kartları uygular ve tebeşirle yolunu çizer.',
-        'Sınıf ikinci robot için aynadaki programı kurar: adımlar aynı, SAĞA DÖN yerine SOLA DÖN, SOLA DÖN yerine SAĞA DÖN.',
+        'Sınıf ikinci robot için aynadaki programı kurar: Adımlar aynı, SAĞA DÖN yerine SOLA DÖN, SOLA DÖN yerine SAĞA DÖN.',
         'İkinci robot uygular. İki yol çizginin iki yanında aynadaki gibi mi? Kâğıdı çizgiden katlayarak ya da bir ayna tutarak denetleyin.',
-        'Birinci robotun kodunu olduğu gibi ikinci robota verin: ne oluyor? Sınıf tartışır.',
+        'Birinci robotun kodunu olduğu gibi ikinci robota verin: Ne oluyor? Sınıf tartışır.',
       ],
       hazirlik: 'Kartları iki takım kesin. Ayna doğrusu için bant, yollar için tebeşir gerekir. Küçük bir el aynası denetimi kolaylaştırır.',
       kartlar: [
@@ -531,13 +531,13 @@ export const SINIF3: readonly Unite[] = [
     ogretmenNotu: {
       hedef: 'Öğrenci bir parçası verilen simetrik şekli simetri doğrusuna göre kodla tamamlar; aynadaki kodda adımların aynı kaldığını, dönüşlerin yer değiştirdiğini fark eder ve birden çok simetri doğrusu olan şekilleri tanır.',
       dersler: [
-        { baslik: '1. ders', metin: 'Fişsiz "Ayna dansı" (15 dk), ardından 1–2. görevler: hazır sol yarı kodunu aynaya çevir, öbür yanda tekrarla. 3. görev (ev) bireysel.' },
+        { baslik: '1. ders', metin: 'Fişsiz "Ayna dansı" (15 dk), ardından 1–2. görevler: Hazır sol yarı kodunu aynaya çevir, öbür yanda tekrarla. 3. görev (ev) bireysel.' },
         { baslik: '2. ders', metin: '4. görev (hatayı bul) ikişerli, 5. görev (yatay ayna) bireysel. Ders "dikdörtgenin kaç simetri doğrusu var?" sorusuyla kapanır.' },
       ],
       yanilgilar: [
-        { ad: 'Kodu aynen kopyalamak', metin: 'Aynadaki yarı için aynı kodu kullanmak: robot aynı yarının üstünden geçer. 1. görevin hazır kodu bunu gösterir.' },
+        { ad: 'Kodu aynen kopyalamak', metin: 'Aynadaki yarı için aynı kodu kullanmak: Robot aynı yarının üstünden geçer. 1. görevin hazır kodu bunu gösterir.' },
         { ad: 'Yalnız ilk dönüşü değiştirmek', metin: 'Robotu öbür yana çevirip sonraki dönüşleri aynı bırakmak. 4. görevde robot ilk basamakta aynadaki çizgiden sapar.' },
-        { ad: 'Adım sayısını değiştirmek', metin: 'Aynada kenarların uzayıp kısaldığını sanmak. Oysa her kenar aynadaki eşiyle aynı uzunluktadır: adımlar aynı kalır.' },
+        { ad: 'Adım sayısını değiştirmek', metin: 'Aynada kenarların uzayıp kısaldığını sanmak. Oysa her kenar aynadaki eşiyle aynı uzunluktadır: Adımlar aynı kalır.' },
       ],
       sorular: [
         'Aynadaki kodda hangi bloklar değişti, hangileri aynı kaldı?',
@@ -568,7 +568,7 @@ export const SINIF3: readonly Unite[] = [
       roller: ['Bir öğrenci robot olur; her turdan önce "çıkışta mıyım?" diye bakar.', 'Sınıf programcıdır; kartları tahtaya dizer.'],
       adimlar: [
         'Öğretmen yere her seferinde farklı sayıda saksı kartı dizer, sonuna ÇIKIŞ kartını koyar.',
-        'Tahtaya "ÇIKIŞA KADAR TEKRARLA: İLERİ, SULA" dizilir. Robot uygular: çıkışa varınca da sular mı? Sınıf izler.',
+        'Tahtaya "ÇIKIŞA KADAR TEKRARLA: İLERİ, SULA" dizilir. Robot uygular: Çıkışa varınca da sular mı? Sınıf izler.',
         'Sınıf programı düzeltir: önce İLERİ, sonra "ÇIKIŞA KADAR TEKRARLA: SULA, İLERİ".',
         'Saksı sayısı değiştirilir; aynı program yeniden oynanır. Sınıfa sorulur: "Kaç saksı olduğunu bilmemiz gerekti mi?"',
         'İLERİ kartı döngünün altına konur. Robot ne yapar? Döngü biter mi?',
@@ -599,7 +599,7 @@ export const SINIF3: readonly Unite[] = [
         'Döngü çıkışa varıp varmadığına ne zaman bakıyor: turun başında mı, sonunda mı?',
         'Döngünün içinde "ileri git" olmasaydı ne olurdu?',
       ],
-      celdiriciler: 'Araç kutusundaki "4 kez tekrarla" bloğu bilerek çeldiricidir: bir sırada işe yarar gibi görünür, sıra uzayınca ya da kısalınca bozulur.',
+      celdiriciler: 'Araç kutusundaki "4 kez tekrarla" bloğu bilerek çeldiricidir: Bir sırada işe yarar gibi görünür, sıra uzayınca ya da kısalınca bozulur.',
     },
   },
 ];

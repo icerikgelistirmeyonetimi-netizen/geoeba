@@ -215,7 +215,7 @@ function durumYukle(): Durum | null {
 const sekmeGerekceleri: Partial<Record<Sekme, string>> = {
   cizgi: 'Çizgi grafiği için tabloda en az bir sayısal değişken olmalı.',
   kokYaprak: 'Kök-yaprak gösterimi için tabloda en az bir sayısal değişken olmalı.',
-  sacilim: 'Saçılım grafiği iki sayısal değişken arasındaki ilişkiyi gösterir: tabloda en az iki sayısal sütun olmalı.',
+  sacilim: 'Saçılım grafiği iki sayısal değişken arasındaki ilişkiyi gösterir: Tabloda en az iki sayısal sütun olmalı.',
 };
 
 /** Göster / gizle seçeneği (basılı düğme; sekme düğmeleriyle aynı dil) */
@@ -1732,7 +1732,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
             aria-pressed={panelAcik}
             aria-haspopup="dialog"
             aria-label={toplaSimge ? 'Veri topla' : undefined}
-            title="Veri topla: anketle, ölçerek ya da deneyle kendi verinizi toplayın"
+            title="Veri topla: Anketle, ölçerek ya da deneyle kendi verinizi toplayın"
             onClick={() => setBaslangic('topla')}
             data-veri-topla-dugmesi=""
           >
@@ -2565,7 +2565,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
         {sekme === 'sutun' && sutunSiklik && (
           <span
             className="inline-flex h-11 shrink-0 items-center gap-1.5 px-1 text-[12px] font-semibold text-muted-foreground"
-            title={`${noktaDegerler.length} veri var: her satır yerine her değerin kaç kez görüldüğü çizildi.`}
+            title={`${noktaDegerler.length} veri var: Her satır yerine her değerin kaç kez görüldüğü çizildi.`}
             data-siklik-notu
           >
             <SecenekSimgesi ad="sutunlar" />

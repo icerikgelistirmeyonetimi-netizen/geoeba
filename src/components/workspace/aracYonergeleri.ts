@@ -20,7 +20,7 @@ function ilkokulYonergesi(arac: string, secilen: number): AracYonergesi | null {
     case 'measure_angle':
       return {
         baslik: 'Açıölçer',
-        aciklama: 'Açıölçeri tanı: gövdesini sürükleyerek taşı, koldaki tutamaçla kolunu, alttaki oklu tutamaçla tabanını döndür. İlkokulda açıölçerle açı ölçülmez.',
+        aciklama: 'Açıölçeri tanı: Gövdesini sürükleyerek taşı, koldaki tutamaçla kolunu, alttaki oklu tutamaçla tabanını döndür. İlkokulda açıölçerle açı ölçülmez.',
       };
     case 'angle':
       return { baslik: 'Açı Oluştur', aciklama: `Sırayla 3 noktaya dokun: ortadaki nokta köşe olur${sayac(secilen, 3)}.` };
@@ -35,12 +35,12 @@ function ilkokulYonergesi(arac: string, secilen: number): AracYonergesi | null {
     case 'reflect':
       return {
         baslik: 'Yansıt',
-        aciklama: 'Şekli simetriğiyle tamamla: şekle dokun; simetri doğrusu şeklin yanına çizilir, simetriği öbür yana konur. Üstteki düğmelerle dikey ya da yatay simetri doğrusunu seç.',
+        aciklama: 'Şekli simetriğiyle tamamla: Şekle dokun; simetri doğrusu şeklin yanına çizilir, simetriği öbür yana konur. Üstteki düğmelerle dikey ya da yatay simetri doğrusunu seç.',
       };
     case 'symmetry':
       return {
         baslik: 'Simetri Keşfet',
-        aciklama: 'Şekle dokun, üzerine aday simetri doğrusunun iki ucunu işaretle ve «Katla»ya bas: iki yarı örtüşürse bu bir simetri doğrusudur.',
+        aciklama: 'Şekle dokun, üzerine aday simetri doğrusunun iki ucunu işaretle ve «Katla»ya bas: İki yarı örtüşürse bu bir simetri doğrusudur.',
       };
     // 4. tur [179]: derece yok (TYMM MAT.4.3.5: açı bir dönme miktarıdır)
     case 'rotate':

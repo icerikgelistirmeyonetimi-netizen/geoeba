@@ -75,7 +75,7 @@ export const GOREVLER: readonly Gorev[] = [
     id: 'sulama-yaz',
     tur: 'yaz',
     baslik: 'Sulama robotu',
-    yonerge: 'Robot çıkışa kadar yürüyor ama hiç sulamıyor. Koduna ekle: toprak kuruysa sulasın.',
+    yonerge: 'Robot çıkışa kadar yürüyor ama hiç sulamıyor. Koduna ekle: Toprak kuruysa sulasın.',
     dunya: SERA_ILK,
     hedef: SULAMA_HEDEFI,
     bitkiAdi: 'saksı',
@@ -115,7 +115,7 @@ export const GOREVLER: readonly Gorev[] = [
     id: 'sulama-gubre',
     tur: 'kurgu',
     baslik: 'Sararmış yapraklar',
-    yonerge: 'Bazı fidelerin yaprakları sararmış. Koduna ekle: yaprak sarıysa gübre versin.',
+    yonerge: 'Bazı fidelerin yaprakları sararmış. Koduna ekle: Yaprak sarıysa gübre versin.',
     dunya: SERA_SARI,
     hedef: GUBRE_HEDEFI,
     bitkiAdi: 'saksı',
@@ -161,7 +161,7 @@ export const GOREVLER: readonly Gorev[] = [
     id: 'hasat-yaz',
     tur: 'yaz',
     baslik: 'Hasat robotu',
-    yonerge: 'Hasat robotunun kodunu sen yaz: yalnız kırmızı domatesleri toplasın, çıkışta dursun.',
+    yonerge: 'Hasat robotunun kodunu sen yaz: Yalnız kırmızı domatesleri toplasın, çıkışta dursun.',
     dunya: HASAT_ILK,
     hedef: HASAT_HEDEFI,
     bitkiAdi: 'bitki',
@@ -169,7 +169,7 @@ export const GOREVLER: readonly Gorev[] = [
     baslangic: 'bos',
     cozum: HASAT_COZUMU,
     ipuclari: [
-      'Sulama robotunun kodunu hatırla: çıkışa kadar tekrarla, ilerle, bak ve karar ver.',
+      'Sulama robotunun kodunu hatırla: Çıkışa kadar tekrarla, ilerle, bak ve karar ver.',
       '"eğer domates kırmızıysa" bloğunun içine "topla" koy.',
     ],
     basari: (iz) => `Oldu! Sepette ${izOzeti(iz).sepet} domates var.`,
@@ -229,7 +229,7 @@ export const OGRETMEN_NOTU: OgretmenNotuVerisi = {
   hedef:
     'Öğrenci, bir işi her durumda aynı biçimde yapmak yerine önce duruma bakıp karar veren bir algoritma yazar; aynı kodu farklı kurgularda sınayıp düzeltir ve hazır koddaki hataları bulur.',
   dersler: [
-    { baslik: '1. ders', metin: 'Fişsiz "Robot bahçıvan" oyunu (15 dk), ardından 1–3. görevler: hazır döngüye kararı ekle, başka serada sına, yeni kural ekle.' },
+    { baslik: '1. ders', metin: 'Fişsiz "Robot bahçıvan" oyunu (15 dk), ardından 1–3. görevler: Hazır döngüye kararı ekle, başka serada sına, yeni kural ekle.' },
     { baslik: '2. ders', metin: '4. görev (hatayı bul) ikişerli; 5. görev zorlu ve isteğe bağlı; 6–7. görevler (hasat kodunu sıfırdan yazma) bireysel. Ders tartışmayla kapanır.' },
   ],
   yanilgilar: [

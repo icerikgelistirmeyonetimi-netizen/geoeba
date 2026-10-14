@@ -248,7 +248,7 @@ export class DeneyMotoru {
   /** Saklanan çalışma sınırı doluysa uyarır (yeni çalışma açılamaz) */
   private sinirDolu(a: Arastirma): boolean {
     if (a.deney.calismalar.length < EN_COK_CALISMA) return false;
-    this.cikis.bildirim(`En çok ${EN_COK_CALISMA} deney saklanır: yeni deney için “Geri al” ile eskilerini silin.`);
+    this.cikis.bildirim(`En çok ${EN_COK_CALISMA} deney saklanır: Yeni deney için “Geri al” ile eskilerini silin.`);
     return true;
   }
 

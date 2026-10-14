@@ -73,7 +73,7 @@ export function KesirAraciCubugu() {
       <CubukMetni
         simge={<span className="font-bold text-xs">½</span>}
         baslik={`Kesir ${gosterilen.pay}/${gosterilen.payda}`}
-        aciklama={secili ? 'Seçili modeli değiştir' : 'Tuvale dokun: bu kesir modeli konur'}
+        aciklama={secili ? 'Seçili modeli değiştir' : 'Tuvale dokun: Bu kesir modeli konur'}
       />
       <CubukAyirici />
       {(Object.keys(KESIR_MODEL_ADLARI) as KesirModelTuru[]).map((m) => (

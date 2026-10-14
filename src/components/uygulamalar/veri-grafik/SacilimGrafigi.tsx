@@ -271,7 +271,7 @@ export function SacilimGrafigi({
         </g>
       ) : (
         <text x={W / 2} y={H / 2} fontSize={fs} fontWeight={700} textAnchor="middle" fill={RENK.solukMetin}>
-          {metniSigdir('Çizilecek nokta yok: aynı satırda iki değişkenin de değeri olmalı', fs, W - 32, true)}
+          {metniSigdir('Çizilecek nokta yok: Aynı satırda iki değişkenin de değeri olmalı', fs, W - 32, true)}
         </text>
       )}
 

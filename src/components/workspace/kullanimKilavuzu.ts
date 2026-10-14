@@ -137,9 +137,9 @@ export function kilavuzBolumleri(kademe: KademeDuzeyi): KilavuzBolumu[] {
       baslik: 'Kaydetme ve dışa aktarma',
       metin: [],
       maddeler: [
-        'Dosya > Kaydet (Ctrl+S): çalışma .geoeba dosyası olarak indirilir; Dosya > Aç (Ctrl+O) ile yeniden açılır.',
+        'Dosya > Kaydet (Ctrl+S): Çalışma .geoeba dosyası olarak indirilir; Dosya > Aç (Ctrl+O) ile yeniden açılır.',
         'Dosya > Dışa Aktar: Görsel (PNG), Vektör (SVG) ya da Belge (PDF). Dosya > Yazdır (Ctrl+P).',
-        'Dosya > Yeni (Ctrl+N): kaydedilmemiş değişiklik varsa önce kaydetmek isteyip istemediğiniz sorulur.',
+        'Dosya > Yeni (Ctrl+N): Kaydedilmemiş değişiklik varsa önce kaydetmek isteyip istemediğiniz sorulur.',
       ],
     },
     {

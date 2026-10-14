@@ -161,13 +161,13 @@ export function karsilastirmaYorumu(
         : `Aritmetik ortalaması büyük olan ${adB} ${kars(mb, '>', ma)}`;
   if (yayilim === 'aciklik') {
     // 6. sınıf: yayılım açıklıkla konuşulur (ortalama mutlak sapma 7. sınıfta)
-    if (oa.deger === ob.deger) return `${ortalamaCumlesi}; açıklıklar da eşit (${m(oa)}): iki değişkenin verileri aynı genişlikte bir aralığa yayılıyor.`;
+    if (oa.deger === ob.deger) return `${ortalamaCumlesi}; açıklıklar da eşit (${m(oa)}): İki değişkenin verileri aynı genişlikte bir aralığa yayılıyor.`;
     const [kk, bb, aa] = oa.deger < ob.deger ? [oa, ob, adA] : [ob, oa, adB];
-    return `${ortalamaCumlesi}; açıklığı küçük olan ${aa}: değerleri daha dar bir aralıkta ${kars(kk, '<', bb)}.`;
+    return `${ortalamaCumlesi}; açıklığı küçük olan ${aa}: Değerleri daha dar bir aralıkta ${kars(kk, '<', bb)}.`;
   }
-  if (oa.deger === ob.deger) return `${ortalamaCumlesi}; ortalama mutlak sapmalar da eşit (${m(oa)}): iki değişkenin verileri ortalama çevresinde aynı ölçüde dağılıyor.`;
+  if (oa.deger === ob.deger) return `${ortalamaCumlesi}; ortalama mutlak sapmalar da eşit (${m(oa)}): İki değişkenin verileri ortalama çevresinde aynı ölçüde dağılıyor.`;
   const [kucuk, buyuk, ad] = oa.deger < ob.deger ? [oa, ob, adA] : [ob, oa, adB];
-  return `${ortalamaCumlesi}; ortalama mutlak sapması küçük olan ${ad}: değerleri ortalamaya daha yakın ${kars(kucuk, '<', buyuk)}.`;
+  return `${ortalamaCumlesi}; ortalama mutlak sapması küçük olan ${ad}: Değerleri ortalamaya daha yakın ${kars(kucuk, '<', buyuk)}.`;
 }
 
 // ── Kartlar ─────────────────────────────────────────────────────────────────
@@ -559,8 +559,8 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
           </p>
           <p>
             {ortancaCift
-              ? `${a.n} veri var (çift): ortanca, ${a.ortancaKonumlari[0]}. ve ${a.ortancaKonumlari[1]}. verilerin toplamının yarısıdır.`
-              : `${a.n} veri var (tek): ortadaki veri ${a.ortancaKonumlari[0]}. veri.`}
+              ? `${a.n} veri var (çift): Ortanca, ${a.ortancaKonumlari[0]}. ve ${a.ortancaKonumlari[1]}. verilerin toplamının yarısıdır.`
+              : `${a.n} veri var (tek): Ortadaki veri ${a.ortancaKonumlari[0]}. veri.`}
           </p>
           <Esitlik
             ad="Ortanca"
@@ -596,14 +596,14 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
           <p>
             {a.tepe.degerler.length === 0 ? (
               <>
-                {`Bütün değerler aynı sıklıkta (her biri ${a.tepe.sayi} kez): tepe değer `}
+                {`Bütün değerler aynı sıklıkta (her biri ${a.tepe.sayi} kez): Tepe değer `}
                 <strong>yok</strong>.
               </>
             ) : (
               <>
                 {a.tepe.degerler.length === 1
-                  ? `En çok görülen değer ${yaz(a.tepe.degerler[0])} (${a.tepe.sayi} kez): tepe değer `
-                  : `En çok görülen değerler ${listeMetni(a.tepe.degerler.map(yaz))} (her biri ${a.tepe.sayi} kez): tepe değer `}
+                  ? `En çok görülen değer ${yaz(a.tepe.degerler[0])} (${a.tepe.sayi} kez): Tepe değer `
+                  : `En çok görülen değerler ${listeMetni(a.tepe.degerler.map(yaz))} (her biri ${a.tepe.sayi} kez): Tepe değer `}
                 <strong>{listeMetni(a.tepe.degerler.map(yaz))}</strong>.
               </>
             )}
@@ -712,11 +712,11 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
             {a.siklikBicimi
               ? // Sıklık tablosunda fark sütunu yok: dengeyi iki yanın uzaklık toplamlarıyla anlatır
                 a.farkToplami === 0
-                ? `Ortalamanın altındaki verilerin uzaklıkları toplamı ${sayiMetni(a.solUzaklikToplami, 4)}, üstündekilerinki ${sayiMetni(a.sagUzaklikToplami, 4)}: iki yan dengede (farkların toplamı 0).`
-                : `Ortalamanın altındaki verilerin uzaklıkları toplamı ${sayiMetni(a.solUzaklikToplami, 4)}, üstündekilerinki ${sayiMetni(a.sagUzaklikToplami, 4)}: ortalama yuvarlandığı için tam eşit çıkmadı.`
+                ? `Ortalamanın altındaki verilerin uzaklıkları toplamı ${sayiMetni(a.solUzaklikToplami, 4)}, üstündekilerinki ${sayiMetni(a.sagUzaklikToplami, 4)}: İki yan dengede (farkların toplamı 0).`
+                : `Ortalamanın altındaki verilerin uzaklıkları toplamı ${sayiMetni(a.solUzaklikToplami, 4)}, üstündekilerinki ${sayiMetni(a.sagUzaklikToplami, 4)}: Ortalama yuvarlandığı için tam eşit çıkmadı.`
               : a.farkToplami === 0
-                ? 'Farkların toplamı 0: ortalamanın üstündeki ve altındaki farklar birbirini götürür.'
-                : `Farkların toplamı ${sayiMetni(a.farkToplami, 4)}: ortalama yuvarlandığı için tam 0 çıkmadı.`}
+                ? 'Farkların toplamı 0: Ortalamanın üstündeki ve altındaki farklar birbirini götürür.'
+                : `Farkların toplamı ${sayiMetni(a.farkToplami, 4)}: Ortalama yuvarlandığı için tam 0 çıkmadı.`}
           </p>
           <Esitlik ad="Uzaklıkların toplamı" ifade={toplamIfadesi(uzaklikTerimleri, a.siklikBicimi ? 'değer' : 'veri')} sonuc={sayiMetni(a.uzaklikToplami, 4)} />
           <p className="text-muted-foreground">Ortalama mutlak sapma = ortalamaya uzaklıkların toplamı ÷ veri sayısı</p>

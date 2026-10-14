@@ -333,7 +333,7 @@ function GorevEkrani({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-extrabold text-muted-foreground">
           <UniteMenusu unite={unite} kayit={kayit} onSec={uniteSec} />
           <span className={`rounded-full px-2 py-0.5 ${gorev.tur === 'hata' ? 'bg-ada-mercan/15 text-ada-mercan' : gorev.tur === 'kurgu' ? 'bg-ada-fener/20 text-[#8a6a2a] dark:text-ada-fener' : gorev.tur === 'tahmin' ? 'bg-[#5d66a6]/15 text-[#4a5290] dark:text-[#b9bff0]' : 'bg-primary/10 text-primary'}`}>{GOREV_TURU_ADI[gorev.tur]}</span>
-          {gorev.zorlu && <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground" title="İsteğe bağlı: ünitenin tamamlanması için gerekmez">Zorlu</span>}
+          {gorev.zorlu && <span className="rounded-full bg-muted px-2 py-0.5 text-muted-foreground" title="İsteğe bağlı: Ünitenin tamamlanması için gerekmez">Zorlu</span>}
           <span className="text-foreground">{gorev.baslik}</span>
           {gk.tamam && (
             <span className="inline-flex items-center gap-1 text-ada-vurgu">

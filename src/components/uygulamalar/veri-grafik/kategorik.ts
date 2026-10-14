@@ -194,7 +194,7 @@ export function mod(degerler: string[], sira?: string[]): string[] {
 }
 
 /** Bütün kategoriler eşit sayıdayken tepe değer kartında yazan açıklama */
-export const TEPE_DEGER_YOK = 'bütün değerler eşit sayıda: tepe değer yok';
+export const TEPE_DEGER_YOK = 'bütün değerler eşit sayıda: Tepe değer yok';
 
 const SESLILER = 'aıoueiöü';
 const INCE_SESLILER = 'eiöü';

@@ -185,7 +185,7 @@ export function aygitUyarisi(a: Aygit, cekilisSayisi: number): string | null {
   if (a.tur === 'karistirici' && !a.iadeli) {
     const n = topListesi(a).length;
     if (n > 0 && cekilisSayisi > n)
-      return `Çekilen top torbaya geri atılmıyor: torbada ${n} top var, ${cekilisSayisi} çekişin yalnız ilk ${n} tanesi yapılabilir; torba boşalınca deney durur.`;
+      return `Çekilen top torbaya geri atılmıyor: Torbada ${n} top var, ${cekilisSayisi} çekişin yalnız ilk ${n} tanesi yapılabilir; torba boşalınca deney durur.`;
   }
   if (a.tur === 'cark') {
     const o = carkOranlari(a);

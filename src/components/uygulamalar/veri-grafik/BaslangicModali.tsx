@@ -93,7 +93,7 @@ export function baslangicGenisligi(kokGenislik: number): number {
 const DIYALOG_ADLARI: Record<BaslangicAdimi, string> = {
   secim: 'Nasıl başlayalım?',
   hazir: 'Örnek veri',
-  topla: 'Veri topla: ne araştıralım?',
+  topla: 'Veri topla: Ne araştıralım?',
   plan: 'Veri topla: kendi sorunuz',
 };
 

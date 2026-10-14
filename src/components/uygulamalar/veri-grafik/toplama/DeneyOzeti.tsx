@@ -82,7 +82,7 @@ function Satir({
       <span role="cell" className="flex min-w-0 items-center gap-1.5">
         <span
           className={`truncate ${s.tabloda === false ? 'text-muted-foreground' : ''}`}
-          title={s.tabloda === false ? `${s.etiket}: tabloya yazılmadı (500 ve üstü atış yalnız özete yazılır).` : s.etiket}
+          title={s.tabloda === false ? `${s.etiket}: Tabloya yazılmadı (500 ve üstü atış yalnız özete yazılır).` : s.etiket}
           data-yalniz-ozet={s.tabloda === false ? '' : undefined}
         >
           {s.etiket}

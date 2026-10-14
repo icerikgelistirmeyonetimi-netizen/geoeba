@@ -763,7 +763,7 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
       gercek: 'okulda “evet” diyenler %60',
     },
     etkinlik:
-      'Çark, “evet” diyenlerin %60 olduğu bir okulu canlandırır: her çevirme okuldan rastgele seçilen bir kişinin cevabıdır. 20 kişilik örneklemi birkaç kez seçip “evet” sayısının örneklemden örnekleme değiştiğini ama okulun oranı (%60) çevresinde toplandığını görürüz.',
+      'Çark, “evet” diyenlerin %60 olduğu bir okulu canlandırır: Her çevirme okuldan rastgele seçilen bir kişinin cevabıdır. 20 kişilik örneklemi birkaç kez seçip “evet” sayısının örneklemden örnekleme değiştiğini ama okulun oranı (%60) çevresinde toplandığını görürüz.',
     ogretmenNotu:
       'Önce sınıfa sorun: 20 kişiye sorsak kaç “evet” bekleriz? “20 kez çevir”e birkaç kez basın; her deney yeni bir 20 kişilik örneklemdir. Sonuçların 12 çevresinde dağıldığını ama her seferinde tam 12 çıkmadığını konuşun. Evren okulun tamamı, örneklem seçilen 20 kişidir. “Çevirme sayısı artınca ne olur?” büyük örneklemde oranın %60 çevresine yerleştiğini gösterir.',
     tartisma: (b) => [
@@ -802,7 +802,7 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
       gercek: 'oyuncunun gol oranı %70',
     },
     etkinlik:
-      'Çark, penaltıların %70 kadarını gole çeviren bir oyuncuyu canlandırır: her çevirme bir penaltıdır. 10 penaltılık denemelerde gol sayısının her seferinde değiştiğini, çok sayıda penaltıda gol oranının %70 çevresine yerleştiğini görürüz.',
+      'Çark, penaltıların %70 kadarını gole çeviren bir oyuncuyu canlandırır: Her çevirme bir penaltıdır. 10 penaltılık denemelerde gol sayısının her seferinde değiştiğini, çok sayıda penaltıda gol oranının %70 çevresine yerleştiğini görürüz.',
     ogretmenNotu:
       'Önce tahmin alın: 10 penaltıda kaç gol? “10 kez çevir”e birkaç kez basın; 7 gol en olası sonuçtur ama 5, 6, 8 ya da 9 gol de çıkabilir. Gol oranının %70 olması her 10 penaltıda tam 7 gol demek değildir. “Çevirme sayısı artınca ne olur?” ile oranın %70 çevresine yerleştiğini gösterin.',
     tartisma: (b) => [
@@ -1181,7 +1181,7 @@ export function beklenenUyarisi(a: Arastirma, x: number): string | null {
   if (!b || !Number.isFinite(x)) return null;
   const pay = (b[1] - b[0]) * 0.1;
   if (x >= b[0] - pay && x <= b[1] + pay) return null;
-  return `Bu değer beklenen aralığın dışında (${sayiYaz(b[0], 2)}–${sayiYaz(b[1], 2)}): doğru mu?`;
+  return `Bu değer beklenen aralığın dışında (${sayiYaz(b[0], 2)}–${sayiYaz(b[1], 2)}): Doğru mu?`;
 }
 
 export interface ListeParcasi {
@@ -1730,9 +1730,9 @@ export function adimNotu(a: Arastirma, adim: ArastirmaAdimi = a.adim): { metin: 
         const f = fiil(a.deney.nesne);
         return { metin: `Her ${f} tabloya bir satır, grafiğe bir nokta ekler.`, rozet: r('MAT.6.6.1') };
       }
-      return { metin: 'Her dokunuş bir cevaptır: tabloya bir satır, grafiğe bir nokta ekler.', rozet: r('MAT.5.5.1') };
+      return { metin: 'Her dokunuş bir cevaptır: Tabloya bir satır, grafiğe bir nokta ekler.', rozet: r('MAT.5.5.1') };
     case 'duzenle':
-      if (y === 'olcum') return { metin: 'Veriyi analize hazırlarız: sıralarız, en küçük ve en büyük değere, ötekilerden çok uzak değerlere bakarız.', rozet: r('MAT.8.6.1 · 7.6.1') };
+      if (y === 'olcum') return { metin: 'Veriyi analize hazırlarız: Sıralarız, en küçük ve en büyük değere, ötekilerden çok uzak değerlere bakarız.', rozet: r('MAT.8.6.1 · 7.6.1') };
       if (y === 'deney') return { metin: 'Göreli sıklığı teorik olasılıkla karşılaştırırız.', rozet: 'MAT.7.7.1 · 8.7.1' };
       return { metin: 'Ham veriyi sıklık tablosuna dönüştürürüz: her seçeneği kaç kişi seçti?', rozet: r('MAT.5.5.1') };
     case 'yorum':
@@ -1944,7 +1944,7 @@ function olcumCumleleri(tablo: VeriTablosu, a: Arastirma): string[] {
   if (n >= 2) {
     cumleler.push(`Aritmetik ortalama ${yaz(ort, o)}; ortanca ${yaz(med, o)}.`);
     const oms = ortalamaMutlakSapma(x) as number;
-    cumleler.push(`Ortalama mutlak sapma ${yaz(oms, o)}: değerler ortalamadan ortalama ${yaz(oms, o)} uzakta.`);
+    cumleler.push(`Ortalama mutlak sapma ${yaz(oms, o)}: Değerler ortalamadan ortalama ${yaz(oms, o)} uzakta.`);
   }
   if (duzen.uzaklar.length > 0) {
     const uzak = temizListe(duzen.uzaklar.map((p) => yaz(p.deger)));
@@ -1993,7 +1993,7 @@ function deneyCumleleri(tablo: VeriTablosu, a: Arastirma): string[] {
   const simler = sayimlar.filter((x) => !x.c.gercek);
   // Aynı büyüklükte birden çok örneklem (simülasyon): "Her deneyde 20 kişiye sorduk (simülasyon, 2 deney): toplam …"
   const ayniOrneklem = !!sim && simler.length >= 2 && new Set(simler.map((x) => x.s.n)).size === 1 && simler.length === sayimlar.length;
-  if (sim && ayniOrneklem) cumleler.push(`Her deneyde ${sim.yapilan(simler[0].s.n, `simülasyon, ${simler.length} deney`)}: toplam ${sim.sonuc(sayi)} (${yuzdeYaz(sayi, n)}); ${sim.gercek}.`);
+  if (sim && ayniOrneklem) cumleler.push(`Her deneyde ${sim.yapilan(simler[0].s.n, `simülasyon, ${simler.length} deney`)}: Toplam ${sim.sonuc(sayi)} (${yuzdeYaz(sayi, n)}); ${sim.gercek}.`);
   else if (sim) cumleler.push(`${sim.yapilan(n)}: ${sim.sonuc(sayi)} (${yuzdeYaz(sayi, n)}); ${sim.gercek}.`);
   else cumleler.push(`${n} ${f} yaptık: ${sonucCumlesi(d, sayi)}, göreli sıklık ${yuzdeYaz(sayi, n)}.${teorik}`);
   // Sorunun kendisi en sık sonucu soruyorsa (sayı küpleri, üç ve daha çok sonuç): en sık gelen(ler) ve teorik beklenti

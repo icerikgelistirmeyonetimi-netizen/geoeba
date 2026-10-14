@@ -1068,7 +1068,7 @@ export function VeriTablosu({
     yapistirmaBildirimi ??
     (hatalilar.length > 0
       ? turOnerisi
-        ? `${turOnerisi.sutun.ad}: değerler sayı değil`
+        ? `${turOnerisi.sutun.ad}: Değerler sayı değil`
         : `${hatalilar.length} hücre sayı olarak okunamadı`
       : kisaDurum
         ? `${satirSayisi} satır`
@@ -1329,7 +1329,7 @@ export function VeriTablosu({
                             aria-invalid={hatali || undefined}
                             title={
                               hatali
-                                ? 'Sayı okunamadı: ondalık için virgül kullanın (ör. 3,5). Metin yazacaksanız sütunu başlıktaki menüden kategorik yapın.'
+                                ? 'Sayı okunamadı: Ondalık için virgül kullanın (ör. 3,5). Metin yazacaksanız sütunu başlıktaki menüden kategorik yapın.'
                                 : uzun
                                   ? metin
                                   : undefined

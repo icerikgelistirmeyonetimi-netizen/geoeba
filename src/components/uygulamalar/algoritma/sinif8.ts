@@ -115,7 +115,7 @@ const KOORDINAT_GOREVLERI: Gorev[] = [
     baslangic: 'bos',
     cozum: k([['kez', 3, ['ileri']], 'solaDon', ['kez', 2, ['ileri']], 'isaretle'], 's8k1-'),
     ipuclari: [
-      '(3, 2): ilk sayı x, ikinci sayı y. x ekseni boyunca kaç birim, y ekseni boyunca kaç birim gideceksin?',
+      '(3, 2): İlk sayı x, ikinci sayı y. x ekseni boyunca kaç birim, y ekseni boyunca kaç birim gideceksin?',
       'x ekseni boyunca 3 birim git, sola dön (yukarı bak), 2 birim git, nokta koy.',
     ],
     basari: (iz) => {
@@ -145,7 +145,7 @@ const KOORDINAT_GOREVLERI: Gorev[] = [
         const p = isaretlenenler(iz);
         return Math.abs(p[2].x - p[1].x);
       },
-      sonrasi: 'Ordinatlar aynı: uzaklık apsislerin farkıdır, 5 − 2 = 3.',
+      sonrasi: 'Ordinatlar aynı: Uzaklık apsislerin farkıdır, 5 − 2 = 3.',
     },
     kazanimlar: ['MAT.8.2.1'],
   },
@@ -199,7 +199,7 @@ const KOORDINAT_GOREVLERI: Gorev[] = [
     tur: 'kurgu',
     genelleme: true,
     baslik: 'Her (a, b) için',
-    yonerge: 'Şimdi a = 5, b = 4. Kodu değiştirmeden çalıştır: robot (a, b) noktasına yine gidiyor mu?',
+    yonerge: 'Şimdi a = 5, b = 4. Kodu değiştirmeden çalıştır: Robot (a, b) noktasına yine gidiyor mu?',
     dunya: KOORD_5,
     hedef: NOKTAYI_KOY,
     bitkiAdi: 'bitki',
@@ -207,7 +207,7 @@ const KOORDINAT_GOREVLERI: Gorev[] = [
     baslangic: 'onceki',
     cozum: abKodu('a', 'b', 's8k5-'),
     degiskenler: ['a', 'b'],
-    ipuclari: ['Kodda sayı yok, a ve b var: değişkenler değişince robotun gideceği yer de değişir.'],
+    ipuclari: ['Kodda sayı yok, a ve b var: Değişkenler değişince robotun gideceği yer de değişir.'],
     basari: (iz) => {
       const p = sonKonum(iz);
       return `Oldu! Aynı kod bu kez ${noktaMetni(p)} noktasına gitti: a = ${deger(iz, 'a')}, b = ${deger(iz, 'b')}. Kod her (a, b) için çalışır.`;
@@ -267,7 +267,7 @@ const DOGRUSAL_GOREVLERI: Gorev[] = [
     ipuclari: [
       'x = 0 iken y kaç? x = 1 iken? Noktaları sırayla yaz: (0, 0), (1, 1) …',
       'Bir noktadan sonrakine: 1 birim sağa, 1 birim yukarı. Bu deseni tekrarla.',
-      '5 kez tekrarla: nokta koy, ileri git, sola dön, ileri git, sağa dön. Sonunda bir nokta daha koy.',
+      '5 kez tekrarla: Nokta koy, ileri git, sola dön, ileri git, sağa dön. Sonunda bir nokta daha koy.',
     ],
     basari: (iz) => {
       const d = dogruKurali(iz);
@@ -310,7 +310,7 @@ const DOGRUSAL_GOREVLERI: Gorev[] = [
       const d = dogruKurali(iz);
       return `Oldu! Eğim yine ${sayiMetni(d.m)}, ama doğru y eksenini (0, ${sayiMetni(d.b)}) noktasında kesiyor. y = 2x ile ${dogruYazisi(d.m, d.b)} paralel.`;
     },
-    soru: { metin: 'Aynı x için y = 2x + 1, y = 2x’ten kaç fazla?', birim: '', cevap: (iz) => dogruKurali(iz).b, sonrasi: 'Her x için 1 fazla: iki doğru paraleldir, hiç kesişmez.' },
+    soru: { metin: 'Aynı x için y = 2x + 1, y = 2x’ten kaç fazla?', birim: '', cevap: (iz) => dogruKurali(iz).b, sonrasi: 'Her x için 1 fazla: İki doğru paraleldir, hiç kesişmez.' },
     kazanimlar: ['MAT.8.2.2', 'MAT.8.2.3'],
   },
   {
@@ -346,7 +346,7 @@ const DOGRUSAL_GOREVLERI: Gorev[] = [
     aracKutusu: DOGRU_ARACLARI,
     baslangic: 'onceki',
     cozum: k([...yukariCik(6), ['kez', 3, ['isaretle', 'ileri', 'sagaDon', ['kez', 2, ['ileri']], 'solaDon']], 'isaretle'], 's8d5-'),
-    ipuclari: ['x = 0 iken y = 6: önce 6 birim yukarı çık.', 'Her adımda 1 birim sağa, 2 birim aşağı. Aşağı inmek için sağa dön; inince sola dönüp yine x ekseni yönüne bak.'],
+    ipuclari: ['x = 0 iken y = 6: Önce 6 birim yukarı çık.', 'Her adımda 1 birim sağa, 2 birim aşağı. Aşağı inmek için sağa dön; inince sola dönüp yine x ekseni yönüne bak.'],
     basari: (iz) => {
       const d = dogruKurali(iz);
       return `Oldu! x 1 artınca y ${sayiMetni(-d.m)} azalıyor: eğim ${sayiMetni(d.m)}. Doğru x eksenini (${sayiMetni(-d.b / d.m)}, 0) noktasında kesiyor.`;
@@ -358,7 +358,7 @@ const DOGRUSAL_GOREVLERI: Gorev[] = [
     id: 's8-dogrusal-6',
     tur: 'tahmin',
     baslik: 'x = 10 iken',
-    yonerge: 'Kodu oku: robot hangi doğrunun noktalarını işaretliyor? Kural sürerse x = 10 iken y kaç olur? Önce tahmin et, sonra çalıştır.',
+    yonerge: 'Kodu oku: Robot hangi doğrunun noktalarını işaretliyor? Kural sürerse x = 10 iken y kaç olur? Önce tahmin et, sonra çalıştır.',
     ilkGorunum: 'sozde',
     dunya: DOGRU_6,
     hedef: NOKTAYI_KOY,
@@ -437,7 +437,7 @@ function otelemeCumlesi(iz: Iz): string {
   const a = q.x - p.x;
   const b = q.y - p.y;
   const yon = [a ? `${Math.abs(a)} birim ${a > 0 ? 'sağa' : 'sola'}` : '', b ? `${Math.abs(b)} birim ${b > 0 ? 'yukarı' : 'aşağı'}` : ''].filter(Boolean).join(', ');
-  return `ŞEKİL ${noktaMetni(p)} ve ${noktaMetni(q)} noktalarında çağrıldı: her nokta ${yon} ötelendi, (x, y) → (${terim('x', a)}, ${terim('y', b)}).`;
+  return `ŞEKİL ${noktaMetni(p)} ve ${noktaMetni(q)} noktalarında çağrıldı: Her nokta ${yon} ötelendi, (x, y) → (${terim('x', a)}, ${terim('y', b)}).`;
 }
 const oteleme = (iz: Iz) => {
   const [p, q] = cagriYerleri(iz, 'ŞEKİL');
@@ -474,7 +474,7 @@ const OTELEME_GOREVLERI: Gorev[] = [
     id: 's8-oteleme-2',
     tur: 'kurgu',
     baslik: 'Sağa ve yukarı',
-    yonerge: 'Dikdörtgeni 3 birim sağa, 2 birim yukarı ötele. Görüntü gizli: nereye çizileceğini koordinatlarla bul.',
+    yonerge: 'Dikdörtgeni 3 birim sağa, 2 birim yukarı ötele. Görüntü gizli: Nereye çizileceğini koordinatlarla bul.',
     dunya: OTELE_2,
     hedef: CIZIMI_TAMAMLA,
     bitkiAdi: 'bitki',
@@ -483,7 +483,7 @@ const OTELEME_GOREVLERI: Gorev[] = [
     cozum: k([SEKIL_DIKDORTGEN, ['cagir', 'ŞEKİL'], 'kalemKaldir', ['kez', 3, ['ileri']], 'solaDon', ['kez', 2, ['ileri']], 'sagaDon', 'kalemIndir', ['cagir', 'ŞEKİL']], 's8o2-'),
     ipuclari: ['(x, y) → (x + 3, y + 2): (1, 1) köşesi hangi noktaya gider?', 'Kalem kalkıkken 3 birim sağa git, sola dön, 2 birim yukarı git, sağa dön; ŞEKİL’i yine x ekseni yönüne bakarak çağır.'],
     basari: (iz) => `Oldu! ${otelemeCumlesi(iz)}`,
-    soru: { metin: '(1, 1) köşesinin görüntüsünün ordinatı kaç?', birim: '', cevap: (iz) => 1 + oteleme(iz).b, sonrasi: '(1, 1) → (4, 3): ordinat 2 arttı.' },
+    soru: { metin: '(1, 1) köşesinin görüntüsünün ordinatı kaç?', birim: '', cevap: (iz) => 1 + oteleme(iz).b, sonrasi: '(1, 1) → (4, 3): Ordinat 2 arttı.' },
     kazanimlar: ['MAT.8.5.1', 'MAT.8.5.2'],
   },
   {
@@ -536,8 +536,8 @@ const OTELEME_GOREVLERI: Gorev[] = [
     baslangic: 'onceki',
     cozum: k([SEKIL_BAYRAK, AYNA_BAYRAK, ['cagir', 'ŞEKİL'], 'kalemKaldir', ['kez', 2, ['sagaDon']], 'ileri', 'kalemIndir', ['cagir', 'AYNA']], 's8o5-'),
     ipuclari: [
-      'Yatay aynada x aynı kalır, y değişir: direğin dibi (2, 4) ise görüntüsü hangi noktada?',
-      'Aynadaki bayrak aşağı doğru çizilir: robot AYNA’yı aşağı bakarak çağırmalı.',
+      'Yatay aynada x aynı kalır, y değişir: Direğin dibi (2, 4) ise görüntüsü hangi noktada?',
+      'Aynadaki bayrak aşağı doğru çizilir: Robot AYNA’yı aşağı bakarak çağırmalı.',
       'Kalemi kaldır, iki kez dön, 1 birim ileri git, kalemi indir, AYNA.',
     ],
     basari: (iz) => {
@@ -592,7 +592,7 @@ const US_GOREVLERI: Gorev[] = [
     id: 's8-us-1',
     tur: 'yaz',
     baslik: 'İkiye katla',
-    yonerge: 'Kuleler 1, 2, 4, 8 küp: her kule bir öncekinin 2 katı. Kodu kat değişkeniyle kur: her kule kat kadar küp, sonra kat ikiye katlansın.',
+    yonerge: 'Kuleler 1, 2, 4, 8 küp: Her kule bir öncekinin 2 katı. Kodu kat değişkeniyle kur: Her kule kat kadar küp, sonra kat ikiye katlansın.',
     dunya: KULE_1248,
     hedef: YAPIYI_KUR,
     bitkiAdi: 'bitki',
@@ -616,7 +616,7 @@ const US_GOREVLERI: Gorev[] = [
     id: 's8-us-2',
     tur: 'kurgu',
     baslik: 'Yarıya böl',
-    yonerge: 'Bu kez kuleler 8, 4, 2, 1 küp: her kule bir öncekinin yarısı. Kodunu düzelt.',
+    yonerge: 'Bu kez kuleler 8, 4, 2, 1 küp: Her kule bir öncekinin yarısı. Kodunu düzelt.',
     dunya: KULE_8421,
     hedef: YAPIYI_KUR,
     bitkiAdi: 'bitki',
@@ -646,14 +646,14 @@ const US_GOREVLERI: Gorev[] = [
     cozum: katlaKodu(1, '×', 2, 's8u3-'),
     degiskenler: ['kat'],
     ipuclari: ['Değişken kat hangi değerleri alıyor: 1, 3, 5 …?', '2 eklemek ile 2 ile çarpmak farklıdır. Kuleler eklenerek değil, katlanarak büyümeli.'],
-    basari: (iz) => `Buldun! kat + 2 ile kuleler 1, 3, 5, 7 olurdu: her kule 2 fazla (doğrusal artış). kat × 2 ile ${kuleler(iz).join(', ')}: her kule 2 katı (üslü artış).`,
+    basari: (iz) => `Buldun! kat + 2 ile kuleler 1, 3, 5, 7 olurdu: Her kule 2 fazla (doğrusal artış). kat × 2 ile ${kuleler(iz).join(', ')}: Her kule 2 katı (üslü artış).`,
     kazanimlar: ['MAT.8.1.1'],
   },
   {
     id: 's8-us-4',
     tur: 'tahmin',
     baslik: '2 üssü 10',
-    yonerge: 'Kodu oku: dron kuleleri kurduktan sonra kat değişkenine ne oluyor? Program bitince kat kaç olur? Önce tahmin et, sonra çalıştır.',
+    yonerge: 'Kodu oku: Dron kuleleri kurduktan sonra kat değişkenine ne oluyor? Program bitince kat kaç olur? Önce tahmin et, sonra çalıştır.',
     ilkGorunum: 'sozde',
     dunya: KULE_TAHMIN,
     hedef: YAPIYI_KUR,
@@ -722,8 +722,8 @@ export const SINIF8: readonly Unite[] = [
       hedef: 'Öğrenci dik koordinat sisteminde bir noktaya giden algoritmayı yazar; sıralı ikilide apsis ile ordinatı ayırt eder, robotun koordinatlarını x ve y ölçümleriyle değişkenlere kaydeder.',
       dersler: [{ baslik: '1 ders', metin: 'Fişsiz "Sınıf koordinat düzlemi" (10 dk), ardından 1–3. görevler; 4. görev (hatayı bul) ikişerli; 5. görev genelleme: aynı kod başka (a, b) için.' }],
       yanilgilar: [
-        { ad: 'x ile y’yi karıştırmak', metin: '(3, 2) ile (2, 3) noktalarını aynı sanmak ya da önce y kadar gitmek. 4. görev bunu hedefler: robot (2, 3) noktasını işaretler.' },
-        { ad: 'Ölçümü yanlış anda okumak', metin: 'apsis ← x bloğunu robot noktaya varmadan koymak: değişken o anki konumu, ör. 0’ı alır. 3. görevdeki ileti değişkenin ne olduğunu söyler.' },
+        { ad: 'x ile y’yi karıştırmak', metin: '(3, 2) ile (2, 3) noktalarını aynı sanmak ya da önce y kadar gitmek. 4. görev bunu hedefler: Robot (2, 3) noktasını işaretler.' },
+        { ad: 'Ölçümü yanlış anda okumak', metin: 'apsis ← x bloğunu robot noktaya varmadan koymak: Değişken o anki konumu, ör. 0’ı alır. 3. görevdeki ileti değişkenin ne olduğunu söyler.' },
         { ad: 'Başlangıç noktasını 1 saymak', metin: 'Orijini ilk birim sayıp bir eksik adım atmak. Nokta ağında sayılan şey noktalar değil, aralardaki birimlerdir.' },
       ],
       sorular: ['(3, 2) ile (2, 3) aynı nokta mı? Neden?', 'Bir noktanın x eksenine uzaklığı hangi koordinatı?', 'Kodda sayı yerine a ve b yazmak ne kazandırdı?', 'Robot (0, 0)’a en kısa hangi yoldan döner?'],
@@ -741,7 +741,7 @@ export const SINIF8: readonly Unite[] = [
     kalip: 'egim',
     kazanimlar: ['MAT.8.2.2', 'MAT.8.2.4', 'MAT.8.2.3'],
     sure: '2 ders saati',
-    uygunluk: 'Noktalar gizlidir: çocuk her x için y’yi hesaplar. Yanlış nokta anında gösterilir.',
+    uygunluk: 'Noktalar gizlidir: Çocuk her x için y’yi hesaplar. Yanlış nokta anında gösterilir.',
     gorevler: DOGRUSAL_GOREVLERI,
     fissiz: {
       ad: 'İnsan doğru',
@@ -752,7 +752,7 @@ export const SINIF8: readonly Unite[] = [
         'Yere koordinat ızgarası çizilir.',
         'Tahtaya y = 2x + 1 yazılır. x = 0, 1, 2, 3 değerini alan öğrenciler y’yi hesaplar ve noktalarına geçer.',
         'Robot (0, 1) noktasından başlar; "1 sağa, 2 yukarı" desenini TEKRARLA kartıyla yürür, her noktada NOKTA KOY kartını uygular.',
-        'Öğrencilerin durduğu noktalar ile robotun bıraktığı pullar karşılaştırılır: hepsi bir doğru üstünde mi?',
+        'Öğrencilerin durduğu noktalar ile robotun bıraktığı pullar karşılaştırılır: Hepsi bir doğru üstünde mi?',
         'Kural y = 6 − 2x olur; sınıf azalan deseni (1 sağa, 2 aşağı) bulur.',
       ],
       hazirlik: 'Yere bantla 8 × 8 bir ızgara ve eksenler çizin. Pul ya da tebeşir hazırlayın.',
@@ -771,7 +771,7 @@ export const SINIF8: readonly Unite[] = [
         { baslik: '2. ders', metin: '4. görev (hatayı bul) ikişerli; 5. görev azalan doğru; 6. görevde çocuk kodu okuyup x = 10 için y’yi tahmin eder.' },
       ],
       yanilgilar: [
-        { ad: 'Sabit terimi eğim sanmak', metin: 'y = x + 2’de her adımda 2 yukarı çıkmak. 4. görev bunu hedefler: robot (1, 4) noktasını işaretler.' },
+        { ad: 'Sabit terimi eğim sanmak', metin: 'y = x + 2’de her adımda 2 yukarı çıkmak. 4. görev bunu hedefler: Robot (1, 4) noktasını işaretler.' },
         { ad: 'Her doğrunun orijinden geçtiğini sanmak', metin: 'y = 2x + 1’in noktalarını (0, 0)’dan başlatmak. 3. görevde ilk nokta (0, 1)’dir.' },
         { ad: 'Azalan doğruda yönü karıştırmak', metin: 'Eğim eksi olunca yine yukarı çıkmak. 5. görevde robot sağa dönüp aşağı iner.' },
       ],
@@ -790,7 +790,7 @@ export const SINIF8: readonly Unite[] = [
     no: 3,
     ad: 'Öteleme ve yansıma',
     tema: 'Koordinat düzlemi',
-    yeniKavram: 'Kendi komutunu tanımlamak (alt program): şekli bir kez tanımla, farklı yerlerde çağır',
+    yeniKavram: 'Kendi komutunu tanımlamak (alt program): Şekli bir kez tanımla, farklı yerlerde çağır',
     oncedenBilinen: 'Koordinat düzlemi (1. ünite), yansıma (7. sınıf)',
     kalip: 'komut',
     kazanimlar: ['MAT.8.5.1', 'MAT.8.5.2', 'MAT.8.5.3'],
@@ -806,11 +806,11 @@ export const SINIF8: readonly Unite[] = [
         'Grup ŞEKİL komutunu kurar: 2 birimlik bir dikdörtgen; robot bitirince başladığı yere döner.',
         'Robot (1, 1) noktasında ŞEKİL der ve çizer; tebeşiri kaldırıp 4 birim sağa gider, yeniden ŞEKİL der.',
         'Sınıf iki dikdörtgenin köşe koordinatlarını tabloya yazar: (x, y) → (x + 4, y).',
-        'Grup bir bayrak çizer ve AYNA komutunu kurar: sağa dönüşler sola döner. Robot ayna doğrusunun öbür yanında AYNA der.',
+        'Grup bir bayrak çizer ve AYNA komutunu kurar: Sağa dönüşler sola döner. Robot ayna doğrusunun öbür yanında AYNA der.',
       ],
       hazirlik: 'Yere bantla ızgara ve eksenler çizin. İki KOMUT kartına ŞEKİL ve AYNA yazın. Robotun elinde tebeşir olsun.',
       kartlar: [
-        { komut: 'KOMUT', aciklama: 'Adı yazılı komut: altındaki kartları uygula.', adet: 2 },
+        { komut: 'KOMUT', aciklama: 'Adı yazılı komut: Altındaki kartları uygula.', adet: 2 },
         { komut: 'İLERİ', aciklama: 'Bir birim ileri git.', adet: 4 },
         { komut: 'SAĞA DÖN', aciklama: 'Yerinde sağına dön.', adet: 2 },
         { komut: 'SOLA DÖN', aciklama: 'Yerinde soluna dön.', adet: 2 },
@@ -822,12 +822,12 @@ export const SINIF8: readonly Unite[] = [
     ogretmenNotu: {
       hedef: 'Öğrenci bir şekli komut olarak tanımlar ve farklı noktalarda çağırarak öteler; noktaların koordinatlarının öteleme ve eksene göre yansımada nasıl değiştiğini koddan ve çizimden çıkarır.',
       dersler: [
-        { baslik: '1. ders', metin: 'Fişsiz "Komut kartı" (15 dk), ardından 1–2. görevler: komutu tanımla, iki yerde çağır; gizli görüntüye ötele.' },
+        { baslik: '1. ders', metin: 'Fişsiz "Komut kartı" (15 dk), ardından 1–2. görevler: Komutu tanımla, iki yerde çağır; gizli görüntüye ötele.' },
         { baslik: '2. ders', metin: '3–4. görevler (hatayı bul) ikişerli: çağrının yeri ve AYNA komutundaki dönüşler. 5. görevde ayna yataydır; bayrak aşağı çizilir.' },
       ],
       yanilgilar: [
         { ad: 'Çağrının kendiliğinden yer değiştirdiğini sanmak', metin: 'ŞEKİL’i iki kez art arda çağırıp iki şekil çizileceğini sanmak. Robot yerinden kıpırdamadığı için aynı şekli iki kez çizer. 3. görev bunu hedefler.' },
-        { ad: 'Yansımayı öteleme gibi yapmak', metin: 'AYNA komutunu ŞEKİL’in kopyası olarak yazmak: dönüşler aynı kalınca şekil aynaya göre değil, yana ötelenmiş olur. 4. görev bunu hedefler.' },
+        { ad: 'Yansımayı öteleme gibi yapmak', metin: 'AYNA komutunu ŞEKİL’in kopyası olarak yazmak: Dönüşler aynı kalınca şekil aynaya göre değil, yana ötelenmiş olur. 4. görev bunu hedefler.' },
         { ad: 'Yatay aynada yönü yansıtmamak', metin: 'Yatay aynada yukarı bakan direğin görüntüsünün aşağı baktığını unutmak. 5. görev bunu gösterir.' },
       ],
       sorular: [
@@ -836,7 +836,7 @@ export const SINIF8: readonly Unite[] = [
         'Dikey aynada (x, y) noktasının görüntüsü nedir? Yatay aynada?',
         'Öteleme ile yansımayı koddan nasıl ayırt edersin?',
       ],
-      celdiriciler: 'Bu ünitede çeldirici blok yoktur. 4–5. görevlerde hem ŞEKİL hem AYNA blokları kutudadır: hangisinin nerede çağrılacağını çocuk seçer.',
+      celdiriciler: 'Bu ünitede çeldirici blok yoktur. 4–5. görevlerde hem ŞEKİL hem AYNA blokları kutudadır: Hangisinin nerede çağrılacağını çocuk seçer.',
     },
   },
   {
@@ -857,7 +857,7 @@ export const SINIF8: readonly Unite[] = [
       sure: '10 dakika',
       roller: ['Her grup bir A4 kâğıdı katlar.', 'Bir öğrenci kat değişkenini tahtada tutar.', 'Bir öğrenci dron olur; kat kadar küple kule kurar.'],
       adimlar: [
-        'Kâğıt katlanmadan önce 1 kattır: tahtaya kat = 1 yazılır.',
+        'Kâğıt katlanmadan önce 1 kattır: Tahtaya kat = 1 yazılır.',
         'Her katlamada sınıf "kat ← kat × 2" der; tahtadaki değer güncellenir.',
         'Dron her katlamadan sonra kat kadar küple bir kule kurar: 1, 2, 4, 8.',
         'Sınıf 10 katlamada kaç kat olacağını tahmin eder: 2¹⁰ = 1024.',
@@ -883,7 +883,7 @@ export const SINIF8: readonly Unite[] = [
         { ad: 'Sıfırıncı kuvveti sıfır sanmak', metin: '2⁰’ın 0 olduğunu düşünmek. 2. görevde yarıya bölünen kulelerin sonuncusu 1 küptür: 2⁰ = 1.' },
       ],
       sorular: ['Kuleleri 10 tur sürdürseydik son kule kaç küp olurdu?', '1 + 2 + 4 + 8 neden 16’dan 1 eksik?', 'kat + 2 ile kat × 2 hangi turdan sonra çok farklılaşır?', 'Yarıya bölmeyi sürdürseydik kat hangi değerleri alırdı?'],
-      celdiriciler: 'Araç kutusundaki "kat ← kat + 1" bir şablondur: ifadenin biçimini verir, işlemi ve sayıyı çocuk seçer. "4 kez tekrarla" kule sayısı içindir.',
+      celdiriciler: 'Araç kutusundaki "kat ← kat + 1" bir şablondur: İfadenin biçimini verir, işlemi ve sayıyı çocuk seçer. "4 kez tekrarla" kule sayısı içindir.',
     },
   },
 ];

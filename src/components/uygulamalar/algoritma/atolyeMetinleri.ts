@@ -36,7 +36,7 @@ export function olcutMetinleri(a: Atolye): Olcut[] {
 
 /** Seçili sahnede "Çalıştır" doğru bitince */
 export function calismaBasariMetni(a: Atolye): string {
-  if (a.dunyaBasinaKod) return 'Bu sahada şekil tamam. Öbür sahalara geç: her sahada eksik yarıyı çizen kodu kur, sonra "Hepsini sına".';
+  if (a.dunyaBasinaKod) return 'Bu sahada şekil tamam. Öbür sahalara geç: Her sahada eksik yarıyı çizen kodu kur, sonra "Hepsini sına".';
   const s = sahneAdi(a);
   return a.dunyalar.length > 1 ? `Bu ${s.bulunma} doğru çalıştı. Şimdi "Hepsini sına" ile öbür ${s.cogulBulunma} dene.` : 'Doğru çalıştı. "Hepsini sına" ile yıldızını al.';
 }
@@ -50,7 +50,7 @@ export function sinamaMetni(a: Atolye, sonuc: SinamaSonucu, n: number, sahaIleti
   const ilkHata = sonuc.dunyalar.findIndex((d) => !d.basarili);
   if (a.dunyaBasinaKod) {
     if (sonuc.yildiz === 3) return `Üç yıldız! ${a.dunyalar.length} sahanın hepsinde eksik yarıyı çizdin; en uzun kodun ${n} ${birim}.`;
-    if (sonuc.yildiz === 2) return `İki yıldız: bütün sahalarda şekil tamam. Üçüncü yıldız için her sahada en çok ${a.enCokBlok} ${birim} (en uzun kodun ${n}).`;
+    if (sonuc.yildiz === 2) return `İki yıldız: Bütün sahalarda şekil tamam. Üçüncü yıldız için her sahada en çok ${a.enCokBlok} ${birim} (en uzun kodun ${n}).`;
     if (sonuc.yildiz === 1) return `Bir yıldız: 1. sahada şekil tamam. ${ilkHata + 1}. sahada olmadı: ${sahaIletisi(ilkHata)}`;
     return `1. sahada olmadı: ${sahaIletisi(0)}`;
   }

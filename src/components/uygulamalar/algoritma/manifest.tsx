@@ -10,7 +10,7 @@ export const manifest = {
   id: 'algoritma',
   ad: 'Algoritma Laboratuvarı',
   kisaAd: 'Algoritma',
-  aciklama: 'Robotu programla: bak, karar ver, her durumda çalışan algoritmayı kur.',
+  aciklama: 'Robotu programla: Bak, karar ver, her durumda çalışan algoritmayı kur.',
   renk: '#7f88c4',
   simge: (
     <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

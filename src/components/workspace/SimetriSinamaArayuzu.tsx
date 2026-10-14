@@ -307,7 +307,7 @@ export function SimetriSinamaCubugu({ sinama }: { sinama: SimetriSinama }) {
           ? 'Doğrunun öbür ucuna dokun'
           : animasyonda
             ? 'Katlanıyor…'
-            : '«Katla»ya bas: iki yarı örtüşecek mi?';
+            : '«Katla»ya bas: İki yarı örtüşecek mi?';
   const pasif = 'disabled:opacity-40 disabled:cursor-not-allowed';
   return (
     <KayanCubuk konum="ust" data-simetri-sinama role="status" aria-live="polite">

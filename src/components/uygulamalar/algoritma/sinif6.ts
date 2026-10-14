@@ -86,7 +86,7 @@ const FORMUL_GOREVLERI: Gorev[] = [
     ],
     basari: (iz) => {
       const o = izOzeti(iz);
-      return `Oldu! n = ${deger(iz, 'n')}: robot n = ${o.sulama} saksıyı suladı ve n + 1 = ${o.ileri} adım attı.`;
+      return `Oldu! n = ${deger(iz, 'n')}: Robot n = ${o.sulama} saksıyı suladı ve n + 1 = ${o.ileri} adım attı.`;
     },
     kazanimlar: ['MAT.6.2.3'],
     degiskenler: ['n'],
@@ -151,7 +151,7 @@ const FORMUL_GOREVLERI: Gorev[] = [
     ],
     basari: (iz) => {
       const o = izOzeti(iz);
-      return `Oldu! n = ${deger(iz, 'n')}: robot 2 × n = ${o.ileri - 1} saksının önünden geçti, ${o.sulama} saksıyı suladı.`;
+      return `Oldu! n = ${deger(iz, 'n')}: Robot 2 × n = ${o.ileri - 1} saksının önünden geçti, ${o.sulama} saksıyı suladı.`;
     },
     soru: {
       metin: 'Robot çıkışa kadar kaç adım attı?',
@@ -167,7 +167,7 @@ const FORMUL_GOREVLERI: Gorev[] = [
     id: 's6-formul-5',
     tur: 'tahmin',
     baslik: 'Formülü oku',
-    yonerge: 'Bu serada n = 5 çift saksı var. Kodu oku: tekrar sayısı bir formül. Sonra çalıştır.',
+    yonerge: 'Bu serada n = 5 çift saksı var. Kodu oku: Tekrar sayısı bir formül. Sonra çalıştır.',
     dunya: CIFT_5,
     hedef: SULAMA_HEDEFI,
     bitkiAdi: 'saksı',
@@ -378,8 +378,8 @@ const TERIM_GOREVLERI: Gorev[] = [
     cozum: terimKodu(1, TEK, 's6t1-'),
     ipuclari: [
       'Birinci kulede i = 1: 2 × 1 − 1 = 1 küp. İkincide i = 2: 2 × 2 − 1 = 3 küp.',
-      '"i ← 1" ile başla. Her kulede: ileri git, "2 × i − 1 kez tekrarla" içinde küp koy, "i ← i + 1".',
-      'Üç kule var: bu blokları "3 kez tekrarla" içine koy.',
+      '"i ← 1" ile başla. Her kulede: İleri git, "2 × i − 1 kez tekrarla" içinde küp koy, "i ← i + 1".',
+      'Üç kule var: Bu blokları "3 kez tekrarla" içine koy.',
     ],
     basari: (iz) => {
       const h = kuleler(iz);
@@ -486,7 +486,7 @@ const TERIM_GOREVLERI: Gorev[] = [
       's6t5-'
     ),
     ipuclari: [
-      'Kuleler 1, 3 ve 5 küp. Program bitince toplam 1 + 3 + 5 olmalı: her kule kurulunca o kulenin küpleri toplama eklenir.',
+      'Kuleler 1, 3 ve 5 küp. Program bitince toplam 1 + 3 + 5 olmalı: Her kule kurulunca o kulenin küpleri toplama eklenir.',
       'Döngüden önce "toplam ← 0" koy. Döngünün içinde, kule kurulduktan sonra "toplam ← toplam + (2 × i − 1)" koy: 2 × i − 1, o kulenin küp sayısıdır.',
       'Toplama bloğu "i ← i + 1"den önce gelmeli; sonra gelirse bir sonraki kulenin küpleri eklenir. Çalıştır: toplam 9 olmalı.',
     ],
@@ -571,7 +571,7 @@ const EN_GOREVLERI: Gorev[] = [
     aracKutusu: EN_KUTUSU,
     baslangic: 'onceki',
     cozum: enBuyukKodu(0, 's6e2-'),
-    ipuclari: ['Kodun domatesleri bilmeden çalışmalı: her domatesi o ana kadarki en büyükle karşılaştırıyor mu?'],
+    ipuclari: ['Kodun domatesleri bilmeden çalışmalı: Her domatesi o ana kadarki en büyükle karşılaştırıyor mu?'],
     basari: (iz) =>
       degerleri(iz, 'enBüyük').length <= 2
         ? `Oldu! enBüyük: ${degisim(iz, 'enBüyük')}. İlk domatesten sonra hiç değişmedi, çünkü ondan ağırı yok.`
@@ -632,7 +632,7 @@ const EN_GOREVLERI: Gorev[] = [
     aracKutusu: EN_KUTUSU,
     baslangic: EN_TAHMIN_KODU,
     cozum: EN_TAHMIN_KODU,
-    ipuclari: ['Her domateste sor: şimdiye kadarkilerin hepsinden ağır mı?'],
+    ipuclari: ['Her domateste sor: Şimdiye kadarkilerin hepsinden ağır mı?'],
     basari: (iz) => `enBüyük: ${degisim(iz, 'enBüyük')}. Baştaki 0’dan sonra ${degerleri(iz, 'enBüyük').length - 1} kez değişti.`,
     tahmin: {
       metin: 'Değişken enBüyük, baştaki 0’dan sonra kaç kez değişecek?',
@@ -650,7 +650,7 @@ const EN_GOREVLERI: Gorev[] = [
     tur: 'kurgu',
     zorlu: true,
     baslik: 'En hafif domates',
-    yonerge: 'Şimdi en hafif domatesi bul: kütlesi enKüçük değişkeninde kalsın. Başlangıç değerini iyi seç.',
+    yonerge: 'Şimdi en hafif domatesi bul: Kütlesi enKüçük değişkeninde kalsın. Başlangıç değerini iyi seç.',
     dunya: EN_KUCUK,
     hedef: { cikistaBitir: true, degiskenler: { enKüçük: 90 } },
     bitkiAdi: 'bitki',
@@ -745,14 +745,14 @@ export const SINIF6: readonly Unite[] = [
       roller: ['Sınıf sırayla sayar; her öğrenci bir sayı söyler.', 'Bir öğrenci hakem olur; kalanı denetler.'],
       adimlar: [
         'Sınıf 1’den başlayarak sırayla sayar.',
-        'Kural: sayı 3’e kalansız bölünüyorsa öğrenci sayı yerine "gübre!" der.',
+        'Kural: Sayı 3’e kalansız bölünüyorsa öğrenci sayı yerine "gübre!" der.',
         'Kural değişir: her 4. sayı. Sonra hem 2’nin hem 3’ün katı olan sayılar.',
         'Hakem soruyu sorar: "Hem 2’nin hem 3’ün katı olan sayılar hangi sayının katı?"',
         'Tahtada program kurulur: sıra ← sıra + 1; eğer sıra mod 3 = 0 ise gübre ver.',
       ],
       hazirlik: 'Hazırlık gerekmez. İsterseniz tahtaya 1–30 sayı şeridi yazıp katları renkli kalemle işaretleyin.',
       kartlar: [
-        { komut: 'DEĞİŞKEN', aciklama: 'sıra ← sıra + 1: sayıyı 1 artır.', adet: 1 },
+        { komut: 'DEĞİŞKEN', aciklama: 'sıra ← sıra + 1: Sayıyı 1 artır.', adet: 1 },
         { komut: 'İŞLEM', aciklama: 'sıra mod 3: 3’e bölümden kalanı bul.', adet: 1 },
         { komut: 'EĞER', aciklama: 'Kalan 0 ise içteki kartı uygula.', adet: 1 },
         { komut: 'DEĞİLSE', aciklama: 'Kalan 0 değilse bu kartı uygula.', adet: 1 },
@@ -776,7 +776,7 @@ export const SINIF6: readonly Unite[] = [
         '30 saksılık sırada kaç saksı 4’ün katıdır?',
         'Tek sayıları bulmak için hangi koşulu yazardınız?',
       ],
-      celdiriciler: 'Araç kutusunda "yaprak sarıysa" koşulu bilerek yoktur: robot yaprağı göremez, yalnız sayabilir. Böylece katlar kuralı zorunlu olur.',
+      celdiriciler: 'Araç kutusunda "yaprak sarıysa" koşulu bilerek yoktur: Robot yaprağı göremez, yalnız sayabilir. Böylece katlar kuralı zorunlu olur.',
     },
   },
   {
@@ -818,7 +818,7 @@ export const SINIF6: readonly Unite[] = [
         { baslik: '1 ders', metin: 'Fişsiz "Kule tablosu" (15 dk), ardından 1–2. görevler (tek ve çift sayı kuleleri); 3. görev ikişerli; 4. görevde önce tahmin. 5. görev zorlu: ilk n tek sayının toplamı.' },
       ],
       yanilgilar: [
-        { ad: 'i’yi 0’dan başlatmak', metin: 'Genel terim 2 × i − 1 iken i ← 0 yazmak: birinci kule −1 küp olur ve dron durur (3. görev). Formül ile başlangıç birlikte düşünülmelidir.' },
+        { ad: 'i’yi 0’dan başlatmak', metin: 'Genel terim 2 × i − 1 iken i ← 0 yazmak: Birinci kule −1 küp olur ve dron durur (3. görev). Formül ile başlangıç birlikte düşünülmelidir.' },
         { ad: 'Yalnız farka bakmak', metin: 'Örüntü 2’şer arttığı için genel terimi "i + 2" sanmak. Tablo i ile küp sayısını yan yana gösterir.' },
         { ad: 'Terimi saymakla bulmak', metin: '20. terimi bulmak için bütün terimleri yazmak. Genel terim saymadan bulur (1. görev sorusu).' },
       ],
@@ -857,10 +857,10 @@ export const SINIF6: readonly Unite[] = [
       ],
       hazirlik: 'Öğrencilere 80–250 arası sayılar yazılı kartlar dağıtın. Şampiyon kartı için silinebilir bir tahta ya da kâğıt hazırlayın.',
       kartlar: [
-        { komut: 'DEĞİŞKEN', aciklama: 'enBüyük ← 0: şampiyon kartına 0 yaz.', adet: 1 },
+        { komut: 'DEĞİŞKEN', aciklama: 'enBüyük ← 0: Şampiyon kartına 0 yaz.', adet: 1 },
         { komut: 'BAK', aciklama: 'Önündekinin sayısına bak.', adet: 1 },
         { komut: 'KARAR', aciklama: 'Bu sayı enBüyük’ten büyük mü?', adet: 1 },
-        { komut: 'DEĞİŞKEN', aciklama: 'enBüyük ← kütle: şampiyon kartına yeni sayıyı yaz.', adet: 1 },
+        { komut: 'DEĞİŞKEN', aciklama: 'enBüyük ← kütle: Şampiyon kartına yeni sayıyı yaz.', adet: 1 },
         { komut: 'İLERİ', aciklama: 'Sıradaki kişiye geç.', adet: 1 },
         { komut: 'ÇIKIŞA KADAR TEKRARLA', aciklama: 'Sıra bitene kadar içteki kartları yeniden uygula.', adet: 1 },
       ],
@@ -871,8 +871,8 @@ export const SINIF6: readonly Unite[] = [
         { baslik: '1 ders', metin: 'Fişsiz "Şampiyon kartı" (10 dk), ardından 1–2. görevler; 3–4. görevler ikişerli; 5. görevde önce tahmin. 6. görev zorlu: en küçüğü bulmak.' },
       ],
       yanilgilar: [
-        { ad: 'Çok büyük başlangıç değeri', metin: 'enBüyük’ü 1000 gibi bir sayıyla başlatmak: hiçbir domates ondan ağır olmadığı için değer hiç değişmez (3. görev).' },
-        { ad: 'Ters karşılaştırma', metin: '"kütle < enBüyük" yazmak: kod en hafifini bulur (4. görev: 80 gram). Karşılaştırmanın yönü neyi aradığımızı belirler.' },
+        { ad: 'Çok büyük başlangıç değeri', metin: 'enBüyük’ü 1000 gibi bir sayıyla başlatmak: Hiçbir domates ondan ağır olmadığı için değer hiç değişmez (3. görev).' },
+        { ad: 'Ters karşılaştırma', metin: '"kütle < enBüyük" yazmak: Kod en hafifini bulur (4. görev: 80 gram). Karşılaştırmanın yönü neyi aradığımızı belirler.' },
         { ad: 'Yalnız komşuyla karşılaştırmak', metin: 'Her domatesi yalnız bir öncekiyle karşılaştırmak. Kod her domatesi şimdiye kadarki en büyükle karşılaştırır (5. görevin tahmini).' },
       ],
       sorular: [
@@ -881,7 +881,7 @@ export const SINIF6: readonly Unite[] = [
         'enBüyük’ü ilk domatesin kütlesiyle başlatmak neden de doğru bir yol?',
         'Açıklık (en büyük − en küçük) bize veri hakkında ne söyler?',
       ],
-      celdiriciler: 'Araç kutusundaki "topla" bloğu gerekmez: domatesler yalnız tartılır. Toplayan öğrenci ham domateste durur ve tartmanın toplamaktan ayrı olduğunu görür.',
+      celdiriciler: 'Araç kutusundaki "topla" bloğu gerekmez: Domatesler yalnız tartılır. Toplayan öğrenci ham domateste durur ve tartmanın toplamaktan ayrı olduğunu görür.',
     },
   },
 ];

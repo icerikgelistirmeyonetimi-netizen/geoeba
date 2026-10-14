@@ -808,11 +808,11 @@ export function DaireGrafigi({
             {metniSigdir(
               oransiz
                 ? surukleVar
-                  ? 'Bir dilime dokunun: değeri burada görünür; sınırını sürükleyin.'
-                  : 'Bir dilime dokunun: değeri burada görünür.'
+                  ? 'Bir dilime dokunun: Değeri burada görünür; sınırını sürükleyin.'
+                  : 'Bir dilime dokunun: Değeri burada görünür.'
                 : surukleVar
-                  ? 'Bir dilime dokunun: merkez açısının hesabı burada görünür; sınırını sürükleyin.'
-                  : 'Bir dilime dokunun: merkez açısının hesabı burada görünür.',
+                  ? 'Bir dilime dokunun: Merkez açısının hesabı burada görünür; sınırını sürükleyin.'
+                  : 'Bir dilime dokunun: Merkez açısının hesabı burada görünür.',
               fs,
               alanG - 24,
             )}

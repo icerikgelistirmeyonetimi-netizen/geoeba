@@ -154,7 +154,7 @@ export function CommandAssistant({ onSelectTool }: { onSelectTool: (tool: ToolMo
         <span aria-hidden className="h-6 w-px bg-border" />
         <button type="button" onClick={toggleMic} disabled={!speech.supported} aria-pressed={micOn}
           aria-label={micOn ? 'Mikrofonu kapat' : 'Mikrofonu aç ve sesle komut ver'}
-          title={speech.supported ? (micOn ? 'Mikrofonu kapat' : 'Mikrofonu aç: kapatana kadar sesli komut verebilirsiniz') : 'Bu tarayıcı mikrofonu desteklemiyor'}
+          title={speech.supported ? (micOn ? 'Mikrofonu kapat' : 'Mikrofonu aç: Kapatana kadar sesli komut verebilirsiniz') : 'Bu tarayıcı mikrofonu desteklemiyor'}
           className={`relative flex h-10 w-10 items-center justify-center rounded-full transition-colors disabled:opacity-40 ${micOn ? 'bg-destructive text-destructive-foreground' : 'text-foreground hover:bg-muted'}`}>
           {micOn && <span aria-hidden className="absolute inset-0 animate-pulse rounded-full bg-destructive/40" style={{ transform: `scale(${1 + level * 0.35})`, transition: 'transform 80ms linear' }} />}
           {micOn ? <MicOff className="relative h-5 w-5" /> : <Mic className="h-5 w-5" />}
