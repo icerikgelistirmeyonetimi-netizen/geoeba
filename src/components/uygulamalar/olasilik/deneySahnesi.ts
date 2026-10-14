@@ -23,6 +23,7 @@ import {
   type Sablon,
   type Sonuc,
 } from './olasilik';
+import { paraKenariniCiz, paraYuzunuCiz } from './madeniPara';
 
 // ---------------------------------------------------------------------------
 // Saf yardımcılar
@@ -119,6 +120,31 @@ export function zarUstYuzu(q: THREE.Quaternion): number {
     }
   });
   return enIyi;
+}
+
+/** Verilen yönelimde yerel ekseni dünyada `yon`a en çok bakan zar yüzü. */
+function yondekiYuz(q: THREE.Quaternion, yon: THREE.Vector3): number {
+  let enIyi = 1;
+  let enIyiDeger = -Infinity;
+  const v = new THREE.Vector3();
+  YUZ_NORMALLERI.forEach((n, i) => {
+    const d = v.copy(n).applyQuaternion(q).dot(yon);
+    if (d > enIyiDeger) {
+      enIyiDeger = d;
+      enIyi = ZAR_YUZLERI[i];
+    }
+  });
+  return enIyi;
+}
+
+/**
+ * 2B yedek görünümdeki (WebGL yoksa) sayı küpünün görünen üç yüzü: üst = sonuç; ön (+Z, öğrenciye bakan) ve sağ (+X)
+ * yüzler 3B küpün aynı sonuçtaki yönelimiyle (zarYuzQuaternion, dönme 0) aynı. Böylece 2B küp de gerçek bir sayı
+ * küpü gibi görünür (karşılıklı yüzler 7) ve sonuç yine üstteki rakamdır.
+ */
+export function zarGorunenYuzler(ust: number): { ust: number; on: number; sag: number } {
+  const q = zarYuzQuaternion(ust, 0);
+  return { ust: zarUstYuzu(q), on: yondekiYuz(q, new THREE.Vector3(0, 0, 1)), sag: yondekiYuz(q, new THREE.Vector3(1, 0, 0)) };
 }
 
 /** Madeni para: X ekseni etrafındaki açıdan yukarı bakan yüz (0 → Tura, π → Yazı). */
@@ -401,67 +427,47 @@ function tuvalDokusu(boyut: number, ciz: (ctx: CanvasRenderingContext2D, s: numb
   return doku;
 }
 
-/** Madeni para yüzü: altın zemin, kenar halkası; tura → ay-yıldız, yazı → "1" ve yazı. */
 /** Para kapağı dokusunun döndürme açısı (tura +, yazı −): yazılar kameradan düz okunsun. */
 export const PARA_DOKU_DONUSU = Math.PI / 2;
 
-function paraDokusu(yuz: ParaYuzu): THREE.CanvasTexture {
-  return tuvalDokusu(512, (ctx, s) => {
-    const m = s / 2;
-    const g = ctx.createRadialGradient(m * 0.7, m * 0.7, s * 0.05, m, m, m);
-    g.addColorStop(0, '#f1d48c');
-    g.addColorStop(0.6, '#d3a95a');
-    g.addColorStop(1, '#a87a35');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, s, s);
-    ctx.strokeStyle = 'rgba(120, 80, 20, 0.7)';
-    ctx.lineWidth = s * 0.02;
-    ctx.beginPath();
-    ctx.arc(m, m, m * 0.9, 0, IKI_PI);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(255, 240, 200, 0.5)';
-    ctx.lineWidth = s * 0.01;
-    ctx.beginPath();
-    ctx.arc(m, m, m * 0.84, 0, IKI_PI);
-    ctx.stroke();
-    ctx.fillStyle = '#6d4a17';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    if (yuz === 'tura') {
-      // Ay: iki daire farkı; yıldız: beş köşeli
-      ctx.save();
-      ctx.translate(m * 0.9, m);
-      ctx.beginPath();
-      ctx.arc(0, 0, s * 0.19, 0, IKI_PI);
-      ctx.fill();
-      ctx.fillStyle = '#d3a95a';
-      ctx.beginPath();
-      ctx.arc(s * 0.07, 0, s * 0.155, 0, IKI_PI);
-      ctx.fill();
-      ctx.restore();
-      ctx.fillStyle = '#6d4a17';
-      ctx.save();
-      ctx.translate(m * 1.3, m);
-      ctx.beginPath();
-      for (let i = 0; i < 10; i++) {
-        const r = i % 2 === 0 ? s * 0.075 : s * 0.03;
-        const a = -Math.PI / 2 + (i * Math.PI) / 5;
-        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-      ctx.font = `700 ${s * 0.11}px Manrope, sans-serif`;
-      ctx.fillText('TURA', m, s * 0.8);
-    } else {
-      ctx.font = `800 ${s * 0.42}px Fraunces, Georgia, serif`;
-      ctx.fillText('1', m, m * 0.92);
-      ctx.font = `700 ${s * 0.075}px Manrope, sans-serif`;
-      ctx.fillText('TÜRK LİRASI', m, s * 0.7);
-      ctx.font = `700 ${s * 0.09}px Manrope, sans-serif`;
-      ctx.fillText('YAZI', m, s * 0.83);
-    }
-  });
+/** 3B para ölçüsü (sahne birimi): ayrıntılar (halka yazısı, silüet) okunsun diye 0,55'ten büyütüldü; kalınlık/çap ≈ 1 TL. */
+export const PARA_YARICAPI = 0.66;
+export const PARA_YARI_KALINLIK = 0.045;
+/** Para malzemelerinin metalliği: ortam yansıması olmadan yüksek metallik parayı karartır. */
+export const PARA_METALLIK = 0.3;
+/** Para dokusunun kendi ışıltısı (emissiveMap şiddeti). */
+export const PARA_ISILTI = 0.28;
+
+/**
+ * Silindir kapaklarının malzeme sırası: CylinderGeometry grupları [yan, üst kapak (+Y), alt kapak (−Y)]. Açı 0'da üst
+ * kapak yukarı bakar → paraYuzuAcidan(0) = 'tura'; açı π'de alt kapak → 'yazi'.
+ */
+export const PARA_KAPAK_YUZLERI: readonly [ParaYuzu, ParaYuzu] = ['tura', 'yazi'];
+
+/**
+ * Madeni para yüzü (gerçek 1 TL gibi; çizim madeniPara.ts): kip 'renk' → renk dokusu, 'yukseklik' → kabartma
+ * (bump) dokusu. Dışa aktarılır: test sahte tuvalle içeriği sınar.
+ */
+export function paraDokusu(yuz: ParaYuzu, kip: 'renk' | 'yukseklik' = 'renk'): THREE.CanvasTexture {
+  const doku = tuvalDokusu(1024, (ctx, s) => paraYuzunuCiz(ctx, s, yuz, kip));
+  if (kip === 'yukseklik') doku.colorSpace = THREE.NoColorSpace;
+  return doku;
+}
+
+/** Para kenarı: tırtıklı altın sarısı halka (silindir yanı). */
+export function paraKenarDokusu(kip: 'renk' | 'yukseklik' = 'renk'): THREE.CanvasTexture {
+  const doku = tuvalDokusu(512, (ctx, s) => paraKenariniCiz(ctx, s, kip));
+  if (kip === 'yukseklik') doku.colorSpace = THREE.NoColorSpace;
+  return doku;
+}
+
+/**
+ * Renkli çarkın dilim malzemesi. Ton eşleme (AgX) çarkta KAPALI: üstten güçlü aydınlanan yatay dilimlerde AgX renkleri
+ * soldurup lejanttaki/seçicideki renkten uzaklaştırıyordu (ölçüm: «Mor» griye, «Sarı» beje kayıyordu; doygunluk
+ * yarıya iniyordu). Işık ve gölge yine uygulanır; dilim rengi seçilen renge yakın görünür.
+ */
+export function carkDilimMalzemesi(renk: string): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({ color: renk, roughness: 0.6, metalness: 0.05, toneMapped: false });
 }
 
 /**
@@ -820,6 +826,11 @@ export class DeneySahnesi extends EventTarget {
     r.domElement.style.display = 'block';
     r.domElement.style.width = '100%';
     r.domElement.style.height = '100%';
+    // Bağlam daha baştan kayıpsa (tarayıcı WebGL'i bu sayfa için kapatmış) sahne kurulmaz: DeneyAlani 2B görünüme geçer
+    if (r.getContext().isContextLost()) {
+      r.dispose();
+      throw new Error('WebGL bağlamı kayıp');
+    }
     kap.appendChild(r.domElement);
     this.renderer = r;
 
@@ -976,10 +987,12 @@ export class DeneySahnesi extends EventTarget {
     adim(0);
     this.dongulemeGuncelle();
     if (this.duraklatildi || this.gizli) {
-      // Görünmezken bekletme yok: doğrudan sonuca git
+      // Görünmezken bekletme yok: doğrudan sonuca git. Son poz çizilir: döngü durmuşken çizilmezse kart yeniden
+      // görününce eski poz kalıyordu (rozet yeni sonucu, küp/para eski yüzü gösteriyordu).
       adim(1);
       this.animasyon = null;
       bitti();
+      this.ciz();
     }
   }
 
@@ -1105,26 +1118,51 @@ export class DeneySahnesi extends EventTarget {
   }
 
   private paraKur(): void {
-    const geo = new THREE.CylinderGeometry(0.55, 0.55, 0.07, 72);
-    const kenar = new THREE.MeshStandardMaterial({ color: '#c99a52', metalness: 0.85, roughness: 0.35 });
+    // Gerçek 1 TL: iki metal (altın sarısı halka + gümüş gri göbek), tırtıklı kenar, kabartma yazı ve silüet.
+    // Ortam yansıması (PMREM) KULLANILMAZ: açılış sekmesi paradır ve PMREM üretimi sahnenin en ağır GPU adımı (yalnız
+    // Galton'da); metal görünüşü dokudaki gradyan + düşük metallik + yönlü ışığın parlaması + dokunun kendi ışıltısıyla
+    // (emissiveMap) verilir: yansıyacak ortam yokken altın sarısı halka bronz gibi kararmasın.
+    const geo = new THREE.CylinderGeometry(PARA_YARICAPI, PARA_YARICAPI, PARA_YARI_KALINLIK * 2, 96);
+    const kenarRengi = paraKenarDokusu('renk');
+    const kenar = new THREE.MeshStandardMaterial({
+      map: kenarRengi,
+      bumpMap: paraKenarDokusu('yukseklik'),
+      bumpScale: 2,
+      metalness: PARA_METALLIK,
+      roughness: 0.38,
+      emissive: '#ffffff',
+      emissiveMap: kenarRengi,
+      emissiveIntensity: PARA_ISILTI,
+    });
     // Silindir kapağının UV'si (u↔z, v↔x) yazıyı kameraya göre 90° yan çeviriyordu; doku
     // merkez etrafında döndürülür (üst kapak ve aynalı alt kapak için zıt işaret)
-    const turaDokusu = paraDokusu('tura');
-    turaDokusu.center.set(0.5, 0.5);
-    turaDokusu.rotation = PARA_DOKU_DONUSU;
-    const yaziDokusu = paraDokusu('yazi');
-    yaziDokusu.center.set(0.5, 0.5);
-    yaziDokusu.rotation = -PARA_DOKU_DONUSU;
-    const tura = new THREE.MeshStandardMaterial({ map: turaDokusu, metalness: 0.7, roughness: 0.3 });
-    const yazi = new THREE.MeshStandardMaterial({ map: yaziDokusu, metalness: 0.7, roughness: 0.3 });
-    const para = new THREE.Mesh(geo, [kenar, tura, yazi]);
+    const kapak = (yuz: ParaYuzu, donus: number) => {
+      const renk = paraDokusu(yuz, 'renk');
+      const kabartma = paraDokusu(yuz, 'yukseklik');
+      for (const d of [renk, kabartma]) {
+        d.center.set(0.5, 0.5);
+        d.rotation = donus;
+      }
+      return new THREE.MeshStandardMaterial({
+        map: renk,
+        bumpMap: kabartma,
+        bumpScale: 1.6,
+        metalness: PARA_METALLIK,
+        roughness: 0.32,
+        emissive: '#ffffff',
+        emissiveMap: renk,
+        emissiveIntensity: PARA_ISILTI,
+      });
+    };
+    const [ustYuz, altYuz] = PARA_KAPAK_YUZLERI;
+    const para = new THREE.Mesh(geo, [kenar, kapak(ustYuz, PARA_DOKU_DONUSU), kapak(altYuz, -PARA_DOKU_DONUSU)]);
     para.castShadow = true;
     para.receiveShadow = true;
-    para.position.y = 0.035;
+    para.position.y = PARA_YARI_KALINLIK;
     this.nesneler.add(para);
     this.para = para;
     this.paraAcisi = 0;
-    this.golge = this.temasGolgesi(0.6);
+    this.golge = this.temasGolgesi(PARA_YARICAPI * 1.09);
   }
 
   private zarKur(adet: number): void {
@@ -1147,7 +1185,7 @@ export class DeneySahnesi extends EventTarget {
     araliklar.forEach((a, i) => {
       if (a.uzunluk <= 0) return;
       const geo = new THREE.CylinderGeometry(1.15, 1.15, 0.09, Math.max(6, Math.round((a.uzunluk / IKI_PI) * 96)), 1, false, a.baslangic, a.uzunluk);
-      const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: dilimler[i].renk, roughness: 0.6, metalness: 0.05 }));
+      const mesh = new THREE.Mesh(geo, carkDilimMalzemesi(dilimler[i].renk));
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       grup.add(mesh);
@@ -1324,7 +1362,7 @@ export class DeneySahnesi extends EventTarget {
           y = 0.22 * Math.abs(Math.sin(u * Math.PI)) * (1 - u);
           aci = hedef;
         }
-        para.position.y = 0.035 + y;
+        para.position.y = PARA_YARI_KALINLIK + y;
         para.rotation.set(aci, sallanti * (1 - kolayCikis(t)), 0);
         // Havada yalnız temas gölgesi (yönlü gölgeyle iki ayrı gölge görünmesin)
         para.castShadow = y < 0.05;
@@ -1333,7 +1371,7 @@ export class DeneySahnesi extends EventTarget {
       () => {
         this.paraAcisi = hedef;
         para.rotation.set(hedef, 0, 0);
-        para.position.y = 0.035;
+        para.position.y = PARA_YARI_KALINLIK;
         para.castShadow = true;
         bitti();
       }
@@ -1993,7 +2031,8 @@ export class DeneySahnesi extends EventTarget {
     this.sahne.clear();
     this.isik.shadow.dispose();
     this.renderer.dispose();
-    this.renderer.forceContextLoss();
+    // Bağlam zaten kayıpsa (kayıptan sonra sahne yeniden kurulurken) bırakılacak bir şey yok
+    if (!this.renderer.getContext().isContextLost()) this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
   }
 }

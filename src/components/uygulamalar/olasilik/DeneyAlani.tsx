@@ -8,6 +8,8 @@
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { DeneySahnesi, GALTON_YIGIN_KAPASITE, temsilMetni, webglDestekli, yiginOlcegi } from './deneySahnesi';
 import { KART_TURU_SEMBOLU, galtonKosuluSaglar, galtonKutuSayimlari, kartRengi, sonucEtiketi, type Sablon, type Sonuc } from './olasilik';
+import { MadeniParaSvg } from './MadeniPara2B';
+import { SvgSayiKupu, svgZarlari } from './SayiKupu2B';
 
 export interface DeneyAlaniTutamaci {
   oynat: (sonuc: Sonuc, hizli?: boolean) => void;
@@ -191,6 +193,11 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
     if (svgZamanlayici.current) window.clearTimeout(svgZamanlayici.current);
   }, []);
 
+  // Şablon değişti / sıfırlandı (son sonuç boşaldı): 2B görünümde eski şablonun sonucu kalmasın
+  useEffect(() => {
+    if (!sonSonuc) setSvgSonuc(null);
+  }, [sonSonuc]);
+
   useImperativeHandle(
     ref,
     () => ({
@@ -214,7 +221,7 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
     [webgl, svgOynat, svgSonuc]
   );
 
-  const gosterilen = webgl ? sonSonuc : svgSonuc ?? sonSonuc;
+  const gosterilen = gosterilenSonuc(webgl, sablon, sonSonuc, svgSonuc);
   const olcek = birikim ? yiginOlcegi(birikim, GALTON_YIGIN_KAPASITE) : null;
 
   const kart = (
@@ -272,38 +279,47 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
     </div>
   );
 
-  if (!birikim)
-    return (
-      <>
-        {kart}
-        {canli}
-      </>
-    );
-  // Galton: sahnenin altında küçük anahtar (renkler, ölçek, teorik eğri anahtarı)
+  // Ağaç yapısı her şablonda AYNI olmalı (sarmalayıcı + kart + canlı bölge [+ Galton anahtarı]): three'nin tuvali kart
+  // içindeki kapRef div'ine elle eklenir. Önceden Galton sarmalayıcıyla, öbür şablonlar parçayla (<>) dönüyordu; React
+  // geçişte DOM düğümlerini konumla yeniden kullanıp siliyordu ve sahne Galton'dayken kurulduysa (laboratuvar Galton'da
+  // yeniden açılınca, tema değişince) başka şablona geçişte tuval belgeden kopuyordu: sayı küpü / para kartı boş kalıyordu.
+  // canli sr-only (mutlak konumlu): sarmalayıcıda boşluk eklemez.
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5" data-deney-alani-kabi>
       {kart}
       {canli}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[13px] text-muted-foreground" data-galton-anahtar>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full" style={{ background: '#d9805f' }} aria-hidden="true" />
-          Son bilye
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full" style={{ background: '#2a9d94' }} aria-hidden="true" />
-          {olcek?.oranli ? `Birikim (1 bilye ≈ ${temsilMetni(olcek.temsil)} deneme)` : 'Birikim (1 bilye = 1 deneme)'}
-        </span>
-        <label className="ml-auto inline-flex min-h-[44px] cursor-pointer items-center gap-2 font-semibold text-foreground">
-          <input type="checkbox" className="h-5 w-5 accent-[#b9884a]" checked={teorikEgri} onChange={(e) => setTeorikEgri(e.target.checked)} data-teorik-egri />
-          <span className="inline-block w-5 border-t-2 border-dashed border-[#b9884a]" aria-hidden="true" />
-          Teorik eğri
-        </label>
-      </div>
+      {birikim && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[13px] text-muted-foreground" data-galton-anahtar>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded-full" style={{ background: '#d9805f' }} aria-hidden="true" />
+            Son bilye
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-block h-3 w-3 rounded-full" style={{ background: '#2a9d94' }} aria-hidden="true" />
+            {olcek?.oranli ? `Birikim (1 bilye ≈ ${temsilMetni(olcek.temsil)} deneme)` : 'Birikim (1 bilye = 1 deneme)'}
+          </span>
+          <label className="ml-auto inline-flex min-h-[44px] cursor-pointer items-center gap-2 font-semibold text-foreground">
+            <input type="checkbox" className="h-5 w-5 accent-[#b9884a]" checked={teorikEgri} onChange={(e) => setTeorikEgri(e.target.checked)} data-teorik-egri />
+            <span className="inline-block w-5 border-t-2 border-dashed border-[#b9884a]" aria-hidden="true" />
+            Teorik eğri
+          </label>
+        </div>
+      )}
     </div>
   );
 });
 
 const BOS_SAYIM: Record<string, number> = {};
+
+/**
+ * Kartta (rozet, 2B çizim, ekran okuyucu) gösterilecek son sonuç. 2B görünümün kendi sonucu yalnız aynı şablon türündeyse
+ * geçerli: sekme değişince «Sonuç: Yazı» sayı küpü sekmesinde kalıyordu.
+ */
+export function gosterilenSonuc(webgl: boolean | null, sablon: Sablon, sonSonuc: Sonuc | null, svgSonuc: Sonuc | null): Sonuc | null {
+  const son = sonSonuc && sonSonuc.tur === sablon.tur ? sonSonuc : null;
+  if (webgl) return son;
+  return svgSonuc && svgSonuc.tur === sablon.tur ? svgSonuc : son;
+}
 
 // ---------------------------------------------------------------------------
 // WebGL yoksa: sade SVG sürümü
@@ -314,26 +330,19 @@ function SvgDeney({ sablon, sonuc, azHareket, birikim }: { sablon: Sablon; sonuc
   const anahtar = sonuc ? JSON.stringify(sonuc) : 'yok';
   return (
     <svg viewBox="0 0 400 240" className="h-full w-full" aria-hidden="true">
-      <rect width="400" height="240" fill="#f3ead6" />
+      {/* Zemin görünüm kutusunun dışına da taşar: Galton'un uzun kartında üstte/altta boş bant kalmasın */}
+      <rect x="-400" y="-300" width="1200" height="840" fill="#f3ead6" />
       <ellipse cx="200" cy="200" rx="150" ry="22" fill="#e6dcc4" />
       <g key={anahtar} style={anim}>
         {sablon.tur === 'para' && (
-          <g transform="translate(200 120)">
-            <circle r="60" fill="#d3a95a" stroke="#a87a35" strokeWidth="6" />
-            <text textAnchor="middle" dominantBaseline="middle" fontSize="26" fontWeight="800" fill="#6d4a17">
-              {sonuc?.tur === 'para' ? (sonuc.yuz === 'tura' ? 'TURA' : 'YAZI') : '?'}
-            </text>
+          // Gerçek 1 TL gibi (madeniPara.ts): sonuç yoksa 3B'deki gibi tura yüzü
+          <g transform="translate(200 118)">
+            <MadeniParaSvg yuz={sonuc?.tur === 'para' ? sonuc.yuz : 'tura'} r={70} />
           </g>
         )}
         {sablon.tur === 'zar' &&
-          (sonuc?.tur === 'zar' ? sonuc.zarlar : [0]).map((z, i, dizi) => (
-            <g key={i} transform={`translate(${200 + (i - (dizi.length - 1) / 2) * 110} 120)`}>
-              <rect x="-45" y="-45" width="90" height="90" rx="14" fill="#fbf7ee" stroke="#d9cfb8" strokeWidth="3" />
-              <text textAnchor="middle" dominantBaseline="middle" fontSize="40" fontWeight="800" fill="#15302d">
-                {z || '?'}
-              </text>
-            </g>
-          ))}
+          // Sonuç yokken 3B'deki açılış duruşu (üstte 1; iki küpte 1 ve 3); «?» kutusu görsel yerine geçmiyordu
+          svgZarlari(sablon, sonuc).map((z, i, dizi) => <SvgSayiKupu key={i} ust={z} cx={200 + (i - (dizi.length - 1) / 2) * 135} cy={124} />)}
         {sablon.tur === 'cark' && (
           <g transform="translate(200 125)">
             {(() => {
