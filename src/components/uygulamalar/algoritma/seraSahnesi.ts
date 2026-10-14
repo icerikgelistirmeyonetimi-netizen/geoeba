@@ -2712,15 +2712,37 @@ export class SeraSahnesi {
     this.izDokulari.forEach((t) => t.dispose());
     this.ortam.dispose();
     this.renderer.dispose();
+    // renderer.dispose() GPU bağlamını bırakmaz: tuval toplanana dek canlı kalıp tarayıcının bağlam sınırını dolduruyordu
+    // (zaten kaybolmuş bağlamda uzantı alınamaz; three uyarı yazar)
+    if (!this.renderer.getContext().isContextLost()) this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
   }
 }
 
+let webglSondasi: boolean | null = null;
+
+/**
+ * WebGL var mı. Sonuç modül düzeyinde önbelleğe alınır ve sonda bağlamı hemen bırakılır (Olasılık / Sınıf / Adalar
+ * sondalarıyla aynı). Önceden her SahneAlani bağlanışında (StrictMode'da iki kez) canlı bir bağlam sızıyordu; tarayıcı
+ * 16 bağlam sınırında EN ESKİ canlı bağlamı düşürüyor, öbür uygulamaların 3B sahnesi (ör. Olasılık) boş kalıyordu.
+ */
 export function webglVar(): boolean {
+  if (typeof document === 'undefined') return false;
+  if (webglSondasi !== null) return webglSondasi;
   try {
     const c = document.createElement('canvas');
-    return !!(c.getContext('webgl2') || c.getContext('webgl'));
+    c.width = 1;
+    c.height = 1;
+    const gl = (c.getContext('webgl2') ?? c.getContext('webgl')) as WebGLRenderingContext | null;
+    webglSondasi = !!gl;
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
   } catch {
-    return false;
+    webglSondasi = false;
   }
+  return webglSondasi;
+}
+
+/** Yalnız testler için: sonda önbelleğini sıfırlar. */
+export function webglSondasiniSifirla(): void {
+  webglSondasi = null;
 }
