@@ -7,6 +7,7 @@
  */
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { DeneySahnesi, GALTON_YIGIN_KAPASITE, temsilMetni, webglDestekli, yiginOlcegi } from './deneySahnesi';
+import { baglamKaybiniIzle } from '@/components/sinif/baglamKaybi';
 import { KART_TURU_SEMBOLU, galtonKosuluSaglar, galtonKutuSayimlari, kartRengi, sonucEtiketi, type Sablon, type Sonuc } from './olasilik';
 import { MadeniParaSvg } from './MadeniPara2B';
 import { SvgSayiKupu, svgZarlari } from './SayiKupu2B';
@@ -63,6 +64,9 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
   const sonSonucRef = useRef(sonSonuc);
   sonSonucRef.current = sonSonuc;
   const [webgl, setWebgl] = useState<boolean | null>(null);
+  /** Grafik bağlamı kaybolunca artar: sahne yeni bir bağlamla yeniden kurulur (sinif/baglamKaybi.ts) */
+  const [nesil, setNesil] = useState(0);
+  const kayiplar = useRef<number[]>([]);
   const [svgSonuc, setSvgSonuc] = useState<Sonuc | null>(null);
   const svgZamanlayici = useRef<number | null>(null);
   const anahtar = kurulumAnahtari(sablon);
@@ -102,13 +106,20 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
     };
     sahne.addEventListener('bitti', dinleyici);
     sahneRef.current = sahne;
+    // Bağlam düşerse (tarayıcı bağlam sınırı, GPU sıfırlanması) tuval bütün sekmelerde kalıcı boş kalıyordu
+    const izlemeyiBirak = baglamKaybiniIzle(kap.querySelector('canvas'), kayiplar.current, {
+      ad: 'Olasılık Laboratuvarı',
+      yenidenKur: () => setNesil((n) => n + 1),
+      vazgec: () => setWebgl(false),
+    });
     return () => {
+      izlemeyiBirak();
       // Önce dispose: süren animasyonun 'bitti' olayı dinleyiciye ulaşsın, sonra dinleyici sökülür
       sahne?.dispose();
       sahne?.removeEventListener('bitti', dinleyici);
       sahneRef.current = null;
     };
-  }, [webgl, koyu, azHareket]);
+  }, [webgl, koyu, azHareket, nesil]);
 
   // Klavye: animasyon sürerken Enter / Boşluk / Escape atlar (odak nerede olursa olsun; giriş alanları hariç)
   useEffect(() => {
@@ -137,7 +148,7 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
     const son = sonSonucRef.current;
     if (son && son.tur === sablon.tur && !sahne.animasyonda) sahne.yerlestir(son);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [anahtar, webgl, koyu, azHareket]);
+  }, [anahtar, webgl, koyu, azHareket, nesil]);
 
   // Galton koşulu değişti: tahta yeniden kurulmaz, yalnız istenen kutuların vurgusu yenilenir
   useEffect(() => {
@@ -149,7 +160,7 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
   useEffect(() => {
     const b = birikimRef.current;
     if (b) sahneRef.current?.birikimGoster(b);
-  }, [birikimAnahtari, webgl, koyu, azHareket]);
+  }, [birikimAnahtari, webgl, koyu, azHareket, nesil]);
 
   useEffect(() => {
     sahneRef.current?.teorikEgri(teorikEgri);
@@ -178,7 +189,7 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
     );
     io.observe(kap);
     return () => io.disconnect();
-  }, [gizli, webgl, koyu, azHareket]);
+  }, [gizli, webgl, koyu, azHareket, nesil]);
 
   const svgOynat = useCallback(
     (sonuc: Sonuc) => {

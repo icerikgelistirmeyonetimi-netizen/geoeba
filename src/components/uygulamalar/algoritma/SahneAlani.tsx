@@ -7,6 +7,7 @@
  */
 import React, { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { SeraSahnesi, webglVar, type Donanim } from './seraSahnesi';
+import { baglamKaybiniIzle } from '@/components/sinif/baglamKaybi';
 import { izgara, type DunyaDurumu, type DunyaTanimi, type Hata } from './dunya';
 import type { Adim } from './yorumlayici';
 import { DunyaSemasi, YapiGorunumleri } from './DunyaSemasi';
@@ -40,6 +41,9 @@ export const SahneAlani = forwardRef<SahneTutamaci, SahneAlaniProps>(function Sa
   const sahneRef = useRef<SeraSahnesi | null>(null);
   const [webgl, setWebgl] = useState<boolean | null>(null);
   const [ustten, setUstten] = useState(false);
+  /** Grafik bağlamı kaybolunca artar: sahne yeni bir bağlamla yeniden kurulur */
+  const [nesil, setNesil] = useState(0);
+  const kayiplar = useRef<number[]>([]);
   const sonDurum = useRef<{ d: DunyaDurumu; hata: Hata | null } | null>(null);
   const dunyaRef = useRef(dunya);
   dunyaRef.current = dunya;
@@ -62,6 +66,12 @@ export const SahneAlani = forwardRef<SahneTutamaci, SahneAlaniProps>(function Sa
       return;
     }
     sahneRef.current = s;
+    // Bağlam düşerse (tarayıcı bağlam sınırı, GPU sıfırlanması) tuval kalıcı boş kalıyordu: sahne yeniden kurulur
+    const izlemeyiBirak = baglamKaybiniIzle(kap.querySelector('canvas'), kayiplar.current, {
+      ad: 'Algoritma',
+      yenidenKur: () => setNesil((n) => n + 1),
+      vazgec: () => setWebgl(false),
+    });
     s.kur(dunyaRef.current, donanimRef.current);
     s.usttenBak(usttenRef.current);
     if (sonDurum.current) {
@@ -69,10 +79,11 @@ export const SahneAlani = forwardRef<SahneTutamaci, SahneAlaniProps>(function Sa
       if (sonDurum.current.hata) s.hataGoster(sonDurum.current.hata);
     }
     return () => {
+      izlemeyiBirak();
       s.dispose();
       sahneRef.current = null;
     };
-  }, [webgl, koyu, azHareket]);
+  }, [webgl, koyu, azHareket, nesil]);
 
   // Dünya / donanım değişti: sıra yeniden kurulur
   const dunyaAnahtari = `${dunya.id}|${dunya.bitkiler.length}|${donanim.tank}|${donanim.sepet}|${donanim.gubre}`;
@@ -85,7 +96,7 @@ export const SahneAlani = forwardRef<SahneTutamaci, SahneAlaniProps>(function Sa
   }, [dunyaAnahtari]);
 
   useEffect(() => sahneRef.current?.usttenBak(ustten), [ustten]);
-  useEffect(() => sahneRef.current?.gorunur(!gizli), [gizli]);
+  useEffect(() => sahneRef.current?.gorunur(!gizli), [gizli, nesil]);
 
   useImperativeHandle(
     ref,

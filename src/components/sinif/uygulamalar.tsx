@@ -3,19 +3,23 @@
 /**
  * Masaüstü uygulama kayıt defteri: görev çubuğuna sabitlenmiş, masaüstü kısayolu ve Başlat menüsü
  * girişi olan uygulamalar (sırası burada belirlenir). Her uygulama bir pencerede açılır
- * (UygulamaPenceresi); gövdeler next/dynamic ile tembel yüklenir (ssr: false) ve yüklenirken
+ * (UygulamaPenceresi); gövdeler tembel yüklenir (yalnız tarayıcıda; aşağıda tembel()) ve yüklenirken
  * pencere içinde ada yükleyicisi tarzı küçük bir "hazırlanıyor" gösterilir.
+ *
+ * Tembel yükleme next/dynamic ile değil tembelYukleme.ts ile: next/dynamic (React.lazy) bir kez reddedilen parçayı
+ * kalıcı tutuyordu; yayın sonrası eski parça 404'ünde ya da ağ kopmasında pencere sayfa yenilenene kadar açılmıyordu.
  *
  * Uygulama sözleşmesi: src/components/uygulamalar/<klasör>/index.tsx → `manifest` + varsayılan
  * bileşen ({ pencereGenisligi?, pencereYuksekligi? }) ve manifest.tsx (yalnız manifest; kabuk
  * statik olarak bunu okur, gövdeyi yüklemez). Çizim Stüdyosu mevcut çalışma alanıdır
  * (WorkspaceView + başlık çubuğunda WorkspaceMenuBar).
  */
-import React, { type ComponentType } from 'react';
+import React, { Suspense, lazy, useState, type ComponentType } from 'react';
 import dynamic from 'next/dynamic';
 import { manifest as veriGrafikManifesti } from '@/components/uygulamalar/veri-grafik/manifest';
 import { ilkokulManifesti as olasilikIlkokulManifesti, manifest as olasilikManifesti } from '@/components/uygulamalar/olasilik/manifest';
 import { manifest as algoritmaManifesti } from '@/components/uygulamalar/algoritma/manifest';
+import { onbellekliYukleyici } from './tembelYukleme';
 import s from './sinif.module.css';
 
 const VARLIK_ONEKI = process.env.NEXT_PUBLIC_ASSET_PREFIX ?? '';
@@ -72,11 +76,33 @@ export function UygulamaHazirlaniyor({ ad }: { ad?: string }) {
   );
 }
 
+/**
+ * Tembel uygulama gövdesi (yalnız tarayıcıda): parça yüklenirken pencere içinde "hazırlanıyor", geçici ağ hatasında
+ * birkaç kez yeniden denenir (tembelYukleme.ts), başarılı modül saklanır (bir kez indirilir). Başarısızlık SAKLANMAZ:
+ * her bağlanış (pencere açılışı, hata sınırının «Yeniden dene»si) kendi lazy örneğini kurar ve parçayı yeniden ister.
+ * Parça yine gelmezse hata pencerenin hata sınırına (PencereHataSiniri) gider: «Yeniden dene» / «Sayfayı yenile».
+ */
 function tembel<P extends object>(yukle: () => Promise<{ default: ComponentType<P> }>, ad: string): ComponentType<P> {
-  return dynamic(yukle, {
-    ssr: false,
-    loading: () => <UygulamaHazirlaniyor ad={ad} />,
-  });
+  const yukleyici = onbellekliYukleyici(yukle);
+  function TembelUygulama(props: P) {
+    // Bağlanışta bir kez seçilir: ağaç yapısı bağlı kaldıkça değişmemeli (değişirse uygulama sökülüp yeniden kurulur)
+    const [hazir] = useState<ComponentType<P> | null>(() => yukleyici.hazir()?.default ?? null);
+    const [Gecikmeli] = useState(() => (hazir ? null : lazy(yukleyici.yukle)));
+    if (hazir) {
+      const Hazir = hazir;
+      return <Hazir {...props} />;
+    }
+    if (!Gecikmeli || typeof window === 'undefined') return <UygulamaHazirlaniyor ad={ad} />;
+    // lazy() türü ref özelliklerini de taşır; gövdeler ref almaz
+    const Govde = Gecikmeli as unknown as ComponentType<P>;
+    return (
+      <Suspense fallback={<UygulamaHazirlaniyor ad={ad} />}>
+        <Govde {...props} />
+      </Suspense>
+    );
+  }
+  TembelUygulama.displayName = `Tembel(${ad})`;
+  return TembelUygulama;
 }
 
 const CizimStudyosu = tembel<UygulamaProps>(
