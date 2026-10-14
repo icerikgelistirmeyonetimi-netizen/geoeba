@@ -76,7 +76,7 @@ describe('7. sınıf', () => {
     expect(cumle('s7-denklem-4')).toBe('Oldu! 7 kuru saksı × 2 litre = 14 litre. Su 10. saksıda bitti; nemli saksılar su harcamadı.');
     expect(cumle('s7-prizma-1')).toBe('Oldu! 3 × 2 × 2 = 12 küp: Prizmanın hacmi 12 birim küp.');
     expect(cumle('s7-prizma-4')).toBe('Oldu! Önden 4 × 2, yandan 3 × 2 görünen prizma: 4 × 3 × 2 = 24 küp.');
-    expect(cumle('s7-prizma-5')).toBe('Oldu! hacim = 2 × 3 × 4 = 24; dron da 24 küp koydu. Formül ile sayım aynı sonucu verdi.');
+    expect(cumle('s7-prizma-5')).toBe('Oldu! Hacim = 2 × 3 × 4 = 24; dron da 24 küp koydu. Formül ile sayım aynı sonucu verdi.');
     expect(cumle('s7-yansima-1')).toBe('Oldu! Başlangıç noktası aynaya 3 birim uzaktı; görüntüsü de öbür yanda 3 birim uzakta. Robot 6 birim çizmeden gitti, 5 çizgi çizdi.');
     expect(cumle('s7-yansima-4')).toBe('Buldun! Görüntüyü çizerken robot 2 kez sola, 1 kez sağa döndü; şekilde tam tersi vardı: 2 sağa, 1 sola.');
   });

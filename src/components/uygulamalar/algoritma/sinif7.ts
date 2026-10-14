@@ -340,7 +340,7 @@ const PRIZMA_1 = insaatAlani('s7-prizma-3x2x2', 'Prizma 3 × 2 × 2', ['.....', 
 const PRIZMA_2 = insaatAlani('s7-prizma-4x2x3', 'Prizma 4 × 2 × 3', ['......', 'B3333.', '.3333.', '......'], { sinar: 'Sayılar değişir' });
 const PRIZMA_3 = insaatAlani('s7-prizma-3x2x3', 'Prizma 3 × 2 × 3', ['.....', 'B333.', '.333.', '.....'], { sinar: 'En ile boy karışırsa' });
 const PRIZMA_4 = insaatAlani('s7-prizma-gizli', 'Gizli prizma', ['......', 'B2222.', '.2222.', '.2222.', '......'], { sinar: 'Önden ve yandan görünüm', hedefGizli: true });
-const PRIZMA_5 = insaatAlani('s7-prizma-degisken', 'Değişkenli prizma', ['....', 'B44.', '.44.', '.44.', '....'], { sinar: 'en, boy, yükseklik değişkenleri', degiskenler: { en: 2, boy: 3, yükseklik: 4 } });
+const PRIZMA_5 = insaatAlani('s7-prizma-degisken', 'Değişkenli prizma', ['....', 'B44.', '.44.', '.44.', '....'], { sinar: 'En, boy ve yükseklik değişkenleri', degiskenler: { en: 2, boy: 3, yükseklik: 4 } });
 
 const PRIZMA_ARACLARI: BlokSablonu[] = [ILERI, SAGA, SOLA, KOY, TEKRAR];
 const YAPIYI_KUR: Hedef = { yapiyiKur: true, cikistaBitir: false };
@@ -350,7 +350,8 @@ const PRIZMA_GOREVLERI: Gorev[] = [
     id: 's7-prizma-1',
     tur: 'yaz',
     baslik: 'Sıradan prizmaya',
-    yonerge: 'Kod prizmanın ilk sırasını kuruyor. Sıranın sonunda geri dönüp yandaki sıraya geç; bunu 2 sıra için tekrarla.',
+    // Uzman (5. tur, satır 129): "Küpü nereden bırakacağı net anlaşılmıyor" → yönergede açık söz; sahnede bırakma gölgesi
+    yonerge: 'Kod prizmanın ilk sırasını kuruyor. Sıranın sonunda geri dönüp yandaki sıraya geç; bunu 2 sıra için tekrarla. Dron küpü tam altındaki kareye bırakır: Kesikli çizgi o kareyi gösterir.',
     dunya: PRIZMA_1,
     hedef: YAPIYI_KUR,
     bitkiAdi: 'bitki',
@@ -429,7 +430,8 @@ const PRIZMA_GOREVLERI: Gorev[] = [
     tur: 'yaz',
     zorlu: true,
     baslik: 'Formülle prizma',
-    yonerge: 'Değişkenler hazır: en, boy ve yükseklik. Tekrar sayılarını bu değişkenlerle yaz; sonunda hacim ← en × boy × yükseklik hesapla.',
+    // Uzman (5. tur, satır 129): "Cümle büyük harfle başlamalı, en kelimesinin baş harfi büyük olmalı"
+    yonerge: 'En, boy ve yükseklik değişkenleri hazır. Tekrar sayılarını bu değişkenlerle yaz; sonunda hacim ← en × boy × yükseklik hesapla.',
     dunya: PRIZMA_5,
     hedef: { yapiyiKur: true, cikistaBitir: false, degiskenler: { hacim: 24 } },
     bitkiAdi: 'bitki',
@@ -439,11 +441,11 @@ const PRIZMA_GOREVLERI: Gorev[] = [
     degiskenler: ['en', 'boy', 'yükseklik', 'hacim'],
     ipuclari: [
       'Önceki kodun aynısı, ama her sayının yerinde bir değişken var. Hangi sayı en, hangisi boy?',
-      '"en kez tekrarla" bloğundaki değişkeni tıklayıp boy ya da yükseklik yapabilirsin.',
+      'Bloklardaki "en kez tekrarla" bloğunda değişkene dokunup onu boy ya da yükseklik yapabilirsin.',
     ],
     basari: (iz) => {
       const v = izOzeti(iz).degiskenler;
-      return `Oldu! hacim = ${v.en} × ${v.boy} × ${v.yükseklik} = ${v.hacim}; dron da ${izOzeti(iz).kup} küp koydu. Formül ile sayım aynı sonucu verdi.`;
+      return `Oldu! Hacim = ${v.en} × ${v.boy} × ${v.yükseklik} = ${v.hacim}; dron da ${izOzeti(iz).kup} küp koydu. Formül ile sayım aynı sonucu verdi.`;
     },
     kazanimlar: ['MAT.7.4.4', 'MAT.7.4.3'],
   },
@@ -500,23 +502,26 @@ function kalemSayimi(iz: Iz) {
   return { kalkik, sola, saga };
 }
 
+// Uzman (5. tur, satır 130): "Yansımayı daha net anlatabilmek adına robotun olmadığı taraftan aynı şeklin simetrisinin
+// çizilmesi daha uygun olur." 1. ve 2. görevde hedef gizli değil: Şeklin aynadaki görüntüsü aynanın öbür yanında (robotun
+// olmadığı yanda) soluk kesikli çizgiyle baştan görünür; öğrenci robotla o görüntüyü çizer. 3–4. görevler (hatayı bul) gizli kalır.
 const AYNA_1 = saha(
   's7-ayna-dikey',
   'Dikey ayna',
   agKur(9, 5, [1, 1], [[[1, 1], [3, 1], [3, 3], [2, 3]]], [[[7, 1], [5, 1], [5, 3], [6, 3]]]),
-  { eksen: { yon: 'dikey', k: 4 }, hedefGizli: true, sinar: 'Başlangıç ve yön yansır' }
+  { eksen: { yon: 'dikey', k: 4 }, sinar: 'Başlangıç ve yön yansır' }
 );
 const AYNA_2 = saha(
   's7-ayna-yatay',
   'Yatay ayna',
   agKur(6, 7, [1, 2], [[[1, 2], [3, 2], [3, 0], [2, 0]]], [[[1, 4], [3, 4], [3, 6], [2, 6]]]),
-  { eksen: { yon: 'yatay', k: 3 }, hedefGizli: true, sinar: 'Yatay aynada doğu doğu kalır' }
+  { eksen: { yon: 'yatay', k: 3 }, sinar: 'Yatay aynada doğu doğu kalır' }
 );
 const AYNA_3 = saha(
   's7-ayna-kalem',
   'Kanca',
   agKur(9, 5, [2, 0], [[[2, 0], [2, 1], [3, 1], [3, 3]]], [[[6, 0], [6, 1], [5, 1], [5, 3]]]),
-  { eksen: { yon: 'dikey', k: 4 }, hedefGizli: true, yon: 1, sinar: 'Kalem kalkmazsa' }
+  { eksen: { yon: 'dikey', k: 4 }, hedefGizli: true, yon: 1, sinar: 'Kalem geç kalkarsa' }
 );
 const AYNA_4 = saha(
   's7-ayna-basamak',
@@ -536,7 +541,7 @@ const YANSIMA_GOREVLERI: Gorev[] = [
     id: 's7-yansima-1',
     tur: 'yaz',
     baslik: 'Aynadaki şekil',
-    yonerge: 'Hazır kod soldaki şekli çiziyor. Aynadaki görüntüsünü çiz: Kalemi kaldırıp başlangıç noktasının yansımasına git, kalemi indir, şekli yansıt.',
+    yonerge: 'Hazır kod soldaki şekli çiziyor. Aynadaki görüntüsü sağda kesikli çizgiyle görünüyor; onu çiz: Kalemi kaldırıp başlangıç noktasının yansımasına git, kalemi indir, şekli yansıt.',
     dunya: AYNA_1,
     hedef: CIZIMI_TAMAMLA,
     bitkiAdi: 'bitki',
@@ -559,7 +564,7 @@ const YANSIMA_GOREVLERI: Gorev[] = [
     id: 's7-yansima-2',
     tur: 'kurgu',
     baslik: 'Yatay ayna',
-    yonerge: 'Ayna bu kez yatay. Şekli aynanın altına yansıt. Yatay aynada hangi yön değişir, hangisi aynı kalır?',
+    yonerge: 'Ayna bu kez yatay. Şeklin görüntüsü aynanın altında kesikli çizgiyle görünüyor; onu çiz. Yatay aynada hangi yön değişir, hangisi aynı kalır?',
     dunya: AYNA_2,
     hedef: CIZIMI_TAMAMLA,
     bitkiAdi: 'bitki',
@@ -582,14 +587,20 @@ const YANSIMA_GOREVLERI: Gorev[] = [
     id: 's7-yansima-3',
     tur: 'hata',
     baslik: 'Yolda kalan çizgi',
-    yonerge: 'Robot aynadaki başlangıca giderken şekilde olmayan bir çizgi çiziyor. Hatayı bul, düzelt.',
+    // Uzman (5. tur, satır 130): "Görev 3/4'te hata bulunması istenmiş fakat yok." Eskiden hata eksik bloktu (kodda
+    // "kalemi kaldır" hiç yoktu; okurken görülmüyordu). Şimdi kodda görünen tek hata var: "kalemi kaldır" yanlış yerde,
+    // robot aynadaki başlangıca vardıktan SONRA çalışıyor. Düzeltme: Bu bloğu en başa taşımak (çözümle tek fark).
+    yonerge: 'Robot aynadaki başlangıca giderken yolda şekilde olmayan bir çizgi çiziyor. Kodu çalıştır, çizginin nerede başladığına bak. Hatalı bloğu bul, düzelt.',
     dunya: AYNA_3,
     hedef: CIZIMI_TAMAMLA,
     bitkiAdi: 'bitki',
     aracKutusu: AYNA_ARACLARI,
-    baslangic: k(['solaDon', ['kez', 4, ['ileri']], 'sagaDon', 'kalemIndir', 'ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'ileri'], 's7y3h-'),
+    baslangic: k(['solaDon', ['kez', 4, ['ileri']], 'kalemKaldir', 'sagaDon', 'kalemIndir', 'ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'ileri'], 's7y3h-'),
     cozum: k(['kalemKaldir', 'solaDon', ['kez', 4, ['ileri']], 'sagaDon', 'kalemIndir', 'ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'ileri'], 's7y3-'),
-    ipuclari: ['Robot yola çıkarken kalemi nerede?', 'Aynadaki başlangıca çizmeden gitmeli: Yola çıkmadan önce "kalemi kaldır".'],
+    ipuclari: [
+      'Robot yola çıkarken kalemi nerede? Kodda "kalemi kaldır" bloğu ne zaman çalışıyor?',
+      'Robot aynadaki başlangıca çizmeden gitmeli. Bunun için "kalemi kaldır" bloğunu kodun en başına, yola çıkmadan önceye taşı.',
+    ],
     basari: (iz) => {
       const c = kalemSayimi(iz);
       return `Buldun! Kalem kalkıkken robot ${c.kalkik} birim çizmeden gitti; sonra ${izOzeti(iz).cizgi} çizgilik görüntüyü çizdi.`;
@@ -867,7 +878,7 @@ export const SINIF7: readonly Unite[] = [
       hedef: 'Öğrenci bir şeklin doğruya göre yansımasını kodla çizer: Kalemi kaldırıp başlangıç noktasının görüntüsüne gider, yönü yansıtır ve dönüşleri yer değiştirir.',
       dersler: [{ baslik: '1 ders', metin: 'Fişsiz "Ayna yürüyüşü" (10 dk), ardından 1–2. görevler (dikey ve yatay ayna), 3–4. görevler (hatayı bul) ikişerli.' }],
       yanilgilar: [
-        { ad: 'Kalemi kaldırmayı unutmak', metin: 'Görüntünün başlangıcına giderken kalemi yerde bırakmak: Robot şekilde olmayan bir çizgi çeker. 3. görev bunu hedefler.' },
+        { ad: 'Kalemi kaldırmayı unutmak', metin: 'Görüntünün başlangıcına giderken kalemi yerde bırakmak ya da geç kaldırmak: Robot şekilde olmayan bir çizgi çeker. 3. görevde "kalemi kaldır" bloğu yol bittikten sonra çalışır.' },
         { ad: 'Dönüşleri aynen kopyalamak', metin: 'Yansımayı öteleme gibi yapmak: aynı kodu başka yerde çalıştırmak. Aynada sağ ile sol yer değiştirir; 4. görev bunu hedefler.' },
         { ad: 'Yönü yansıtmamak', metin: 'Dikey aynada doğuya bakan robotun görüntüsünün batıya baktığını unutmak. Yatay aynada ise doğu doğu kalır (2. görev).' },
       ],

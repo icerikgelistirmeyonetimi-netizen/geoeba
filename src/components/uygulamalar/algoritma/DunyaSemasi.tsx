@@ -63,7 +63,8 @@ function SahaSemasi({ dunya, g, durum, hucre, robot, etiket }: { dunya: DunyaTan
           strokeDasharray={`${hucre * 0.16} ${hucre * 0.12}`}
         />
       )}
-      {!durum && [...g.cizgiHedef].map((k) => cizgi(k, '#216a78', hucre * 0.08, true))}
+      {/* Çizilecek çizgiler: öğretmen notunda hep; görev ekranında (WebGL yoksa) hedef gizli değilse, 3B sahnedeki gibi kesikli */}
+      {(!durum || !dunya.hedefGizli) && [...g.cizgiHedef].map((k) => cizgi(k, '#216a78', hucre * 0.08, true))}
       {[...g.cizgiVerilen].map((k) => cizgi(k, '#f3eee0', hucre * 0.12))}
       {[...g.cizgiVerilen].map((k) => cizgi(k, '#15302d', hucre * 0.04))}
       {[...cizilen].map((k) => cizgi(k, g.cizgiHedef.has(k) || g.cizgiVerilen.has(k) ? '#2a9d94' : '#d9534f', hucre * 0.1))}

@@ -52,6 +52,9 @@ export type RobotIfadesi = 'normal' | 'mutlu' | 'uzgun' | 'dusunceli';
 // ---------------------------------------------------------------------------
 // Palet
 // ---------------------------------------------------------------------------
+/** Dronun bırakma gölgesi boş karede (kök yerel y'si; karonun hemen üstü) */
+const DUSME_YER = 0.05;
+
 const RENK = {
   fildisi: '#f4efe3',
   murekkep: '#15302d',
@@ -1076,13 +1079,17 @@ export class SeraSahnesi {
     kok.add(dron);
     const dGovde = golgeli(new THREE.Mesh(new RoundedBoxGeometry(0.44, 0.15, 0.4, 3, 0.06), fildisi));
     dron.add(dGovde);
-    // Ön yüz belirgin olsun (uzman 4. tur, 7. sınıf 3. ünite: "dronun ön yüzü belirginleştirilmeli"): kubbe biraz
-    // geride; önde robotunki gibi gözlü yüz ekranı, üstte öne bakan mercan ok; ön kollar ve koruma halkaları mercan
+    // Ön yüz belirgin olsun (uzman 4. ve 5. tur, 7. sınıf 3. ünite: "dronun ön yüzü belirginleştirilmeli"): gövdenin ön
+    // yarısı mercan (arka yarısı fildişi), önde gözlü yüz ekranı, iki yanında yanan farlar ve altında öne uzanan mercan
+    // burun; üstte öne bakan açık renk ok; ön kollar ve koruma halkaları mercan. Kubbe geride.
     const kubbe = golgeli(new THREE.Mesh(new THREE.SphereGeometry(0.13, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), vurguMat));
-    kubbe.position.set(-0.04, 0.07, 0);
+    kubbe.position.set(-0.07, 0.07, 0);
     kubbe.scale.set(1.15, 0.7, 1);
     dron.add(kubbe);
     const onMat = new THREE.MeshStandardMaterial({ color: RENK.mercan, roughness: 0.42, metalness: 0.04 });
+    const onKapak = golgeli(new THREE.Mesh(new RoundedBoxGeometry(0.2, 0.156, 0.406, 3, 0.06), onMat));
+    onKapak.position.x = 0.123;
+    dron.add(onKapak);
     const dYuz = new THREE.Mesh(new RoundedBoxGeometry(0.04, 0.115, 0.32, 3, 0.03), new THREE.MeshStandardMaterial({ color: '#10252a', roughness: 0.16, metalness: 0.25 }));
     dYuz.position.set(0.214, -0.004, 0);
     dron.add(dYuz);
@@ -1092,16 +1099,46 @@ export class SeraSahnesi {
       g.position.set(0.236, 0.002, z);
       dron.add(g);
     }
+    const farMat = new THREE.MeshStandardMaterial({ color: '#fff4cf', emissive: '#ffe08a', emissiveIntensity: 1.1, roughness: 0.2 });
+    const farGeo = new THREE.SphereGeometry(0.028, 16, 10);
+    for (const z of [-0.142, 0.142]) {
+      const f = new THREE.Mesh(farGeo, farMat);
+      f.position.set(0.232, -0.03, z);
+      dron.add(f);
+    }
+    // Kubbenin önünde koyu vizör ve iki parlak göz: Yukarıdan bakan kamerada en çok kubbe görünür; ön yüz pervane
+    // korumalarının arkasında kalsa da dronun nereye baktığı kubbedeki yüzden okunur (gözler robotun ifade rengini paylaşır)
+    const vizor = new THREE.Mesh(
+      new THREE.SphereGeometry(0.134, 24, 8, Math.PI - 0.95, 1.9, 0.16 * Math.PI, 0.32 * Math.PI),
+      new THREE.MeshStandardMaterial({ color: '#10252a', roughness: 0.16, metalness: 0.25 })
+    );
+    vizor.position.copy(kubbe.position);
+    vizor.scale.copy(kubbe.scale);
+    dron.add(vizor);
+    const kubbeGozGeo = new THREE.SphereGeometry(0.02, 12, 8);
+    for (const yan of [-1, 1]) {
+      const r = 0.137;
+      const teta = 0.31 * Math.PI;
+      const fi = Math.PI - yan * 0.36;
+      const g = new THREE.Mesh(kubbeGozGeo, gozMat);
+      g.position.set(kubbe.position.x - r * Math.cos(fi) * Math.sin(teta) * kubbe.scale.x, kubbe.position.y + r * Math.cos(teta) * kubbe.scale.y, r * Math.sin(fi) * Math.sin(teta));
+      g.scale.set(0.55, 1.35, 0.85);
+      dron.add(g);
+    }
+    const burun = golgeli(new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.13, 20), onMat));
+    burun.rotation.z = -Math.PI / 2;
+    burun.position.set(0.295, -0.042, 0);
+    dron.add(burun);
     const onOkSekli = new THREE.Shape();
     onOkSekli.moveTo(0.235, 0);
-    onOkSekli.lineTo(0.105, 0.15);
-    onOkSekli.lineTo(0.145, 0);
-    onOkSekli.lineTo(0.105, -0.15);
+    onOkSekli.lineTo(0.085, 0.15);
+    onOkSekli.lineTo(0.13, 0);
+    onOkSekli.lineTo(0.085, -0.15);
     onOkSekli.closePath();
     const onOkGeo = new THREE.ShapeGeometry(onOkSekli);
     onOkGeo.rotateX(-Math.PI / 2);
-    const onOk = new THREE.Mesh(onOkGeo, onMat);
-    onOk.position.y = 0.0765;
+    const onOk = new THREE.Mesh(onOkGeo, new THREE.MeshStandardMaterial({ color: '#fbf7ee', roughness: 0.5 }));
+    onOk.position.y = 0.0795;
     dron.add(onOk);
     const kolGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.32, 10);
     const motorGeo = new THREE.CylinderGeometry(0.045, 0.05, 0.06, 16);
@@ -1155,17 +1192,21 @@ export class SeraSahnesi {
     tasinanKup.scale.setScalar(1 / 1.08);
     dron.add(tasinanKup);
 
-    // Küpün düşeceği yer: yere inen kesik çizgi (boyu kur()'da uçuş yüksekliğine göre) ve karede çerçeve.
-    // Kulenin içinde kalan parçası görünmez: çizgi kulenin üstünde, yani küpün konacağı yerde biter.
-    const dusmeMat = new THREE.MeshBasicMaterial({ color: RENK.mercan, transparent: true, opacity: 0.75, depthWrite: false });
+    // Küpün düşeceği yer: yere inen kesik çizgi (boyu kur()'da uçuş yüksekliğine göre) ve küpün konacağı yüzeyde
+    // (boş karede karonun, dolu karede kulenin üstünde; dusmeHedefiAyarla) mercan çerçeveli yarı saydam gölge kare.
+    // Kulenin içinde kalan çizgi parçası görünmez: çizgi kulenin üstünde, yani küpün konacağı yerde biter.
+    const dusmeMat = new THREE.MeshBasicMaterial({ color: RENK.mercan, transparent: true, opacity: 0.95, depthWrite: false });
     const dusmeCizgisi = new THREE.Group();
     dusmeCizgisi.visible = false;
     kok.add(dusmeCizgisi);
-    const dusmeHedefi = new THREE.Mesh(new THREE.RingGeometry(0.47, 0.54, 4, 1, Math.PI / 4), dusmeMat);
+    const dusmeHedefi = new THREE.Mesh(new THREE.RingGeometry(0.44, 0.54, 4, 1, Math.PI / 4), dusmeMat);
     dusmeHedefi.rotation.x = -Math.PI / 2;
     dusmeHedefi.position.y = 0.05;
     dusmeHedefi.renderOrder = 1;
     dusmeHedefi.visible = false;
+    const dusmeGolgesi = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.62), new THREE.MeshBasicMaterial({ color: RENK.mercan, transparent: true, opacity: 0.38, depthWrite: false }));
+    dusmeGolgesi.renderOrder = 1;
+    dusmeHedefi.add(dusmeGolgesi);
     kok.add(dusmeHedefi);
 
     kok.scale.setScalar(1.08);
@@ -2010,7 +2051,7 @@ export class SeraSahnesi {
       (c as THREE.Mesh).geometry.dispose();
     }
     const kupAlti = this.ucus + R.tasinanKup.position.y - (KUP * 0.92) / 2 / 1.08;
-    const yer = R.dusmeHedefi.position.y;
+    const yer = DUSME_YER;
     const uzunluk = kupAlti - yer;
     if (uzunluk <= 0.05) return;
     const parca = 0.09;
@@ -2018,11 +2059,26 @@ export class SeraSahnesi {
     const adim = uzunluk / n;
     const mat = R.dusmeHedefi.material as THREE.Material;
     for (let i = 0; i < n; i++) {
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, parca, 8), mat);
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, parca, 8), mat);
       m.position.y = kupAlti - i * adim - parca / 2;
       m.renderOrder = 1;
       g.add(m);
     }
+  }
+
+  /**
+   * Bırakma gölgesini küpün konacağı yüzeye taşır: kuledeki küp sayısı kadar yukarı (kök yerel ölçüsünde; kök 1,08
+   * büyütülmüş ve karonun 0,055 üstünde). Boş karede karo üstü, dolu karede kulenin tepesi.
+   */
+  private dusmeHedefiAyarla(kup: number) {
+    this.robot.dusmeHedefi.position.y = DUSME_YER + (kup * KUP) / 1.08;
+  }
+
+  /** Durumdaki dronun altındaki kulenin küp sayısı */
+  private alttakiKup(d: DunyaDurumu): number {
+    const g = this.izg;
+    if (!g || d.x < 0 || d.y < 0 || d.x >= g.en || d.y >= g.boy) return 0;
+    return d.kupler[hucreNo(g, d.x, d.y)] ?? 0;
   }
 
   // -------------------------------------------------------------------------
@@ -2073,7 +2129,10 @@ export class SeraSahnesi {
     this.katman?.guncelle(d, null);
     R.kalemUcu.position.y = d.kalem ? 0 : 0.13;
     R.tasinanKup.visible = this.tur === 'insaat';
-    if (this.tur === 'insaat') R.dron.position.y = this.ucus;
+    if (this.tur === 'insaat') {
+      R.dron.position.y = this.ucus;
+      this.dusmeHedefiAyarla(this.alttakiKup(d));
+    }
   }
 
   /** Hatanın izini kalıcı gösterir (goster'dan sonra): hata hücresinde mercan halka, boşa akan su. */
@@ -2229,12 +2288,15 @@ export class SeraSahnesi {
           const ciziyor = this.tur === 'cizim' && onceki.kalem;
           const y0 = this.yerMerkezi(onceki.x, onceki.y);
           const y1 = this.yerMerkezi(a.durum.x, a.durum.y);
+          const kup0 = this.alttakiKup(onceki);
+          const kup1 = this.alttakiKup(a.durum);
           await this.ara(s(this.tur === 'insaat' ? 0.7 : 0.55), (t) => {
             const u = hizlanYavasla(t);
             R.kok.position.lerpVectors(p0, p1, u);
             if (this.tur === 'insaat') {
-              // Dron öne eğilerek uçar
+              // Dron öne eğilerek uçar; bırakma gölgesi dronun yarı yolda geçtiği karenin yüzeyine atlar
               R.dron.rotation.z = -Math.sin(t * Math.PI) * 0.16;
+              this.dusmeHedefiAyarla(u < 0.5 ? kup0 : kup1);
             } else {
               R.govde.position.y = Math.abs(Math.sin(t * Math.PI * 2)) * 0.012;
               R.tekerlekler.forEach((w, i) => (w.rotation.y = bas[i] - tekerDon * u));

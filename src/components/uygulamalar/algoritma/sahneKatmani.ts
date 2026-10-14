@@ -199,7 +199,11 @@ export class DunyaKatmani {
     // Hazır çizgiler; çizilecek çizgilerin soluk kesikli izi (hedef gizli değilse)
     for (const kk of izg.cizgiVerilen) grup.add(this.cizgiMesh(kk, this.cizgiMatVerilen, 0.1));
     if (!this.k.dunya.hedefGizli) {
-      const izMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: koyu ? 0.28 : 0.5, depthWrite: false });
+      // Aynalı sahada hazır şekil varsa görünen hedef onun yansımasıdır (bugün yalnız 7. sınıf Yansıma 1–2, uzman 5. tur):
+      // Biraz daha belirgin çizilir. Hazır şekli olmayan aynalı sahalar (8. sınıf Bayrak ve aynası) eskisi gibi kalır.
+      const ayna = !!this.k.dunya.eksen && izg.cizgiVerilen.size > 0;
+      const izMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: ayna ? (koyu ? 0.5 : 0.85) : koyu ? 0.28 : 0.5, depthWrite: false });
+      const izEn = ayna ? 0.075 : 0.06;
       for (const kk of izg.cizgiHedef) {
         const [a, b] = this.uclar(kk);
         const boy = a.distanceTo(b);
@@ -209,7 +213,7 @@ export class DunyaKatmani {
           const t1 = (i + 0.72) / parca;
           const p0 = a.clone().lerp(b, t0);
           const p1 = a.clone().lerp(b, t1);
-          const m = new THREE.Mesh(new THREE.PlaneGeometry(p0.distanceTo(p1), 0.06), izMat);
+          const m = new THREE.Mesh(new THREE.PlaneGeometry(p0.distanceTo(p1), izEn), izMat);
           m.rotation.x = -Math.PI / 2;
           m.rotation.z = -Math.atan2(b.z - a.z, b.x - a.x);
           m.position.set((p0.x + p1.x) / 2, 0.01, (p0.z + p1.z) / 2);
