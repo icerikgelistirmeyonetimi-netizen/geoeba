@@ -122,6 +122,7 @@ import {
   kutuKoseleri,
   karsiYuz,
   ayritiDegistir,
+  ayritOlcumuGorunurlukIster,
   ayritAnahtari,
   ayritOlcusu,
   turkceSayiOku,
@@ -2195,7 +2196,13 @@ export function Canvas3D(props: Canvas3DProps) {
     if (tool === 'measure_edge') {
       const ayrit = pickEdge(ndc);
       if (ayrit) {
+        const gorunurlukIster = ayritOlcumuGorunurlukIster(olculenAyritlarRef.current, ayrit, workspace?.viewport.showMeasurements);
         setOlculenAyritlar((prev) => ayritiDegistir(prev, ayrit));
+        // 2B'deki ölçme araçları gibi: yeni ölçüm "Sade görünüm"de / "Ölçümleri göster" kapalıyken de görünsün
+        if (gorunurlukIster && workspace) {
+          workspace.setViewport((prev) => (prev.showMeasurements === false ? { ...prev, showMeasurements: true } : prev));
+          if (typeof window !== 'undefined') window.dispatchEvent(new Event('geoeba:show-measurements'));
+        }
         return;
       }
     }
