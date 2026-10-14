@@ -136,6 +136,10 @@ import {
   ikiParmakKamera,
   parmakCifti,
 } from './canvas3dDonusum';
+import { yapismaOturumuKur, yapistir, surukleKipi, pikselBasinaBirim, type YapismaOturumu } from '@/math/yapisma3d';
+import { kilavuzuGuncelle, kilavuzuTemizle, bosKilavuzDurumu, type KilavuzDurumu } from './yapismaKilavuzu3B';
+import { useYapisma3B } from './yapisma3BDurumu';
+import { Magnet } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
 /*  Sabitler                                                                   */
@@ -1399,6 +1403,14 @@ export function Canvas3D(props: Canvas3DProps) {
   // yüz, köşe, ayrıt sayısı; döndürme çeyrek dönüşlerle (ilkokul3B.ts)
   const eksenlerGorunur = kademe3BEksenleriGosterir(kademeDuzeyi);
   const ilkokul3B = kademeDuzeyi === 'ilkokul';
+  // Mıknatıs (YAP3B): açık mı + kademe profili; sürükleme oturumu ve kılavuz (src/math/yapisma3d.ts, yapismaKilavuzu3B.ts)
+  const yapisma3B = useYapisma3B();
+  const yapismaAyarRef = useRef(yapisma3B);
+  yapismaAyarRef.current = yapisma3B;
+  const yapismaOturumuRef = useRef<YapismaOturumu | null>(null);
+  const kilavuzRef = useRef<KilavuzDurumu>(bosKilavuzDurumu());
+  const sonImlecRef = useRef<{ x: number; y: number } | null>(null);
+  const yapismaBittiRef = useRef(0);
   // 2B nesneler gizliyse (ortaokul, ilkokul) sahne, isabet, gizmo ve silme onları hiç görmez
   const objects = goster2BNesneler ? workspace?.objects ?? BOS_NESNELER : BOS_NESNELER;
   const selectedObjectIds = goster2BNesneler ? workspace?.selectedObjectIds ?? BOS_KIMLIKLER : BOS_KIMLIKLER;
@@ -1896,6 +1908,17 @@ export function Canvas3D(props: Canvas3DProps) {
     }
     requestRender();
   }, [solids, effectiveSelectedIds, activeTool, objects, selectedObjectIds, aynaDuzlemi, aynaSeviyesi, otelemeOku, requestRender]);
+
+  /* ------------------------- Mıknatıs kılavuzu (YAP3B) ------------------ */
+  // Taşıma bitince (bırakma, Esc, ikinci parmak: hepsi setInteraction(null)) oturum ve kılavuz silinir.
+  useEffect(() => {
+    if (interaction?.type === 'move') return;
+    if (yapismaOturumuRef.current) yapismaBittiRef.current = performance.now();
+    yapismaOturumuRef.current = null;
+    sonImlecRef.current = null;
+    if (kilavuzuTemizle(kilavuzRef.current)) requestRender();
+  }, [interaction, requestRender]);
+  useEffect(() => () => { kilavuzuTemizle(kilavuzRef.current, true); }, []);
 
   /* --------------------------- Yardımcılar ----------------------------- */
   const getPointerNdc = useCallback((clientX: number, clientY: number): THREE.Vector2 => {
@@ -2583,6 +2606,23 @@ export function Canvas3D(props: Canvas3DProps) {
 
         if (!it.moved && Math.hypot(e.clientX - it.startClient.x, e.clientY - it.startClient.y) < 3) return;
 
+        // Mıknatıs (YAP3B): ham öteleme yapıştırma kurallarından geçer; yazım, applied, geri al ve Esc yolu aynen kalır
+        const yap = yapismaAyarRef.current;
+        if (yap.acik) {
+          sonImlecRef.current = { x: e.clientX, y: e.clientY };
+          let o = yapismaOturumuRef.current;
+          if (!o || o.kaynak !== it.startPositions) {
+            o = yapismaOturumuKur(l.solids, it.solidIds, it.startPositions, surukleKipi(it.axis, it.vertical), yap.profil, it.startPositions);
+            yapismaOturumuRef.current = o;
+          }
+          const capa = l.solids.find((s) => s.id === it.anchorId);
+          const pxBr = capa ? pikselBasinaBirim(l.basis.camera.position, l.basis.forward, getSolidCenter(capa), height) : l.camera.zoom;
+          const r = yapistir(o, { hamDelta: delta, pikselBasinaBirim: pxBr, dokunma: !(e instanceof MouseEvent), izgaraGorunur: l.camera.showGrid, geciciKapali: e.altKey });
+          delta = r.delta;
+          const t3 = threeRef.current;
+          if (t3 && kilavuzuGuncelle(t3.scene, kilavuzRef.current, r.iz, { hizaCizgisi: yap.profil.hizaCizgisi }, requestRender)) requestRender();
+        }
+
         const target: Point3D = {
           x: Number(delta.x.toFixed(2)),
           y: Number(delta.y.toFixed(2)),
@@ -2697,7 +2737,7 @@ export function Canvas3D(props: Canvas3DProps) {
       window.removeEventListener('touchend', onTouchEnd);
       window.removeEventListener('touchcancel', onTouchEnd);
     };
-  }, [getPointerNdc, intersectPlane, groundPlane, halkaVektoru]);
+  }, [getPointerNdc, intersectPlane, groundPlane, halkaVektoru, requestRender]);
 
   /* ------------------------------ Tekerlek ----------------------------- */
   useEffect(() => {
@@ -2763,6 +2803,25 @@ export function Canvas3D(props: Canvas3DProps) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [etkilesimiIptalEt, seciliyiSil]);
+
+  // Mıknatıs (YAP3B): sürüklerken Alt geçici kapatır. Alt tek başına bırakılınca Windows tarayıcısı menüye odaklanmasın; fare
+  // kıpırdamasa da kare yeniden hesaplansın diye son imleç konumuyla sentetik mousemove gönderilir.
+  useEffect(() => {
+    const onAlt = (e: KeyboardEvent) => {
+      if (e.key !== 'Alt') return;
+      const tasiyor = interactionRef.current?.type === 'move';
+      if (!tasiyor && performance.now() - yapismaBittiRef.current > 1000) return;
+      e.preventDefault();
+      const p = sonImlecRef.current;
+      if (tasiyor && p && !e.repeat) window.dispatchEvent(new MouseEvent('mousemove', { clientX: p.x, clientY: p.y, altKey: e.type === 'keydown' }));
+    };
+    window.addEventListener('keydown', onAlt);
+    window.addEventListener('keyup', onAlt);
+    return () => {
+      window.removeEventListener('keydown', onAlt);
+      window.removeEventListener('keyup', onAlt);
+    };
+  }, []);
 
   /* ------------------------- Ekran üstü bindirmeler -------------------- */
   const overlays = useMemo(() => {
@@ -2957,6 +3016,16 @@ export function Canvas3D(props: Canvas3DProps) {
             className={koseDugmesi(activeTool === 'orbit')}
           >
             <Orbit className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={yapisma3B.degistir}
+            aria-label="Mıknatıs"
+            aria-pressed={yapisma3B.acik}
+            title={ilkokul3B ? 'Mıknatıs — cisimler yan yana ve üst üste düzgün oturur' : 'Mıknatıs — taşınan cisim yanındaki ve altındaki cisme oturur, iç içe girmez (sürüklerken Alt: serbest)'}
+            className={koseDugmesi(yapisma3B.acik)}
+          >
+            <Magnet className="w-5 h-5" />
           </button>
           <button
             type="button"

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   cisimIzdusumuAnahtariVar, cisimIzdusumuVarsayilanAcik, cisimIzdusumuYalnizAd, gizliSecimBirakilir, kademe2BNesneleri3BdeGosterir,
-  kademe3BEksenleriGosterir,
+  kademe3BEksenleriGosterir, kademe3BYapismaProfili, kademe3BYapismaVarsayilanAcik,
 } from '../kademeDuzeyleri3B';
 import { KADEME_KIMLIKLERI } from '../kademeDuzeyleri';
 import { cisimIzdusumuAcikMi, cisimIzdusumunuDegistir } from '../cisimIzdusumu';
@@ -63,5 +63,19 @@ describe('görünmeyen kümenin seçimi yalnız geçişte bırakılır (denetim,
     expect(gizliSecimBirakilir(null, { etkin: true, gizli: false }, true)).toBe(false);
     expect(gizliSecimBirakilir({ etkin: true, gizli: true }, { etkin: false, gizli: true }, true)).toBe(false);
     expect(gizliSecimBirakilir(null, { etkin: false, gizli: false }, true)).toBe(false);
+  });
+});
+
+/* YAP3B (14.10.2026): Mıknatıs her kademede açık açılır; profil kademeye göre (ilkokulda her zaman ızgara, hiza çizgisi yok). */
+describe('Kademe: 3B Mıknatıs', () => {
+  it('her kademede açılışta açık', () => {
+    for (const k of [...KADEME_KIMLIKLERI, 'tum'] as const) expect(kademe3BYapismaVarsayilanAcik(k), k).toBe(true);
+  });
+  it('profiller: ilkokul her zaman ızgara + zemin engeli + hiza çizgisi yok; ortaokul otomatik + zemin engeli; lise ve tüm otomatik', () => {
+    expect(kademe3BYapismaProfili('ilkokul')).toEqual({ izgara: 'her_zaman', zeminEngel: true, hizaCizgisi: false });
+    expect(kademe3BYapismaProfili('ortaokul')).toEqual({ izgara: 'otomatik', zeminEngel: true, hizaCizgisi: true });
+    expect(kademe3BYapismaProfili('lise')).toEqual({ izgara: 'otomatik', zeminEngel: false, hizaCizgisi: true });
+    expect(kademe3BYapismaProfili('tum')).toEqual({ izgara: 'otomatik', zeminEngel: false, hizaCizgisi: true });
+    expect(Object.isFrozen(kademe3BYapismaProfili('ilkokul'))).toBe(true);
   });
 });

@@ -26,6 +26,8 @@ const EMOJISIZ_DOSYALAR = [
   'ViewCube3D.tsx',
   'treeToolDefinitions3D.tsx',
   'kademeDuzeyleri3B.ts',
+  'yapisma3BDurumu.ts',
+  'yapismaKilavuzu3B.ts',
 ];
 
 /**

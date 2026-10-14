@@ -14,9 +14,11 @@
  */
 import type { KademeDuzeyi, KademeId } from './kademeDuzeyleri';
 import type { Tool3DTreeId, TreeTool3DGroup } from './treeToolDefinitions3D';
+import type { YapismaProfili } from '@/math/yapisma3d';
 
 export const ILKOKUL_3B_ARACLARI: readonly Tool3DTreeId[] = [
   'select_move', // Taşı (MAT.2.3.4: yeri değişince biçim değişmez)
+  'yapisma', // Mıknatıs (YAP3B): küplerle yapı kurma, prizmaları yan yana dizme
   'orbit', // Döndür ve İncele ("3D Görünümü")
   'pan', // Görünümü Kaydır
   'delete', // Sil
@@ -160,4 +162,28 @@ export interface AyrimDurumu {
 export function gizliSecimBirakilir(onceki: AyrimDurumu | null, simdi: AyrimDurumu, secimVar: boolean): boolean {
   if (!simdi.etkin || !simdi.gizli || !secimVar) return false;
   return !onceki || !onceki.etkin || !onceki.gizli;
+}
+
+/* ------------------------- Mıknatıs (YAP3B, 14.10.2026) ------------------------- */
+
+/**
+ * Mıknatıs (taşınan cisim yanındaki cisme dayanır, üstüne konunca oturur, kareli zemine hizalanır) açılışta açık mı?
+ * Her kademede EVET: havadaki cisim yüksekliğini korur, ızgara yalnız yakınken çeker ve iç içe kurulmuş sahneler affedilir;
+ * bugünkü yerleşimi hiçbir kademede bozmaz (tasarım YAP3B §2). Kademe başına değiştirmek için tek yer.
+ */
+export function kademe3BYapismaVarsayilanAcik(_duzey: KademeDuzeyi): boolean {
+  return true;
+}
+
+const YAPISMA_PROFILLERI: Readonly<Record<KademeDuzeyi, YapismaProfili>> = {
+  // İlkokul: birim küp her zaman bir kareyi tam kaplar (2B ilkokul «Izgaraya Sıçra» gibi); hiza çizgisi yok, yalnız temas vurgusu
+  ilkokul: Object.freeze({ izgara: 'her_zaman', zeminEngel: true, hizaCizgisi: false }),
+  ortaokul: Object.freeze({ izgara: 'otomatik', zeminEngel: true, hizaCizgisi: true }),
+  lise: Object.freeze({ izgara: 'otomatik', zeminEngel: false, hizaCizgisi: true }),
+  tum: Object.freeze({ izgara: 'otomatik', zeminEngel: false, hizaCizgisi: true }),
+};
+
+/** Kademenin Mıknatıs profili: ilkokul { her_zaman, zemin engeli, hiza çizgisi yok } · ortaokul { otomatik, zemin engeli } · lise ve tüm { otomatik } */
+export function kademe3BYapismaProfili(duzey: KademeDuzeyi): YapismaProfili {
+  return YAPISMA_PROFILLERI[duzey] ?? YAPISMA_PROFILLERI.tum;
 }
