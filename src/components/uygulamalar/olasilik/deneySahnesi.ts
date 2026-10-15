@@ -24,6 +24,7 @@ import {
   type Sonuc,
 } from './olasilik';
 import { paraKenariniCiz, paraYuzunuCiz } from './madeniPara';
+import { TURA_GORSELI } from './turaGorseli';
 
 // ---------------------------------------------------------------------------
 // Saf yardımcılar
@@ -445,11 +446,24 @@ export const PARA_ISILTI = 0.28;
 export const PARA_KAPAK_YUZLERI: readonly [ParaYuzu, ParaYuzu] = ['tura', 'yazi'];
 
 /**
- * Madeni para yüzü (gerçek 1 TL gibi; çizim madeniPara.ts): kip 'renk' → renk dokusu, 'yukseklik' → kabartma
- * (bump) dokusu. Dışa aktarılır: test sahte tuvalle içeriği sınar.
+ * Tura yüzü ortak TCMB görselinden; yazı yüzü madeniPara.ts çiziminden gelir.
+ * Fotoğraf yükseklik haritası sayılmaz: tura için yükseklik istendiğinde düz yüz döner.
  */
-export function paraDokusu(yuz: ParaYuzu, kip: 'renk' | 'yukseklik' = 'renk'): THREE.CanvasTexture {
-  const doku = tuvalDokusu(1024, (ctx, s) => paraYuzunuCiz(ctx, s, yuz, kip));
+export function paraDokusu(yuz: ParaYuzu, kip: 'renk' | 'yukseklik' = 'renk', yuklendi?: () => void): THREE.Texture {
+  if (yuz === 'tura' && kip === 'renk') {
+    // TextureLoader aynı Texture nesnesini, gömülü görsel çözülünce günceller.
+    const doku = new THREE.TextureLoader().load(TURA_GORSELI, yuklendi);
+    doku.colorSpace = THREE.SRGBColorSpace;
+    doku.anisotropy = 4;
+    return doku;
+  }
+  const doku = tuvalDokusu(1024, (ctx, s) => {
+    if (yuz === 'tura') {
+      // Fotoğrafın ışık/gölgeleri yükseklik değildir; sahte yüz kabartması üretme.
+      ctx.fillStyle = '#808080';
+      ctx.fillRect(0, 0, s, s);
+    } else paraYuzunuCiz(ctx, s, yuz, kip);
+  });
   if (kip === 'yukseklik') doku.colorSpace = THREE.NoColorSpace;
   return doku;
 }
@@ -1118,7 +1132,7 @@ export class DeneySahnesi extends EventTarget {
   }
 
   private paraKur(): void {
-    // Gerçek 1 TL: iki metal (altın sarısı halka + gümüş gri göbek), tırtıklı kenar, kabartma yazı ve silüet.
+    // İki metal ve tırtıklı kenar; tura yüzünde gerçek Atatürk rölyefi görseli.
     // Ortam yansıması (PMREM) KULLANILMAZ: açılış sekmesi paradır ve PMREM üretimi sahnenin en ağır GPU adımı (yalnız
     // Galton'da); metal görünüşü dokudaki gradyan + düşük metallik + yönlü ışığın parlaması + dokunun kendi ışıltısıyla
     // (emissiveMap) verilir: yansıyacak ortam yokken altın sarısı halka bronz gibi kararmasın.
@@ -1137,9 +1151,10 @@ export class DeneySahnesi extends EventTarget {
     // Silindir kapağının UV'si (u↔z, v↔x) yazıyı kameraya göre 90° yan çeviriyordu; doku
     // merkez etrafında döndürülür (üst kapak ve aynalı alt kapak için zıt işaret)
     const kapak = (yuz: ParaYuzu, donus: number) => {
-      const renk = paraDokusu(yuz, 'renk');
-      const kabartma = paraDokusu(yuz, 'yukseklik');
+      const renk = paraDokusu(yuz, 'renk', () => this.ciz());
+      const kabartma = yuz === 'tura' ? null : paraDokusu(yuz, 'yukseklik');
       for (const d of [renk, kabartma]) {
+        if (!d) continue;
         d.center.set(0.5, 0.5);
         d.rotation = donus;
       }

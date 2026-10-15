@@ -2,6 +2,11 @@
 
 import React, { useState } from 'react';
 import { formatTurkishNumber } from '@/math/coordinates';
+import { DEFAULT_STYLE_SETTINGS, type StyleSettings } from '@/types/workspace';
+import { turYaziBoyu } from '@/math/etiketStandardi';
+import { metinDugumleri, metniSeslendir } from '@/math/matematikYazimi';
+import { kutuOlcusu } from '@/math/yazimDuzeni';
+import { MatematikEtiketi } from './MatematikEtiketi';
 import { ILKOKUL_DONUSLERI, ilkokulDonusAcisi, ilkokulDonusAdi, type DonusYonu } from './ilkokulKipi';
 
 interface RotateGizmoProps {
@@ -18,6 +23,9 @@ interface RotateGizmoProps {
    * saat yönünün tersine); sürükleme okuması da dönüşün adını yazar (TYMM MAT.4.3.5: açı bir dönme miktarıdır).
    */
   ilkokul?: boolean;
+  /** Canlı derece ölçüsü, tuvaldeki diğer ölçülerle aynı ayarlardan çizilir. */
+  stil?: StyleSettings;
+  olcek?: number;
 }
 
 const HAZIR_DERECELER = [30, 45, 60, 90, 120, 135, 180, 270];
@@ -31,9 +39,13 @@ const HAZIR_DERECELER = [30, 45, 60, 90, 120, 135, 180, 270];
  * Çokgen, yay ve daire dilimi katmanlarının hepsi bu bileşeni kullanır; böylece
  * palet her şekilde aynı görünür ve tek yerden değişir.
  */
-export function RotateGizmo({ center, feedbackDeg, onFreeRotateStart, onRotate, ilkokul = false }: RotateGizmoProps) {
+export function RotateGizmo({ center, feedbackDeg, onFreeRotateStart, onRotate, ilkokul = false, stil = DEFAULT_STYLE_SETTINGS, olcek = 1 }: RotateGizmoProps) {
   const [yon, setYon] = useState<DonusYonu>('saat');
   const ilkokulOkumasi = ilkokul && feedbackDeg !== null ? ilkokulDonusAdi(feedbackDeg) : '';
+  const dereceMetni = feedbackDeg === null ? '' : formatTurkishNumber(feedbackDeg) + '°';
+  const dereceSatirlari = [metinDugumleri(dereceMetni)];
+  const derecePx = turYaziBoyu('olcu', stil);
+  const dereceOlcusu = kutuOlcusu(dereceSatirlari, derecePx);
   return (
     <g className="rotate-gizmo-layer select-none">
       {/* A) Merkez Döndürme Noktası (Pivot) */}
@@ -109,20 +121,13 @@ export function RotateGizmo({ center, feedbackDeg, onFreeRotateStart, onRotate, 
 
       {/* D) Canlı Sürükleme Derecesi */}
       {!ilkokul && feedbackDeg !== null && (
-        <g transform={`translate(${center.x}, ${center.y - 82})`}>
-          <rect
-            x="-35"
-            y="-13"
-            width="70"
-            height="26"
-            rx="8"
-            fillOpacity={0.96}
-            strokeWidth="1.5"
-            className="fill-ada-murekkep stroke-ada-mercan shadow-2xl"
+        <g className="pointer-events-none">
+          <MatematikEtiketi
+            x={center.x} y={center.y - 72 - dereceOlcusu.yukseklik * olcek / 2}
+            satirlar={dereceSatirlari} olcu={dereceOlcusu} px={derecePx} olcek={olcek}
+            renk="on" sesli={metniSeslendir(dereceMetni)} ipucu={dereceMetni}
+            kutu={{ sinif: 'fill-background/90 stroke-border' }} kutuGizli={!stil.showLabelBoxes}
           />
-          <text x="0" y="5" textAnchor="middle" className="fill-ada-fildisi font-black text-xs font-mono">
-            {formatTurkishNumber(feedbackDeg)}°
-          </text>
         </g>
       )}
 

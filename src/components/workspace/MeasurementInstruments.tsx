@@ -13,6 +13,11 @@
  */
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { turYaziBoyu } from '@/math/etiketStandardi';
+import { labelFontScale } from '@/math/labelViewport';
+import { metinDugumleri, metniSeslendir } from '@/math/matematikYazimi';
+import { kutuOlcusu } from '@/math/yazimDuzeni';
+import { MatematikEtiketi } from './MatematikEtiketi';
 import {
   LayoutGrid,
   LocateFixed,
@@ -80,8 +85,6 @@ import {
   iletkidenAciNesneleri,
   iletkiyiYerlestir,
   normalizeDeg,
-  okumaGenisligi,
-  okumaKonumu,
   olcmeAraciMi,
   tabanOkumasi,
   tutamactanUzaklastir,
@@ -166,9 +169,7 @@ const CENTIK_ORTA = 'stroke-ada-murekkep/70 dark:stroke-ada-fildisi/70 pointer-e
 const CENTIK_INCE = 'stroke-ada-murekkep/45 dark:stroke-ada-fildisi/45 pointer-events-none';
 const SAYI = 'fill-ada-murekkep dark:fill-ada-fildisi font-sans font-semibold tabular-nums pointer-events-none select-none';
 /** Zeminden bağımsız okunur kalsın diye yazının arkasında zemin renginde hale */
-const HALE: React.CSSProperties = { paintOrder: 'stroke', strokeLinejoin: 'round' };
-const BILGI_YAZISI =
-  'fill-ada-deniz-koyu dark:fill-ada-vurgu stroke-ada-fildisi dark:stroke-ada-deniz-koyu font-sans font-semibold tabular-nums pointer-events-none select-none';
+const OLCU_KUTUSU = { sinif: 'fill-background/90 stroke-border' };
 
 type TutamacRengi = 'mercan' | 'vurgu';
 
@@ -284,7 +285,32 @@ export function MeasurementInstruments({
     menuyuAc: () => undefined,
   });
 
-  const { setActiveTool, addObjects, objects } = useWorkspace();
+  const { setActiveTool, addObjects, objects, styleSettings } = useWorkspace();
+  const olcuPx = turYaziBoyu('olcu', styleSettings);
+  const olcuOlcegi = labelFontScale(viewport, styleSettings.yaziAltSiniri);
+  // Ölçü kutusu ve yerleşim aynı yazı ölçüsünden hesaplanır; dar tuvalde uzun okumalar satırlanır.
+  const olcuHazirla = (metin: string) => {
+    const satirMetinleri: string[] = [];
+    let satir = '';
+    const enFazla = Math.max(1, viewport.width - 12);
+    for (const sozcuk of metin.split(/\s+/)) {
+      const aday = satir ? satir + ' ' + sozcuk : sozcuk;
+      if (satir && kutuOlcusu([metinDugumleri(aday)], olcuPx).genislik * olcuOlcegi > enFazla) {
+        satirMetinleri.push(satir); satir = sozcuk;
+      } else satir = aday;
+    }
+    satirMetinleri.push(satir);
+    const satirlar = satirMetinleri.map(metinDugumleri);
+    const olcu = kutuOlcusu(satirlar, olcuPx);
+    return { metin, satirlar, olcu, genislik: olcu.genislik * olcuOlcegi, yukseklik: olcu.yukseklik * olcuOlcegi };
+  };
+  const olcuCiz = (yazi: ReturnType<typeof olcuHazirla>, x: number, y: number) => (
+    <MatematikEtiketi
+      x={x} y={y} satirlar={yazi.satirlar} olcu={yazi.olcu}
+      px={olcuPx} olcek={olcuOlcegi} renk="on" sesli={metniSeslendir(yazi.metin)} ipucu={yazi.metin}
+      kutu={OLCU_KUTUSU} kutuGizli={!styleSettings.showLabelBoxes}
+    />
+  );
   // İlkokul: açıölçer derece okuması vermez (yalnız tanıtım); alan modeli çarpma değil birim kare sayısı yazar
   const ilkokul = useIlkokulKipi();
   const gorunur = olcmeAraciMi(activeTool);
@@ -735,18 +761,17 @@ export function MeasurementInstruments({
 
   /** Sürüklenen tutamacın anlık okuması (döndürülmemiş katmanda; hep dik ve en üstte) */
   const okumaHapi = (metin: string, tutamacEkran: Point2D) => {
-    const w = okumaGenisligi(metin);
-    const p = okumaKonumu(tutamacEkran, w, viewport);
+    const yazi = olcuHazirla(metin);
+    const yariW = yazi.genislik / 2, yariH = yazi.yukseklik / 2;
+    const sinirla = (n: number, yari: number, boy: number) => boy < 2 * (yari + 6)
+      ? boy / 2 : Math.max(yari + 6, Math.min(boy - yari - 6, n));
+    const mesafe = Math.max(46, yariH + 24);
+    let y = tutamacEkran.y - mesafe;
+    if (y - yariH < 6) y = tutamacEkran.y + mesafe;
+    const p = { x: sinirla(tutamacEkran.x, yariW, viewport.width), y: sinirla(y, yariH, viewport.height) };
     return (
-      <g data-anlik-okuma="" className="pointer-events-none" transform={`translate(${p.x} ${p.y})`}>
-        <rect x={-w / 2} y={-14} width={w} height={28} rx={14} className="fill-ada-murekkep/90 dark:fill-ada-fildisi/95" />
-        <text
-          y={4.5}
-          textAnchor="middle"
-          className="fill-ada-fildisi dark:fill-ada-murekkep text-[13px] font-semibold font-sans tabular-nums select-none"
-        >
-          {metin}
-        </text>
+      <g data-anlik-okuma="" className="pointer-events-none select-none">
+        {olcuCiz(yazi, p.x, p.y)}
       </g>
     );
   };
@@ -934,9 +959,9 @@ export function MeasurementInstruments({
         </g>
 
         {gosterim.olcu && !ilkokul && aktifTutamac !== 'kol' && (
-          <text x={yazi.x} y={yazi.y + 4} textAnchor="middle" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
-            {iletkiOkumasi(a)}
-          </text>
+          <g className="pointer-events-none select-none">
+            {olcuCiz(olcuHazirla(iletkiOkumasi(a)), yazi.x, yazi.y)}
+          </g>
         )}
         {aktifTutamac === 'kol' && !ilkokul && okumaHapi(iletkiOkumasi(a), yereldenEkrana(koken, donus, kolTopuz))}
         {aktifTutamac === 'taban' && !ilkokul && okumaHapi(tabanOkumasi(taban), yereldenEkrana(koken, donus, tabanTopuz))}
@@ -1135,7 +1160,14 @@ export function MeasurementInstruments({
     const H = satir * z;
     const kayma = alanKoseKaymasi(z);
     const koseTopuz = { x: W + kayma, y: -H - kayma };
-    const kenarYazilari = W >= 44 && H >= 44;
+    const sutunYazisi = olcuHazirla(sutun + ' br');
+    const satirYazisi = olcuHazirla(satir + ' br');
+    const alanYazisi = olcuHazirla(ilkokul ? ilkokulAlanOkumasi(sutun, satir) : alanOkumasi(sutun, satir));
+    const cevreYazisi = olcuHazirla(cevreOkumasi(sutun, satir));
+    const kenarYazilari = W >= 44 && H >= Math.max(44, satirYazisi.yukseklik);
+    const alanGorunur = gosterim.alan && aktifTutamac !== 'kose';
+    const alanY = 8 + alanYazisi.yukseklik / 2;
+    const cevreY = 8 + (alanGorunur ? alanYazisi.yukseklik + 6 : 0) + cevreYazisi.yukseklik / 2;
     let cift = '';
     let tek = '';
     for (let r = 0; r < satir; r++) {
@@ -1190,35 +1222,16 @@ export function MeasurementInstruments({
               )}
           </g>
 
-          {/* Kenar uzunlukları ve alan/çevre: yalnız yazı (hap ya da düğme yok).
-              Model çok küçükse (uzak plan) kenar yazıları köşe tutamacıyla üst üste binerdi: gizlenir. */}
-          {kenarYazilari && (
-            <>
-              <text x={W / 2} y={-H - 8} textAnchor="middle" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
-                {sutun} br
-              </text>
-              <text x={-8} y={-H / 2 + 4} textAnchor="end" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
-                {satir} br
-              </text>
-            </>
-          )}
-          {gosterim.alan && aktifTutamac !== 'kose' && (
-            <text x={W / 2} y={22} textAnchor="middle" strokeWidth={3} style={HALE} className={`text-[12px] ${BILGI_YAZISI}`}>
-              {ilkokul ? ilkokulAlanOkumasi(sutun, satir) : alanOkumasi(sutun, satir)}
-            </text>
-          )}
-          {gosterim.cevre && (
-            <text
-              x={W / 2}
-              y={gosterim.alan ? 40 : 22}
-              textAnchor="middle"
-              strokeWidth={3}
-              style={HALE}
-              className={`text-[11px] ${BILGI_YAZISI}`}
-            >
-              {cevreOkumasi(sutun, satir)}
-            </text>
-          )}
+          {/* Yazı kutusu büyüdüğünde de kenarlardan dışarı ve birbirinden ayrı kalır.
+              Çok küçük modelde yan yazı üst/alt okumaya değmesin diye kenarlar gizlenir. */}
+          <g className="pointer-events-none select-none">
+            {kenarYazilari && <>
+              {olcuCiz(sutunYazisi, W / 2, -H - 8 - sutunYazisi.yukseklik / 2)}
+              {olcuCiz(satirYazisi, -8 - satirYazisi.genislik / 2, -H / 2)}
+            </>}
+            {alanGorunur && olcuCiz(alanYazisi, W / 2, alanY)}
+            {gosterim.cevre && olcuCiz(cevreYazisi, W / 2, cevreY)}
+          </g>
 
           {tutamacCiz({
             tur: 'kose',

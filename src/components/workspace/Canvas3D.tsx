@@ -104,7 +104,7 @@ import {
   type Tema3B,
 } from './etiket3B';
 import { turYaziBoyu, yakinlikOlceklenir, yaziOlcegi3B, type YaziBoyuAyarlari } from '@/math/etiketStandardi';
-import { yazimAyari } from '@/math/matematikYazimi';
+import { metinDugumleri, metniSeslendir, yazimAyari } from '@/math/matematikYazimi';
 import { DEFAULT_STYLE_SETTINGS } from '@/types/workspace';
 import { tamSayiOlcuEtkin } from './olcuYuvarlama';
 import { MatematikEtiketi } from './MatematikEtiketi';
@@ -3190,20 +3190,37 @@ export function Canvas3D(props: Canvas3DProps) {
           interaction.currentScreen.y - interaction.startScreen.y
         );
         const size = Math.max(2, Math.min(8, distPx / 20));
+        const metin = `≈ ${formatTurkishNumber(size, 1)} br`;
         return (
-          <div
-            className="absolute z-10 rounded-full border-2 border-dashed border-ada-lavanta bg-ada-lavanta/10 pointer-events-none flex items-center justify-center"
-            style={{
-              left: interaction.startScreen.x - distPx,
-              top: interaction.startScreen.y - distPx,
-              width: distPx * 2,
-              height: distPx * 2,
-            }}
-          >
-            <span className="px-2 py-0.5 rounded-md bg-ada-murekkep text-ada-fildisi text-[10px] font-black whitespace-nowrap">
-              ≈ {formatTurkishNumber(size, 1)} br
-            </span>
-          </div>
+          <>
+            <div
+              className="absolute z-10 rounded-full border-2 border-dashed border-ada-lavanta bg-ada-lavanta/10 pointer-events-none"
+              style={{
+                left: interaction.startScreen.x - distPx,
+                top: interaction.startScreen.y - distPx,
+                width: distPx * 2,
+                height: distPx * 2,
+              }}
+            />
+            <svg
+              className="absolute inset-0 z-10 w-full h-full overflow-visible pointer-events-none"
+              width={dimensions.width}
+              height={dimensions.height}
+            >
+              <MatematikEtiketi
+                satirlar={[metinDugumleri(metin)]}
+                x={interaction.startScreen.x}
+                y={interaction.startScreen.y}
+                px={turYaziBoyu('olcu', etiketStili)}
+                olcek={yaziOlcegi}
+                renk="on"
+                kutu={{ sinif: 'fill-background/95 stroke-border' }}
+                kutuGizli={!stil.showLabelBoxes}
+                sesli={metniSeslendir(metin)}
+                ipucu={metin}
+              />
+            </svg>
+          </>
         );
       })()}
 

@@ -53,7 +53,7 @@ import { Solid3DObject, Point3D } from '@/types/workspace3d';
 import { projectSolidFor2D } from '@/math/solidProjection2D';
 import { useCisimIzdusumu } from './cisimIzdusumu';
 import { cisimIzdusumuYalnizAd, gizliSecimBirakilir, type AyrimDurumu } from './kademeDuzeyleri3B';
-import { cisimBilgiSatiri, izdusumGovdesi, kenarEtiketKutulari, rozetleriYerlestir, satirGenisligi, SATIR_YUKSEKLIGI } from '@/math/cisimEtiketleri2B';
+import { cisimBilgiSatiri, cisimBilgiEtiketi, cisimEtiketYazimi, izdusumGovdesi, kenarEtiketKutulari, rozetleriYerlestir } from '@/math/cisimEtiketleri2B';
 
 /** Etiketi olmayan nesneler için menü başlığında gösterilecek tür adları. */
 const TYPE_LABELS: Record<string, string> = {
@@ -1413,6 +1413,24 @@ export function Canvas({
   const fs = useCallback(
     (base: number, kind: EtiketGrubu = 'measure') => etiketYaziBoyu(base, kind, styleSettings),
     [styleSettings]
+  );
+
+  /** Kesir ve canlı ölçü yazıları da kalıcı ölçülerle aynı tema, boyut ve kutu ayarını kullanır. */
+  const metinOlcuEtiketi = (metin: string, x: number, y: number, cerceve?: string) => (
+    <g data-canvas-label="" className="pointer-events-none select-none">
+      <MatematikEtiketi
+        satirlar={[metinDugumleri(metin)]}
+        x={x}
+        y={y}
+        px={fs(11, 'measure')}
+        olcek={yaziOlcegi}
+        renk="on"
+        kutu={cerceve ? { sinif: 'fill-background/95', cizgi: cerceve, cizgiKalinligi: 1.2, rx: 7 } : { sinif: 'fill-background/95 stroke-border', rx: 7 }}
+        kutuGizli={!styleSettings.showLabelBoxes}
+        sesli={metniSeslendir(metin)}
+        ipucu={metin}
+      />
+    </g>
   );
 
   /** Şekil çizgisi kalınlığı: temel kalınlık x kullanıcı çarpanı. Izgara ve arayüz etkilenmez. */
@@ -5524,6 +5542,8 @@ export function Canvas({
                     onFreeRotateStart={(e) => handleStartRotateShape(e, poly)}
                     onRotate={(deg) => rotateShapeByAngle(poly, deg)}
                     ilkokul={ilkokul}
+                    stil={styleSettings}
+                    olcek={yaziOlcegi}
                   />
                 )}
               </g>
@@ -5539,15 +5559,16 @@ export function Canvas({
           });
           // İlkokulda yalnız cismin adı: taban alanı, hacim ve "a = 3 br" yok (uzman 4. tur [180])
           const yalnizAd = cisimIzdusumuYalnizAd(kademe);
-          const satirlar = new Map(izdusumler.map(({ solid, proj }) => [solid.id, cisimBilgiSatiri(proj, { yalnizAd })]));
+          const cisimYaziBoyu = fs(11, 'measure');
+          const satirlar = new Map(izdusumler.map(({ solid, proj }) => [solid.id, cisimBilgiEtiketi(cisimBilgiSatiri(proj, { yalnizAd }), cisimYaziBoyu)]));
           const satirYerleri = showDetails
             ? rozetleriYerlestir(
                 izdusumler.map(({ solid, proj }) => ({
                   id: solid.id,
                   govde: izdusumGovdesi(proj),
-                  kenarlar: yalnizAd ? [] : kenarEtiketKutulari(proj, yaziOlcegi),
-                  w: satirGenisligi(satirlar.get(solid.id)!) * yaziOlcegi,
-                  h: SATIR_YUKSEKLIGI * yaziOlcegi,
+                  kenarlar: yalnizAd ? [] : kenarEtiketKutulari(proj, yaziOlcegi, cisimYaziBoyu),
+                  w: satirlar.get(solid.id)!.olcu.genislik * yaziOlcegi,
+                  h: satirlar.get(solid.id)!.olcu.yukseklik * yaziOlcegi,
                 })),
                 8 * kutuOlcegi,
                 { w: viewport.width, h: viewport.height },
@@ -5704,31 +5725,23 @@ export function Canvas({
 
                       {/* Kenar / Yarıçap Ölçü Etiketleri (ilkokulda yok: harfle kenar "a = 3 br" gösterilmez) */}
                       {showDetails && !yalnizAd &&
-                        proj.topView.dimensionLabels.map((lbl, li) => (
-                          <g key={li} data-canvas-label="" transform={`translate(${lbl.x} ${lbl.y}) scale(${yaziOlcegi})`} className="select-none pointer-events-none">
-                            <rect
-                              x={-30}
-                              y={-11}
-                              width="60"
-                              height="20"
-                              rx="5"
-                              fill="#ffffff"
-                              fillOpacity="0.92"
-                              stroke="#cbd5e1"
-                              strokeWidth="0.9"
-                              className="dark:fill-card dark:stroke-border shadow-2xs"
-                            />
-                            <text
-                              x={0}
-                              y={3}
-                              textAnchor="middle"
-                              fontSize="10"
-                              className="font-mono font-bold fill-foreground"
-                            >
-                              {lbl.text}
-                            </text>
-                          </g>
-                        ))}
+                        proj.topView.dimensionLabels.map((lbl, li) => {
+                          const etiket = cisimEtiketYazimi(lbl.text, cisimYaziBoyu);
+                          return (
+                            <g key={li} data-canvas-label="" className="select-none pointer-events-none">
+                              <MatematikEtiketi
+                                {...etiket}
+                                x={lbl.x}
+                                y={lbl.y}
+                                px={cisimYaziBoyu}
+                                olcek={yaziOlcegi}
+                                renk="on"
+                                kutu={{ sinif: 'fill-background/95 stroke-border', rx: 7 }}
+                                kutuGizli={!styleSettings.showLabelBoxes}
+                              />
+                            </g>
+                          );
+                        })}
                     </g>
                   )}
 
@@ -5739,22 +5752,22 @@ export function Canvas({
                     const yer = satirYerleri.get(solid.id)!;
                     const satir = satirlar.get(solid.id)!;
                     const cerceve = isSelected ? '#ec4899' : solid.color || '#3b82f6';
-                    const w = satirGenisligi(satir);
-                    const adW = satir.ad.length * 6.2;
                     return (
                       <g
                         data-canvas-label=""
                         data-cisim-bilgisi={solid.id}
-                        transform={`translate(${yer.x}, ${yer.y}) scale(${yaziOlcegi})`}
                         className="select-none pointer-events-none"
                       >
-                        <rect x={-w / 2} y={-SATIR_YUKSEKLIGI / 2} width={w} height={SATIR_YUKSEKLIGI} rx={7} fill="#0f172a" fillOpacity={0.9} stroke={cerceve} strokeWidth={isSelected ? 1.8 : 1.2} className="shadow-md" />
-                        <text x={-w / 2 + 8} y={3.5} fontSize="10" fontWeight="bold" fill="#ffffff" className="font-sans">
-                          {satir.ad}
-                        </text>
-                        <text x={-w / 2 + 8 + adW + 6} y={3.5} fontSize="9" fill="#e2e8f0" className="font-mono">
-                          {satir.degerler}
-                        </text>
+                        <MatematikEtiketi
+                          {...satir}
+                          x={yer.x}
+                          y={yer.y}
+                          px={cisimYaziBoyu}
+                          olcek={yaziOlcegi}
+                          renk="on"
+                          kutu={{ dolgu: '#ffffff', dolguOpakligi: 0.92, cizgi: cerceve, cizgiKalinligi: isSelected ? 2.5 : 1.2, rx: 8, sinif: 'shadow-sm dark:fill-card' }}
+                          kutuGizli={!styleSettings.showLabelBoxes}
+                        />
                       </g>
                     );
                   })()}
@@ -6435,6 +6448,8 @@ export function Canvas({
                     onFreeRotateStart={(e) => handleStartRotateShape(e, shape)}
                     onRotate={(deg) => rotateShapeByAngle(shape, deg)}
                     ilkokul={ilkokul}
+                    stil={styleSettings}
+                    olcek={yaziOlcegi}
                   />
                 )}
               </g>
@@ -6488,6 +6503,8 @@ export function Canvas({
                       onFreeRotateStart={(e) => handleStartRotateShape(e, elp)}
                       onRotate={(deg) => rotateShapeByAngle(elp, deg)}
                       ilkokul={ilkokul}
+                      stil={styleSettings}
+                      olcek={yaziOlcegi}
                     />
                   )}
                 </g>
@@ -6705,6 +6722,8 @@ export function Canvas({
                       onFreeRotateStart={(e) => handleStartRotateShape(e, seg)}
                       onRotate={(deg) => rotateShapeByAngle(seg, deg)}
                       ilkokul={ilkokul}
+                      stil={styleSettings}
+                      olcek={yaziOlcegi}
                     />
                   )}
                 </g>
@@ -7562,7 +7581,8 @@ export function Canvas({
               }
             }
 
-            const badgeY = center.y + totalHeightPx / 2 + 8 * etiketOlcegi;
+            const kesirOlcusu = kutuOlcusu([metinDugumleri(String(n) + '/' + d)], fs(11, 'measure'));
+            const badgeY = center.y + totalHeightPx / 2 + 8 * etiketOlcegi + kesirOlcusu.yukseklik * yaziOlcegi / 2;
 
             return (
               <g
@@ -7577,29 +7597,7 @@ export function Canvas({
               >
                 {shapes}
                 {showDetails && (
-                  <g data-canvas-label="" transform={etiketOlcekDonusumu(center.x, badgeY)} className="pointer-events-none drop-shadow-sm select-none">
-                    <rect
-                      x={center.x - 30}
-                      y={badgeY}
-                      width={60}
-                      height={26}
-                      rx={8}
-                      fill="#0f172a"
-                      fillOpacity={0.94}
-                      stroke={fracColor}
-                      strokeWidth={1.2}
-                    />
-                    <text
-                      x={center.x}
-                      y={badgeY + 17}
-                      textAnchor="middle"
-                      fill="#ffffff"
-                      fontSize={12}
-                      className="font-black font-mono tracking-wide"
-                    >
-                      {n}/{d}
-                    </text>
-                  </g>
+                  metinOlcuEtiketi(`${n}/${d}`, center.x, badgeY, fracColor)
                 )}
               </g>
             );
@@ -7751,12 +7749,7 @@ export function Canvas({
                 <line x1={cS.x} y1={cS.y} x2={yatayUc.x} y2={yatayUc.y} stroke="#8b5cf6" strokeWidth={2.5} />
                 <circle cx={cS.x} cy={cS.y} r={4} fill="#8b5cf6" />
                 <circle cx={yatayUc.x} cy={yatayUc.y} r={4} fill="#ffffff" stroke="#8b5cf6" strokeWidth={2} />
-                <g data-canvas-label="" transform={etiketOlcekDonusumu((cS.x + yatayUc.x) / 2, cS.y - 16)}>
-                  <rect x={(cS.x + yatayUc.x) / 2 - 36} y={cS.y - 26} width={72} height={20} rx={6} fill="#0f172a" fillOpacity={0.9} />
-                  <text x={(cS.x + yatayUc.x) / 2} y={cS.y - 12} textAnchor="middle" fill="#ffffff" className="font-bold" fontSize={11}>
-                    r = {formatTurkishNumber(Number((rPx / viewport.zoom).toFixed(2)))} br
-                  </text>
-                </g>
+                {metinOlcuEtiketi(`r = ${formatTurkishNumber(Number((rPx / viewport.zoom).toFixed(2)))} br`, (cS.x + yatayUc.x) / 2, cS.y - 16)}
               </g>
             );
           }
@@ -7775,12 +7768,7 @@ export function Canvas({
                 {/* Kalemin ineceği yer: büyük ve belirgin */}
                 <circle cx={kalem.x} cy={kalem.y} r={7} fill="#8b5cf6" fillOpacity={0.25} />
                 <circle cx={kalem.x} cy={kalem.y} r={5} fill="#ffffff" stroke="#8b5cf6" strokeWidth={2.5} />
-                <g data-canvas-label="" transform={etiketOlcekDonusumu(kalem.x, kalem.y - 20)}>
-                  <rect x={kalem.x - 46} y={kalem.y - 30} width={92} height={20} rx={6} fill="#0f172a" fillOpacity={0.92} />
-                  <text x={kalem.x} y={kalem.y - 16} textAnchor="middle" fill="#ffffff" className="font-bold" fontSize={11}>
-                    başlangıç {derece}°
-                  </text>
-                </g>
+                {metinOlcuEtiketi(`başlangıç ${derece}°`, kalem.x, kalem.y - 20)}
               </g>
             );
           }
@@ -7802,12 +7790,7 @@ export function Canvas({
               <line x1={cS.x} y1={cS.y} x2={bitis.x} y2={bitis.y} stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="3,3" opacity={0.7} />
               <circle cx={cS.x} cy={cS.y} r={4} fill="#8b5cf6" />
               <circle cx={bas.x} cy={bas.y} r={4} fill="#8b5cf6" stroke="#ffffff" strokeWidth={1.5} />
-              <g data-canvas-label="" transform={etiketOlcekDonusumu(cS.x, cS.y - 20)}>
-                <rect x={cS.x - 46} y={cS.y - 30} width={92} height={20} rx={6} fill="#0f172a" fillOpacity={0.9} />
-                <text x={cS.x} y={cS.y - 16} textAnchor="middle" fill="#ffffff" className="font-bold" fontSize={11}>
-                  {derece}° {pergel.tarama < 0 ? '↻' : '↺'} {derece >= 353 ? '(tam tur)' : ''}
-                </text>
-              </g>
+              {metinOlcuEtiketi(`${derece}° ${pergel.tarama < 0 ? '↻' : '↺'} ${derece >= 353 ? '(tam tur)' : ''}`, cS.x, cS.y - 20)}
             </g>
           );
         })()}
@@ -7849,12 +7832,7 @@ export function Canvas({
                   strokeDasharray="4,4"
                   className="animate-pulse"
                 />
-                <g data-canvas-label="" transform={etiketOlcekDonusumu(mx, my)}>
-                  <rect x={mx - 52} y={my - 12} width={104} height={24} rx={6} fill="#0f172a" fillOpacity={0.9} />
-                  <text x={mx} y={my + 4} textAnchor="middle" fill="#ffffff" className="font-bold text-[11px]">
-                    a={formatTurkishNumber(ra)} b={formatTurkishNumber(rb)} br
-                  </text>
-                </g>
+                {metinOlcuEtiketi(`a=${formatTurkishNumber(ra)} b=${formatTurkishNumber(rb)} br`, mx, my)}
               </g>
             );
           } else if (activeTool === 'square') {
@@ -7876,12 +7854,7 @@ export function Canvas({
                   strokeDasharray="4,4"
                   className="animate-pulse"
                 />
-                <g data-canvas-label="" transform={etiketOlcekDonusumu(mx, my)}>
-                  <rect x={mx - 36} y={my - 12} width={72} height={24} rx={6} fill="#0f172a" fillOpacity={0.9} />
-                  <text x={mx} y={my + 4} textAnchor="middle" fill="#ffffff" className="font-bold text-[11px]">
-                    {formatTurkishNumber(kenar)} x {formatTurkishNumber(kenar)} br
-                  </text>
-                </g>
+                {metinOlcuEtiketi(`${formatTurkishNumber(kenar)} x ${formatTurkishNumber(kenar)} br`, mx, my)}
               </g>
             );
           } else if (activeTool === 'rectangle') {
@@ -7904,12 +7877,7 @@ export function Canvas({
                   strokeDasharray="4,4"
                   className="animate-pulse"
                 />
-                <g data-canvas-label="" transform={etiketOlcekDonusumu(mx, my)}>
-                  <rect x={mx - 40} y={my - 12} width={80} height={24} rx={6} fill="#0f172a" fillOpacity={0.9} />
-                  <text x={mx} y={my + 4} textAnchor="middle" fill="#ffffff" className="font-bold text-[11px]">
-                    {formatTurkishNumber(gen)} x {formatTurkishNumber(yuk)} br
-                  </text>
-                </g>
+                {metinOlcuEtiketi(`${formatTurkishNumber(gen)} x ${formatTurkishNumber(yuk)} br`, mx, my)}
               </g>
             );
           } else if (activeTool === 'circle') {
@@ -7929,25 +7897,14 @@ export function Canvas({
                   strokeDasharray="4,4"
                 />
                 <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y} stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="2,2" />
-                <g data-canvas-label="" transform={etiketOlcekDonusumu(s1.x, s1.y)}>
-                  <rect x={s1.x - 30} y={s1.y - 12} width={60} height={24} rx={6} fill="#0f172a" fillOpacity={0.9} />
-                  <text x={s1.x} y={s1.y + 4} textAnchor="middle" fill="#ffffff" className="font-bold text-[11px]">
-                    r = {formatTurkishNumber(yariCap)} br
-                  </text>
-                </g>
+                {metinOlcuEtiketi(`r = ${formatTurkishNumber(yariCap)} br`, s1.x, s1.y)}
               </g>
             );
           } else if (activeTool === 'segment') {
             return (
               <g className="pointer-events-none">
                 <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y} stroke="#0284c7" strokeWidth={2.5} strokeDasharray="4,4" />
-                <g data-canvas-label="" transform={etiketOlcekDonusumu((s1.x + s2.x) / 2, (s1.y + s2.y) / 2)}>
-                  <rect x={(s1.x + s2.x) / 2 - 25} y={(s1.y + s2.y) / 2 - 12} width={50} height={24} rx={6} fill="#0f172a" fillOpacity={0.9} />
-                  <text x={(s1.x + s2.x) / 2} y={(s1.y + s2.y) / 2 + 4} textAnchor="middle" fill="#ffffff" className="font-bold text-[11px]">
-                    {/* Oluşacak parçanın gerçek uzunluğu gösterilir (ızgaraya yapış açıkken yuvarlama yapılmaz) */}
-                    {formatTurkishNumber(viewport.snapToGrid ? distWorld : Number(distWorld.toFixed(1)))} br
-                  </text>
-                </g>
+                {metinOlcuEtiketi(`${formatTurkishNumber(viewport.snapToGrid ? distWorld : Number(distWorld.toFixed(1)))} br`, (s1.x + s2.x) / 2, (s1.y + s2.y) / 2)}
               </g>
             );
           }
@@ -8022,12 +7979,7 @@ export function Canvas({
                 <line x1={cS.x} y1={cS.y} x2={p1.x} y2={p1.y} stroke="#94a3b8" strokeWidth={1.2} strokeDasharray="3,3" />
                 {/* Bitiş noktası yayın ÜZERİNE oturacak; hedef konumu şimdiden göster */}
                 <circle cx={p1.x} cy={p1.y} r={5} fill="#ffffff" stroke={activeTool === 'sector' ? '#10b981' : '#0284c7'} strokeWidth={2} />
-                <g data-canvas-label="" transform={etiketOlcekDonusumu(cS.x, cS.y - 20)}>
-                  <rect x={cS.x - 22} y={cS.y - 30} width={44} height={20} rx={6} fill="#0f172a" fillOpacity={0.9} />
-                  <text x={cS.x} y={cS.y - 16} textAnchor="middle" fill="#ffffff" className="font-bold text-[11px]">
-                    {formatTurkishNumber(derece)}°
-                  </text>
-                </g>
+                {metinOlcuEtiketi(`${formatTurkishNumber(derece)}°`, cS.x, cS.y - 20)}
               </g>
             );
           }
@@ -8053,12 +8005,7 @@ export function Canvas({
               <g className="pointer-events-none">
                 <line x1={vS.x} y1={vS.y} x2={iS.x} y2={iS.y} stroke={RENK} strokeWidth={1.5} strokeDasharray="4,4" />
                 <path d={yayYolu} fill="none" stroke="#f59e0b" strokeWidth={2.5} strokeDasharray="4,3" />
-                <g data-canvas-label="" transform={etiketOlcekDonusumu(vS.x + 48, vS.y - 22)}>
-                  <rect x={vS.x + 26} y={vS.y - 32} width={44} height={20} rx={6} fill="#0f172a" fillOpacity={0.9} />
-                  <text x={vS.x + 48} y={vS.y - 18} textAnchor="middle" fill="#ffffff" className="font-bold text-[11px]">
-                    {formatTurkishNumber(derece)}°
-                  </text>
-                </g>
+                {metinOlcuEtiketi(`${formatTurkishNumber(derece)}°`, vS.x + 48, vS.y - 22)}
               </g>
             );
           }
@@ -8083,38 +8030,14 @@ export function Canvas({
                     strokeDasharray="5,4"
                   />
                   <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y} stroke={RENK} strokeWidth={1.4} strokeDasharray="3,3" />
-                  <g data-canvas-label="" transform={etiketOlcekDonusumu(s1.x, s1.y - 1)}>
-                    <rect x={s1.x - 32} y={s1.y - 12} width={64} height={22} rx={6} fill="#0f172a" fillOpacity={0.9} />
-                    <text x={s1.x} y={s1.y + 3} textAnchor="middle" fill="#ffffff" className="font-bold text-[11px]">
-                      r = {formatTurkishNumber(uzunluk)} br
-                    </text>
-                  </g>
+                  {metinOlcuEtiketi(`r = ${formatTurkishNumber(uzunluk)} br`, s1.x, s1.y - 1)}
                 </g>
               );
             }
             return (
               <g className="pointer-events-none">
                 <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y} stroke={RENK} strokeWidth={2} strokeDasharray="5,4" />
-                <g data-canvas-label="" transform={etiketOlcekDonusumu((s1.x + s2.x) / 2, (s1.y + s2.y) / 2 - 14)}>
-                  <rect
-                    x={(s1.x + s2.x) / 2 - 30}
-                    y={(s1.y + s2.y) / 2 - 24}
-                    width={60}
-                    height={20}
-                    rx={6}
-                    fill="#0f172a"
-                    fillOpacity={0.9}
-                  />
-                  <text
-                    x={(s1.x + s2.x) / 2}
-                    y={(s1.y + s2.y) / 2 - 10}
-                    textAnchor="middle"
-                    fill="#ffffff"
-                    className="font-bold text-[11px]"
-                  >
-                    {formatTurkishNumber(uzunluk)} br
-                  </text>
-                </g>
+                {metinOlcuEtiketi(`${formatTurkishNumber(uzunluk)} br`, (s1.x + s2.x) / 2, (s1.y + s2.y) / 2 - 14)}
               </g>
             );
           }
@@ -8161,8 +8084,6 @@ export function Canvas({
           const canliMetin = ilkokul
             ? ilkokulUzunlukMetni(dist, isCm ? uzunlukOlcBirimi(kademe) : 'br')
             : `${formatTurkishNumber(dist)} ${isCm ? uzunlukOlcBirimi(kademe) : 'br'}`;
-          // "yaklaşık 4 br" 72 px'lik rozete sığmıyordu
-          const rozetGenisligi = Math.max(72, 16 + canliMetin.length * 7);
 
           return (
             <g className="pointer-events-none measurement-live-preview">
@@ -8190,29 +8111,7 @@ export function Canvas({
               {/* Çizgi Uç Çentikleri */}
               <circle cx={s2.x} cy={s2.y} r={4} fill={isCm ? '#0284c7' : '#059669'} stroke="#ffffff" strokeWidth={1.5} />
               {/* Canlı Ölçüm Rozeti */}
-              <g data-canvas-label="" transform={`translate(${midX}, ${midY - 14}) scale(${yaziOlcegi})`}>
-                <rect
-                  x={-rozetGenisligi / 2}
-                  y="-12"
-                  width={rozetGenisligi}
-                  height="24"
-                  rx="7"
-                  fill="#0f172a"
-                  fillOpacity="0.95"
-                  stroke={isCm ? '#38bdf8' : '#34d399'}
-                  strokeWidth="1.2"
-                  className="shadow-md"
-                />
-                <text
-                  x="0"
-                  y="4"
-                  textAnchor="middle"
-                  fill="#ffffff"
-                  className="font-bold text-xs font-sans tracking-wide"
-                >
-                  {canliMetin}
-                </text>
-              </g>
+              {metinOlcuEtiketi(`${canliMetin}`, midX, midY - 14, isCm ? '#38bdf8' : '#34d399')}
             </g>
           );
         })()}

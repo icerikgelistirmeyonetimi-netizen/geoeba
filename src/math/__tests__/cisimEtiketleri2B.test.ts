@@ -3,12 +3,11 @@ import type { Solid3DObject, Solid3DType } from '@/types/workspace3d';
 import type { ViewportTransform } from '@/types/math';
 import { projectSolidFor2D } from '../solidProjection2D';
 import {
-  SATIR_YUKSEKLIGI,
+  cisimBilgiEtiketi,
   cisimBilgiSatiri,
   izdusumGovdesi,
   kenarEtiketKutulari,
   rozetleriYerlestir,
-  satirGenisligi,
   type EkranKutusu,
 } from '../cisimEtiketleri2B';
 import { tuvalEngelleri } from '@/components/workspace/eksenSayilari';
@@ -32,9 +31,10 @@ const kesisir = (a: EkranKutusu, b: EkranKutusu) => a.x < b.x + b.w && b.x < a.x
 
 function yerlestir(cisimler: Solid3DObject[], engeller: EkranKutusu[] = []) {
   const projeler = cisimler.map((s) => ({ s, p: projectSolidFor2D(s, VP, false, 'top') }));
-  const girdiler = projeler.map(({ s, p }) => ({
-    id: s.id, govde: izdusumGovdesi(p), kenarlar: kenarEtiketKutulari(p, 1), w: satirGenisligi(cisimBilgiSatiri(p)), h: SATIR_YUKSEKLIGI,
-  }));
+  const girdiler = projeler.map(({ s, p }) => {
+    const { olcu } = cisimBilgiEtiketi(cisimBilgiSatiri(p));
+    return { id: s.id, govde: izdusumGovdesi(p), kenarlar: kenarEtiketKutulari(p, 1), w: olcu.genislik, h: olcu.yukseklik };
+  });
   const yerler = rozetleriYerlestir(girdiler, 8, { w: VP.width, h: VP.height }, engeller);
   const kutular = girdiler.filter((g) => yerler.has(g.id)).map((g) => {
     const y = yerler.get(g.id)!;

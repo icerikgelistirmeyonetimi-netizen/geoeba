@@ -606,7 +606,7 @@ export class SeraSahnesi {
   private ucanDomates: THREE.Mesh;
 
   private bitkiSayisi = 0;
-  /** Seranın sabit parçaları (taş zemin, camın ardındaki çit); bahçede gizlenir */
+  /** Seranın sabit parçaları (taş zemin, dış çim ve çit); bahçede gizlenir */
   private seraSabitleri = new THREE.Group();
   private izg: Izgara | null = null;
   private bahceMi = false;
@@ -769,7 +769,7 @@ export class SeraSahnesi {
     const cim = new THREE.Mesh(new THREE.PlaneGeometry(60, 16), new THREE.MeshStandardMaterial({ color: this.koyu ? '#1f3a33' : '#b9cf9a', roughness: 1 }));
     cim.rotation.x = -Math.PI / 2;
     cim.position.set(0, 0.003, -9.6);
-    this.sahne.add(cim);
+    this.seraSabitleri.add(cim);
     const tepeRenk = this.koyu ? ['#1d3833', '#22403a', '#274640'] : ['#a7c58c', '#95b97e', '#b8d1a0'];
     const tepeGeo = new THREE.SphereGeometry(1, 40, 20);
     [

@@ -1,7 +1,7 @@
 // Alan uzmanı, 5. tur (geoeba (4).xlsx, atölye inceleme satır 141): «madeni para yapılırsa gerçek parayla aynı olmalı».
 // Para gerçek 1 TL gibi: iki metal (altın sarısı halka + gümüş gri göbek), tırtıklı kenar; yazı yüzü «1 LİRA», tura yüzü
 // «TÜRKİYE CUMHURİYETİ», yıl ve kabartma profil silüeti. Yazı/tura sonucu ↔ yukarı bakan yüz ilişkisi değişmedi.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import * as THREE from 'three';
@@ -20,7 +20,8 @@ import {
 } from '../madeniPara';
 import { MadeniParaSvg } from '../MadeniPara2B';
 import { SablonSimgesi } from '../SablonSimgesi';
-import { PARA_KAPAK_YUZLERI, paraHedefAcisi, paraYuzuAcidan } from '../deneySahnesi';
+import { PARA_KAPAK_YUZLERI, paraDokusu, paraHedefAcisi, paraYuzuAcidan } from '../deneySahnesi';
+import { TURA_GORSELI } from '../turaGorseli';
 
 interface Cagri {
   ad: string;
@@ -164,19 +165,20 @@ describe('yazı / tura sonucu ↔ yukarı bakan yüz (değişmedi)', () => {
 });
 
 describe('2B madeni para (WebGL yoksa) ve şablon simgesi', () => {
-  it('tura yüzü: ülke adı, yıl, silüet; yazı yüzü: «1» ve «LİRA»', () => {
+  it('tura yüzü ortak gerçek para görselini, yazı yüzü «1» ve «LİRA» çizimini kullanır', () => {
     const tura = renderToStaticMarkup(React.createElement('svg', null, React.createElement(MadeniParaSvg, { yuz: 'tura', r: 70 })));
     expect(tura).toContain('data-madeni-para="tura"');
-    expect(tura).toContain(PARA_YAZILARI.ulke);
-    expect(tura).toContain(PARA_YAZILARI.yil);
+    expect(tura).toContain('Atatürk rölyefli');
+    expect(tura).toContain(`href="${TURA_GORSELI}"`);
+    expect(tura).not.toContain('<text');
     expect(tura).not.toContain(PARA_YAZILARI.birim);
-    expect(tura.match(/<path d="M/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(tura).not.toContain('<path');
     const yazi = renderToStaticMarkup(React.createElement('svg', null, React.createElement(MadeniParaSvg, { yuz: 'yazi', r: 70 })));
     expect(yazi).toContain('data-madeni-para="yazi"');
     expect(yazi).toMatch(/>1<\/text>/);
     expect(yazi).toContain(`>${PARA_YAZILARI.birim}</text>`);
     expect(yazi).not.toContain('TÜRKİYE');
-    for (const h of [tura, yazi]) {
+    for (const h of [yazi]) {
       expect(h).toContain(PARA_RENKLERI.halka.orta);
       expect(h).toContain(PARA_RENKLERI.gobek.orta);
     }
@@ -188,5 +190,22 @@ describe('2B madeni para (WebGL yoksa) ve şablon simgesi', () => {
     expect(h).toContain(PARA_RENKLERI.gobek.orta);
     expect(h).toMatch(/>1<\/text>/);
     expect(h).not.toContain('<mask');
+  });
+});
+
+describe('Atatürk rölyefi ortak görseli', () => {
+  it('WebGL tura dokusu ortak görseli yükler ve tamamlandığında yeniden çizimi bildirir', () => {
+    const texture = new THREE.Texture();
+    const load = vi.spyOn(THREE.TextureLoader.prototype, 'load').mockReturnValue(texture);
+    try {
+      const yenidenCiz = vi.fn();
+      expect(paraDokusu('tura', 'renk', yenidenCiz)).toBe(texture);
+      expect(load).toHaveBeenCalledWith(TURA_GORSELI, yenidenCiz);
+      expect(yenidenCiz).not.toHaveBeenCalled();
+      load.mock.calls[0][1]?.(texture);
+      expect(yenidenCiz).toHaveBeenCalledOnce();
+      expect(texture.colorSpace).toBe(THREE.SRGBColorSpace);
+      expect(TURA_GORSELI).toMatch(/^data:image\/png;base64,/);
+    } finally { load.mockRestore(); texture.dispose(); }
   });
 });

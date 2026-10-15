@@ -394,7 +394,7 @@ describe('3B etiket: Canvas3D bağlantısı (kaynak)', () => {
 
   it('ölçü yazıları 2B\'nin MatematikEtiketi bileşeniyle; dokular süpürülür', () => {
     expect(c3).toContain("px={turYaziBoyu('olcu', etiketStili)}");
-    expect(c3.match(/<MatematikEtiketi/g)?.length).toBe(2);
+    expect(c3.match(/<MatematikEtiketi/g)?.length).toBe(3);
     expect(c3.match(/etiketDokulariniSupur\(t\.scene, t\.etiketDokulari\)/g)?.length).toBe(2);
     expect(c3).toContain('t.etiketDokulari.hepsiniAt();');
   });

@@ -8,6 +8,8 @@
  * Taban biçiminin adı (Kare, Daire…) yazılmaz: çizimin kendisi gösteriyor.
  */
 import { formatTurkishNumber } from './coordinates';
+import { metinDugumleri, metniSeslendir } from './matematikYazimi';
+import { kutuOlcusu } from './yazimDuzeni';
 import type { ProjectedSolid2D } from './solidProjection2D';
 
 /** Ekran dikdörtgeni (sol üst köşe + boyut, piksel) */
@@ -35,10 +37,18 @@ export function cisimBilgiSatiri(
   return { ad: proj.name, degerler: parcalar.join(' · ') };
 }
 
-/** Satırın ölçek 1'deki boyutu: ad 10 px kalın (≈ 6,2 px/harf), değerler 9 px eş aralıklı (≈ 5,4 px/harf). */
-export const SATIR_YUKSEKLIGI = 18;
-export function satirGenisligi(satir: { ad: string; degerler: string }): number {
-  return Math.round(16 + satir.ad.length * 6.2 + (satir.degerler ? 6 + satir.degerler.length * 5.4 : 0));
+/** Standart MatematikEtiketi ile aynı yazım ve kutu ölçüsü: çizim ile çakışma hesabı birlikte değişir. */
+export function cisimEtiketYazimi(metin: string, px = 11) {
+  const satirlar = [metinDugumleri(metin)];
+  return { satirlar, olcu: kutuOlcusu(satirlar, px), sesli: metniSeslendir(metin), ipucu: metin };
+}
+
+export function cisimBilgiEtiketi(satir: { ad: string; degerler: string }, px = 11) {
+  return cisimEtiketYazimi([satir.ad, satir.degerler].filter(Boolean).join(' · '), px);
+}
+
+export function satirGenisligi(satir: { ad: string; degerler: string }, px = 11): number {
+  return cisimBilgiEtiketi(satir, px).olcu.genislik;
 }
 
 /** Üstten görünümün ekrandaki sınır kutusu (çokgen köşeleri ya da daire). */
@@ -59,9 +69,14 @@ export function izdusumGovdesi(proj: Pick<ProjectedSolid2D, 'topView' | 'footpri
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
-/** Kenar ölçü etiketlerinin (Canvas: 60 × 20 kutu, merkezden −30…30, −11…9) ölçeklenmiş kutuları. */
-export function kenarEtiketKutulari(proj: Pick<ProjectedSolid2D, 'topView'>, olcek: number): EkranKutusu[] {
-  return (proj.topView?.dimensionLabels ?? []).map((l) => ({ x: l.x - 30 * olcek, y: l.y - 11 * olcek, w: 60 * olcek, h: 20 * olcek }));
+/** Kenar ölçü etiketlerinin standart yazı boyu ve yakınlık ölçeğine göre ekrandaki kutuları. */
+export function kenarEtiketKutulari(proj: Pick<ProjectedSolid2D, 'topView'>, olcek: number, px = 11): EkranKutusu[] {
+  return (proj.topView?.dimensionLabels ?? []).map((l) => {
+    const { olcu } = cisimEtiketYazimi(l.text, px);
+    const w = olcu.genislik * olcek;
+    const h = olcu.yukseklik * olcek;
+    return { x: l.x - w / 2, y: l.y - h / 2, w, h };
+  });
 }
 
 export interface RozetGirdisi {
