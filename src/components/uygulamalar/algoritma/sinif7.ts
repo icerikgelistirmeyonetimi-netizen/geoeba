@@ -505,7 +505,8 @@ function kalemSayimi(iz: Iz) {
 
 // Uzman (5. tur, satır 130): "Yansımayı daha net anlatabilmek adına robotun olmadığı taraftan aynı şeklin simetrisinin
 // çizilmesi daha uygun olur." 1. ve 2. görevde hedef gizli değil: Şeklin aynadaki görüntüsü aynanın öbür yanında (robotun
-// olmadığı yanda) soluk kesikli çizgiyle baştan görünür; öğrenci robotla o görüntüyü çizer. 3–4. görevler (hatayı bul) gizli kalır.
+// olmadığı yanda) soluk kesikli çizgiyle baştan görünür; öğrenci robotla o görüntüyü çizer. 3. görevde hedef gizlidir;
+// 4. görevde son dönüş hatasını karşılaştırabilmek için hedef görünür (uzman 6. tur).
 const AYNA_1 = saha(
   's7-ayna-dikey',
   'Dikey ayna',
@@ -528,7 +529,7 @@ const AYNA_4 = saha(
   's7-ayna-basamak',
   'Basamak',
   agKur(9, 5, [1, 1], [[[1, 1], [2, 1], [2, 2], [3, 2], [3, 3]]], [[[7, 1], [6, 1], [6, 2], [5, 2], [5, 3]]]),
-  { eksen: { yon: 'dikey', k: 4 }, hedefGizli: true, sinar: 'Dönüşler aynen kalırsa' }
+  { eksen: { yon: 'dikey', k: 4 }, hedefGizli: false, sinar: 'Son dönüş yanlışsa' }
 );
 
 const CIZIMI_TAMAMLA: Hedef = { cizimiTamamla: true, cikistaBitir: false };
@@ -611,17 +612,17 @@ const YANSIMA_GOREVLERI: Gorev[] = [
   {
     id: 's7-yansima-4',
     tur: 'hata',
-    baslik: 'Aynı dönüşler',
-    yonerge: 'Kalem doğru, başlangıç doğru; ama görüntü aynadaki gibi değil. Kodu izle, hatayı bul, düzelt.',
+    baslik: 'Son dönüş',
+    yonerge: 'Kesikli çizgi şeklin aynadaki görüntüsü. Hazır kod son parçayı yanlış yöne çiziyor. Kodu adım adım çalıştır; hatalı dönüş bloğunu bul, düzelt.',
     dunya: AYNA_4,
     hedef: CIZIMI_TAMAMLA,
     bitkiAdi: 'bitki',
     aracKutusu: AYNA_ARACLARI,
-    baslangic: k(['kalemKaldir', ['kez', 6, ['ileri']], 'sagaDon', 'sagaDon', 'kalemIndir', 'ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri'], 's7y4h-'),
+    baslangic: k(['kalemKaldir', ['kez', 6, ['ileri']], 'sagaDon', 'sagaDon', 'kalemIndir', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri', 'sagaDon', 'ileri'], 's7y4h-'),
     cozum: k(['kalemKaldir', ['kez', 6, ['ileri']], 'sagaDon', 'sagaDon', 'kalemIndir', 'ileri', 'solaDon', 'ileri', 'sagaDon', 'ileri', 'solaDon', 'ileri'], 's7y4-'),
     ipuclari: [
-      'Görüntünün ilk çizgisinden sonra robot hangi yöne döndü? Aynada hangi yöne dönmeliydi?',
-      'Aynada sağ ile sol yer değiştirir: Görüntüyü çizen kısımdaki her dönüşü tersine çevir.',
+      'İlk üç parça kesikli görüntüyle örtüşüyor. Son parçadan önce robot hangi yöne dönüyor?',
+      'Kodun son "sağa dön" bloğunu "sola dön" ile değiştir. Son parça aşağı doğru çizilmeli.',
     ],
     basari: (iz) => {
       const c = kalemSayimi(iz);

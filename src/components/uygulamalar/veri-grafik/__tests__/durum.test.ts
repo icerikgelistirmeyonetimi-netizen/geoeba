@@ -194,13 +194,15 @@ describe('sekmeDuzelt: seçili sekme hep çizilebilir (M29)', () => {
   const boy = sabitBoy(); // Öğrenci | Boy (cm): bir sayısal değişken
   const renk = tabloOlustur(['Renk'], [['Mavi'], ['Kırmızı'], ['Mavi']]); // sayısal değişken yok
 
-  it('Saçılım + 1 sayısal → Nokta; Çizgi + 0 sayısal → Nokta; 2 sayısalda değişmez (aynı nesne)', () => {
+  it('Saçılım her tabloda Nokta olur; Çizgi veri türüne göre korunur', () => {
     const d = baslangicDurumu();
     expect(sekmeDuzelt({ ...d, tablo: boy, sekme: 'sacilim' }).sekme).toBe('nokta');
     expect(sekmeDuzelt({ ...d, tablo: renk, sekme: 'cizgi' }).sekme).toBe('nokta');
     expect(sekmeDuzelt({ ...d, tablo: boy, sekme: 'cizgi' }).sekme).toBe('cizgi');
     const iki: Durum = { ...d, tablo: mac, sekme: 'sacilim' };
-    expect(sekmeDuzelt(iki)).toBe(iki);
+    expect(sekmeDuzelt(iki).sekme).toBe('nokta');
+    const cizgi: Durum = { ...iki, sekme: 'cizgi' };
+    expect(sekmeDuzelt(cizgi)).toBe(cizgi);
     // Kapısı olmayan sekmeler her tabloda kalır
     for (const s of ['nokta', 'sutun', 'daire', 'istatistik'] as const) expect(sekmeDuzelt({ ...d, tablo: renk, sekme: s }).sekme).toBe(s);
   });
@@ -515,13 +517,12 @@ describe("Deney özeti kümesi ('ozet'): türetilmiş ve salt okunur", () => {
     expect(teoriksiz.ikinciDegisken).toBeNull();
   });
 
-  it('sekme kapısı özetin tablosuna bakar: Çizgi ve Saçılım çizilebilir', () => {
+  it('sekme kapısı: özette Çizgi korunur, kaldırılan Saçılım Nokta olur', () => {
     const d = kumeDegistir(deneyDurumu(), 'ozet');
     expect(sayisalDegiskenSayisi(etkinTablo(d))).toBeGreaterThanOrEqual(3);
-    for (const s of ['cizgi', 'sacilim'] as const) {
-      const e = { ...d, sekme: s };
-      expect(sekmeDuzelt(e)).toBe(e);
-    }
+    const e = { ...d, sekme: 'cizgi' as const };
+    expect(sekmeDuzelt(e)).toBe(e);
+    expect(sekmeDuzelt({ ...d, sekme: 'sacilim' }).sekme).toBe('nokta');
     // Atışlar tablosunda (yalnız kategorik) Çizgi çizilemez
     expect(sekmeDuzelt({ ...deneyDurumu(), sekme: 'cizgi' }).sekme).toBe('nokta');
   });

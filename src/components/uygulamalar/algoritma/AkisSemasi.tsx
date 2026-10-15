@@ -289,7 +289,7 @@ export function AkisSemasi({ program, aktif = null }: { program: Program; aktif?
   const en = x + kenar;
   const yuk = boy + kenar * 2;
   return (
-    <svg viewBox={`0 0 ${en} ${yuk}`} width={en} height={yuk} className="max-w-full text-foreground" style={{ height: 'auto' }} role="img" aria-label="Akış şeması" data-akis-semasi>
+    <svg viewBox={`0 0 ${en} ${yuk}`} width={en} height={yuk} className="block shrink-0 text-foreground" style={{ maxWidth: 'none' }} role="img" aria-label="Akış şeması" data-akis-semasi>
       <defs>
         <marker id="akis-ok" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0 0 L10 5 L0 10 z" fill="currentColor" fillOpacity={0.6} />

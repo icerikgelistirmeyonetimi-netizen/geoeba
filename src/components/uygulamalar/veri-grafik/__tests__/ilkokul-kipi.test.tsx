@@ -125,7 +125,7 @@ describe('[181] ilkokul kuralları (saf)', () => {
       expect(k.yuzdeVeAci, String(s)).toBe(false);
       expect(k.cetele, String(s)).toBe(true);
       expect(k.tekGrafikteKarsilastir, String(s)).toBe(true);
-      expect(k.sutunaDonustur, String(s)).toBe(s === 4);
+      expect(k.sutunaDonustur, String(s)).toBe(false);
       for (const yok of ['daire', 'cizgi', 'sacilim', 'kokYaprak'] as const) expect(k.sekmeler, `${s} ${yok}`).not.toContain(yok);
     }
   });
@@ -144,7 +144,7 @@ describe('[181] ilkokul kuralları (saf)', () => {
     for (const s of [5, 6, 7, 8] as const) {
       expect(sinifKurallari(s).noktaSekli, String(s)).toBe('nokta');
       expect(sinifKurallari(s).cetele, String(s)).toBe(false);
-      expect(sinifKurallari(s).sutunaDonustur, String(s)).toBe(true);
+      expect(sinifKurallari(s).sutunaDonustur, String(s)).toBe(false);
       expect(sinifKurallari(s).sekmeAdlari, String(s)).toEqual({});
     }
     expect(durumKurallari({ ornekId: 'boy', etkinKume: 'tablom' }, true)).toBe(ILKOKUL_KURALLARI);
@@ -271,8 +271,8 @@ describe('[181] uygulama kökü: İlkokul kademesi', () => {
     expect(tabloAdi(uygulamaCiz(boy, 'ilkokul'))).toBe("1-A'nın en sevdiği oyuncak");
     const orta = uygulamaCiz(boy, 'ortaokul');
     expect(tabloAdi(orta)).toBe('7-C öğrencilerinin boy uzunlukları');
-    expect(grafikSekmeleri(orta)).toEqual(['Nokta', 'Sütun', 'Çizgi', 'Daire', 'Saçılım', 'İstatistik']);
-    expect(seritDugmeleri(orta)).toEqual(['Aritmetik ortalama', 'Ortanca', 'Ortalama mutlak sapma', 'Etiketler', 'Sütunlara dönüştür']);
+    expect(grafikSekmeleri(orta)).toEqual(['Nokta', 'Sütun', 'Çizgi', 'Daire', 'İstatistik']);
+    expect(seritDugmeleri(orta)).toEqual(['Aritmetik ortalama', 'Ortanca', 'Ortalama mutlak sapma', 'Etiketler']);
     expect(orta).toContain('data-veri-topla-dugmesi');
     // Tüm araçlar: bugünkü açılış
     expect(tabloAdi(uygulamaCiz(null, 'tum'))).toBe('7-C öğrencilerinin boy uzunlukları');
@@ -286,7 +286,7 @@ describe('[181] uygulama kökü: İlkokul kademesi', () => {
       expect(grafikSekmeleri(html), sekme).toEqual(['Nokta grafiği', 'Sütun grafiği', 'Sıklık tablosu']);
       expect(metin(html), sekme).not.toMatch(/Aritmetik ortalama|Ortanca|Ortalama mutlak sapma|Standart sapma/);
     }
-    expect(seritDugmeleri(uygulamaCiz({ ...degisik, sekme: 'nokta' }, 'ilkokul'))).toEqual(['Etiketler', 'Sütunlara dönüştür']);
+    expect(seritDugmeleri(uygulamaCiz({ ...degisik, sekme: 'nokta' }, 'ilkokul'))).toEqual(['Etiketler']);
     // Sayısal değişkende Sıklık tablosu: değerlerin çetelesi ve sıklığı (ölçü kartı, "Verilerin toplamı" yok)
     const ist = uygulamaCiz({ ...degisik, sekme: 'istatistik' }, 'ilkokul');
     expect(ist).toContain('Çetele ve sıklık tablosu');
@@ -338,7 +338,7 @@ describe('[181] uygulama kökü: İlkokul kademesi', () => {
     expect(metin(ist)).not.toContain('Tepe değer');
   });
 
-  it('3. sınıf: nokta grafiği; 4. sınıf: sütun grafiği (yan yana, yüzdesiz) ve "Sütunlara dönüştür"; 1. sınıf sıklık tablosu çeteleli', () => {
+  it('3. sınıf: nokta grafiği; 4. sınıf: sütun grafiği (yan yana, yüzdesiz); 1. sınıf sıklık tablosu çeteleli', () => {
     const gelis = uygulamaCiz(yukle('gelis'), 'ilkokul');
     expect(grafikSekmeleri(gelis)).toEqual(['Nokta grafiği', 'Sıklık tablosu']);
     expect(gelis).not.toContain('data-sekil="kare"');
@@ -346,7 +346,7 @@ describe('[181] uygulama kökü: İlkokul kademesi', () => {
     const gezi = uygulamaCiz(yukle('gezi'), 'ilkokul');
     expect(grafikSekmeleri(gezi)).toEqual(['Nokta grafiği', 'Sütun grafiği', 'Sıklık tablosu']);
     expect(metin(gezi)).not.toMatch(ORTAOKUL_OLCULERI);
-    expect(seritDugmeleri(uygulamaCiz(yukle('gezi', { sekme: 'nokta' }), 'ilkokul'))).toEqual(['Sayılar', 'Sütunlara dönüştür']);
+    expect(seritDugmeleri(uygulamaCiz(yukle('gezi', { sekme: 'nokta' }), 'ilkokul'))).toEqual(['Sayılar']);
     const ist = uygulamaCiz(yukle('oyuncak', { sekme: 'istatistik' }), 'ilkokul');
     expect(ist).toContain('Çetele ve sıklık tablosu');
     expect(ist.match(/data-cetele-hucresi/g)).toHaveLength(4);

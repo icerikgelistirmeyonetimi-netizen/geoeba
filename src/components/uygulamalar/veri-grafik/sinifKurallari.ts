@@ -8,17 +8,17 @@
  *   sütunu yok; iki yönlü sıklık tablosu varken tek yönlü tablo gösterilmez.
  * - 6. sınıf: Çizgi yerine Kök-yaprak gösterimi, Saçılım yok; ölçüler aritmetik ortalama, ortanca, tepe değer, açıklık
  *   (ortalama mutlak sapma ve standart sapma yok).
- * - 7. ve 8. sınıf: bütün grafikler; ortalama mutlak sapma var, standart sapma (lise ölçüsü) yok.
+ * - 7. ve 8. sınıf: saçılım dışındaki grafikler; ortalama mutlak sapma var, standart sapma (lise ölçüsü) yok.
  * - 5–8. sınıf: iki veri grubu tek grafikte, ikili gruplar hâlinde karşılaştırılır (sütunlar ve nokta yığınları yan
  *   yana; "önce birinci grup, sonra ikinci grup" değil).
- * Örneğe bağlı olmayan tablo (kendi tablonuz, veri toplama) ya da sınıfı olmayan örnek bugünkü bütün davranışla
- * çalışır: lise ve serbest kullanım değişmez.
+ * Saçılım sekmesi tüm düzeylerde kapalıdır. Nokta grafiğindeki sütun dönüşümü yerine ayrı Sütun sekmesi kullanılır.
+ * Örneğe bağlı olmayan tabloda bütün sayısal ölçüler kullanılabilir.
  *
  * İlkokul (alan uzmanı incelemesi, 4. tur, satır 181; TYMM MAT.1.4.1, MAT.2.4.1, MAT.3.4.1, MAT.4.4.2): kategorik veri,
  * en çok iki veri grubu; merkezi eğilim ve yayılım ölçüsü, yüzde ve açı yok; daire, çizgi, kök-yaprak ve saçılım yok.
  * Programın temsilleri: çetele ve sıklık tablosu (İstatistik sekmesi "Sıklık tablosu" adını alır, tabloda çetele
  * sütunu) ve sınıfın grafiği — 1. sınıf nesne grafiği (her veri bir resim), 2. sınıf şekil grafiği (her veri bir kare),
- * 3. sınıf nokta grafiği, 4. sınıf nokta grafiği ve sütun grafiği ("Sütunlara dönüştür" yalnız 4. sınıfta).
+ * 3. sınıf nokta grafiği, 4. sınıf nokta grafiği ve ayrı sütun grafiği sekmesi.
  * Kademe menüsünde İlkokul seçiliyken 1–4. sınıf örneğine bağlı olmayan her tablo (kendi tablonuz, veri toplama, 5–8.
  * sınıf örneği) ilkokulun ortak kurallarıyla (ILKOKUL_KURALLARI: 4. sınıfın temsilleri) çalışır.
  */
@@ -57,15 +57,15 @@ export interface SinifKurallari {
   noktaSekli: NoktaSekli;
   /** Sıklık tablosunda çetele (ilkokul: çetele ve sıklık tablosu birlikte) */
   cetele: boolean;
-  /** Nokta grafiğinin şeridinde "Sütunlara dönüştür" (ilkokulda yalnız sütun grafiğinin olduğu 4. sınıfta) */
+  /** Eski kayıt uyumluluğu: dönüşüm kapalı; sütun grafiği ayrı sekmede. */
   sutunaDonustur: boolean;
 }
 
-const TUM_SEKMELER: readonly GrafikTuru[] = ['nokta', 'sutun', 'cizgi', 'daire', 'sacilim', 'istatistik'];
+const TUM_SEKMELER: readonly GrafikTuru[] = ['nokta', 'sutun', 'cizgi', 'daire', 'istatistik'];
 const HEPSI: OlcuKumesi = { merkezi: true, aciklik: true, oms: true, standartSapma: true };
 const OLCUSUZ: OlcuKumesi = { merkezi: false, aciklik: false, oms: false, standartSapma: false };
 /** 5–8. sınıf ve sınıfsız tablo: sekme adları, nokta biçimi ve sütun dönüşümü bugünkü gibi; çetele yok */
-const ORTAOKUL_TEMSILLERI = { sekmeAdlari: {}, noktaSekli: 'nokta', cetele: false, sutunaDonustur: true } as const;
+const ORTAOKUL_TEMSILLERI = { sekmeAdlari: {}, noktaSekli: 'nokta', cetele: false, sutunaDonustur: false } as const;
 
 /** İlkokulun ortak kuralları: ölçü, yüzde ve açı yok; çetele ve sıklık tablosu; iki grup tek grafikte */
 const ILKOKUL_ORTAK = {
@@ -104,7 +104,7 @@ const KURALLAR: Record<SinifDuzeyi, Omit<SinifKurallari, 'sinif'>> = {
     sekmeler: ['nokta', 'sutun', 'istatistik'],
     sekmeAdlari: { nokta: 'Nokta grafiği', sutun: 'Sütun grafiği', istatistik: SIKLIK_TABLOSU },
     noktaSekli: 'nokta',
-    sutunaDonustur: true,
+    sutunaDonustur: false,
   },
   5: {
     sekmeler: ['nokta', 'sutun', 'daire', 'istatistik'],
@@ -140,7 +140,7 @@ const KURALLAR: Record<SinifDuzeyi, Omit<SinifKurallari, 'sinif'>> = {
   },
 };
 
-/** Sınıfı olmayan tablo: bütün grafikler ve ölçüler (bugünkü davranış) */
+/** Sınıfı olmayan tablo: saçılım dışındaki grafikler ve bütün ölçüler. */
 export const SERBEST_KURALLAR: SinifKurallari = {
   sinif: null,
   sekmeler: TUM_SEKMELER,

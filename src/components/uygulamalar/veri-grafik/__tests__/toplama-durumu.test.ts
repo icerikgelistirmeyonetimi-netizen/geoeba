@@ -269,12 +269,12 @@ describe('toplama durumu: paneli açma ve kapatma', () => {
     expect(toplamaAc(a)).toBe(a);
   });
 
-  it('veri toplanmadan kapatınca önceki tablo ve görünüm aynen geri gelir (derin eşitlik)', () => {
+  it('veri toplanmadan kapatınca önceki tablo geri gelir; kaldırılan Saçılım Nokta olur', () => {
     const d0 = kullaniciDurumu();
     const plan = planiUygula(d0, hazir('meyve')).durum;
     const { durum, tost } = toplamaKapat(plan);
     expect(tost).toBe('Veri toplanmadı; önceki tablo geri geldi.');
-    expect(gorunum(durum)).toEqual(gorunum(d0));
+    expect(gorunum(durum)).toEqual({ ...gorunum(d0), sekme: 'nokta' });
     expect(durum.toplamaAcik).toBe(false);
     expect(durum.oncekiTablo).toBeNull();
     expect(arastirmaBagli(durum.tablo, durum.arastirma)).toBe(false);

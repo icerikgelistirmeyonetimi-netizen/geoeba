@@ -114,7 +114,8 @@ describe('uzman 5. tur: 7. sınıf 4. ünite Yansıma (satır 130)', () => {
       const html = renderToStaticMarkup(<DunyaSemasi dunya={d} durum={baslangicDurumu(d)} />);
       expect((html.match(/stroke="#216a78"[^>]*stroke-dasharray/g) ?? []).length, id).toBe(z.cizgiHedef.size);
     }
-    for (const id of ['s7-yansima-3', 's7-yansima-4']) {
+    // 6. turda 4. görevin hedefi görünür yapıldı; 3. görev korunur.
+    for (const id of ['s7-yansima-3']) {
       const d = gorev(id).dunya;
       expect(d.hedefGizli, id).toBe(true);
       expect(renderToStaticMarkup(<DunyaSemasi dunya={d} durum={baslangicDurumu(d)} />), id).not.toMatch(/stroke="#216a78"[^>]*stroke-dasharray/);

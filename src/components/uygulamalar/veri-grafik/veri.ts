@@ -1596,6 +1596,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     aciklama: 'Kurayla seçilen 40 öğrenci: Ortalama ve ortancayı karşılaştırın, örneklemin okulu temsil edip etmediğini tartışın.',
     onerilenGrafik: 'nokta',
     varsayilanDegisken: 'Süre (dakika)',
+    karsilastir: 'Şube',
     renkDegisken: 'Şube',
     daire: 'uygunDegil',
     hassas: true,
@@ -1641,7 +1642,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     ],
     sekmeIpucu: {
       istatistik: 'Gruplara göre (Şube) tabloda dört şubenin ortalamaları birbirine yakın (138–155 dakika). Örneklem her şubeden eşit alındı.',
-      sutun: '40 sütun bir arada okunmaz; bu kadar çok veride Nokta grafiği daha uygun.',
+      sutun: 'Her grupta dört şubeden birer öğrenci yan yana gösterilir. Renk anahtarından şubeleri izleyin.',
       cizgi: '',
       daire: 'Süreler paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
     },

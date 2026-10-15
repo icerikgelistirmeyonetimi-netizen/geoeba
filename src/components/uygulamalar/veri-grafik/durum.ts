@@ -845,7 +845,7 @@ export function ornegiYukle(d: Durum, ornekId: string): { durum: Durum; onceki: 
       sutunModu: a.sutunModu,
     },
   });
-  return { durum: { ...durum, ipucu: 'kart', daireModu: null }, onceki };
+  return { durum: sekmeDuzelt({ ...durum, ipucu: 'kart', daireModu: null }), onceki };
 }
 
 /**

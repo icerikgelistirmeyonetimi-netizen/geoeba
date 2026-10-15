@@ -59,6 +59,7 @@ import { VeriTablosu as VeriTablosuBileseni, tabloDogalGenisligi } from './VeriT
 import { NoktaGrafigi, yiginYuksekligi, type NoktaSecenekleri } from './NoktaGrafigi';
 import { SutunGrafigi } from './SutunGrafigi';
 import { CizgiGrafigi, yuzdeAnlamli } from './CizgiGrafigi';
+import { GrupCizgiGrafikleri } from './GrupCizgiGrafikleri';
 import { KesifKarti } from './KesifKarti';
 import { BaslangicModali, type BaslangicAdimi } from './BaslangicModali';
 import { acilisYamasi } from './rehber';
@@ -840,7 +841,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const kategorikDegiskenler = useMemo(() => degiskenler.filter((s) => s.tur === 'etiket'), [degiskenler]);
   /** Çizgi, kök-yaprak ve saçılım yalnız sayısal değişkenle çizilir: sekmelerde yalnız sayısallar, seçili değişken kategorikse ilk sayısal */
   const yalnizSayisal = sekme === 'cizgi' || sekme === 'sacilim' || sekme === 'kokYaprak';
-  const sekmeDegiskenleri = yalnizSayisal ? sayisalDegiskenler : degiskenler;
+  const temelSekmeDegiskenleri = yalnizSayisal ? sayisalDegiskenler : degiskenler;
   const sacilim = useMemo(
     () => sacilimEksenleri({ degisken: durum.degisken, yDegisken: durum.yDegisken, renkDegisken: durum.renkDegisken }, tablo),
     [durum.degisken, durum.yDegisken, durum.renkDegisken, tablo],
@@ -865,6 +866,13 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const karsTuru = karsAdaylari.find((a) => a.id === durum.ikinciDegisken && a.neden === null)?.tur ?? null;
   /** İkinci sayısal değişken karşılaştırılıyor (iki panel, iki seri, iki sütunlu istatistik) */
   const ikinciSayisal = karsTuru === 'sayi' && ikinciSutun >= 0;
+  // Karşılaştırma aynı istatistik tablosunu iki değişken sekmesinde yinelemez.
+  const istatistikBirlesik = sekme === 'istatistik' && ikinciSayisal;
+  const sekmeDegiskenleri = istatistikBirlesik
+    ? temelSekmeDegiskenleri.filter((s) => s.id !== durum.ikinciDegisken).map((s) =>
+        s.id === grafikSutunId ? { ...s, ad: `${s.ad} / ${tablo.sutunlar[ikinciSutun].ad}` } : s)
+    : temelSekmeDegiskenleri;
+
 
   /**
    * Kategorik sütunda kutucuk sırası: Tablom bir araştırmaya bağlıysa araştırmanın sırası (anket seçenekleri, gruplar,
@@ -1365,6 +1373,14 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const cizgiSutunlari = grafikSutun >= 0 ? [grafikSutun, ...(ikinciSayisal && ikinciSutun !== grafikSutun ? [ikinciSutun] : [])] : [];
   /** Deney özetinde teorik olasılık serisi kesikli çizgiyle (deneysel olasılıkla karışmasın) */
   const cizgiIkinciKesikli = etkinKume === 'ozet' && cizgiSutunlari.length > 1 && tablo.sutunlar[cizgiSutunlari[1]]?.id === OZET_SUTUNU.teorik;
+  // Sınıf grupları ortak eksenli, alt alta panellerde aynı sırada karşılaştırılır.
+  const cizgiGruplari = useMemo(() => {
+    if (sekme !== 'cizgi' || !tekGrafik || grafikSutun < 0 || !renkEslemi) return [];
+    const g = grupPanelleri(tablo, grafikSutun, renkEslemi.sutun,
+      kategoriSiralari.get(tablo.sutunlar[renkEslemi.sutun]?.id ?? ''));
+    return g.length >= 2 && g.length <= 4 ? g : [];
+  }, [sekme, tekGrafik, grafikSutun, renkEslemi, tablo, kategoriSiralari]);
+
 
   /**
    * Grafikteki veri sayısı: boş durum (0 veri) ve PNG bandı ("24 veri") için. Saçılımda iki değeri de olan satırlar,
@@ -2021,9 +2037,9 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
         >
           {/* Değişken sekmeleri grafiğin üstünde (seçili sekme grafiğin gösterdiği değişken; renkli nokta ikinci değişken);
               tek değişkende satır çizilmez, adı zaten grafikte yazar */}
-          {(sekmeDegiskenleri.length > 1 || (bantVar && kumeSecici)) && (
+          {(istatistikBirlesik || sekmeDegiskenleri.length > 1 || (bantVar && kumeSecici)) && (
           <div className="flex shrink-0 items-end gap-2 border-b border-border bg-background px-2 pt-2">
-            {sekmeDegiskenleri.length <= 1 ? (
+            {sekmeDegiskenleri.length <= 1 && !istatistikBirlesik ? (
               // Tek değişken: sekme çizilmez (korunan karar 2); satırda yalnız veri kümesi seçici durur
               <div className="min-w-0 flex-1" />
             ) : (
@@ -2331,6 +2347,22 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                       {sekmeGerekceleri.cizgi} Kategorik veriler için Nokta, Sütun ya da Daire grafiğini deneyin.
                     </p>
                   </div>
+                ) : cizgiGruplari.length > 1 ? (
+                  <GrupCizgiGrafikleri
+                    tablo={tablo}
+                    sutunlar={cizgiSutunlari}
+                    gruplar={cizgiGruplari}
+                    renkEslemi={renkEslemi}
+                    yuzdeGoster={cizgiYuzdeleri}
+                    degerleriGoster={durum.degerleriGoster}
+                    seciliSatir={seciliGecerli}
+                    onSatirSec={setSeciliSatir}
+                    onDegerDegis={degerDegis}
+                    yuvarlamaAdimi={yuvarlamaAdimi}
+                    genislik={grafikGenislik}
+                    yukseklik={grafikYukseklik}
+                    azaltilmisHareket={azaltilmisHareket}
+                  />
                 ) : (
                   <CizgiGrafigi
                     tablo={tablo}

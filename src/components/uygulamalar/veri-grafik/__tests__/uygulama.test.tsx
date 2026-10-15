@@ -89,9 +89,8 @@ describe('Veri ve Grafik uygulaması (sunucu tarafı akıllı çizim)', () => {
     expect(html).toContain('aria-label="Grafik seçenekleri"');
     // Seçenek şeridi grafik alanının altında (sunucuda grafik ölçülmeden çizilmez, şerit yine de yerinde)
     expect(html.indexOf('data-secenek-seridi')).toBeGreaterThan(html.indexOf('id="vg-grafik-alani"'));
-    // Veri türüne göre: tek sayısal değişkenli tabloda saçılım sekmesi pasif ve nedeni ipucunda
-    expect(html).toMatch(/aria-disabled="true"[^>]*title="Saçılım grafiği iki sayısal değişken/);
-    expect(html).toContain('>Saçılım<');
+    // Uzman 6. tur: Saçılım sekmesi bütün sınıflarda kaldırıldı.
+    expect(html).not.toContain('>Saçılım<');
     // Tabloda "+ Satır" düğmesi yok; altta yazmaya hazır boş satır var
     expect(html).toContain('data-bos-satir');
     expect(html).toContain('aria-label="Yeni satır, Boy (cm)"');

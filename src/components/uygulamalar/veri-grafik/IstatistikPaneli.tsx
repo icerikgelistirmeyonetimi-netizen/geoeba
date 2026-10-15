@@ -3,7 +3,7 @@
 /**
  * İstatistik paneli: seçili sayısal değişkenin ölçüleri iki başlık altında:
  * - Merkezi eğilim ölçüleri: aritmetik ortalama, ortanca, tepe değer;
- * - Yayılım ölçüleri: açıklık (en büyük − en küçük), ortalama mutlak sapma, standart sapma (lise ölçüsü; örneklem:
+ * - Yayılım ölçüleri: açıklık (en büyük değer − en küçük değer), ortalama mutlak sapma, standart sapma (lise ölçüsü; örneklem:
  *   veri sayısı − 1; ortalama mutlak sapmanın yanında durur, onun yerini almaz).
  * "Hesaplama adımlarını göster" ders kitabı düzeninde adımları açar: toplam ve bölme, sıralama ve ortanca konumu,
  * sıklık sayımı, açıklık, fark / ortalamaya uzaklık tablosu, kare uzaklık tablosu ve karekök. Gösterilen her terim
@@ -233,7 +233,7 @@ function OlcuKartlari({ ozet, ondalik, olculer }: { ozet: Ozet; ondalik: number;
       {yayilimVar && (
       <OlcuGrubu baslik="Yayılım ölçüleri" soru="veriler ne kadar dağınık?" sinif="grow-[3] basis-[480px]">
         {olculer.aciklik && (
-          <Kart baslik="Açıklık" aciklama="en büyük − en küçük" veri="aciklik">
+          <Kart baslik="Açıklık" aciklama="en büyük değer − en küçük değer" veri="aciklik">
             <AciklikIfadesi ozet={ozet} ondalik={ondalik} />
           </Kart>
         )}
@@ -374,6 +374,7 @@ function KarsilastirmaTablosu({ adlar, ozetler, ondalik, olculer }: { adlar: [st
             <tr>
               <th scope="row" className={satirBasi}>
                 Açıklık
+                <span className="block text-xs font-normal text-muted-foreground">en büyük değer − en küçük değer</span>
               </th>
               {ozetler.map((o, i) => (
                 <td key={i} className={hucre}>
@@ -616,7 +617,7 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
           <p>
             En küçük veri <strong>{yaz(a.enKucuk)}</strong>, en büyük veri <strong>{yaz(a.enBuyuk)}</strong>.
           </p>
-          <Esitlik ad="Açıklık" ifade={`en büyük − en küçük = ${yaz(a.enBuyuk)} − ${terim(a.enKucuk)}`} sonuc={a.aciklikGosterim} />
+          <Esitlik ad="Açıklık" ifade={`en büyük değer − en küçük değer = ${yaz(a.enBuyuk)} − ${terim(a.enKucuk)}`} sonuc={a.aciklikGosterim} />
         </Adim>
         )}
 

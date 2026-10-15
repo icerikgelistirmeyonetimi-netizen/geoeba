@@ -321,7 +321,7 @@ describe('istatistik paneli: ders kitabı düzeni, adımlar ve karşılaştırma
     expect(html).toContain('Verilerin toplamı = (−3) + 2 + 5 = 4');
     expect(html).toContain('Aritmetik ortalama = 4 ÷ 3 ≈ 1,33');
     expect(html).toContain('farkları yuvarlanmış ortalamayla (≈ 1,33) hesapladık');
-    expect(html).toContain('Açıklık = en büyük − en küçük = 5 − (−3) = 8');
+    expect(html).toContain('Açıklık = en büyük değer − en küçük değer = 5 − (−3) = 8');
     toplamiTutar(panel(t, 1), 'Uzaklıkların toplamı');
     expect(html).not.toContain('-3');
   });

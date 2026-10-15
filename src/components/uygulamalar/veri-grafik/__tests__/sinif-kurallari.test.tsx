@@ -80,12 +80,12 @@ const metin = (html: string) =>
 // ── Kurallar (saf) ──────────────────────────────────────────────────────────────────────────────────────────
 
 describe('sınıf kuralları: sekmeler ve ölçüler', () => {
-  it('5., 6., 7. ve 8. sınıfın sekmeleri; sınıfsız tabloda bugünkü 6 sekme', () => {
+  it('5., 6., 7. ve 8. sınıfın sekmeleri; sınıfsız tabloda 5 sekme', () => {
     expect(sinifKurallari(5).sekmeler).toEqual(['nokta', 'sutun', 'daire', 'istatistik']);
     expect(sinifKurallari(6).sekmeler).toEqual(['nokta', 'sutun', 'kokYaprak', 'daire', 'istatistik']);
-    for (const s of [7, 8] as const) expect(sinifKurallari(s).sekmeler).toEqual(['nokta', 'sutun', 'cizgi', 'daire', 'sacilim', 'istatistik']);
+    for (const s of [7, 8] as const) expect(sinifKurallari(s).sekmeler).toEqual(['nokta', 'sutun', 'cizgi', 'daire', 'istatistik']);
     expect(sinifKurallari(null)).toBe(SERBEST_KURALLAR);
-    expect(SERBEST_KURALLAR.sekmeler).toEqual(['nokta', 'sutun', 'cizgi', 'daire', 'sacilim', 'istatistik']);
+    expect(SERBEST_KURALLAR.sekmeler).toEqual(['nokta', 'sutun', 'cizgi', 'daire', 'istatistik']);
     expect(sekmeSinifta('kokYaprak', SERBEST_KURALLAR)).toBe(false);
     expect(sinifSekmesi('cizgi', sinifKurallari(6))).toBe('nokta');
     expect(sinifSekmesi('sacilim', sinifKurallari(5))).toBe('nokta');
@@ -411,7 +411,7 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     const gun = yukle('gun');
     expect(grafikSekmeleri(uygulamaCiz(gun))).toEqual(['Nokta', 'Sütun', 'Daire', 'İstatistik']);
     const nokta = uygulamaCiz({ ...gun, sekme: 'nokta' });
-    expect(seritDugmeleri(nokta)).toEqual(['Etiketler', 'Sütunlara dönüştür']);
+    expect(seritDugmeleri(nokta)).toEqual(['Etiketler']);
     const ist = uygulamaCiz({ ...gun, sekme: 'istatistik', adimlariGoster: true });
     expect(ist).toContain('data-olcusuz-ozet');
     expect(metin(ist)).not.toMatch(/Merkezi eğilim|Yayılım ölçüleri|Standart sapma|Ortalama mutlak sapma|Tepe değer/);
@@ -434,21 +434,15 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     expect(metin(ist)).not.toMatch(/Göreli sıklık|Merkez açı|Tepe değer/);
   });
 
-  it('[109] denetim: Nokta → Sütunlara dönüştür (renk anahtarı Sınıf, karşılaştırma yok) — 5–8. sınıfta parçalar yan yana, sınıfsızda yığılı', () => {
+  it('[109] eski kayıtta sütun modu açık olsa da Nokta grafiği noktaları gösterir', () => {
     const atik = { ...yukle('atik'), sekme: 'nokta' as Sekme, sutunModu: true, ikinciDegisken: null };
-    const html = uygulamaCiz(atik);
-    const nokta = html.slice(html.indexOf('data-grafik="nokta"'));
-    expect(nokta).toContain('data-yan-parca="5-A"');
-    expect(nokta).toContain('data-yan-parca="5-B"');
-    expect(nokta).not.toContain('data-yigin-parcasi');
-    // Yemek artığı: 5-A 3, 5-B 5; Plastik: 5-A 6, 5-B 1 — sayılar kendi sütunlarının üstünde (toplam yazılmaz), yüzde yok
-    const sayilar = Array.from(nokta.matchAll(/data-yan-parca-sayisi="(5-[AB])"[^>]*>(\d+)</g), (m) => `${m[1]}:${m[2]}`);
-    expect(sayilar.slice(0, 4)).toEqual(['5-A:3', '5-B:5', '5-A:6', '5-B:1']);
-    expect(svgYazilari(nokta.slice(0, nokta.indexOf('</svg>')))).not.toMatch(/%/);
-    // Sınıfsız tablo (bağ kopmuş): bugünkü yığılı sütunlar
-    const kendi = uygulamaCiz({ ...atik, ornekId: null, tabloAdi: null });
-    expect(kendi).toContain('data-yigin-parcasi="5-A"');
-    expect(kendi).not.toContain('data-yan-parca=');
+    for (const durum of [atik, { ...atik, ornekId: null, tabloAdi: null }]) {
+      const html = uygulamaCiz(durum);
+      expect(html).toContain('data-grafik="nokta"');
+      expect(html).not.toContain('Sütunlara dönüştür');
+      expect(html).not.toMatch(/data-yukseklik="(?!0")/);
+      expect(html).not.toContain('data-yan-parca-sayisi');
+    }
   });
 
   it('[109] 5. sınıf başkan: tek sıklık tablosunda yalnız Sıklık sütunu; sütunların üstünde yüzde yok', () => {
@@ -465,7 +459,7 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     const kitap = yukle('kitap');
     expect(grafikSekmeleri(uygulamaCiz(kitap))).toEqual(['Nokta', 'Sütun', 'Kök-yaprak', 'Daire', 'İstatistik']);
     expect(grafikSekmeleri(uygulamaCiz(yukle('mac')))).toEqual(['Nokta', 'Sütun', 'Kök-yaprak', 'Daire', 'İstatistik']);
-    expect(seritDugmeleri(uygulamaCiz({ ...kitap, sekme: 'nokta' }))).toEqual(['Aritmetik ortalama', 'Ortanca', 'Etiketler', 'Sütunlara dönüştür']);
+    expect(seritDugmeleri(uygulamaCiz({ ...kitap, sekme: 'nokta' }))).toEqual(['Aritmetik ortalama', 'Ortanca', 'Etiketler']);
     const kok = uygulamaCiz({ ...kitap, sekme: 'kokYaprak' });
     expect(kok).toContain('data-grafik="kok-yaprak"');
     const ist = uygulamaCiz({ ...kitap, sekme: 'istatistik', adimlariGoster: true });
@@ -496,7 +490,7 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
 
   it('[111] 7. sınıf sınav: iki sınıf tek nokta grafiğinde (yan yana yığınlar), sütunlar 7A-01 ile 7B-01 çiftleri; standart sapma yok', () => {
     const sinav = yukle('sinav');
-    expect(grafikSekmeleri(uygulamaCiz(sinav))).toEqual(['Nokta', 'Sütun', 'Çizgi', 'Daire', 'Saçılım', 'İstatistik']);
+    expect(grafikSekmeleri(uygulamaCiz(sinav))).toEqual(['Nokta', 'Sütun', 'Çizgi', 'Daire', 'İstatistik']);
     const nokta = uygulamaCiz({ ...sinav, sekme: 'nokta', secenekler: { ortalama: true, oms: true, etiketler: false, ortanca: false, standartSapma: true } });
     expect(nokta).toContain('data-yan-yana-karsilastirma');
     expect(nokta).not.toContain('data-grup-panelleri');
@@ -505,7 +499,7 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     expect(metin(nokta)).toContain('7-A: Aritmetik ortalama = 70 · Ort. mutlak sapma = 16');
     expect(metin(nokta)).toContain('7-B: Aritmetik ortalama = 70 · Ort. mutlak sapma = 6');
     expect(nokta).not.toContain('data-standart-sapma-bandi');
-    expect(seritDugmeleri(nokta)).toEqual(['Aritmetik ortalama', 'Ortanca', 'Ortalama mutlak sapma', 'Etiketler', 'Sütunlara dönüştür']);
+    expect(seritDugmeleri(nokta)).toEqual(['Aritmetik ortalama', 'Ortanca', 'Ortalama mutlak sapma', 'Etiketler']);
     const sutun = uygulamaCiz({ ...sinav, sekme: 'sutun' });
     expect(sutun).toContain('data-ikili');
     const etiketler = Array.from(sutun.matchAll(/data-tutamak-satir="(\d+)"/g), (m) => Number(m[1]));
@@ -546,13 +540,13 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     }
   });
 
-  it('sınıfsız tablo (kendi tablonuz): bugünkü davranış — 6 sekme, alt alta paneller, bütün ölçü düğmeleri, sütunda tek seri', () => {
+  it('sınıfsız tablo (kendi tablonuz): bugünkü davranış — 5 sekme, alt alta paneller, bütün ölçü düğmeleri, sütunda tek seri', () => {
     const kendi = { ...yukle('mac'), ornekId: null, tabloAdi: null };
-    expect(grafikSekmeleri(uygulamaCiz(kendi))).toEqual(['Nokta', 'Sütun', 'Çizgi', 'Daire', 'Saçılım', 'İstatistik']);
+    expect(grafikSekmeleri(uygulamaCiz(kendi))).toEqual(['Nokta', 'Sütun', 'Çizgi', 'Daire', 'İstatistik']);
     const nokta = uygulamaCiz({ ...kendi, sekme: 'nokta' });
     expect(nokta).toContain('data-karsilastirma-panelleri');
     expect(nokta).not.toContain('data-yan-yana-karsilastirma');
-    expect(seritDugmeleri(nokta)).toEqual(['Aritmetik ortalama', 'Ortanca', 'Ortalama mutlak sapma', 'Standart sapma', 'Etiketler', 'Sütunlara dönüştür']);
+    expect(seritDugmeleri(nokta)).toEqual(['Aritmetik ortalama', 'Ortanca', 'Ortalama mutlak sapma', 'Standart sapma', 'Etiketler']);
     const sutun = uygulamaCiz({ ...kendi, sekme: 'sutun' });
     expect(sutun).not.toContain('data-ikili');
     const ist = uygulamaCiz({ ...kendi, sekme: 'istatistik' });
