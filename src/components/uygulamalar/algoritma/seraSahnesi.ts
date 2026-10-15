@@ -277,29 +277,47 @@ function golgeDokusu(): THREE.CanvasTexture {
 
 /** Çimen: açık yeşil zemin, ince ot çizgileri ve hafif lekeler */
 function cimDokusu(koyu: boolean): THREE.CanvasTexture {
-  const [c, g] = tuval(512, 512);
+  const N = 512;
+  const [c, g] = tuval(N, N);
   const r = uretec(31);
+  // Tekrarlanan dokuda kenardan taşan leke ve otlar karşı kenardan devam eder.
+  // Yalnızca tuvalle kesişen kopyalar çizilir; içte kalan parçalar bir kez çizilir.
+  const sararakCiz = (sol: number, ust: number, sag: number, alt: number, ciz: (dx: number, dy: number) => void) => {
+    for (let sy = Math.ceil(-alt / N); sy <= Math.floor((N - ust) / N); sy++) {
+      for (let sx = Math.ceil(-sag / N); sx <= Math.floor((N - sol) / N); sx++) {
+        ciz(sx * N, sy * N);
+      }
+    }
+  };
   g.fillStyle = koyu ? '#274a38' : '#8fbe68';
-  g.fillRect(0, 0, 512, 512);
+  g.fillRect(0, 0, N, N);
   for (let i = 0; i < 18; i++) {
-    const x = r() * 512;
-    const y = r() * 512;
-    const gr = g.createRadialGradient(x, y, 0, x, y, 40 + r() * 60);
-    gr.addColorStop(0, koyu ? 'rgba(20,50,35,0.35)' : 'rgba(120,170,80,0.45)');
-    gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gr;
-    g.fillRect(0, 0, 512, 512);
+    const x = r() * N;
+    const y = r() * N;
+    const yari = 40 + r() * 60;
+    sararakCiz(x - yari, y - yari, x + yari, y + yari, (dx, dy) => {
+      const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, yari);
+      gr.addColorStop(0, koyu ? 'rgba(20,50,35,0.35)' : 'rgba(120,170,80,0.45)');
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr;
+      g.fillRect(x + dx - yari, y + dy - yari, yari * 2, yari * 2);
+    });
   }
   for (let i = 0; i < 5200; i++) {
-    const x = r() * 512;
-    const y = r() * 512;
+    const x = r() * N;
+    const y = r() * N;
     const v = r();
     g.strokeStyle = koyu ? `rgba(${40 + v * 40}, ${80 + v * 50}, ${55 + v * 30}, 0.55)` : `rgba(${95 + v * 60}, ${150 + v * 50}, ${60 + v * 40}, 0.6)`;
     g.lineWidth = 1 + r() * 1.2;
-    g.beginPath();
-    g.moveTo(x, y);
-    g.lineTo(x + (r() - 0.5) * 5, y - 3 - r() * 6);
-    g.stroke();
+    const xx = x + (r() - 0.5) * 5;
+    const yy = y - 3 - r() * 6;
+    const pay = g.lineWidth / 2 + 1;
+    sararakCiz(Math.min(x, xx) - pay, Math.min(y, yy) - pay, Math.max(x, xx) + pay, Math.max(y, yy) + pay, (dx, dy) => {
+      g.beginPath();
+      g.moveTo(x + dx, y + dy);
+      g.lineTo(xx + dx, yy + dy);
+      g.stroke();
+    });
   }
   return dokuYap(c, true);
 }

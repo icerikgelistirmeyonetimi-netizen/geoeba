@@ -23,7 +23,7 @@ const VARLIK_ONEKI = process.env.NEXT_PUBLIC_ASSET_PREFIX ?? '';
 /** Kapak görseli: /algoritma/kapak/<kimlik>(-koyu).webp; altında hep sınıfın renginde yalın desen (görsel yüklenince üstünü örter) */
 function Kapak({ kimlik, renk, koyu, etiket, oran = '16 / 10', children }: { kimlik: string; renk: string; koyu: boolean; etiket: string; oran?: string; children?: React.ReactNode }) {
   const [durum, setDurum] = useState<'yukleniyor' | 'var' | 'yok'>('yukleniyor');
-  const src = `${VARLIK_ONEKI}/algoritma/kapak/${kimlik}${koyu ? '-koyu' : ''}.webp`;
+  const src = `${VARLIK_ONEKI}/algoritma/kapak/${kimlik}${koyu ? '-koyu' : ''}.webp?v=20261015-zemin`;
   return (
     <div className="relative w-full overflow-hidden rounded-[16px] bg-muted" style={{ aspectRatio: oran }}>
       <svg className="absolute inset-0 h-full w-full" viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
