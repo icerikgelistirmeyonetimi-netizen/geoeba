@@ -23,8 +23,9 @@ import {
   type Sablon,
   type Sonuc,
 } from './olasilik';
-import { paraKenariniCiz, paraYuzunuCiz } from './madeniPara';
+import { paraKenariniCiz } from './madeniPara';
 import { TURA_GORSELI } from './turaGorseli';
+import { YAZI_GORSELI } from './yaziGorseli';
 
 // ---------------------------------------------------------------------------
 // Saf yardımcılar
@@ -431,7 +432,7 @@ function tuvalDokusu(boyut: number, ciz: (ctx: CanvasRenderingContext2D, s: numb
 /** Para kapağı dokusunun döndürme açısı (tura +, yazı −): yazılar kameradan düz okunsun. */
 export const PARA_DOKU_DONUSU = Math.PI / 2;
 
-/** 3B para ölçüsü (sahne birimi): ayrıntılar (halka yazısı, silüet) okunsun diye 0,55'ten büyütüldü; kalınlık/çap ≈ 1 TL. */
+/** 3B para ölçüsü (sahne birimi): ayrıntılar (halka yazısı, rölyef) okunsun diye 0,55'ten büyütüldü; kalınlık/çap ≈ 1 TL. */
 export const PARA_YARICAPI = 0.66;
 export const PARA_YARI_KALINLIK = 0.045;
 /** Para malzemelerinin metalliği: ortam yansıması olmadan yüksek metallik parayı karartır. */
@@ -445,26 +446,13 @@ export const PARA_ISILTI = 0.28;
  */
 export const PARA_KAPAK_YUZLERI: readonly [ParaYuzu, ParaYuzu] = ['tura', 'yazi'];
 
-/**
- * Tura yüzü ortak TCMB görselinden; yazı yüzü madeniPara.ts çiziminden gelir.
- * Fotoğraf yükseklik haritası sayılmaz: tura için yükseklik istendiğinde düz yüz döner.
- */
-export function paraDokusu(yuz: ParaYuzu, kip: 'renk' | 'yukseklik' = 'renk', yuklendi?: () => void): THREE.Texture {
-  if (yuz === 'tura' && kip === 'renk') {
-    // TextureLoader aynı Texture nesnesini, gömülü görsel çözülünce günceller.
-    const doku = new THREE.TextureLoader().load(TURA_GORSELI, yuklendi);
-    doku.colorSpace = THREE.SRGBColorSpace;
-    doku.anisotropy = 4;
-    return doku;
-  }
-  const doku = tuvalDokusu(1024, (ctx, s) => {
-    if (yuz === 'tura') {
-      // Fotoğrafın ışık/gölgeleri yükseklik değildir; sahte yüz kabartması üretme.
-      ctx.fillStyle = '#808080';
-      ctx.fillRect(0, 0, s, s);
-    } else paraYuzunuCiz(ctx, s, yuz, kip);
-  });
-  if (kip === 'yukseklik') doku.colorSpace = THREE.NoColorSpace;
+/** 2B görünümle ortak kapak görselleri: tura TCMB görseli, yazı kullanıcının EPS vektörüdür. */
+export function paraDokusu(yuz: ParaYuzu, yuklendi?: () => void): THREE.Texture {
+  // TextureLoader aynı Texture nesnesini, görsel yüklenip çözülünce günceller.
+  // Sahne yalnız gerektiğinde çizildiğinden yükleme tamamlandığında yeniden çizim istenir.
+  const doku = new THREE.TextureLoader().load(yuz === 'tura' ? TURA_GORSELI : YAZI_GORSELI, yuklendi);
+  doku.colorSpace = THREE.SRGBColorSpace;
+  doku.anisotropy = 4;
   return doku;
 }
 
@@ -1132,7 +1120,7 @@ export class DeneySahnesi extends EventTarget {
   }
 
   private paraKur(): void {
-    // İki metal ve tırtıklı kenar; tura yüzünde gerçek Atatürk rölyefi görseli.
+    // İki metal ve tırtıklı kenar; tura yüzünde gerçek Atatürk rölyefi, yazı yüzünde ortak SVG.
     // Ortam yansıması (PMREM) KULLANILMAZ: açılış sekmesi paradır ve PMREM üretimi sahnenin en ağır GPU adımı (yalnız
     // Galton'da); metal görünüşü dokudaki gradyan + düşük metallik + yönlü ışığın parlaması + dokunun kendi ışıltısıyla
     // (emissiveMap) verilir: yansıyacak ortam yokken altın sarısı halka bronz gibi kararmasın.
@@ -1151,17 +1139,12 @@ export class DeneySahnesi extends EventTarget {
     // Silindir kapağının UV'si (u↔z, v↔x) yazıyı kameraya göre 90° yan çeviriyordu; doku
     // merkez etrafında döndürülür (üst kapak ve aynalı alt kapak için zıt işaret)
     const kapak = (yuz: ParaYuzu, donus: number) => {
-      const renk = paraDokusu(yuz, 'renk', () => this.ciz());
-      const kabartma = yuz === 'tura' ? null : paraDokusu(yuz, 'yukseklik');
-      for (const d of [renk, kabartma]) {
-        if (!d) continue;
-        d.center.set(0.5, 0.5);
-        d.rotation = donus;
-      }
+      const renk = paraDokusu(yuz, () => this.ciz());
+      renk.center.set(0.5, 0.5);
+      renk.rotation = donus;
+      // Görsellerdeki renk/ışık ayrıntıları yükseklik değildir; eski yazı kabartmasını üstlerine bindirme.
       return new THREE.MeshStandardMaterial({
         map: renk,
-        bumpMap: kabartma,
-        bumpScale: 1.6,
         metalness: PARA_METALLIK,
         roughness: 0.32,
         emissive: '#ffffff',
