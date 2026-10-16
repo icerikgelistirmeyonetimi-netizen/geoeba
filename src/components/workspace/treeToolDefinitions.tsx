@@ -63,6 +63,9 @@ export const TREE_TOOL_GROUPS: TreeToolGroup[] = [
       { id: 'ray', name: 'Işın', description: 'Başlangıç noktası ve üzerinden geçen ikinci nokta ile ışın çizin.', icon: <GeometryToolIcon kind="ray" />, iconColor: R.temel },
       { id: 'segment_length', name: 'Ölçülü Doğru Parçası', description: 'Bir başlangıç noktasına tıklayın, uzunluğu sayı olarak girin.', icon: <Ruler className="w-4 h-4" />, iconColor: R.temel },
       { id: 'circle', name: 'Çember', description: 'Merkez ve yarıçap noktasıyla çember çizin.', icon: <CircleIcon className="w-4 h-4" />, iconColor: R.cember },
+      // Çokgen ve Düzgün Çokgen temel araçlardır (her kademede sık kullanılır; panelin üstündeki ayrı kısayol şeridi kaldırıldı, 16 Ekim 2026)
+      { id: 'polygon', name: 'Çokgen', description: 'Köşeleri belirleyerek çokgen çizin.', icon: <GeometryToolIcon kind="polygon" />, iconColor: R.cokgen },
+      { id: 'regular_polygon', name: 'Düzgün Çokgen', description: 'Kenar sayısını girerek düzgün çokgen oluşturun.', icon: <Hexagon className="w-4 h-4" />, iconColor: R.cokgen },
       { id: 'pen', name: 'Kalem', description: 'Serbest çizim kalemi.', icon: <PenTool className="w-4 h-4" />, iconColor: R.temel },
     ],
   },
@@ -119,10 +122,8 @@ export const TREE_TOOL_GROUPS: TreeToolGroup[] = [
     name: 'Çokgen Araçları',
     defaultExpanded: false,
     tools: [
-      { id: 'polygon', name: 'Çokgen', description: 'Köşeleri belirleyerek çokgen çizin.', icon: <GeometryToolIcon kind="polygon" />, iconColor: R.cokgen },
       { id: 'rectangle', name: 'Dikdörtgen', description: 'Dikdörtgen şekli ekleyin.', icon: <GeometryToolIcon kind="rectangle" />, iconColor: R.cokgen },
       { id: 'square', name: 'Kare', description: 'Köşeye dokunup kenar uzunluğunu yazın ya da sürükleyerek çizin.', icon: <Square className="w-4 h-4" />, iconColor: R.cokgen },
-      { id: 'regular_polygon', name: 'Düzgün Çokgen', description: 'Kenar sayısını girerek düzgün çokgen oluşturun.', icon: <Hexagon className="w-4 h-4" />, iconColor: R.cokgen },
     ],
   },
 

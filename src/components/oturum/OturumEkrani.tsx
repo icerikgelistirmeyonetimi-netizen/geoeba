@@ -8,20 +8,15 @@
  * adalardaki kademe kartlarıyla aynı kaynaktan (adaEslemeleri); tokenlar sınıf kabuğundan (sinif.module.css).
  */
 import React from 'react';
-import { Backpack, BookOpen, GraduationCap, LogOut, type LucideIcon } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import type { LevelId } from '@/types/curriculum';
 import { KADEME_ADALARI } from '@/components/adalar/adaEslemeleri';
+import { KADEME_SIMGELERI } from '@/components/adalar/kademeSimgeleri';
 import { useSaat } from '@/components/sinif/useSaat';
 import s from './oturum.module.css';
 
-const SIMGELER: Record<LevelId, LucideIcon> = {
-  ilkokul: Backpack,
-  ortaokul: BookOpen,
-  lise: GraduationCap,
-};
-
-/** Hesaplar adalarla aynı sıra, ad, sınıf aralığı ve renkte (adaEslemeleri tek kaynak). */
-const HESAPLAR = KADEME_ADALARI.map((k) => ({ id: k.id, ad: k.ad, siniflar: k.aralik, renk: k.renk, Simge: SIMGELER[k.id] }));
+/** Hesaplar adalarla aynı sıra, ad, sınıf aralığı, renk ve simgede (adaEslemeleri + kademeSimgeleri tek kaynak). */
+const HESAPLAR = KADEME_ADALARI.map((k) => ({ id: k.id, ad: k.ad, siniflar: k.aralik, renk: k.renk, Simge: KADEME_SIMGELERI[k.id] }));
 
 export interface OturumEkraniProps {
   onOturumAc: (kademe: LevelId) => void;

@@ -1581,15 +1581,6 @@ export function Toolbar({
               {/* Kademe süzgeci açıkken: "İlkokul araçları · Tüm araçlar" */}
               <KademeSuzgeciSeridi duzey={kademeDuzeyi} onTumAraclar={tumAraclaraDon} />
 
-              <div className="grid grid-cols-2 gap-1 px-2.5 py-2 border-b border-border/60" aria-label="Sık kullanılan çokgen araçları">
-                {aracGruplari.flatMap((g) => g.tools).filter((t) => t.id === 'polygon' || t.id === 'regular_polygon').map((t) => (
-                  <button key={t.id} type="button" onClick={() => handleToolClick(t.id as ToolMode)}
-                    aria-pressed={activeTool === t.id} className="min-h-[44px] flex items-center justify-center gap-1.5 rounded-lg bg-muted/50 hover:bg-primary/10 text-[11px] font-semibold text-foreground">
-                    <span className={t.iconColor}>{t.icon}</span><span>{t.name}</span>
-                  </button>
-                ))}
-              </div>
-
               {/* Ağaç Menü Araç Listesi (Alt Alta Tek Tek) — kademe süzgecinden geçmiş gruplar; sayaçlar süzülmüş sayıdır */}
               <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-3.5 scrollbar-thin">
                 {normalizedSearch !== '' && gorunenSonucSayisi === 0 && (

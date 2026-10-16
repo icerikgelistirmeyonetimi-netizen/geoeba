@@ -20,9 +20,435 @@
 })();
 </script>
 <style>html.sablon-donus #ekran-kapak { display: none !important; }</style>
-<script src="ortak/7c10e67e8c59bec7.js"></script>
+<script>
+/* Sayfa modülü kayıt defterleri — parça script'lerinden ÖNCE tanımlı olmalı */
+window.SAYFA_INIT = {}; window.SAYFA_TAMAM = {};
+window.SAYFA_DURAKLAT = {}; window.SAYFA_DEVAM = {};
+/* JS ÇALIŞMA ZAMANI HATASI KAYDI (2026-09-06, konum-hataları teşhisi: FIZ.11.4 s22
+   tanımsız değişkenle SAYFA_INIT yarıda kaldı, 3B tuval bembeyaz çıktı ve görsel tur
+   kareyi KABUL ETTİ — hat hiçbir yerde hatayı dinlemiyordu). Köprünün try/catch'i
+   hatayı yutar, window "error" olayı hiç tetiklenmez; bu yüzden kayıt catch'ten
+   AÇIKÇA yapılır. Eşzamansız hatalar (rAF döngüsü, olay işleyici, setTimeout)
+   global dinleyiciyle o an AKTİF sayfaya yazılır. Denetim betiği (gorsel_denetim)
+   sayfanın kaydını okur ve ENGEL bulgusu üretir. İçerik davranışı DEĞİŞMEZ.
+   2026-09-11: 2e0036a0'dan taşındı (denetim raporu 6b) — 10.09 17:35 koşusunda bu
+   köprü 7 sayfadaki «SAYFA_INIT scene is not defined @at gokKuresi» hatasını görsel
+   prompta taşıdı, tur onardı (karne 2,4 → 4,9); HEAD'de köprü yoktu. */
+window.__JS_HATALAR__ = {};
+window.JS_HATA_KAYDET = function (no, e, kaynak) {
+  try {
+    no = +no || 0;
+    var m = (e && (e.message || (e.reason && e.reason.message))) || String(e && e.reason || e || "hata");
+    var yer = (e && e.stack && String(e.stack).split("\n").slice(1, 2)[0]) || "";
+    if (e && e.lineno) yer = ":" + e.lineno + (e.colno ? ":" + e.colno : "");
+    var kayit = (kaynak ? kaynak + " " : "") + String(m).slice(0, 160) + (yer ? " @" + String(yer).trim().slice(0, 80) : "");
+    var L = window.__JS_HATALAR__[no] || (window.__JS_HATALAR__[no] = []);
+    if (L.indexOf(kayit) < 0 && L.length < 5) L.push(kayit);
+  } catch (e2) {}
+};
+(function () {
+  function aktifNo() {
+    var el = document.querySelector(".sayfa.aktif");
+    return el ? (+String(el.id).replace("sayfa-", "") || 0) : 0;
+  }
+  window.addEventListener("error", function (ev) {
+    if (ev && ev.target && ev.target !== window && !ev.error && !ev.message) return; // kaynak yükleme hatası (img/script) — JS değil
+    window.JS_HATA_KAYDET(aktifNo(), ev.error || ev, "");
+  });
+  window.addEventListener("unhandledrejection", function (ev) {
+    window.JS_HATA_KAYDET(aktifNo(), ev, "promise");
+  });
+})();
+/* Sesli içerik (2026-08-24): SAYFA_ANLATIM[n] = function(olay){...} — anlatım
+   motoru her söylenen kelimede {kelime, indeks, t} ile çağırır; sayfa bununla
+   anlatıma senkron kurgular kurabilir. Bildirimsel yol daha kolaydır: sahne
+   öğesine data-anlatim-kelime="..." ver, motor o kelime söylenirken öğeyi
+   kendiliğinden gösterir (data-anlatim-etki="ciz|vurgula" ile çizim/vurgu). */
+window.SAYFA_ANLATIM = {};
+
+/* EGITSEL — projeye özgü küçük yardımcılar (sözleşme 2b: parçalar YALNIZ
+   çağırır, yeniden yazmaz). Savunmacı: yanlış kullanımda patlamaz,
+   console.warn + zararsız düşüş. */
+window.EGITSEL = {
+  /* Dönüt: TOAST olarak verilir (kullanıcı kararı 2026-08-15 — sayfa içi
+     .durum-bandi kaldırıldı, tüm bildirimler toast'tır). `kok` imzada
+     KALIR: 200+ mevcut parça dontVer(kok, ...) diye çağırıyor.
+     tip: "dogru" | "yanlis" */
+  dontVer: function (kok, tip, mesaj) {
+    /* Nötr tipler (2026-09-26, geoeba parti raporu 7.4.x): bazı sayfalar
+       yönlendirmeyi dontVer(kok, "uyari", …) diye veriyor; eskiden her
+       bilinmeyen tip «yanlis»a dönüp kırmızı + yanlış sesi basıyordu. */
+    if (tip === "uyari" || tip === "bilgi" || tip === "notr" || tip === "ipucu") {
+      if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj); }
+      return;
+    }
+    tip = tip === "dogru" ? "dogru" : "yanlis";
+    if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj, tip); }
+    else { console.warn("EGITSEL.dontVer: SABLON_TOAST yok"); }
+  },
+  /* Tek-seçim grubu: kok üzerinde olay delegasyonu — seçiciyle eşleşen
+     öğelere (SONRADAN eklenenler dahil) tıklamada .secili'yi tek öğede
+     tutar, cb(el, el.dataset.deger) çağırır. ayarlar.toggle=true ise
+     seçili öğeye ikinci tıklama seçimi kaldırır (cb(null, undefined)). */
+  secimGrubu: function (kok, secici, cb, ayarlar) {
+    if (!kok || !kok.addEventListener) {
+      console.warn("EGITSEL.secimGrubu: geçersiz kok");
+      return;
+    }
+    ayarlar = ayarlar || {};
+    kok.addEventListener("click", function (ev) {
+      var el = ev.target && ev.target.closest ? ev.target.closest(secici) : null;
+      if (!el || !kok.contains(el)) { return; }
+      if (el.disabled || el.classList.contains("locked")) { return; }
+      if (ayarlar.toggle && el.classList.contains("secili")) {
+        el.classList.remove("secili");
+        if (typeof cb === "function") { cb(null, undefined); }
+        return;
+      }
+      var ogeler = kok.querySelectorAll(secici);
+      Array.prototype.forEach.call(ogeler, function (o) { o.classList.remove("secili"); });
+      el.classList.add("secili");
+      if (typeof cb === "function") { cb(el, el.dataset ? el.dataset.deger : undefined); }
+    });
+  },
+  /* Kilitle/aç: eşleşen buton ve şıkları topluca disabled + .locked yapar.
+     kilitli=false ile açar. */
+  kilitle: function (kok, secici, kilitli) {
+    var ogeler = kok && kok.querySelectorAll ? kok.querySelectorAll(secici) : [];
+    Array.prototype.forEach.call(ogeler, function (el) {
+      if ("disabled" in el) { el.disabled = kilitli !== false; }
+      el.classList.toggle("locked", kilitli !== false);
+    });
+  },
+
+  /* ÇOKTAN SEÇMELİ DEĞERLENDİRME MOTORU (2026-09-26, geoeba uzman raporu:
+     «değerlendirme soruları kendi içinde ileri-geri yapılamıyor», «sonucu
+     gör dediğinde kaç doğru kaç yanlış gösteren ekran çıkmıyor», «baştan
+     başlayınca bazı sorular çözülmüş geliyor», «lisede sorular 5 şıklı
+     olmalı», «en az 2 seçim hakkı verilmeli, yanlışta hemen doğru cevap
+     gelmemeli»). Her değerlendirme sayfası bu mekaniği kendisi yazıyordu ve
+     her biri başka eksik taşıyordu; motor TEK doğruluk kaynağıdır.
+       EGITSEL.degerlendirme(kok, {
+         sorular: [{metin, siklar: [{metin, dogru}], donut}],  // şık sayısı serbest (≤6)
+         hak: 2,                // soru başına deneme hakkı
+         karistir: true,        // şık sırası (soru başına BİR kez karışır)
+         soruDegisti: function (i, soru) {},     // sahneyi soruya eşle
+         sahneOnEki: "s7-soru-",  // isteğe bağlı: <g id="s7-soru-K"> grupları etkin soruya göre
+                                  // gösterilir/gizlenir (K = 1..n; esk değerlendirme sözleşmesi)
+         cevaplandi: function (i, dogruMu, soru) {},
+         bitti: function (dogru, toplam) {}
+       })
+     Arayüz .kontrol-govde / .kontrol-eylem İÇİNE kurulur (içerikleri
+     değiştirilir); metin ve şıklar LaTeX içerebilir (MathJax dizilir). */
+  degerlendirme: function (kok, ayar) {
+    ayar = ayar || {};
+    var sorular = (ayar.sorular || []).filter(function (s) { return s && s.siklar && s.siklar.length; });
+    var govde = ayar.govde || (kok && kok.querySelector(".kontrol-govde"));
+    var eylem = ayar.eylem || (kok && kok.querySelector(".kontrol-eylem"));
+    if (!govde || !sorular.length) { console.warn("EGITSEL.degerlendirme: govde/soru yok"); return null; }
+    var HAK = Math.max(1, ayar.hak || 2);
+    var HARF = ["A", "B", "C", "D", "E", "F"];
+    var durum, aktif = 0, sonucEkrani = false;
+
+    function karisik(n) {
+      var d = [];
+      for (var i = 0; i < n; i++) { d.push(i); }
+      if (ayar.karistir === false) { return d; }
+      for (var j = d.length - 1; j > 0; j--) {
+        var k = Math.floor(Math.random() * (j + 1)); var t = d[j]; d[j] = d[k]; d[k] = t;
+      }
+      return d;
+    }
+    function sifirla() {
+      durum = sorular.map(function (s) {
+        return { sira: karisik(s.siklar.length), denenen: [], sonuc: "bos" };  // bos|devam|dogru|yanlis
+      });
+      aktif = 0; sonucEkrani = false;
+    }
+    function el(etiket, sinif, metin) {
+      var e = document.createElement(etiket);
+      if (sinif) { e.className = sinif; }
+      if (metin !== undefined) { e.innerHTML = metin; }
+      return e;
+    }
+    function diz(kap) {
+      try {
+        if (window.MathJax && window.MathJax.typesetPromise) { window.MathJax.typesetPromise([kap]); }
+        else if (window.MathJax && window.MathJax.typeset) { window.MathJax.typeset([kap]); }
+      } catch (e) { /* dizgi hatası etkileşimi durdurmaz */ }
+    }
+    function sayim() {
+      var s = { dogru: 0, yanlis: 0, bos: 0 };
+      durum.forEach(function (d) { if (d.sonuc === "dogru") s.dogru++; else if (d.sonuc === "yanlis") s.yanlis++; else s.bos++; });
+      return s;
+    }
+    // SORU BÖLÜMÜ STANDARDI (2026-10-08, kullanıcı: «kimisinde soru sayısı yazıyor kiminde noktalarla
+    // ifade edilmiş, standart yok; soru sayısı bölümü alan kullanımı açısından daha efektif olabilir»):
+    // numaralı yuvarlaklar panelin BAŞLIK SATIRININ sağına yerleşir (ayrı satır yer kaplamaz);
+    // «Soru i / n» yalnız ekran okuyucuya söylenir. Başlık satırı yoksa eski yerinde (deg-ust) kalır.
+    function noktalar(ust) {
+      var bas = kok.querySelector(".panel-basi .baslik-satiri") || kok.querySelector(".baslik-satiri");
+      var eski = bas && bas.querySelector(".soru-sayac");
+      if (eski) { eski.remove(); }
+      var kap = el("div", "deg-noktalar soru-sayac");
+      kap.setAttribute("role", "group");
+      kap.setAttribute("aria-label", "Sorular");
+      sorular.forEach(function (_, i) {
+        var d = durum[i];
+        var b = el("button", "deg-nokta soru-nokta tiklanir " + d.sonuc + (i === aktif && !sonucEkrani ? " aktif" : ""), String(i + 1));
+        b.type = "button";
+        b.setAttribute("aria-label", (i + 1) + ". soru" + (d.sonuc === "dogru" ? ", doğru" : d.sonuc === "yanlis" ? ", yanlış" : ""));
+        b.addEventListener("click", function () { git(i); });
+        kap.appendChild(b);
+      });
+      var sr = el("span", "sr-only", sonucEkrani ? "Sonuçlar" : "Soru " + (aktif + 1) + " / " + sorular.length);
+      sr.setAttribute("aria-live", "polite");
+      kap.appendChild(sr);
+      (bas || ust).appendChild(kap);
+      if (bas && window.EGITSEL.baslikTekrariniGizle) { window.EGITSEL.baslikTekrariniGizle(bas); }
+    }
+    function eylemKur(dugmeler) {
+      if (!eylem) { return; }
+      eylem.innerHTML = "";
+      var satir = el("div", "deg-eylem");
+      dugmeler.forEach(function (d) {
+        var b = el("button", "buton" + (d.birincil ? " birincil" : ""), d.metin);
+        b.type = "button";
+        if (d.pasif) { b.disabled = true; }
+        b.addEventListener("click", d.is);
+        satir.appendChild(b);
+      });
+      eylem.appendChild(satir);
+    }
+    // Soru sahnesi grupları (sahneOnEki): yalnız etkin sorunun grubu görünür
+    function sahneGoster() {
+      if (!ayar.sahneOnEki) { return; }
+      for (var k = 1; k <= sorular.length; k++) {
+        var g = kok.querySelector("#" + ayar.sahneOnEki + k);
+        if (g) { g.style.display = k === aktif + 1 ? "" : "none"; }
+      }
+    }
+    function ciz() {
+      sonucEkrani = false;
+      var soru = sorular[aktif], d = durum[aktif];
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      noktalar(ust);
+      if (ust.childNodes.length) { kap.appendChild(ust); }
+      // soru metni kutusuz ve büyük (.soru-metni — yazı standardı)
+      kap.appendChild(el("div", "soru-metni deg-metin", soru.metin || ""));
+      var liste = el("div", "deg-siklar");
+      var bitmis = d.sonuc === "dogru" || d.sonuc === "yanlis";
+      d.sira.forEach(function (asilNo, gorunen) {
+        var sik = soru.siklar[asilNo];
+        var b = el("button", "parca-btn");
+        b.type = "button";
+        b.appendChild(el("span", "kutucuk", HARF[gorunen] || String(gorunen + 1)));
+        b.appendChild(el("span", "", sik.metin));
+        var denendi = d.denenen.indexOf(asilNo) > -1;
+        if (denendi && !sik.dogru) { b.classList.add("yanlis-secim"); b.disabled = true; }
+        if (bitmis) {
+          b.disabled = true;
+          if (sik.dogru) { b.classList.add("dogru-secim"); }
+          else if (!denendi) { b.classList.add("soluk"); }
+        }
+        b.addEventListener("click", function () { sec(asilNo); });
+        liste.appendChild(b);
+      });
+      kap.appendChild(liste);
+      govde.appendChild(kap);
+      diz(govde);
+      var son = aktif === sorular.length - 1;
+      eylemKur([
+        { metin: "Önceki", pasif: aktif === 0, is: function () { git(aktif - 1); } },
+        // 2. tur uzman notu (7.1.1, 2026-10-06): son soruda düğme «sonraki ekran» değil «Testi Bitir»
+        { metin: son ? "Testi Bitir" : "Sonraki", birincil: true,
+          is: function () { if (son) { sonuc(); } else { git(aktif + 1); } } }
+      ]);
+      sahneGoster();
+      if (typeof ayar.soruDegisti === "function") {
+        try { ayar.soruDegisti(aktif, soru); } catch (e) { console.error("degerlendirme.soruDegisti", e); }
+      }
+    }
+    function sec(asilNo) {
+      var soru = sorular[aktif], d = durum[aktif];
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis" || d.denenen.indexOf(asilNo) > -1) { return; }
+      d.denenen.push(asilNo);
+      var dogruMu = !!soru.siklar[asilNo].dogru;
+      // 3. tur (6. sınıf genel): iki seçenekli soruda bir yanlıştan sonra doğru cevap gösterilir —
+      // hak, yanlış şık sayısını aşmaz; soru başına `hak` verilebilir
+      var hak = soru.hak || Math.min(HAK, Math.max(1, soru.siklar.length - 1));
+      var kalan = hak - d.denenen.length;
+      if (dogruMu) {
+        d.sonuc = "dogru";
+        window.EGITSEL.dontVer(kok, "dogru", soru.donut || "Doğru seçim.");
+      } else if (kalan > 0) {
+        d.sonuc = "devam";
+        // 2. tur (R17): hak 3 iken ilk yanlışta da «Bir hakkın» diyordu — kalan hakkı yaz
+        var KALAN_AD = ["", "Bir", "İki", "Üç", "Dört"];
+        window.EGITSEL.dontVer(kok, "yanlis", (KALAN_AD[kalan] || String(kalan)) + " hakkın daha var, tekrar dene.");
+      } else {
+        d.sonuc = "yanlis";
+        window.EGITSEL.dontVer(kok, "yanlis", soru.donut || "Doğru seçenek işaretlendi.");
+      }
+      ciz();
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis") {
+        if (typeof ayar.cevaplandi === "function") {
+          try { ayar.cevaplandi(aktif, d.sonuc === "dogru", soru); } catch (e) { console.error("degerlendirme.cevaplandi", e); }
+        }
+      }
+    }
+    function git(i) {
+      if (i < 0 || i >= sorular.length) { return; }
+      aktif = i;
+      ciz();
+    }
+    function sonuc() {
+      sonucEkrani = true;
+      var s = sayim(), n = sorular.length;
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Sonuçlar"));
+      noktalar(ust);
+      kap.appendChild(ust);
+      var kutu = el("div", "panel deg-sonuc");
+      kutu.appendChild(el("div", "deg-puan buyuk-sayi", s.dogru + " / " + n));
+      var sayac = el("div", "deg-sayac");
+      sayac.appendChild(el("span", "d", "Doğru: " + s.dogru));
+      sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
+      sayac.appendChild(el("span", "b", "Boş: " + s.bos));
+      kutu.appendChild(sayac);
+      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kap.appendChild(kutu);
+      govde.appendChild(kap);
+      eylemKur([
+        { metin: "Soruları İncele", is: function () { git(0); } },
+        { metin: "Tekrar Çöz", birincil: true, is: function () { sifirla(); ciz(); } }
+      ]);
+      if (typeof ayar.bitti === "function") {
+        try { ayar.bitti(s.dogru, n); } catch (e) { console.error("degerlendirme.bitti", e); }
+      }
+    }
+    sifirla();
+    // Üretim/görsel denetim kancası: window.__BASLANGIC_SORU__ (1 tabanlı) → test o sorudan başlar
+    // (soru sırası zaten karışmaz; yalnız şıklar karışır)
+    var basla = parseInt(window.__BASLANGIC_SORU__, 10);
+    if (basla >= 1 && basla <= sorular.length) { aktif = basla - 1; }
+    ciz();
+    return { git: git, sonuc: sonuc, sifirla: function () { sifirla(); ciz(); } };
+  },
+
+  /* 2B TUVAL YÜKSEK ÇÖZÜNÜRLÜK (2026-08-17 çözünürlük raporu, P0)
+     ---------------------------------------------------------------
+     SORUN: <canvas width="970"> yazınca tampon 970 fiziksel pikselde
+     donar. Çerçeve 1280×720'yi transform:scale(k) ile büyütüyor; 1920×1080
+     pencerede k=1,5 ve DPR 1,25 iken tuval ekranda 1411 CSS px yer kaplıyor,
+     gereken fiziksel genişlik 1763 px — ölçülen yeterlilik 0,55. Yani yazılar
+     ve çapraz çizgiler yarı çözünürlükte esnetiliyor.
+
+     KULLANIM (parça kodunda, çizimden önce):
+       var ctx = EGITSEL.tuvalHazirla(canvas, 970, 630);
+     Bundan sonra ÇİZİM MANTIKSAL koordinatta yapılır (0..970, 0..630) —
+     tek satır çizim kodu değişmez. Tampon fiziksel piksele kurulur,
+     ctx başlangıç dönüşümü ölçeği taşır.
+
+     ⚠ MANTIKSAL BOYUT canvas.width DEĞİLDİR: canvas.width artık FİZİKSEL
+     piksel verir. Genişlik gereken yerde hazırlayıcının döndürdüğü
+     ctx.mantiksalW / ctx.mantiksalH kullanılır. İşaretçi koordinatı için
+     EGITSEL.tuvalNoktasi(canvas, olay) çağrılır.
+
+     Ölçek/DPR değişiminde tampon kendiliğinden yeniden kurulur; tuval
+     TEMİZLENDİĞİ için sayfa yeniden çizmelidir — bunun için tuvala
+     `yeniden-ciz` olayı gönderilir (rAF ile çizen sayfada gereksiz):
+         tuval.addEventListener("yeniden-ciz", ciz);                       */
+  tuvalHazirla: function (tuval, mantiksalW, mantiksalH) {
+    if (!tuval || !tuval.getContext) { console.warn("tuvalHazirla: tuval yok"); return null; }
+    var mw = mantiksalW || tuval.clientWidth || tuval.width || 1;
+    var mh = mantiksalH || tuval.clientHeight || tuval.height || 1;
+    tuval._mantiksalW = mw; tuval._mantiksalH = mh;
+    // Kutu ölçüsü CSS'ten gelmeli; width/height ÖZNİTELİĞİ artık tampon
+    // ölçüsüdür ve düzeni belirlememelidir.
+    if (!tuval.style.width) { tuval.style.width = "100%"; }
+    if (!tuval.style.height) { tuval.style.height = "100%"; }
+    var ctx = tuval.getContext("2d");
+    window.EGITSEL._tuvalKur(tuval, ctx);
+    if (!tuval._olcekBagli) {
+      tuval._olcekBagli = true;
+      addEventListener("sablon:goruntu-degisti", function () {
+        if (!tuval.isConnected) return;
+        window.EGITSEL._tuvalKur(tuval, ctx);
+        tuval.dispatchEvent(new CustomEvent("yeniden-ciz"));
+      });
+    }
+    return ctx;
+  },
+
+  _tuvalKur: function (tuval, ctx) {
+    var m = window.SABLON_GORSEL_METRIK
+         || {scale: 1, dpr: window.devicePixelRatio || 1};
+    var kutu = tuval.getBoundingClientRect();
+    // Kutu henüz ölçülemiyorsa (gizli sayfa) mantıksal boyut × etkin oran.
+    var cssW = kutu.width || (tuval._mantiksalW * (m.scale || 1));
+    var cssH = kutu.height || (tuval._mantiksalH * (m.scale || 1));
+    // getBoundingClientRect ZATEN transform'u içerir → ayrıca k ile çarpma.
+    var pw = Math.max(1, Math.round(cssW * (m.dpr || 1)));
+    var ph = Math.max(1, Math.round(cssH * (m.dpr || 1)));
+    var enBuyuk = 8e6;                       // tampon tavanı (~8 MP)
+    if (pw * ph > enBuyuk) {
+      var s = Math.sqrt(enBuyuk / (pw * ph));
+      pw = Math.round(pw * s); ph = Math.round(ph * s);
+    }
+    if (tuval.width !== pw) { tuval.width = pw; }
+    if (tuval.height !== ph) { tuval.height = ph; }
+    ctx.setTransform(pw / tuval._mantiksalW, 0, 0, ph / tuval._mantiksalH, 0, 0);
+    ctx.mantiksalW = tuval._mantiksalW;
+    ctx.mantiksalH = tuval._mantiksalH;
+  },
+
+  /* İşaretçi olayını MANTIKSAL tuval koordinatına çevirir. canvas.width
+     ARTIK fiziksel pikseldir; eski `e.offsetX * c.width / rect.width`
+     hesabı yanlış sonuç verir. */
+  tuvalNoktasi: function (tuval, olay) {
+    var kutu = tuval.getBoundingClientRect();
+    var mw = tuval._mantiksalW || tuval.width;
+    var mh = tuval._mantiksalH || tuval.height;
+    return {x: kutu.width ? (olay.clientX - kutu.left) * mw / kutu.width : 0,
+            y: kutu.height ? (olay.clientY - kutu.top) * mh / kutu.height : 0};
+  }
+};
+
+/* MathJax yapılandırması — tex-svg gömülmeden ÖNCE tanımlı olmalı.
+   Tek-dolar ($...$) varsayılanda kapalıdır; eski üretimler tek-dolar
+   kullandığından açıyoruz (2026-08-11 tespiti: MAT.7.4'te 5 sayfa).
+
+   ⚠ SVG ATLANIR (2026-08-18 kullanıcı bildirimi «latex metinler de bozuk
+   görünüyor», ölçüldü ve DOM'da doğrulandı): MathJax bir SVG <text> düğümü
+   içindeki `\( … \)` ifadesini de tipograflıyor ve yerine <mjx-container>
+   koyuyor. mjx-container bir HTML öğesidir; SVG ad alanında BİLİNMEYEN
+   öğedir ve tarayıcı onu HİÇ ÇİZMEZ — formül ekrandan tümüyle kayboluyor
+   (ölçüm: 15 <text> düğümü, devre şemalarında \(R_1\), \(I_1\) etiketleri).
+   Çözüm iki parçalı: (1) MathJax SVG'ye HİÇ girmez — yarım iş yapıp düğümü
+   bozmasın; (2) aşağıdaki `svgLatexDuzelt` o metni Unicode'a çevirir
+   (R₁, 45°, CO₂). SVG içinde tipografik matematik zaten MÜMKÜN DEĞİLDİR;
+   seçenek «düz okunur metin» ile «hiçbir şey» arasındadır.
+
+   KESİR TAM BOY (2026-09-16 kullanıcı bildirimi, MAT.4.1.7 s1): satır içi
+   \frac MathJax'ta küçültülmüş kipte çizilir, rakamlar gövde yazısının ~%70'i
+   kalıyordu. İlkokul (1-4) matematikte \frac = \dfrac (rakamlar gövde boyunda). */
+window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
+                          displayMath: [["\\[", "\\]"], ["$$", "$$"]],
+                          macros: /^MAT\.[1-4]\./.test("MAT.H.4.2")
+                                  ? { frac: ["\\dfrac{#1}{#2}", 2] } : {} },
+                   options: { skipHtmlTags: ["script", "noscript", "style",
+                                             "textarea", "pre", "code",
+                                             "annotation", "annotation-xml",
+                                             "svg"] } };
+</script>
 <script src="ortak/f5b3f5fac24e774b.js"></script>
-<script src="ortak/b47118f55e978615.js"></script>
+<script src="ortak/27c9562c7880c36e.js"></script>
 <script src="ortak/17f319aeaf055a36.js"></script>
 <script>/* RoundedBoxGeometry.js — yerel gömme */
 /* three.js r155 örnek portu — RoundedBoxGeometry (examples/jsm/geometries/RoundedBoxGeometry.js)
@@ -187,543 +613,6 @@
 } )();
 
 </script>
-<script>/* StudyoOrtami.js — yerel gömme */
-/* 2026-09-11 — 8c2a9012 (10 Eylül main yedeği) sürümünden bayt bayt taşındı;
- * kullanıcı kararı «StudyoOrtami olsun bir deneyelim». Yalnız bu dosya taşındı:
- * malzeme3b kataloğu, gezegen dokuları, Reflector ve kontak gölgesi/bloom
- * bentleri kapsam dışıdır. Dosyanın gövdesi aşağıda değiştirilmeden durur. */
-/* StudyoOrtami — PMREM ortam sahnesi (RoomEnvironment'ın yerine; 2026-09-05).
- * Lisans: bu depo. Neden: RoomEnvironment nötr beyaz bir odadır — yansımada
- * «beş beyaz nokta + düz koyu alt yarı», ufuk yok; cam/krom kenarı zeminde
- * erir, vernik/sır/clearcoat okunmaz (ölçüldü: 5 mercekli galeri eleştirisi,
- * denemeler/malzeme-galerisi/ortam-deneyi). Bu sahne: üstte gök, ufukta açık
- * şerit, altta koyu zemin degradesi (ufuk çizgisi yansımada görünür) + bir
- * yumuşak ana panel + yan dolgu + arka rim şeridi. Parlaklık, difüz beyaz
- * yüzeyde RoomEnvironment×0.45 ile aynı aydınlığı verecek şekilde KALİBRE
- * edildi (kalibrasyon: denemeler/malzeme-galerisi/ortam-kalibrasyon.html) —
- * yani envMapIntensity 1 ile kullanılır, 0.45 traverse satırı GEREKMEZ.
- * Kullanım:
- *   scene.environment = new THREE.PMREMGenerator(renderer)
- *       .fromScene(new THREE.StudyoOrtami(), 0.04).texture;
- * ayar (isteğe bağlı): gok / ufuk / zeminUst / zemin (CSS renk;
- * yalnız özel atmosferde değiştirilir; açık fon rengi alt yarıya kopyalanmaz),
- * anaSiddet (varsayılan 3.5), dolguSiddet (1.0),
- * rimSiddet (1.8). Montaj bu dosyayı yalnız sayfada «StudyoOrtami» geçince
- * gömer (uretici/sablon.py kutuphane_dosyalari). */
-( function () {
-
-	THREE.StudyoOrtami = function ( ayar ) {
-
-		ayar = ayar || {};
-		const s = new THREE.Scene();
-
-		// Gök küresi: degrade doku (üst gök → ufuk şeridi → koyu zemin)
-		const c = document.createElement( 'canvas' ); c.width = 4; c.height = 256;
-		const g = c.getContext( '2d' ), gr = g.createLinearGradient( 0, 0, 0, 256 );
-		gr.addColorStop( 0.00, ayar.gok || '#8fb6dc' );
-		gr.addColorStop( 0.46, ayar.ufuk || '#e9eef3' );
-		gr.addColorStop( 0.52, ayar.zeminUst || '#5a6068' );
-		gr.addColorStop( 1.00, ayar.zemin || '#26292e' );
-		g.fillStyle = gr; g.fillRect( 0, 0, 4, 256 );
-		const t = new THREE.CanvasTexture( c );
-		if ( THREE.SRGBColorSpace ) t.colorSpace = THREE.SRGBColorSpace;
-		const kure = new THREE.Mesh( new THREE.SphereGeometry( 50, 32, 24 ),
-			new THREE.MeshBasicMaterial( { map: t, side: THREE.BackSide } ) );
-		s.add( kure );
-
-		function panel( w, h, x, y, z, siddet ) {
-
-			const m = new THREE.Mesh( new THREE.PlaneGeometry( w, h ),
-				new THREE.MeshBasicMaterial( { side: THREE.DoubleSide } ) );
-			m.material.color.setScalar( siddet );
-			m.position.set( x, y, z ); m.lookAt( 0, 0, 0 );
-			s.add( m );
-
-		}
-
-		// KALİBRASYON (2026-09-05, ortam-kalibrasyon.html, ACES 0.9, difüz beyaz küre + gri zemin):
-		//   RoomEnvironment × 0.45 → küre tepesi 232 · gölge tarafı 180 · zemin 185 (üretim tabanı)
-		//   StudyoOrtami  × 1.0  → 232 · 176 · 190 (ana 3.5 / dolgu 1.0 / rim 1.8) → difüz aydınlık eş, krom ortalaması 192 → 95 (ufuk + koyu zemin: gerçek kontrast)
-		panel( 14, 8, - 8, 14, 6, ayar.anaSiddet != null ? ayar.anaSiddet : 3.5 );    // ana yumuşak panel (tepe-sol-ön): geniş, orta parlak → yumuşak vurgu
-		panel( 6, 12, 16, 5, - 4, ayar.dolguSiddet != null ? ayar.dolguSiddet : 1.0 ); // yan dolgu
-		panel( 20, 3, 0, 6, - 20, ayar.rimSiddet != null ? ayar.rimSiddet : 1.8 );    // arka rim şeridi: kenar ışığı / ufuk parlaması
-		return s;
-
-	};
-
-} )();
-
-</script>
-<script>/* RGBELoader.js — yerel gömme */
-/* RGBELoader — three.js r155 examples/jsm/loaders/RGBELoader.js GLOBAL PORTU (MIT, bkz. LISANS-three-ports.txt).
- * 2026-10-12: Poly Haven HDRI ortam ışığı (sahneAmbiyansi) için; ES modül importları THREE.* olarak yeniden yazıldı,
- * gövde değiştirilmedi. Kullanım: new THREE.RGBELoader().parse(arrayBuffer) → DataTexture (equirect). */
-( function () {
-
-// https://github.com/mrdoob/three.js/issues/5552
-// http://en.wikipedia.org/wiki/RGBE_image_format
-
-class RGBELoader extends THREE.DataTextureLoader {
-
-	constructor( manager ) {
-
-		super( manager );
-
-		this.type = THREE.HalfFloatType;
-
-	}
-
-	// adapted from http://www.graphics.cornell.edu/~bjw/rgbe.html
-
-	parse( buffer ) {
-
-		const
-			/* return codes for rgbe routines */
-			//RGBE_RETURN_SUCCESS = 0,
-			RGBE_RETURN_FAILURE = - 1,
-
-			/* default error routine.  change this to change error handling */
-			rgbe_read_error = 1,
-			rgbe_write_error = 2,
-			rgbe_format_error = 3,
-			rgbe_memory_error = 4,
-			rgbe_error = function ( rgbe_error_code, msg ) {
-
-				switch ( rgbe_error_code ) {
-
-					case rgbe_read_error: console.error( 'THREE.RGBELoader Read Error: ' + ( msg || '' ) );
-						break;
-					case rgbe_write_error: console.error( 'THREE.RGBELoader Write Error: ' + ( msg || '' ) );
-						break;
-					case rgbe_format_error: console.error( 'THREE.RGBELoader Bad File Format: ' + ( msg || '' ) );
-						break;
-					default:
-					case rgbe_memory_error: console.error( 'THREE.RGBELoader: Error: ' + ( msg || '' ) );
-
-				}
-
-				return RGBE_RETURN_FAILURE;
-
-			},
-
-			/* offsets to red, green, and blue components in a data (float) pixel */
-			//RGBE_DATA_RED = 0,
-			//RGBE_DATA_GREEN = 1,
-			//RGBE_DATA_BLUE = 2,
-
-			/* number of floats per pixel, use 4 since stored in rgba image format */
-			//RGBE_DATA_SIZE = 4,
-
-			/* flags indicating which fields in an rgbe_header_info are valid */
-			RGBE_VALID_PROGRAMTYPE = 1,
-			RGBE_VALID_FORMAT = 2,
-			RGBE_VALID_DIMENSIONS = 4,
-
-			NEWLINE = '\n',
-
-			fgets = function ( buffer, lineLimit, consume ) {
-
-				const chunkSize = 128;
-
-				lineLimit = ! lineLimit ? 1024 : lineLimit;
-				let p = buffer.pos,
-					i = - 1, len = 0, s = '',
-					chunk = String.fromCharCode.apply( null, new Uint16Array( buffer.subarray( p, p + chunkSize ) ) );
-
-				while ( ( 0 > ( i = chunk.indexOf( NEWLINE ) ) ) && ( len < lineLimit ) && ( p < buffer.byteLength ) ) {
-
-					s += chunk; len += chunk.length;
-					p += chunkSize;
-					chunk += String.fromCharCode.apply( null, new Uint16Array( buffer.subarray( p, p + chunkSize ) ) );
-
-				}
-
-				if ( - 1 < i ) {
-
-					/*for (i=l-1; i>=0; i--) {
-						byteCode = m.charCodeAt(i);
-						if (byteCode > 0x7f && byteCode <= 0x7ff) byteLen++;
-						else if (byteCode > 0x7ff && byteCode <= 0xffff) byteLen += 2;
-						if (byteCode >= 0xDC00 && byteCode <= 0xDFFF) i--; //trail surrogate
-					}*/
-					if ( false !== consume ) buffer.pos += len + i + 1;
-					return s + chunk.slice( 0, i );
-
-				}
-
-				return false;
-
-			},
-
-			/* minimal header reading.  modify if you want to parse more information */
-			RGBE_ReadHeader = function ( buffer ) {
-
-
-				// regexes to parse header info fields
-				const magic_token_re = /^#\?(\S+)/,
-					gamma_re = /^\s*GAMMA\s*=\s*(\d+(\.\d+)?)\s*$/,
-					exposure_re = /^\s*EXPOSURE\s*=\s*(\d+(\.\d+)?)\s*$/,
-					format_re = /^\s*FORMAT=(\S+)\s*$/,
-					dimensions_re = /^\s*\-Y\s+(\d+)\s+\+X\s+(\d+)\s*$/,
-
-					// RGBE format header struct
-					header = {
-
-						valid: 0, /* indicate which fields are valid */
-
-						string: '', /* the actual header string */
-
-						comments: '', /* comments found in header */
-
-						programtype: 'RGBE', /* listed at beginning of file to identify it after "#?". defaults to "RGBE" */
-
-						format: '', /* RGBE format, default 32-bit_rle_rgbe */
-
-						gamma: 1.0, /* image has already been gamma corrected with given gamma. defaults to 1.0 (no correction) */
-
-						exposure: 1.0, /* a value of 1.0 in an image corresponds to <exposure> watts/steradian/m^2. defaults to 1.0 */
-
-						width: 0, height: 0 /* image dimensions, width/height */
-
-					};
-
-				let line, match;
-
-				if ( buffer.pos >= buffer.byteLength || ! ( line = fgets( buffer ) ) ) {
-
-					return rgbe_error( rgbe_read_error, 'no header found' );
-
-				}
-
-				/* if you want to require the magic token then uncomment the next line */
-				if ( ! ( match = line.match( magic_token_re ) ) ) {
-
-					return rgbe_error( rgbe_format_error, 'bad initial token' );
-
-				}
-
-				header.valid |= RGBE_VALID_PROGRAMTYPE;
-				header.programtype = match[ 1 ];
-				header.string += line + '\n';
-
-				while ( true ) {
-
-					line = fgets( buffer );
-					if ( false === line ) break;
-					header.string += line + '\n';
-
-					if ( '#' === line.charAt( 0 ) ) {
-
-						header.comments += line + '\n';
-						continue; // comment line
-
-					}
-
-					if ( match = line.match( gamma_re ) ) {
-
-						header.gamma = parseFloat( match[ 1 ] );
-
-					}
-
-					if ( match = line.match( exposure_re ) ) {
-
-						header.exposure = parseFloat( match[ 1 ] );
-
-					}
-
-					if ( match = line.match( format_re ) ) {
-
-						header.valid |= RGBE_VALID_FORMAT;
-						header.format = match[ 1 ];//'32-bit_rle_rgbe';
-
-					}
-
-					if ( match = line.match( dimensions_re ) ) {
-
-						header.valid |= RGBE_VALID_DIMENSIONS;
-						header.height = parseInt( match[ 1 ], 10 );
-						header.width = parseInt( match[ 2 ], 10 );
-
-					}
-
-					if ( ( header.valid & RGBE_VALID_FORMAT ) && ( header.valid & RGBE_VALID_DIMENSIONS ) ) break;
-
-				}
-
-				if ( ! ( header.valid & RGBE_VALID_FORMAT ) ) {
-
-					return rgbe_error( rgbe_format_error, 'missing format specifier' );
-
-				}
-
-				if ( ! ( header.valid & RGBE_VALID_DIMENSIONS ) ) {
-
-					return rgbe_error( rgbe_format_error, 'missing image size specifier' );
-
-				}
-
-				return header;
-
-			},
-
-			RGBE_ReadPixels_RLE = function ( buffer, w, h ) {
-
-				const scanline_width = w;
-
-				if (
-					// run length encoding is not allowed so read flat
-					( ( scanline_width < 8 ) || ( scanline_width > 0x7fff ) ) ||
-					// this file is not run length encoded
-					( ( 2 !== buffer[ 0 ] ) || ( 2 !== buffer[ 1 ] ) || ( buffer[ 2 ] & 0x80 ) )
-				) {
-
-					// return the flat buffer
-					return new Uint8Array( buffer );
-
-				}
-
-				if ( scanline_width !== ( ( buffer[ 2 ] << 8 ) | buffer[ 3 ] ) ) {
-
-					return rgbe_error( rgbe_format_error, 'wrong scanline width' );
-
-				}
-
-				const data_rgba = new Uint8Array( 4 * w * h );
-
-				if ( ! data_rgba.length ) {
-
-					return rgbe_error( rgbe_memory_error, 'unable to allocate buffer space' );
-
-				}
-
-				let offset = 0, pos = 0;
-
-				const ptr_end = 4 * scanline_width;
-				const rgbeStart = new Uint8Array( 4 );
-				const scanline_buffer = new Uint8Array( ptr_end );
-				let num_scanlines = h;
-
-				// read in each successive scanline
-				while ( ( num_scanlines > 0 ) && ( pos < buffer.byteLength ) ) {
-
-					if ( pos + 4 > buffer.byteLength ) {
-
-						return rgbe_error( rgbe_read_error );
-
-					}
-
-					rgbeStart[ 0 ] = buffer[ pos ++ ];
-					rgbeStart[ 1 ] = buffer[ pos ++ ];
-					rgbeStart[ 2 ] = buffer[ pos ++ ];
-					rgbeStart[ 3 ] = buffer[ pos ++ ];
-
-					if ( ( 2 != rgbeStart[ 0 ] ) || ( 2 != rgbeStart[ 1 ] ) || ( ( ( rgbeStart[ 2 ] << 8 ) | rgbeStart[ 3 ] ) != scanline_width ) ) {
-
-						return rgbe_error( rgbe_format_error, 'bad rgbe scanline format' );
-
-					}
-
-					// read each of the four channels for the scanline into the buffer
-					// first red, then green, then blue, then exponent
-					let ptr = 0, count;
-
-					while ( ( ptr < ptr_end ) && ( pos < buffer.byteLength ) ) {
-
-						count = buffer[ pos ++ ];
-						const isEncodedRun = count > 128;
-						if ( isEncodedRun ) count -= 128;
-
-						if ( ( 0 === count ) || ( ptr + count > ptr_end ) ) {
-
-							return rgbe_error( rgbe_format_error, 'bad scanline data' );
-
-						}
-
-						if ( isEncodedRun ) {
-
-							// a (encoded) run of the same value
-							const byteValue = buffer[ pos ++ ];
-							for ( let i = 0; i < count; i ++ ) {
-
-								scanline_buffer[ ptr ++ ] = byteValue;
-
-							}
-							//ptr += count;
-
-						} else {
-
-							// a literal-run
-							scanline_buffer.set( buffer.subarray( pos, pos + count ), ptr );
-							ptr += count; pos += count;
-
-						}
-
-					}
-
-
-					// now convert data from buffer into rgba
-					// first red, then green, then blue, then exponent (alpha)
-					const l = scanline_width; //scanline_buffer.byteLength;
-					for ( let i = 0; i < l; i ++ ) {
-
-						let off = 0;
-						data_rgba[ offset ] = scanline_buffer[ i + off ];
-						off += scanline_width; //1;
-						data_rgba[ offset + 1 ] = scanline_buffer[ i + off ];
-						off += scanline_width; //1;
-						data_rgba[ offset + 2 ] = scanline_buffer[ i + off ];
-						off += scanline_width; //1;
-						data_rgba[ offset + 3 ] = scanline_buffer[ i + off ];
-						offset += 4;
-
-					}
-
-					num_scanlines --;
-
-				}
-
-				return data_rgba;
-
-			};
-
-		const RGBEByteToRGBFloat = function ( sourceArray, sourceOffset, destArray, destOffset ) {
-
-			const e = sourceArray[ sourceOffset + 3 ];
-			const scale = Math.pow( 2.0, e - 128.0 ) / 255.0;
-
-			destArray[ destOffset + 0 ] = sourceArray[ sourceOffset + 0 ] * scale;
-			destArray[ destOffset + 1 ] = sourceArray[ sourceOffset + 1 ] * scale;
-			destArray[ destOffset + 2 ] = sourceArray[ sourceOffset + 2 ] * scale;
-			destArray[ destOffset + 3 ] = 1;
-
-		};
-
-		const RGBEByteToRGBHalf = function ( sourceArray, sourceOffset, destArray, destOffset ) {
-
-			const e = sourceArray[ sourceOffset + 3 ];
-			const scale = Math.pow( 2.0, e - 128.0 ) / 255.0;
-
-			// clamping to 65504, the maximum representable value in float16
-			destArray[ destOffset + 0 ] = THREE.DataUtils.toHalfFloat( Math.min( sourceArray[ sourceOffset + 0 ] * scale, 65504 ) );
-			destArray[ destOffset + 1 ] = THREE.DataUtils.toHalfFloat( Math.min( sourceArray[ sourceOffset + 1 ] * scale, 65504 ) );
-			destArray[ destOffset + 2 ] = THREE.DataUtils.toHalfFloat( Math.min( sourceArray[ sourceOffset + 2 ] * scale, 65504 ) );
-			destArray[ destOffset + 3 ] = THREE.DataUtils.toHalfFloat( 1 );
-
-		};
-
-		const byteArray = new Uint8Array( buffer );
-		byteArray.pos = 0;
-		const rgbe_header_info = RGBE_ReadHeader( byteArray );
-
-		if ( RGBE_RETURN_FAILURE !== rgbe_header_info ) {
-
-			const w = rgbe_header_info.width,
-				h = rgbe_header_info.height,
-				image_rgba_data = RGBE_ReadPixels_RLE( byteArray.subarray( byteArray.pos ), w, h );
-
-			if ( RGBE_RETURN_FAILURE !== image_rgba_data ) {
-
-				let data, type;
-				let numElements;
-
-				switch ( this.type ) {
-
-					case THREE.FloatType:
-
-						numElements = image_rgba_data.length / 4;
-						const floatArray = new Float32Array( numElements * 4 );
-
-						for ( let j = 0; j < numElements; j ++ ) {
-
-							RGBEByteToRGBFloat( image_rgba_data, j * 4, floatArray, j * 4 );
-
-						}
-
-						data = floatArray;
-						type = THREE.FloatType;
-						break;
-
-					case THREE.HalfFloatType:
-
-						numElements = image_rgba_data.length / 4;
-						const halfArray = new Uint16Array( numElements * 4 );
-
-						for ( let j = 0; j < numElements; j ++ ) {
-
-							RGBEByteToRGBHalf( image_rgba_data, j * 4, halfArray, j * 4 );
-
-						}
-
-						data = halfArray;
-						type = THREE.HalfFloatType;
-						break;
-
-					default:
-
-						console.error( 'THREE.RGBELoader: unsupported type: ', this.type );
-						break;
-
-				}
-
-				return {
-					width: w, height: h,
-					data: data,
-					header: rgbe_header_info.string,
-					gamma: rgbe_header_info.gamma,
-					exposure: rgbe_header_info.exposure,
-					type: type
-				};
-
-			}
-
-		}
-
-		return null;
-
-	}
-
-	setDataType( value ) {
-
-		this.type = value;
-		return this;
-
-	}
-
-	load( url, onLoad, onProgress, onError ) {
-
-		function onLoadCallback( texture, texData ) {
-
-			switch ( texture.type ) {
-
-				case THREE.FloatType:
-				case THREE.HalfFloatType:
-
-					texture.colorSpace = THREE.LinearSRGBColorSpace;
-					texture.minFilter = THREE.LinearFilter;
-					texture.magFilter = THREE.LinearFilter;
-					texture.generateMipmaps = false;
-					texture.flipY = true;
-
-					break;
-
-			}
-
-			if ( onLoad ) onLoad( texture, texData );
-
-		}
-
-		return super.load( url, onLoadCallback, onProgress, onError );
-
-	}
-
-}
-
-
-THREE.RGBELoader = RGBELoader;
-} )();
-
-</script>
-<script src="ortak/a10810bcb36709d6.js"></script>
 <script src="ortak/c94ff30389b6f9ad.js"></script>
 <script>/* pdnd-svg.js — yerel gömme */
 /* pdnd-svg.js — Pragmatic DnD'yi SVG düğümlerine açan köprü.
@@ -1093,12 +982,9 @@ THREE.RGBELoader = RGBELoader;
 })();
 
 </script>
-<script src="ortak/ad16bc01990609a5.js"></script>
+<script src="ortak/4d6cc6546768808d.js"></script>
 <script src="ortak/d85e518ebf6759fa.js"></script>
-<script src="ortak/006945e5ce8c4c9d.js"></script>
-<script src="ortak/91e3416dcfa6bab1.js"></script>
-<script src="ortak/f7acca3b3f0936e8.js"></script><script>/* EBA logosu (sablon/kutuphane/eba-logo.svg) */
-window.EBA_LOGO="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MjAuMDMgMjIwIiB3aWR0aD0iODIwLjAzIiBoZWlnaHQ9IjIyMCI+PHRpdGxlPkVCQSBsb2dvc3UgKyB0YXNpeWljaSB0aXAsIHlhdGF5PC90aXRsZT48ZGVmcz48Y2xpcFBhdGggaWQ9ImViYUljIj48Y2lyY2xlIGN4PSIxMTAiIGN5PSIxMTAiIHI9IjQxLjA4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCA1NSkgc2NhbGUoMS4wOSkiPjxwYXRoIGZpbGw9IiNEMDMyMzgiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTTQ3OC42MDEgMTguNDIzQzQ3Ni43NyA5LjM5OCA0NjkuNjYzIDIuMjk2IDQ2MC42MzkgMC40NjVDNDU5LjE0OSAwLjE2IDQ1Ny42MDYgMCA0NTYuMDI2IDBMMzU0LjY5OSAwQzM1My4xMTkgMCAzNTEuNTc2IDAuMTYgMzUwLjA4NiAwLjQ2NUMzNDEuMDYyIDIuMjk2IDMzMy45NiA5LjM5OCAzMzIuMTI5IDE4LjQyM0MzMzEuODI0IDE5LjkxMyAzMzEuNjY0IDIxLjQ1NiAzMzEuNjY0IDIzLjAzNkwzMzEuNjY0IDEwMS4zMzVMMzUwLjA4NiAxMDEuMzM1TDM1MC4wODYgNzMuNjk5TDQ2MC42MzkgNzMuNjk5TDQ2MC42MzkgMTAxLjMzNUw0NzkuMDY2IDEwMS4zMzVMNDc5LjA2NiAyMy4wMzZDNDc5LjA2NiAyMS40NTYgNDc4LjkwNiAxOS45MTMgNDc4LjYwMSAxOC40MjNNMzUwLjA4NiA1NS4yNzNMMzUwLjA4NiAyOS45NDFDMzUwLjA4NiAyMy41NzkgMzU1LjI0NiAxOC40MjMgMzYxLjYwOCAxOC40MjNMNDQ5LjEyMSAxOC40MjNDNDU1LjQ4MyAxOC40MjMgNDYwLjYzOSAyMy41NzkgNDYwLjYzOSAyOS45NDFMNDYwLjYzOSA1NS4yNzNMMzUwLjA4NiA1NS4yNzNNMTguNDI3IDI5Ljk0MUwxOC40MjcgNDEuNDYyTDM2Ljg2NyA0MS40NjJMMTI4Ljk3NiA0MS40NThMMTI4Ljk3NiA1OS44ODFMMzAuMjQyIDU5Ljg4MUMzMC4xNDMgNTkuODczIDMwLjA0NCA1OS44NzMgMjkuOTQ1IDU5Ljg3M0MyOS44NDcgNTkuODczIDI5Ljc0OCA1OS44NzMgMjkuNjQ5IDU5Ljg4MUwxOC40MjcgNTkuODgxTDE4LjQyNyA3MS4zOTVDMTguNDI3IDc3Ljc1NyAyMy41ODMgODIuOTEzIDI5Ljk0NSA4Mi45MTNMMTQ3LjQwMyA4Mi45MTNMMTQ3LjQwMyAxMDEuMzM1TDIzLjAzNiAxMDEuMzM1QzIxLjQ1NiAxMDEuMzM1IDE5LjkxNyAxMDEuMTc1IDE4LjQyNyAxMDAuODc1QzkuNDAzIDk5LjA0NCAyLjI5NyA5MS45MzcgMC40NjYgODIuOTEzQzAuMTYxIDgxLjQyMyAwIDc5Ljg4IDAgNzguM0wwIDIzLjAzNkMwIDIxLjQ1NiAwLjE2MSAxOS45MTMgMC40NjYgMTguNDIzQzIuMjk3IDkuMzk4IDkuNDAzIDIuMjkyIDE4LjQyNyAwLjQ2MUMxOS45MTcgMC4xNiAyMS40NTYgMCAyMy4wMzYgMEwxNDcuNDAzIDBMMTQ3LjQwMyAxOC40MjNMMjkuOTQ1IDE4LjQyM0MyMy41ODMgMTguNDIzIDE4LjQyNyAyMy41NzkgMTguNDI3IDI5Ljk0MU0zMTMuMjM2IDM2Ljg1TDMxMy4yMzYgMjMuMDM2QzMxMy4yMzYgMjEuNDU2IDMxMy4wNzYgMTkuOTEzIDMxMi43NzIgMTguNDIzQzMxMC45NCA5LjM5OCAzMDMuODM0IDIuMjkyIDI5NC44MDYgMC40NjFDMjkzLjMyIDAuMTU2IDI5MS43NzcgMCAyOTAuMjAxIDBMMTY1LjgyNiAwTDE2NS44MjYgMTAxLjMzNUwyOTAuMjAxIDEwMS4zMzVDMjkxLjc3NyAxMDEuMzM1IDI5My4zMiAxMDEuMTc5IDI5NC44MDYgMTAwLjg3NUMzMDMuODM0IDk5LjA0NCAzMTAuOTQgOTEuOTM3IDMxMi43NzIgODIuOTEzQzMxMy4wNzYgODEuNDIzIDMxMy4yMzYgNzkuODggMzEzLjIzNiA3OC4zTDMxMy4yMzYgNjQuNDg2QzMxMy4yMzYgNjIuOTEgMzEzLjA3NiA2MS4zNjcgMzEyLjc3NiA1OS44ODFDMzEyLjA4NCA1Ni40NzggMzEwLjY0NCA1My4zNDcgMzA4LjYzNiA1MC42NjhDMzEwLjY0NCA0Ny45ODkgMzEyLjA4NCA0NC44NTggMzEyLjc3NiA0MS40NTRDMzEzLjA3NiAzOS45NjkgMzEzLjIzNiAzOC40MjYgMzEzLjIzNiAzNi44NU0yODMuNDMyIDgyLjkxM0MyODMuMzgyIDgyLjkxNyAyODMuMzMzIDgyLjkxNyAyODMuMjg0IDgyLjkxN0MyODMuMjM0IDgyLjkxNyAyODMuMTg1IDgyLjkxNyAyODMuMTM2IDgyLjkxM0wxODQuMjUzIDgyLjkxM0wxODQuMjUzIDU5Ljg4MUwyODMuMTM2IDU5Ljg4MUMyODMuMTg1IDU5Ljg3NyAyODMuMjM0IDU5Ljg3NyAyODMuMjg0IDU5Ljg3N0MyODMuMzMzIDU5Ljg3NyAyODMuMzgyIDU5Ljg3NyAyODMuNDMyIDU5Ljg4MUMyODkuNzI4IDU5Ljk1OSAyOTQuODA2IDY1LjA4MiAyOTQuODA2IDcxLjM5NUMyOTQuODA2IDc3LjcwNyAyODkuNzI4IDgyLjgzNCAyODMuNDMyIDgyLjkxM00yODMuNTggNDEuNDU0QzI4My40ODEgNDEuNDYyIDI4My4zODIgNDEuNDYyIDI4My4yODQgNDEuNDYyQzI4My4xODUgNDEuNDYyIDI4My4wODYgNDEuNDYyIDI4Mi45ODcgNDEuNDU0TDE4NC4yNTMgNDEuNDU0TDE4NC4yNTMgMTguNDIzTDI4My4yODQgMTguNDIzQzI4OS42NDYgMTguNDIzIDI5NC44MDYgMjMuNTc5IDI5NC44MDYgMjkuOTQxQzI5NC44MDYgMzYuMjA0IDI4OS44MDYgNDEuMzAyIDI4My41OCA0MS40NTQiLz48L2c+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNjAwLjAzIDApIj48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMjIwIiBoZWlnaHQ9IjIyMCIgcng9IjM2Ljg1IiByeT0iMzYuODUiIGZpbGw9IiNEMDMyMzgiLz48ZyBmaWxsPSJub25lIiBzdHJva2U9IiMyMzFGMjAiIHN0cm9rZS13aWR0aD0iMTUuMjciIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PHBhdGggZD0iTTMwLjYyIDExMEg2MS4yOSIvPjxwYXRoIGQ9Ik0xNTguNzEgMTEwSDE4OS4zOCIvPjwvZz48Y2lyY2xlIGN4PSIxMTAiIGN5PSIxMTAiIHI9IjQ4LjcxIiBmaWxsPSJub25lIiBzdHJva2U9IiMyMzFGMjAiIHN0cm9rZS13aWR0aD0iMTUuMjYiLz48ZyBjbGlwLXBhdGg9InVybCgjZWJhSWMpIj48Y2lyY2xlIGN4PSIxMTAiIGN5PSIxMTAiIHI9IjQxLjA4IiBmaWxsPSIjRkZGRkZGIi8+PGNpcmNsZSBjeD0iMTEwIiBjeT0iMTEwIiByPSIxMy45NSIgZmlsbD0iI0QwMzIzOCIvPjwvZz48L2c+PC9zdmc+DQo=";</script><script src="ortak/baface1d4f45afe0.js"></script>
+<script src="ortak/25bc6bc279de577f.js"></script>
 <!-- 🔊 Dönüt sesleri: montaj `window.SABLON_SES = {dogru:…, yanlis:…}` basar
      (base64 data URI). Gövde sonundaki toast() bunu hazır bulmalı, o yüzden
      BURADA — kütüphanelerden sonra, sayfa betiklerinden önce. Dosya yoksa
@@ -1109,9 +995,9 @@ window.EBA_LOGO="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vc
      yanındaki <ad>-ses/ klasöründe, göreli yolla. Ayar kapalıysa yuva BOŞ kalır
      ve gövde sonundaki anlatım motoru hiç kurulmaz. -->
 
-<link rel="stylesheet" href="ortak/fdd1eaef88ec7048.css">
+<link rel="stylesheet" href="ortak/e69c53cf44e7d3b8.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-16 14:51
+  montaj: 2026-10-16 15:25
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=yerlesim | zaman=2026-09-28 17:17
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-28 17:11
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-28 17:20
@@ -9005,7 +8891,7 @@ window.SAYFA_INIT[10] = function (kok) {
   <div class="sahne-kap">
     <svg viewBox="0 0 705 630" preserveAspectRatio="xMidYMid meet" role="img">
       <title>Özel Dörtgenler Değerlendirme Soruları Geometrik Sahnesi</title>
-      <defs>
+      <defs><linearGradient id="s11-st-zemin-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#f6f6f9"/><stop offset="100%" stop-color="#e7e5f0"/></linearGradient><linearGradient id="s11-st-kart-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#f6f6f9"/></linearGradient><linearGradient id="s11-st-vurgu-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#d9d5eb"/><stop offset="100%" stop-color="#a297d8"/></linearGradient><linearGradient id="s11-st-ikincil-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#e6cec7"/><stop offset="100%" stop-color="#d2937f"/></linearGradient><radialGradient id="s11-st-golge-grad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f1f1f4" stop-opacity="0.28"/><stop offset="100%" stop-color="#e7e5f0" stop-opacity="0"/></radialGradient>
         <linearGradient id="s11-grad-zemin" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#f6f9fc" />
           <stop offset="100%" stop-color="#edf2f8" />
@@ -9064,7 +8950,7 @@ window.SAYFA_INIT[10] = function (kok) {
       </g>
 
       <!-- Soru 1 Sahnesi: İkizkenar Yamuk ve Paralel Doğrular -->
-      <g id="s11-soru-1" class="s11-soru-sahne" data-sahne-nesne="soru-1">
+<g id="s11-deg-studyo-cerceve" pointer-events="none"><polyline points="26,10 679,10 693,24 693,606 679,620 26,620 12,606 12,24 26,10" fill="none" stroke="#d9d5eb" stroke-width="1.5" stroke-opacity="0.52" stroke-linejoin="round"/><polyline points="27,15 678,15 688,25 688,605 678,615 27,615 17,605 17,25 27,15" fill="none" stroke="#ffffff" stroke-width="1.2" stroke-opacity="0.72" stroke-linejoin="round"/><polyline points="31,13 674,13 675,14 675,18 674,19 31,19 30,18 30,14 31,13" fill="url(#s11-st-vurgu-grad)" fill-opacity="0.26"/><polyline points="20,529 103,536 186,539 269,536 352,529 436,522 519,519 602,522 685,529" fill="none" stroke="#d9d5eb" stroke-width="1.1" stroke-opacity="0.22" stroke-linecap="round"/><polyline points="20,575 103,572 186,567 269,562 352,559 436,562 519,567 602,572 685,575" fill="none" stroke="#e6cec7" stroke-width="1" stroke-opacity="0.2"/><polyline points="21,37 21,19 39,19" fill="none" stroke="#a297d8" stroke-width="1.8" stroke-opacity="0.45" stroke-linecap="round" stroke-linejoin="round"/><polyline points="28,23 31,26 28,29 25,26 28,23" fill="#e6cec7" fill-opacity="0.55"/><polyline points="684,37 684,19 666,19" fill="none" stroke="#a297d8" stroke-width="1.8" stroke-opacity="0.45" stroke-linecap="round" stroke-linejoin="round"/><polyline points="677,23 680,26 677,29 674,26 677,23" fill="#e6cec7" fill-opacity="0.55"/><polyline points="21,593 21,611 39,611" fill="none" stroke="#a297d8" stroke-width="1.8" stroke-opacity="0.45" stroke-linecap="round" stroke-linejoin="round"/><polyline points="28,601 31,604 28,607 25,604 28,601" fill="#e6cec7" fill-opacity="0.55"/><polyline points="684,593 684,611 666,611" fill="none" stroke="#a297d8" stroke-width="1.8" stroke-opacity="0.45" stroke-linecap="round" stroke-linejoin="round"/><polyline points="677,601 680,604 677,607 674,604 677,601" fill="#e6cec7" fill-opacity="0.55"/><polyline points="17,193 25,193" fill="none" stroke="#a6a2b9" stroke-width="1.1" stroke-opacity="0.35"/><polyline points="680,193 688,193" fill="none" stroke="#a6a2b9" stroke-width="1.1" stroke-opacity="0.35"/><polyline points="17,315 25,315" fill="none" stroke="#a6a2b9" stroke-width="1.1" stroke-opacity="0.35"/><polyline points="680,315 688,315" fill="none" stroke="#a6a2b9" stroke-width="1.1" stroke-opacity="0.35"/><polyline points="17,437 25,437" fill="none" stroke="#a6a2b9" stroke-width="1.1" stroke-opacity="0.35"/><polyline points="680,437 688,437" fill="none" stroke="#a6a2b9" stroke-width="1.1" stroke-opacity="0.35"/></g><g id="s11-soru-1" class="s11-soru-sahne" data-sahne-nesne="soru-1"><g class="s11-alt-studyo" pointer-events="none"><polyline points="42,32 668,32 676,40 676,598 668,606 42,606 34,598 34,40 42,32" fill="none" stroke="#e6cec7" stroke-width="1" stroke-dasharray="6 4" stroke-opacity="0.32"/><polyline points="147,602 563,602 575,612 135,612 147,602" fill="url(#s11-st-vurgu-grad)" fill-opacity="0.22" stroke="#a297d8" stroke-width="1.1" stroke-opacity="0.38" stroke-linejoin="round"/><polyline points="153,605 557,605" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-opacity="0.65"/><polyline points="39,50 39,37 52,37" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="44,40 46,42 44,44 42,42 44,40" fill="#d2937f" fill-opacity="0.52"/><polyline points="671,50 671,37 658,37" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="666,40 668,42 666,44 664,42 666,40" fill="#d2937f" fill-opacity="0.52"/><polyline points="39,588 39,601 52,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="44,594 46,596 44,598 42,596 44,594" fill="#d2937f" fill-opacity="0.52"/><polyline points="671,588 671,601 658,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="666,594 668,596 666,598 664,596 666,594" fill="#d2937f" fill-opacity="0.52"/></g>
 <defs>
   
   <linearGradient id="s11-q1-grad-govde" x1="0" y1="0" x2="0" y2="1">
@@ -9358,7 +9244,7 @@ window.SAYFA_INIT[10] = function (kok) {
 </g>
 
       <!-- Soru 2 Sahnesi: Eşkenar Dörtgen Köşegenleri -->
-      <g id="s11-soru-2" class="s11-soru-sahne" data-sahne-nesne="soru-2">
+      <g id="s11-soru-2" class="s11-soru-sahne" data-sahne-nesne="soru-2"><g class="s11-alt-studyo" pointer-events="none"><polyline points="38,24 667,24 675,32 675,598 667,606 38,606 30,598 30,32 38,24" fill="none" stroke="#e6cec7" stroke-width="1" stroke-dasharray="6 4" stroke-opacity="0.32"/><polyline points="144,602 560,602 572,612 132,612 144,602" fill="url(#s11-st-vurgu-grad)" fill-opacity="0.22" stroke="#a297d8" stroke-width="1.1" stroke-opacity="0.38" stroke-linejoin="round"/><polyline points="150,605 554,605" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-opacity="0.65"/><polyline points="35,42 35,29 48,29" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="40,32 42,34 40,36 38,34 40,32" fill="#d2937f" fill-opacity="0.52"/><polyline points="670,42 670,29 657,29" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="665,32 667,34 665,36 663,34 665,32" fill="#d2937f" fill-opacity="0.52"/><polyline points="35,588 35,601 48,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="40,594 42,596 40,598 38,596 40,594" fill="#d2937f" fill-opacity="0.52"/><polyline points="670,588 670,601 657,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="665,594 667,596 665,598 663,596 665,594" fill="#d2937f" fill-opacity="0.52"/><polyline points="188,68 188,544" fill="none" stroke="#a297d8" stroke-width="0.85" stroke-dasharray="3 3" stroke-opacity="0.28"/><polyline points="188,81 188,89" fill="none" stroke="#a297d8" stroke-width="1.6" stroke-opacity="0.65"/><polyline points="70,183 635,183" fill="none" stroke="#a297d8" stroke-width="0.85" stroke-dasharray="3 3" stroke-opacity="0.28"/><polyline points="88,183 96,183" fill="none" stroke="#a297d8" stroke-width="1.6" stroke-opacity="0.65"/><polyline points="284,68 284,544" fill="none" stroke="#a297d8" stroke-width="0.85" stroke-dasharray="3 3" stroke-opacity="0.28"/><polyline points="284,81 284,89" fill="none" stroke="#a297d8" stroke-width="1.6" stroke-opacity="0.65"/><polyline points="70,280 635,280" fill="none" stroke="#a297d8" stroke-width="0.85" stroke-dasharray="3 3" stroke-opacity="0.28"/><polyline points="88,280 96,280" fill="none" stroke="#a297d8" stroke-width="1.6" stroke-opacity="0.65"/><polyline points="98,85 96,89 92,90 88,89 86,85 88,81 92,80 96,81 98,85" fill="#ffffff" fill-opacity="0.85" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.7"/></g>
 <defs>
   <linearGradient id="s11-q2-grad-tahta" x1="0%" y1="0%" x2="0%" y2="100%">
     <stop offset="0%" stop-color="#eef4f8"></stop>
@@ -9513,7 +9399,7 @@ window.SAYFA_INIT[10] = function (kok) {
 </g>
 
       <!-- Soru 3 Sahnesi: Köşegenleri Eşit İkizkenar Yamuk Karşıt Örneği -->
-      <g id="s11-soru-3" class="s11-soru-sahne" data-sahne-nesne="soru-3">
+      <g id="s11-soru-3" class="s11-soru-sahne" data-sahne-nesne="soru-3"><g class="s11-alt-studyo" pointer-events="none"><polyline points="45,34 665,34 673,42 673,598 665,606 45,606 37,598 37,42 45,34" fill="none" stroke="#e6cec7" stroke-width="1" stroke-dasharray="6 4" stroke-opacity="0.32"/><polyline points="147,602 563,602 575,612 135,612 147,602" fill="url(#s11-st-vurgu-grad)" fill-opacity="0.22" stroke="#a297d8" stroke-width="1.1" stroke-opacity="0.38" stroke-linejoin="round"/><polyline points="153,605 557,605" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-opacity="0.65"/><polyline points="42,52 42,39 55,39" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="47,42 49,44 47,46 45,44 47,42" fill="#d2937f" fill-opacity="0.52"/><polyline points="668,52 668,39 655,39" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="663,42 665,44 663,46 661,44 663,42" fill="#d2937f" fill-opacity="0.52"/><polyline points="42,588 42,601 55,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="47,594 49,596 47,598 45,596 47,594" fill="#d2937f" fill-opacity="0.52"/><polyline points="668,588 668,601 655,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="663,594 665,596 663,598 661,596 663,594" fill="#d2937f" fill-opacity="0.52"/></g>
 <defs>
   <linearGradient id="s11-q3-grad-pencere-dis" x1="0%" y1="0%" x2="0%" y2="100%">
     <stop offset="0%" stop-color="#ffffff"></stop>
@@ -9765,7 +9651,7 @@ window.SAYFA_INIT[10] = function (kok) {
 </g>
 
       <!-- Soru 4 Sahnesi: İkizkenar Yamuk & Paralelkenar Karşılaştırması -->
-      <g id="s11-soru-4" class="s11-soru-sahne" data-sahne-nesne="soru-4">
+      <g id="s11-soru-4" class="s11-soru-sahne" data-sahne-nesne="soru-4"><g class="s11-alt-studyo" pointer-events="none"><polyline points="36,24 669,24 677,32 677,598 669,606 36,606 28,598 28,32 36,24" fill="none" stroke="#e6cec7" stroke-width="1" stroke-dasharray="6 4" stroke-opacity="0.32"/><polyline points="144,602 560,602 572,612 132,612 144,602" fill="url(#s11-st-vurgu-grad)" fill-opacity="0.22" stroke="#a297d8" stroke-width="1.1" stroke-opacity="0.38" stroke-linejoin="round"/><polyline points="150,605 554,605" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-opacity="0.65"/><polyline points="33,42 33,29 46,29" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="38,32 40,34 38,36 36,34 38,32" fill="#d2937f" fill-opacity="0.52"/><polyline points="672,42 672,29 659,29" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="667,32 669,34 667,36 665,34 667,32" fill="#d2937f" fill-opacity="0.52"/><polyline points="33,588 33,601 46,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="38,594 40,596 38,598 36,596 38,594" fill="#d2937f" fill-opacity="0.52"/><polyline points="672,588 672,601 659,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="667,594 669,596 667,598 665,596 667,594" fill="#d2937f" fill-opacity="0.52"/></g>
 <defs>
   <linearGradient id="s11-q4-grad-mat" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0%" stop-color="#f4f8fc"></stop>
@@ -9979,7 +9865,7 @@ window.SAYFA_INIT[10] = function (kok) {
 </g>
 
       <!-- Soru 5 Sahnesi: Özel Dörtgenler Venn/Hiyerarşi Şeması -->
-      <g id="s11-soru-5" class="s11-soru-sahne" data-sahne-nesne="soru-5">
+      <g id="s11-soru-5" class="s11-soru-sahne" data-sahne-nesne="soru-5"><g class="s11-alt-studyo" pointer-events="none"><polyline points="40,24 665,24 673,32 673,598 665,606 40,606 32,598 32,32 40,24" fill="none" stroke="#e6cec7" stroke-width="1" stroke-dasharray="6 4" stroke-opacity="0.32"/><polyline points="144,602 560,602 572,612 132,612 144,602" fill="url(#s11-st-vurgu-grad)" fill-opacity="0.22" stroke="#a297d8" stroke-width="1.1" stroke-opacity="0.38" stroke-linejoin="round"/><polyline points="150,605 554,605" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-opacity="0.65"/><polyline points="37,42 37,29 50,29" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="42,32 44,34 42,36 40,34 42,32" fill="#d2937f" fill-opacity="0.52"/><polyline points="668,42 668,29 655,29" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="663,32 665,34 663,36 661,34 663,32" fill="#d2937f" fill-opacity="0.52"/><polyline points="37,588 37,601 50,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="42,594 44,596 42,598 40,596 42,594" fill="#d2937f" fill-opacity="0.52"/><polyline points="668,588 668,601 655,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="663,594 665,596 663,598 661,596 663,594" fill="#d2937f" fill-opacity="0.52"/></g>
 <defs>
   <linearGradient id="s11-q5-grad-board-frame" x1="0" y1="0" x2="1" y2="1">
     <stop offset="0%" stop-color="#ffffff"></stop>
@@ -10404,1622 +10290,9 @@ window.SAYFA_INIT[11] = function (kok) {
 
 </div>
 
-<script>
-/* ============ SABİT MEKANİK: yalnız ileri/geri, kilit YOK ============ */
-(function () {
-  const SAYFA_SAYISI = 11;
-  // Yerleşim ayarı montajda yazılır (parcalar/<KOD>/sablon_ayar.json).
-  // OTO_GECIS: etkinlik tamamlanınca sonraki sayfaya kendiliğinden geçilir —
-  // footer kapalıyken ZORUNLUDUR (başka ileri yolu yok).
-  const OTO_GECIS = false;
-  const GECIS_SANIYE = 3;      // doğru cevap / açık "bitti" sinyali
-  const YANLIS_SANIYE = 6;     // yanlış cevap: doğrusu okunacak kadar bekle
+<script src="ortak/2088490642df0e95.js"></script>
 
-  /* SCORM sahne ölçeği: 1280×720 sabit tasarım, pencereye orantılı sığdırılır.
-     ÖLÇEK YAYINI (2026-08-17 çözünürlük raporu): transform:scale(k) yalnız
-     GÖRÜNTÜYÜ büyütür — clientWidth ve ResizeObserver ölçüleri CSS düzen
-     pikselinde kalır, yani canvas/WebGL büyüdüğünü ANLAYAMAZ ve tarayıcı
-     hazır tamponu esneterek büyütür (ölçüm: 1920×1080'de tampon gerekenin
-     %53'ü → gözle görülür bulanıklık). Ölçek burada TEK yerden yayımlanır;
-     tamponunu k'ya göre kuran her taraf bunu dinler. */
-  function olcekle() {
-    const k = Math.min(innerWidth / 1280, innerHeight / 720);
-    const cerceve = document.getElementById("cerceve");
-    cerceve.style.transform = `translate(-50%, -50%) scale(${k})`;
-    cerceve.style.setProperty("--sablon-olcek", k);
-    const metrik = {scale: k, dpr: window.devicePixelRatio || 1};
-    metrik.etkin = metrik.scale * metrik.dpr;      // ekrandaki gerçek piksel/CSS px
-    window.SABLON_GORSEL_METRIK = metrik;
-    window.dispatchEvent(new CustomEvent("sablon:goruntu-degisti", {detail: metrik}));
-  }
-  addEventListener("resize", olcekle);
-  // DPR yakınlaştırma/ekran değişiminde resize ATMAYABİLİR (tarayıcı farkı):
-  // devicePixelRatio'yu media query ile ayrıca izle.
-  (function dprIzle() {
-    matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`)
-      .addEventListener("change", () => { olcekle(); dprIzle(); }, {once: true});
-  })();
-  // DOMContentLoaded ZATEN geçmiş olabilir (script gövde sonunda) — o durumda
-  // dinleyici hiç tetiklenmez ve çerçeve ölçeksiz kalırdı; hemen bir kez koş.
-  if (document.readyState === "loading") addEventListener("DOMContentLoaded", olcekle);
-  else olcekle();
-  /* SAYFA ROZETİ ALT ÇUBUKTA (2026-10-10 kullanıcı kararı: «sayfa numarası yanında düz
-     yazsın»): KEŞİF/UYGULA/DEĞERLENDİRME rozeti panel başlığında ayrı satır açıyordu
-     (ilkokul boylarında ~40px). Sayaç FOOTER'daysa «1 / 6 · Keşif» yazılır ve panel rozeti
-     gizlenir (body.etiket-altta); sayaç bannerda ya da hiç yoksa rozet panelde kalır. */
-  function sayfaDurumYaz(no) {
-    const durum = document.getElementById("sayfa-durum");
-    if (!durum) return;
-    let metin = no + " / " + SAYFA_SAYISI;
-    const footer = document.getElementById("footer");
-    if (footer && durum.parentElement === footer) {
-      const el = sayfaEl(no);
-      const etiket = el && el.querySelector(".panel-basi .baslik-satiri .etiket");
-      const ham = etiket ? etiket.textContent.trim() : "";
-      if (ham) {
-        const kucuk = ham.toLocaleLowerCase("tr");
-        metin += " · " + kucuk.charAt(0).toLocaleUpperCase("tr") + kucuk.slice(1);
-      }
-      document.body.classList.add("etiket-altta");
-    }
-    durum.textContent = metin;
-  }
-  let aktif = 1;
-  const baslatilan = new Set();
-  let toastZamanlayici = null;
-
-  const sayfaEl = (n) => document.getElementById("sayfa-" + n);
-
-  /* ═══════ BAŞLANGIÇ SAYFASI (D4, 2026-09-24 Chrome/WebGL denetimi) ═══════
-     Çekim N. sayfayı isterken şablon DOMContentLoaded'da HER ZAMAN 1. sayfayı
-     kuruyordu: 1. sayfanın WebGL bağlamı 246-253 ms'de boşuna açılıyor, hedef
-     ancak load'daki tıklamayla kuruluyordu. Çekim hattı gecici.html'e şablondan
-     ÖNCE window.__BASLANGIC_SAYFA__=N basar; şablon doğrudan N'yi kurar (sonraki
-     yönlendirme tıklaması aynı sayfaya olduğu için gec()'te etkisizdir).
-     Bekçinin yenilemesi (aşağıda, Y2) etkin sayfayı sessionStorage'a bırakır:
-     öğrenci F5/otomatik yenilemeden sonra kaldığı sayfada açılır. Kayıt yol
-     damgalıdır (aynı sekmede başka modül açılırsa uygulanmaz) ve okununca
-     silinir. Geçersiz numara 1. sayfaya düşer. */
-  const GL_SAYFA_ANAHTAR = "egitsel:gl-sayfa";
-  function oturumOku(ad) {
-    try { return JSON.parse(sessionStorage.getItem(ad) || "null"); } catch (e) { return null; }
-  }
-  function oturumYaz(ad, deger) {
-    try {
-      if (deger == null) sessionStorage.removeItem(ad);
-      else sessionStorage.setItem(ad, JSON.stringify(deger));
-    } catch (e) { /* erişim yok (sandbox'lı iframe): sessizce geç */ }
-  }
-  const baslangicSayfasi = (function () {
-    let n = Math.floor(+window.__BASLANGIC_SAYFA__ || 0);
-    const kayit = oturumOku(GL_SAYFA_ANAHTAR);
-    if (kayit) oturumYaz(GL_SAYFA_ANAHTAR, null);
-    if (!n && kayit && kayit.yol === location.pathname) n = Math.floor(+kayit.sayfa || 0);
-    return n >= 1 && sayfaEl(n) ? n : 1;
-  })();
-  window.SABLON_BASLANGIC_SAYFA = baslangicSayfasi;   // anlatım motoru da buradan başlar
-
-  /* ═══════ HAZIR SİNYALİ (Y3, 2026-09-24 Chrome/WebGL denetimi) ═══════════
-     Çekim hattı bandı sanal zamanda load+500 ms'de okuyordu; MALZEME3B_OTO'nun
-     ikinci geçişi ve KONUM3B.olc ise İLK ÇİZİMDEN 1,5 sn sonra koşuyor — çok
-     sayfalı montajda EŞ DÜZLEM bulgusu banda 0/5 giriyordu (tek sayfada 5/12).
-     Sözleşme (uretici/gorsel_denetim _DENETIM_SCRIPT ile ortak):
-       · window.__BEKLEYEN (başlık betiği) — ertelenmiş işler sayacı; köprü
-         MALZEME3B_OTO ikinci geçişini, KONUM3B.olc'u ve three yükleyicilerini
-         (doku/GLB) kendisi sayar;
-       · <html data-sahne-hazir="N"> — AKTİF sayfa N için: load geçti, sayaç 0
-         ve (3B sayfaysa) sayfa etkinleştikten sonra en az bir çizim yapıldı.
-         3B olmayan sayfa load'da hazırdır. Sayfa değişince öznitelik SİLİNİR ve
-         yeni sayfa için yeniden kurulur — okuyan N'yi kendi hedefiyle karşılaştırır.
-     İçerik davranışı DEĞİŞMEZ; yalnız bir öznitelik yazılır. */
-  const kayitlar = [];            // köprünün renderer kayıtları (THREE yoksa boş kalır)
-  let yuklendi = document.readyState === "complete";
-  let hazirYazilan = 0;           // data-sahne-hazir'e yazılan sayfa (0 = yok)
-  let cizilenSayfa = 0;           // etkinleştikten sonra ilk çizimini almış aktif sayfa
-  let hazirZamanli = false;
-  // Renderer'ın sayfası: tuval DOM'daysa atası olan .sayfa, değilse kurulduğu INIT'in sayfası.
-  function kayitSayfaNo(k) {
-    const t = k.r && k.r.domElement;
-    const s = t && t.isConnected && t.closest ? t.closest(".sayfa") : null;
-    return s ? (+String(s.id).replace("sayfa-", "") || 0) : k.sayfaNo;
-  }
-  // SAYFANIN CANLI RENDERER'I (2026-09-25, S1 — itiraz doğrulaması K4): etkin sayfanın
-  // köprü renderer'larından biri canlıysa «var», hepsi kayıpsa «kayip», hiç yoksa «yok».
-  // Çekim hattının denetim betiği <body data-gl-sayfa> yazar; «WebGL hatasını 3B sahneyi
-  // silerek düzeltme» itirazı bununla geri alınır. İçerik davranışı değişmez.
-  window.__SAYFA_GL__ = function (no) {
-    let canli = false, kayip = false;
-    kayitlar.forEach((k) => {
-      if (kayitSayfaNo(k) !== +no) return;
-      try { if (k.r.getContext().isContextLost()) kayip = true; else canli = true; } catch (e) { kayip = true; }
-    });
-    return canli ? "var" : (kayip ? "kayip" : "yok");
-  };
-  // Köprünün kendi ertelediği işler sayfasıyla da sayılır: 1. sayfanın 1,5 sn'lik
-  // KONUM3B ölçümü, yönlendirilen 2B sayfanın «load'da hazır»ını geciktirmesin
-  // (ölçüldü: 1451 ms gecikiyordu). Yükleyici işleri sayfasızdır, hepsini bekletir.
-  const sayfaIsleri = new Map();
-  function isBasla(no) {
-    sayfaIsleri.set(no, (sayfaIsleri.get(no) || 0) + 1);
-    window.__BEKLEYEN++;
-    return no;
-  }
-  function isBitti(no) {
-    sayfaIsleri.set(no, Math.max(0, (sayfaIsleri.get(no) || 0) - 1));
-    window.__BEKLEYEN--;
-    hazirZamanla();              // sayaç 0'a inmese de (başka sayfanın işi sürüyor) aktif sayfa hazır olabilir
-  }
-  // HATALI SAYFA ÇİZİM BEKLEMEZ (2026-09-24 gece doğrulaması): renderer'ı kurup
-  // sonra hata atan INIT (FIZ.11.4 s22 sınıfı: tanımsız `ahsapMat`) ya da her
-  // karesi render'dan önce patlayan döngü hiç çizmez; bayrak gelmiyor, havuz
-  // çekim başına ~25 sn bekleyip «hazır sinyali gelmedi» diye yanıltıcı ALTYAPI
-  // notu basıyordu (sentetik montaj: cli 8 sn sanal, havuz 27,5 sn). INIT'i
-  // düşen ya da kaydında (KONUM3B ölçümü dışında) hata olan sayfa için ilk çizim
-  // şartı kalkar; sayaç şartı sürer. JS_HATA_KAYDET her kayıtta denetimi uyandırır.
-  const initDustu = new Set();
-  function sayfaHatali(no) {
-    if (initDustu.has(no)) return true;
-    const L = window.__JS_HATALAR__ && window.__JS_HATALAR__[no];
-    // HESAP kaydı (2026-09-26) kod durması değildir: sahne çizilir, ilk çizim beklenir.
-    return !!(L && L.some((s) => !/^KONUM3B(\s|$)|^(\S+\s+)?EŞ DÜZLEM|^HESAP(\s|$)/.test(String(s))));
-  }
-  function hazirDenetle() {
-    hazirZamanli = false;
-    const no = aktif;
-    if (!yuklendi || hazirYazilan === no) return;
-    let baskaSayfa = 0;
-    sayfaIsleri.forEach((n, s) => { if (s !== no) baskaSayfa += n; });
-    if ((+window.__BEKLEYEN || 0) - baskaSayfa > 0) return;
-    if (cizilenSayfa !== no && !sayfaHatali(no) && kayitlar.some((k) => kayitSayfaNo(k) === no)) return;
-    hazirYazilan = no;
-    document.documentElement.dataset.sahneHazir = String(no);
-  }
-  // Görev sonuna ertelenir: aynı görevdeki gec()/INIT/çizim önce biter, sayaç
-  // ++'ları yerini bulur (ilk çizim 1,5 sn'lik işleri ÇİZİMDEN ÖNCE kurar).
-  function hazirZamanla() {
-    if (hazirZamanli) return;
-    hazirZamanli = true;
-    setTimeout(hazirDenetle, 0);
-  }
-  function hazirSifirla() {
-    hazirYazilan = 0;
-    cizilenSayfa = 0;
-    delete document.documentElement.dataset.sahneHazir;
-  }
-  window.SABLON_HAZIR_DENETLE = hazirZamanla;      // başlıktaki sayaç 0'a inince çağırır
-  addEventListener("load", () => { yuklendi = true; hazirZamanla(); });
-
-  /* ═══════ WebGL BAĞLAM BEKÇİSİ (Y2, 2026-09-24 Chrome/WebGL denetimi) ═══════
-     Chromium merdiveni (kaynaktan okundu; c2_engel.py / e_uc_cokme.py ile ölçüldü):
-       · 1 çökme → bağlamlar kaybolur, 1-2 sn'de geri gelir (köprünün Y1
-         onarımı PMREM/küp kamera/gölgeyi yeniden kurar);
-       · 2 dk içinde 2 çökme → alan adı 2 dk ENGELLİ: canlı bağlamlar GERİ
-         GELMEZ, yeni bağlam kurulamaz («Error creating WebGL context»); engeli
-         yalnız TARAYICININ başlattığı gezinme (F5, adres çubuğu) kaldırır —
-         JS location.reload() kaldırmaz;
-       · 5 dk içinde 3 çökme → GPU süreci --use-gl=disabled açılır, WebGL oturum
-         boyu HER YERDE kapalı; yalnız Chrome'u yeniden başlatmak düzeltir.
-     Eskiden hiçbirinde mesaj yoktu: saydam tuval sayfa zeminini gösteriyor,
-     öğrenci boş bir alan görüyordu. Bekçi:
-       · kaybı JS_HATA_KAYDET'e yazar (CONTEXT_LOST — çekim hattı altyapı sayar);
-       · 3 sn'de geri gelmezse ya da bağlam hiç kurulamazsa 3B kutunun üstüne
-         Türkçe katman koyar: önce «F5'e basın»; F5'ten sonra (sessionStorage
-         işareti) hâlâ kurulamıyorsa GPU modu düşmüştür → «Chrome'u kapatıp açın»;
-       · etkin sayfada katman varken 10 sn'de bir deneme bağlamı açar ve hemen
-         bırakır; açılabiliyorsa engel kalkmıştır → sayfayı saklar ve yeniler
-         (en çok 2 kez / 10 dk: kurulum hep düşüyorsa döngüye girmez; çekimde
-         hiç yenilemez — kareyi çekim hattı yönetir);
-       · INIT bağlam hatasıyla düşen sayfa çekimde «başlatıldı» SAYILMAZ, öğrencide
-         dönüşte yenilenir (initOncesi/initSonrasi);
-       · kurulum hatası YALNIZ taze tuvalde deneme bağlamı da kurulamıyorsa altyapıdır
-         (2026-09-24 gece): kurulabiliyorsa hata sayfanındır (ör. aynı tuvalde önce
-         getContext('2d')) — katman, yenileme, «bağlam kurulamadı» kaydı yok (köprü). */
-  const GL_UYARI_ANAHTAR = "egitsel:gl-uyari";          // F5 işareti {yol, t}
-  const GL_YENILEME_ANAHTAR = "egitsel:gl-yenileme";    // otomatik yenileme anları
-  const GL_KAYIP_BEKLE = 3000, GL_DENEME_ARALIK = 10000;
-  const GL_YENILEME_SINIR = 2, GL_YENILEME_PENCERE = 600000, GL_UYARI_OMUR = 1800000;
-  // Çekim başlığı (gorsel_denetim) __CEKIM__ nesnesini ve __BASLANGIC_SAYFA__'yı basar.
-  const CEKIM = !!window.__CEKIM__ || window.__BASLANGIC_SAYFA__ != null;
-  // Bu belge açılmadan ÖNCE aynı sekmede uyarı gösterilmiş mi (F5/yenileme sonrası)?
-  let oncekiUyari = (function () {
-    const u = oturumOku(GL_UYARI_ANAHTAR);
-    return !!(u && u.yol === location.pathname && Date.now() - (+u.t || 0) < GL_UYARI_OMUR);
-  })();
-  const glKatmanlar = new Map();       // hedef öğe (tuval ya da sahne kutusu) → {el, sayfa}
-  const glDusenSayfalar = new Set();   // INIT'i sırasında bağlam kurulamayan sayfalar
-  let glDenemeZaman = null;
-
-  function glKatmanYerlestir(hedef, k) {
-    const kok = k.el.parentNode;
-    if (!kok) return;
-    if (hedef === kok) {
-      Object.assign(k.el.style, {left: "0", top: "0", width: "100%", height: "100%"});
-      return;
-    }
-    const kr = kok.getBoundingClientRect(), hr = hedef.getBoundingClientRect();
-    if (!hr.width || !hr.height || !kr.width) return;   // gizli sayfa: etkinleşince yeniden
-    // Çerçeve transform:scale ile büyür — ekran pikseli DÜZEN pikseline çevrilir.
-    const s = kr.width / (kok.offsetWidth || kr.width) || 1;
-    Object.assign(k.el.style, {
-      left: (hr.left - kr.left) / s - kok.clientLeft + kok.scrollLeft + "px",
-      top: (hr.top - kr.top) / s - kok.clientTop + kok.scrollTop + "px",
-      width: hr.width / s + "px", height: hr.height / s + "px"});
-  }
-  function glKatmanlariYerlestir() { glKatmanlar.forEach((k, hedef) => glKatmanYerlestir(hedef, k)); }
-  addEventListener("sablon:sayfa-degisti", glKatmanlariYerlestir);
-  addEventListener("sablon:goruntu-degisti", glKatmanlariYerlestir);
-
-  function glKatmanGoster(hedef, no) {
-    let k = glKatmanlar.get(hedef);
-    if (!k) {
-      const el = document.createElement("div");
-      el.className = "sablon-3b-uyari";
-      el.setAttribute("role", "alert");
-      const metin = oncekiUyari
-        ? ["3B sahne bu oturumda açılamıyor",
-           "Tarayıcının grafik desteği kapandı. Chrome'u kapatıp yeniden açın "
-           + "(adres çubuğuna chrome://restart yazabilirsiniz)."]
-        : ["3B sahne şu an gösterilemiyor",
-           "Grafik işlemcisi yeniden başladı. Sayfayı yenilemek için klavyeden F5'e basın."];
-      const b = document.createElement("b");
-      b.textContent = metin[0];
-      const s = document.createElement("span");
-      s.textContent = metin[1];
-      el.append(b, s);
-      k = {el: el, sayfa: no};
-      glKatmanlar.set(hedef, k);
-    }
-    const kok = (hedef.closest && hedef.closest(".sayfa")) || sayfaEl(no)
-             || document.getElementById("cerceve") || document.body;
-    if (k.el.parentNode !== kok) kok.appendChild(k.el);
-    glKatmanYerlestir(hedef, k);
-    // F5 işareti + dönülecek sayfa: yenilemeden sonra bağlam yine kurulamazsa
-    // metin ikinci basamağa geçer; öğrenci her durumda aynı sayfada açılır.
-    oturumYaz(GL_UYARI_ANAHTAR, {yol: location.pathname, t: Date.now()});
-    oturumYaz(GL_SAYFA_ANAHTAR, {yol: location.pathname, sayfa: aktif});
-    if (!glDenemeZaman) glDenemeZaman = setInterval(glDene, GL_DENEME_ARALIK);
-  }
-  function glKatmanKaldir(hedef) {
-    const k = glKatmanlar.get(hedef);
-    if (!k) return;
-    k.el.remove();
-    glKatmanlar.delete(hedef);
-    if (!glKatmanlar.size) {
-      clearInterval(glDenemeZaman);
-      glDenemeZaman = null;
-      oturumYaz(GL_SAYFA_ANAHTAR, null);
-    }
-  }
-  // Bağlam kuruldu: uyarı işareti eskidi — sonraki arıza yine «F5» ile başlar.
-  function glKuruldu() {
-    oncekiUyari = false;
-    oturumYaz(GL_UYARI_ANAHTAR, null);
-  }
-  // Taze 1×1 tuvalde deneme bağlamı: kurulabiliyorsa tarayıcı WebGL veriyor (engel
-  // yok, GPU modu düşmemiş). Hemen bırakılır: 16 bağlam sınırından yer yemesin.
-  // glDene ve köprünün kurulum hatası ayrımı (sayfa kusuru mu, altyapı mı) kullanır.
-  function glYoklama() {
-    try {
-      const c = document.createElement("canvas");
-      c.width = c.height = 1;
-      const gl = c.getContext("webgl2") || c.getContext("webgl");
-      const x = gl && gl.getExtension("WEBGL_lose_context");
-      if (x) x.loseContext();
-      return !!gl;
-    } catch (e) { return false; }
-  }
-  function glDene() {
-    if (document.hidden || CEKIM) return;
-    // Yalnız ETKİN sayfada katman varken: başka sayfada çalışan öğrenciyi yenileme bölmesin.
-    let etkinde = false;
-    glKatmanlar.forEach((k) => { if (k.sayfa === aktif) etkinde = true; });
-    if (!etkinde) return;
-    if (!glYoklama()) return;        // engel sürüyor ya da GPU modu düştü
-    const simdi = Date.now(), eski = oturumOku(GL_YENILEME_ANAHTAR);
-    const anlar = (Array.isArray(eski) ? eski : []).filter((t) => simdi - t < GL_YENILEME_PENCERE);
-    if (anlar.length >= GL_YENILEME_SINIR) return;
-    anlar.push(simdi);
-    oturumYaz(GL_YENILEME_ANAHTAR, anlar);
-    oturumYaz(GL_SAYFA_ANAHTAR, {yol: location.pathname, sayfa: aktif});
-    location.reload();
-  }
-
-  /* INIT'in ÇEVRESİ (gec + DOMContentLoaded; INIT çağrısı ve catch'i iki yerde de
-     eskisi gibi durur). baslatilan INIT'ten ÖNCE işaretlenir (INIT içinden gec()
-     gibi yeniden girişe karşı); INIT WebGL bağlamı kuramadıysa (hata fırlattı ya da
-     köprü düştüğünü gördü — sayfa hatayı kendi yutsa bile) 3B kutusunda bekçi
-     katmanı durur (Y2; eskiden sayfa bir daha hiç denenmiyordu). Başka hata
-     (tanımsız değişken vb.) işareti geri ALMAZ: yarım kalan INIT'i her ziyarette
-     yeniden koşmak DOM'u çoğaltırdı; hata zaten kayıtta ve denetim bandında.
-     YENİDEN DENEME YALNIZ ÇEKİMDE AYNI BELGEDE (2026-09-24 gece doğrulaması):
-     INIT'in 19/450'si renderer'dan ÖNCE dinleyici/DOM kuruyor — aynı belgede
-     yeniden koşunca işleyiciler ikileniyordu (FB.8.4 s16: tek «Kontrol»
-     tıklaması iki dontVer, iki toast). Öğrencide işaret geri ALINMAZ: katman
-     durur, sayfaya dönülünce bekçi deneme bağlamı açar ve kurulabiliyorsa
-     sayfayı YENİLER (glDene; en çok 2 kez / 10 dk). Çekimde (__CEKIM__ /
-     __BASLANGIC_SAYFA__) yenileme yok: işaret geri alınır, INIT sonraki
-     ziyarette aynı belgede yeniden denenir. */
-  let initSayfasi = 0;          // INIT'i şu an koşan sayfa (köprü düşüşü buna yazar)
-  function initOncesi(no, el) {
-    baslatilan.add(no);
-    initDustu.delete(no);
-    glKatmanKaldir(el.querySelector(".bolum.sahne") || el);   // önceki denemenin katmanı
-    initSayfasi = no;
-    return glDusenSayfalar.delete(no);          // true: bu bir yeniden deneme
-  }
-  function initHatasi(no, e) {
-    initDustu.add(no);                          // hazır sinyali çizim beklemesin
-    // 2026-09-25 (S1): köprünün sayfa kusuru saydığı kurulum hatası (tuvalde önce 2d,
-    // devredilmiş tuval, taze tuvalde WebGL var) katman/yenileme açmaz.
-    if (/WebGL context/i.test(String(e && e.message)) && !(e && e.__glSayfaKusuru)) glDusenSayfalar.add(no);
-  }
-  function initSonrasi(no, el, yenidenDeneme) {
-    initSayfasi = 0;
-    if (glDusenSayfalar.has(no)) {
-      if (CEKIM) baslatilan.delete(no);
-      glKatmanGoster(el.querySelector(".bolum.sahne") || el, no);
-    } else if (yenidenDeneme) {
-      // Yeniden deneme tuttu: önceki «bağlam kurulamadı» kayıtları artık yanlış
-      // (denetim bandı onları «sayfa kodu durdu» diye okurdu) — yalnız onlar silinir.
-      // 2026-09-25 (S1): yapılandırılmış kurulum kaydı da (hatası «precision» olsa bile).
-      const L = window.__JS_HATALAR__[no];
-      if (L) window.__JS_HATALAR__[no] = L.filter((s) => !/WebGL context|^WEBGL KURULUM /i.test(s));
-    }
-  }
-
-  /* ==== LaTeX → DÜZ METİN (kullanıcı bildirimi 2026-08-18: «latex metinler
-     de bozuk görünüyor») ==================================================
-     MathJax'ın YETİŞEMEDİĞİ İKİ YER var; oralarda ham `\( … \)` ekrana düşer.
-     Ölçüldü (cikti/ altındaki güncel çıktılar):
-       · DÖNÜT TOAST'I — metin textContent ile yazılır, MathJax hiç çağrılmaz:
-         79 dontVer mesajı LaTeX içeriyor (41 dosya). «\( \ge 85 \)» aynen
-         böyle okunuyordu.
-       · SVG <text> DÜĞÜMÜ — MathJax çıktısı <mjx-container> HTML'idir, SVG
-         içine geçersizdir; tipograflama MÜMKÜN DEĞİL: 15 düğüm («\(R_1\)»).
-     Çözüm MEKANİKTİR (durum bandı sökmesi gibi, sablon.py `_durum_bandini_sok`):
-     diskteki 200+ parça YENİDEN ÜRETİLMEDEN düzelir. Kapsam bilinçli olarak
-     dar — sayfaların gerçekten kullandığı komutlar. Tanınmayan komutta ters
-     bölü düşer, AD KALIR: sessizce yutmaktansa okunur kalıntı bırakılır. */
-  const LATEX_KOMUT = {
-    times: "×", cdot: "·", div: "÷", pm: "±", mp: "∓", ast: "*",
-    ne: "≠", neq: "≠", le: "≤", leq: "≤", ge: "≥", geq: "≥",
-    approx: "≈", equiv: "≡", sim: "~", propto: "∝", infty: "∞",
-    circ: "°", degree: "°", percent: "%",
-    to: "→", rightarrow: "→", longrightarrow: "→", Rightarrow: "⇒",
-    implies: "⇒", leftarrow: "←", Leftarrow: "⇐", leftrightarrow: "↔",
-    Leftrightarrow: "⇔", uparrow: "↑", downarrow: "↓",
-    cdots: "…", ldots: "…", dots: "…",
-    alpha: "α", beta: "β", gamma: "γ", delta: "δ", epsilon: "ε", zeta: "ζ",
-    eta: "η", theta: "θ", kappa: "κ", lambda: "λ", mu: "μ", nu: "ν",
-    xi: "ξ", pi: "π", rho: "ρ", sigma: "σ", tau: "τ", phi: "φ", chi: "χ",
-    psi: "ψ", omega: "ω", Gamma: "Γ", Delta: "Δ", Theta: "Θ", Lambda: "Λ",
-    Pi: "Π", Sigma: "Σ", Phi: "Φ", Psi: "Ψ", Omega: "Ω",
-    sum: "Σ", prod: "Π", int: "∫", partial: "∂", nabla: "∇",
-    angle: "∠", perp: "⊥", parallel: "∥", triangle: "△",
-    in: "∈", notin: "∉", subset: "⊂", supset: "⊃", cup: "∪", cap: "∩",
-    emptyset: "∅", forall: "∀", exists: "∃", therefore: "∴", because: "∵"
-  };
-  const LATEX_UST = {"0":"⁰","1":"¹","2":"²","3":"³","4":"⁴","5":"⁵","6":"⁶",
-                     "7":"⁷","8":"⁸","9":"⁹","+":"⁺","-":"⁻","=":"⁼",
-                     "(":"⁽",")":"⁾","n":"ⁿ","i":"ⁱ","°":"°"};
-  const LATEX_ALT = {"0":"₀","1":"₁","2":"₂","3":"₃","4":"₄","5":"₅","6":"₆",
-                     "7":"₇","8":"₈","9":"₉","+":"₊","-":"₋","=":"₌",
-                     "(":"₍",")":"₎","a":"ₐ","e":"ₑ","i":"ᵢ","k":"ₖ","m":"ₘ",
-                     "n":"ₙ","o":"ₒ","p":"ₚ","r":"ᵣ","s":"ₛ","t":"ₜ","x":"ₓ"};
-
-  /* Tümü eşleşirse Unicode simge, biri bile eşleşmezse işaretçiyi düz bırak
-     (`_max` → «_max»): yarım çevrilmiş «ₘax» okunmaz olurdu. */
-  function latexSimge(govde, tablo, isaret) {
-    let cikti = "";
-    for (const h of govde) {
-      if (!tablo[h]) { return isaret + govde; }
-      cikti += tablo[h];
-    }
-    return cikti;
-  }
-
-  function latexDuz(metin) {
-    let s = metin == null ? "" : String(metin);
-    if (s.indexOf("\\") < 0 && s.indexOf("$") < 0) { return s; }   // hızlı çıkış
-    /* ÇİFT TERS BÖLÜ: sözleşme madde 19 «JS dizesinde ters bölü ÇİFT yazılır»
-       diyor; kimi parça bunu HTML gövdesine de uyguluyor ve çalışma anında
-       `\\(` kalıyor (ölçüldü: BIY/KIM çıktıları). Düz metne çevirirken çift
-       ters bölü TEKe iner — yoksa aşağıdaki desenlerin hiçbiri tutmaz. */
-    s = s.replace(/\\\\/g, "\\");
-    s = s.replace(/\\[([]\s*/g, "").replace(/\s*\\[)\]]/g, "");     // \( \) \[ \]
-    s = s.replace(/\$\$([\s\S]{1,200}?)\$\$/g, "$1");   // $$…$$ blok
-    s = s.replace(/\$([^$\n]{1,120})\$/g, "$1");        // $…$ satır içi
-    s = s.replace(/\\text(?:bf|it|rm|sf|tt)?\s*\{([^{}]*)\}/g, "$1");
-    s = s.replace(/\\(?:mathrm|mathbf|mathit|operatorname)\s*\{([^{}]*)\}/g, "$1");
-    s = s.replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, "$1/$2");
-    s = s.replace(/\\sqrt\s*\{([^{}]*)\}/g, "√($1)");
-    s = s.replace(/\\(?:left|right|big|Big|displaystyle|limits)\b/g, "");
-    s = s.replace(/\\(?:quad|qquad|thinspace|;|:|,|!)/g, " ");
-    s = s.replace(/\\([%$&#_{}])/g, "$1");              // kaçırılmış özel karakter
-    /* Komuttan sonraki boşluk YUTULMAZ: LaTeX'te ayraçtır ama düz metinde
-       kelime arasıdır — yutulunca «45° ve» → «45°ve» oluyordu. */
-    s = s.replace(/\\([a-zA-Z]+)/g, (t, ad) =>
-      LATEX_KOMUT[ad] !== undefined ? LATEX_KOMUT[ad] : ad);
-    s = s.replace(/\^\{([^{}]*)\}|\^(\S)/g, (t, a, b) =>
-      latexSimge(a !== undefined ? a : b, LATEX_UST, "^"));
-    s = s.replace(/_\{([^{}]*)\}|_(\S)/g, (t, a, b) =>
-      latexSimge(a !== undefined ? a : b, LATEX_ALT, "_"));
-    s = s.replace(/[{}]/g, "");
-    return s.replace(/[ \t]{2,}/g, " ");
-  }
-
-  /* SVG <text>/<tspan> içindeki LaTeX sayfa açılırken düz metne çevrilir.
-     mjx-container MathJax'ın KENDİ çıktısıdır — asla dokunulmaz. */
-  function svgLatexDuzelt(kok) {
-    if (!kok || !kok.querySelectorAll) { return; }
-    kok.querySelectorAll("svg text, svg tspan").forEach((el) => {
-      if (el.closest("mjx-container")) { return; }
-      el.childNodes.forEach((d) => {
-        if (d.nodeType !== 3) { return; }
-        const yeni = latexDuz(d.nodeValue);
-        if (yeni !== d.nodeValue) { d.nodeValue = yeni; }
-      });
-    });
-  }
-
-  /* ==== DÖNÜT KISALTMA (kullanıcı kararı 2026-08-18) ====================
-     Şikayet: «dönüt bildirimlerinde dönütler aşırı uzun geliyor; ‹daha
-     dikkatli olmalısın› şeklinde dönüt olmalı, kısa bir bilgi verilebilir».
-     Ölçüldü: mevcut çıktılarda dontVer mesajları 150-250 karakter.
-     Toast doğru/yanlışı ZATEN renk + ikon + başlıkla söylüyor; mesajın işi
-     TEK kısa bilgi vermek. Kısaltma ŞABLONDA yapılır çünkü diskteki parçalar
-     uzun metinle yazılmış — yeniden üretim beklemeden düzelirler. Senaryo
-     promptu (uretici/senaryo.py) ayrıca kısaltıldı: yeni içerik kısa doğar. */
-  const DONUT_BASLIK = { dogru: "Doğru!", yanlis: "Daha dikkatli ol" };
-  const DONUT_SINIRI = 80;          // başlıktan sonraki bilgi payı (karakter)
-  /* Baştaki tebrik/azar kalıbı: ikon + başlık bunu ZATEN söylüyor, metinde
-     tekrarı yalnız yer kaplar. En çok iki kalıp sökülür — ölçülen en uzun
-     yığın «Tebrikler! Doğru cevap. …» idi. */
-  const OVGU = "(?:harikasın|harika|tebrikler|mükemmel|bravo|süper|aferin|"
-    + "çok iyi|çok güzel|tam isabet|ne yazık ki|maalesef|üzgünüm|olmadı|"
-    + "dikkat|doğru cevap|yanlış cevap|doğru seçim|yanlış seçim|doğru|yanlış|"
-    + "evet|hayır)";
-  const DONUT_DOLGU = new RegExp("^\\s*" + OVGU + "\\s*[!.,:;…]+\\s*", "i");
-  /* Övgü CÜMLESİ («Mükemmel çoklu modelleme!», «Harika veri analizi!»): övgü
-     sözcüğüyle açılan KISA cümle. Kelime sınırı `\b` ile aranmaz — Türkçe
-     «yanlış» ş ile biter ve \b orada tutmaz; bunun yerine ardından harf
-     GELMEMESİ istenir. */
-  const DONUT_OVGU = new RegExp("^\\s*" + OVGU
-    + "(?![a-zA-ZçğıöşüÇĞİÖŞÜ])[^.!?]{0,26}[.!?…]+\\s*", "i");
-
-  function donutKisalt(mesaj) {
-    let m = latexDuz(mesaj).replace(/\s+/g, " ").trim();
-    m = m.replace(DONUT_DOLGU, "").replace(DONUT_DOLGU, "");
-    /* Övgü cümlesi yalnız ARKASINDA başka cümle varsa düşer: tek cümlelik
-       «Doğru cevap C şıkkıdır.» övgü değil BİLGİdir, atılırsa toast boşalır. */
-    const ovgusuz = m.replace(DONUT_OVGU, "");
-    if (ovgusuz && ovgusuz !== m) { m = ovgusuz; }
-    const son = m.search(/[.!?](\s|$)/);     // ilk cümle yeter
-    if (son > -1) { m = m.slice(0, son + 1); }
-    if (m.length > DONUT_SINIRI) {
-      const bosluk = m.lastIndexOf(" ", DONUT_SINIRI);
-      m = m.slice(0, bosluk > 40 ? bosluk : DONUT_SINIRI)
-           .replace(/[\s,;:.]+$/, "") + "…";
-    }
-    return m;
-  }
-
-  /* ═══════════ 🔊 Dönüt sesi (kullanıcı isteği 2026-08-19) ═══════════
-     Kanca toast()'un İÇİNDEDİR, EGITSEL.dontVer'de DEĞİL — iki gerekçe:
-       · dontVer'i oto_gecis bloğu zaten sarmalıyor (asilDontVer), ikinci bir
-         sarmalama sıra bağımlılığı doğururdu;
-       · ses ile toast AYNI ANDA çıkar. Çağrıların ~%3'ü animasyon zincirinin
-         ucunda; ses başka yere takılsaydı senkron kayması görünür olurdu.
-     Tip kapısı bedava süzgeç: doğrudan SABLON_TOAST çağrılarının TAMAMI
-     tipsizdir (ölçüldü: 0/740), yani nötr uyarılar kendiliğinden sessiz kalır.
-     Parçalar HİÇBİR ŞEY bilmez, sözleşmeye sıfır bayt eklenir.
-
-     ⚠ OTOMATİK OYNATMA: gerçek tarayıcıda ölçüldü — jest olmadan play()
-     NotAllowedError verir ve `muted` ile ön ısıtma DA reddedilir. Tek çalışan
-     yol, sesi ilk GERÇEK dokunuşun içinde bir kez açmaktır (aşağıda kilitAc).
-     LMS çapraz-origin iframe'inde allow="autoplay" yoksa yine engellenir; o
-     yüzden her yol sessizce başarısız olur — dönüt ASLA ses yüzünden bozulmaz. */
-  const sesCal = (function () {
-    const kaynak = window.SABLON_SES;
-    if (!kaynak || !window.Audio) return function () {};
-
-    let acik = true, sonCalma = 0;
-    const calgi = {};
-    try {
-      for (const tip in kaynak) {
-        calgi[tip] = new Audio(kaynak[tip]);
-        calgi[tip].preload = "auto";
-        // Efekt dosyaları -16 LUFS'a eşitlendi (26.08), anlatımla aynı hedef.
-        // 0.8 kazanç onları anlatımın ~1,8 dB altında tutar: vurgu sesi
-        // içeriğin önüne geçmez. Efektler yeniden düzeylenirse burası da bakılır.
-        calgi[tip].volume = 0.8;
-      }
-    } catch (e) { return function () {}; }
-
-    /* Tercih: file:// origin'i TÜM yerel dosyalarca paylaşılır → ad alanlı
-       anahtar. Okuma ve yazma AYRI try/catch: görsel denetim turu çıktıyı
-       file:// ile açıyor, buradan sızacak bir istisna TÜM turu düşürürdü. */
-    const ANAHTAR = "egitsel:ses";
-    try {
-      const kayit = localStorage.getItem(ANAHTAR);
-      if (kayit !== null) acik = kayit === "1";
-    } catch (e) { /* erişim yok — bellekteki varsayılan geçerli */ }
-
-    function tercihYaz() {
-      try { localStorage.setItem(ANAHTAR, acik ? "1" : "0"); } catch (e) {}
-    }
-
-    // İlk gerçek dokunuşta sesi aç. Yakalama fazı + once: sayfanın kendi
-    // işleyicisi olayı yutsa bile buraya uğrar ve dinleyici kendini söker.
-    function kilitAc() {
-      for (const tip in calgi) {
-        const c = calgi[tip], sesi = c.volume;
-        c.volume = 0;
-        const s = c.play();
-        if (s && s.then) {
-          s.then(() => { c.pause(); c.currentTime = 0; c.volume = sesi; })
-           .catch(() => { c.volume = sesi; });
-        } else { c.pause(); c.currentTime = 0; c.volume = sesi; }
-      }
-    }
-    const kilitSec = { capture: true, once: true };
-    document.addEventListener("pointerdown", kilitAc, kilitSec);
-    document.addEventListener("keydown", kilitAc, kilitSec);
-
-    function cal(tip) {
-      const c = calgi[tip];
-      if (!acik || !c) return;
-      const simdi = Date.now();
-      if (simdi - sonCalma < 120) return;   // aynı işleyicide çift dönüt freni
-      sonCalma = simdi;
-      for (const b in calgi) {              // çapraz tetikte ötekini sustur
-        if (b !== tip && !calgi[b].paused) {
-          calgi[b].pause(); calgi[b].currentTime = 0;
-        }
-      }
-      try {
-        c.currentTime = 0;
-        const s = c.play();
-        if (s && s.catch) s.catch(function () {});   // jest/izin yoksa sessiz
-      } catch (e) { /* yut */ }
-    }
-
-    // Düğme #cerceve'ye eklenir: banner/footer kapalı modüllerde de yaşar.
-    const cerceve = document.getElementById("cerceve");
-    if (cerceve) {
-      const d = document.createElement("button");
-      d.id = "ses-dugme";
-      d.type = "button";
-      d.innerHTML =
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"'
-        + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-        + '<path d="M11 5 6 9H2v6h4l5 4z"/>'
-        + '<path class="dalga" d="M15.5 8.5a5 5 0 0 1 0 7"/>'
-        + '<path class="kapali-cizgi" d="M22 9l-6 6M16 9l6 6"/></svg>';
-      const etiketle = () => {
-        d.setAttribute("aria-pressed", acik ? "true" : "false");
-        d.title = acik ? "Dönüt sesi açık — kapatmak için tıkla"
-                       : "Dönüt sesi kapalı — açmak için tıkla";
-        d.setAttribute("aria-label", d.title);
-      };
-      etiketle();
-      d.addEventListener("click", () => {
-        acik = !acik;
-        tercihYaz();
-        etiketle();
-        // Açınca kısa bir örnek duyur: düğmeye basmak zaten bir jesttir,
-        // kilit beklemeye gerek yok — izin yoksa cal() sessizce düşer.
-        if (acik) cal("dogru");
-      });
-      cerceve.appendChild(d);
-    }
-    return cal;
-  })();
-
-  /* ═══════ ANLATIM SESSİZLİĞİ (kullanıcı şikayeti 2026-08-26) ═══════════
-     «seslendirme çalışırken etkinlik yapılıyor, yapılırken doğru yanlış
-     dönütleri gelmeye devam ediyor … şablon ses çalıştığında dönütleri
-     kapatmalıydı» + «ses efektleri de çalışmamalı».
-
-     NEDEN ŞABLONDA: sözleşme sayfalara «anlatım çalarken öğrenci girişini
-     kilitle» diyor (bkz. sayfa_uretici.py, OTOMATİK GÖSTERİM bendi) ama
-     uyum ÖLÇÜLDÜ — FİZ.10.3 modülünde 23 sayfanın 5'i (3, 9, 11, 19, 20)
-     hiç kilitlemiyor. Kural üretilen içerikte yaşadığı sürece delik her
-     koşuda yeniden açılıyor. Kapı bu yüzden şablonda: doğru/yanlış dönütün
-     TEK boğazı toast()'tur (EGITSEL.dontVer de buraya iner), ses efekti de
-     onun içinden çalınır — biri susarsa ikisi birden susar.
-
-     DÜŞÜRMEZ, BEKLETİR: öğrenci anlatım sürerken cevapladıysa tıklamayı
-     karşılıksız bırakmak daha kötü olurdu. Anlatım durunca/bitince SON
-     bekleyen dönüt ses dahil verilir — hap erteleme kalıbının aynısı
-     (bkz. bekleyenTamam).
-
-     GÖSTERİ DÖNÜTÜ DÜŞER: anlatıma senkron gösteri (SAYFA_ANLATIM kancası)
-     kendi kendine dontVer çağırırsa öğrenci hiçbir şey cevaplamamıştır;
-     onu bekletip sonradan «Doğru!» demek yanlış bilgi olur. Ayrım son
-     GERÇEK jestin yaşıyla yapılır — jest yoksa dönüt sessizce düşer. */
-  const JEST_PENCERESI = 2000;    // ms: dönütü doğuran dokunuş bu kadar taze olmalı
-  let sonJest = -Infinity, bekleyenDonut = null;
-  const jestKaydet = () => { sonJest = performance.now(); };
-  document.addEventListener("pointerdown", jestKaydet, {capture: true, passive: true});
-  document.addEventListener("keydown", jestKaydet, {capture: true});
-
-  /* tip (isteğe bağlı): "dogru" | "yanlis" — dönüt toast'ı renklenir, ikon
-     ve kısa başlık alır; mesaj kısaltılır. Tipsiz çağrı (nazik uyarı)
-     KISALTILMAZ: o zaten tek cümlelik yönlendirmedir. */
-  function toast(mesaj, tip) {
-    const t = document.getElementById("toast");
-    if ((tip === "dogru" || tip === "yanlis") && window.SABLON_ANLATIM_CALIYOR) {
-      // Öğrenci tetiklediyse beklet; gösteri tetiklediyse düşür. Atama
-      // KOŞULLU: gösteri dönütü, bekleyen ÖĞRENCİ dönütünü ezmemeli.
-      if (performance.now() - sonJest < JEST_PENCERESI) {
-        bekleyenDonut = {mesaj: mesaj, tip: tip, sayfa: aktif};
-      }
-      return;
-    }
-    t.textContent = "";
-    if (tip === "dogru" || tip === "yanlis") {
-      sesCal(tip);                 // ses ile toast aynı anda — bkz. yukarısı
-      t.setAttribute("data-tip", tip);
-      const govde = document.createElement("span");
-      const baslik = document.createElement("b");
-      baslik.textContent = DONUT_BASLIK[tip];
-      govde.appendChild(baslik);
-      const bilgi = donutKisalt(mesaj);
-      if (bilgi) {
-        const satir = document.createElement("span");
-        satir.textContent = bilgi;
-        govde.appendChild(satir);
-      }
-      t.appendChild(govde);
-    } else {
-      t.removeAttribute("data-tip");
-      t.textContent = latexDuz(mesaj);
-    }
-    t.classList.add("gorunur");
-    clearTimeout(toastZamanlayici);
-    toastZamanlayici = setTimeout(() => t.classList.remove("gorunur"),
-                                  tip === "yanlis" ? 4200 : 2600);
-  }
-  window.SABLON_TOAST = toast;
-
-  /* Sayfa değişince dönüt EKRANDA KALMAZ (kullanıcı kararı 2026-08-18:
-     «sonraki butonuna tıkladığımda görünmeye devam etmemeli»). Zamanlayıcı
-     da iptal edilir: yoksa eski sayfanın sayacı YENİ sayfada toast kapatır
-     ve o sayfanın kendi dönütünü erken siler. */
-  function toastGizle() {
-    clearTimeout(toastZamanlayici);
-    toastZamanlayici = null;
-    bekleyenDonut = null;       // bekleyen dönüt de yeni sayfaya TAŞINMAZ
-    const t = document.getElementById("toast");
-    if (t) { t.classList.remove("gorunur"); }
-  }
-
-  /* Anlatım susunca (duraklat ya da bitiş) bekleyen dönüt verilir. Sayfa
-     kimliği sınanır: gec() toastGizle ile zaten temizliyor ama sayfa
-     değişimi ses.pause() de tetikliyor — iki yoldan biri sıralama değiştirse
-     eski sayfanın dönütü yenisinde patlamasın. */
-  window.addEventListener("sablon:anlatim-durum", (e) => {
-    if (e.detail.caliyor || !bekleyenDonut) return;
-    const b = bekleyenDonut;
-    bekleyenDonut = null;
-    if (b.sayfa === aktif) { toast(b.mesaj, b.tip); }
-  });
-
-  const PENCERE = 4;  // bannerda aynı anda görünen nokta sayısı
-
-  function noktalariGuncelle() {
-    const noktalar = [...document.querySelectorAll(".adim-nokta")];
-    noktalar.forEach((b) => {
-      const n = +b.dataset.sayfa;
-      b.classList.toggle("aktif", n === aktif);
-      b.classList.toggle("tamam", n !== aktif && baslatilan.has(n));
-    });
-    if (SAYFA_SAYISI > PENCERE) {
-      const bas = Math.min(Math.max(aktif - 1, 1), SAYFA_SAYISI - PENCERE + 1);
-      noktalar.forEach((b) => {
-        const n = +b.dataset.sayfa;
-        b.classList.toggle("gizli", n < bas || n >= bas + PENCERE);
-      });
-      // "…" yalnız o yönde GİZLİ sayfa varsa görünür (kullanıcı kuralı).
-      // Banner kapalıysa bu düğmeler HİÇ YOKTUR → ?. ile sessiz geçilir.
-      document.getElementById("adim-uc-bas")?.classList.toggle("gorunur", bas > 1);
-      document.getElementById("adim-uc")
-        ?.classList.toggle("gorunur", bas + PENCERE - 1 < SAYFA_SAYISI);
-    }
-    document.querySelectorAll("#adim-menu button").forEach((b) => {
-      const n = +b.dataset.sayfa;
-      b.classList.toggle("aktif", n === aktif);
-      b.classList.toggle("tamam", n !== aktif && baslatilan.has(n));
-    });
-  }
-
-  function menuKur() {
-    if (SAYFA_SAYISI <= PENCERE) return;
-    const menu = document.getElementById("adim-menu");
-    if (!menu) return;                 // banner kapalı → adım menüsü de yok
-    menu.innerHTML = [...document.querySelectorAll(".adim-nokta")].map((b) =>
-      `<button data-sayfa="${b.dataset.sayfa}"><span class="menu-no">${b.dataset.sayfa}</span>`
-      + `<span class="menu-baslik">${b.title || ""}</span><span class="menu-durum"></span></button>`
-    ).join("");
-    // ERİŞİLEBİLİRLİK: açıcılar aria-expanded taşır, Escape kapatır ve odağı
-    // açan butona geri verir, açılınca odak ilk menü öğesine geçer.
-    let acan = null;
-    const menuDurum = (acik) => document.querySelectorAll(".adim-uc")
-      .forEach((uc) => uc.setAttribute("aria-expanded", acik ? "true" : "false"));
-    const menuKapat = () => { menu.classList.remove("acik"); menuDurum(false); };
-    menu.querySelectorAll("button").forEach((b) =>
-      b.addEventListener("click", () => {
-        gec(+b.dataset.sayfa);
-        menuKapat();
-      }));
-    document.querySelectorAll(".adim-uc").forEach((uc) =>
-      uc.addEventListener("click", (e) => {
-        e.stopPropagation();
-        const acik = menu.classList.toggle("acik");
-        menuDurum(acik);
-        if (acik) { acan = uc; menu.querySelector("button")?.focus(); }
-      }));
-    document.addEventListener("click", (e) => {
-      if (!menu.contains(e.target)) menuKapat();
-    });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && menu.classList.contains("acik")) {
-        menuKapat();
-        acan?.focus();
-      }
-    });
-  }
-
-  function gec(n) {
-    if (n < 1 || n > SAYFA_SAYISI || n === aktif) return;
-    // SAYFAYA DÖNÜŞTE SIFIRLAMA: etkileşim kurulmuş sayfaya dönüş → temiz yeniden açılış
-    if (typeof window.SABLON_DONUS_SIFIRLA === "function" && window.SABLON_DONUS_SIFIRLA(n, baslatilan)) return;
-    const eski = aktif;
-    toastGizle();               // önceki sayfanın dönütü yeni sayfaya TAŞINMAZ
-    sayfaEl(aktif).classList.remove("aktif");
-    // YAŞAM DÖNGÜSÜ (rapor P1): SAYFA_DURAKLAT/SAYFA_DEVAM defterleri baştan
-    // beri tanımlıydı ama ŞABLON HİÇ ÇAĞIRMIYORDU — kanca kaydeden sayfa bile
-    // duraklamıyordu. Sözleşme bunu vaat ediyorsa şablon çağırmak zorundadır.
-    if (typeof SAYFA_DURAKLAT[eski] === "function") {
-      try { SAYFA_DURAKLAT[eski](sayfaEl(eski)); }
-      catch (e) { console.error("SAYFA_DURAKLAT[" + eski + "]", e); }
-    }
-    aktif = n;
-    hazirSifirla();             // hazır sinyali yeni sayfa için sıfırdan (INIT'in çizimi sayılsın)
-    const el = sayfaEl(aktif);
-    el.classList.add("aktif");
-
-    if (!baslatilan.has(aktif)) {
-      const yeniden = initOncesi(aktif, el);   // Y2: bağlam kuramazsa sonraki ziyarette yeniden
-      if (typeof SAYFA_INIT[aktif] === "function") {
-        // 2026-09-11 (2e0036a0, rapor 6b): catch yutuyordu, köprü hatayı sayfaya yazar
-        try { SAYFA_INIT[aktif](el); } catch (e) { console.error("SAYFA_INIT[" + aktif + "]", e); window.JS_HATA_KAYDET(aktif, e, "SAYFA_INIT"); initHatasi(aktif, e); }
-      }
-      initSonrasi(aktif, el, yeniden);
-    } else if (typeof SAYFA_DEVAM[aktif] === "function") {
-      // DEVAM yalnız ZATEN başlatılmış sayfada anlamlı: ilk açılışta
-      // SAYFA_INIT sahneyi kurar, üstüne devam çağırmak çift başlatma olur.
-      try { SAYFA_DEVAM[aktif](el); }
-      catch (e) { console.error("SAYFA_DEVAM[" + aktif + "]", e); window.JS_HATA_KAYDET(aktif, e, "SAYFA_DEVAM"); }
-    }
-    svgLatexDuzelt(el);         // INIT'in çizdiği SVG metinleri de kapsanır
-    // Sayfa numarası banner/footer'da olabilir ya da hiç olmayabilir
-    sayfaDurumYaz(aktif);
-    noktalariGuncelle();
-    // ERİŞİLEBİLİRLİK: odak yeni sayfaya taşınır (section tabindex="-1"
-    // montajdan gelir) — ekran okuyucunun bağlamı değişir, sayfa değişimini
-    // aria-live'lı #sayfa-durum duyurur. preventScroll: kaydırma zıplamasın.
-    el.focus?.({ preventScroll: true });
-    otoSifirla();               // yeni sayfa → tamamlanma sinyali sıfırdan
-    // Sayfa değişimi GENEL kancası (2026-08-24, sesli içerik): anlatım motoru
-    // ve ileride başka dinleyiciler sayfa geçişini buradan öğrenir — parça
-    // defterlerine (SAYFA_*) dokunmadan, çift sayaç riski olmadan.
-    window.dispatchEvent(new CustomEvent("sablon:sayfa-degisti",
-                                         {detail: {sayfa: aktif, eski: eski}}));
-    // Bekçi katmanı duruyorsa F5 dönüşü öğrencinin ŞİMDİKİ sayfasına olsun; katmanlı
-    // sayfaya dönüldüyse deneme 10 sn beklemez (öğrencide INIT aynı belgede yeniden
-    // koşmaz — bağlam kurulabiliyorsa sayfa yenilenir, bkz. initSonrasi).
-    if (glKatmanlar.size) {
-      oturumYaz(GL_SAYFA_ANAHTAR, {yol: location.pathname, sayfa: aktif});
-      if (!CEKIM) setTimeout(glDene, 0);
-    }
-    hazirZamanla();
-    // Yeni sayfa açılınca tuval ve 3B tamponlarını gerçek kutu ölçüsüne eşitle
-    requestAnimationFrame(() => {
-      if (window.SABLON_GORSEL_METRIK) {
-        window.dispatchEvent(new CustomEvent("sablon:goruntu-degisti", {detail: window.SABLON_GORSEL_METRIK}));
-      }
-      window.dispatchEvent(new Event("resize"));
-    });
-  }
-  window.SABLON_GEC = gec;
-
-  // Footer kapalıysa bu düğmeler yoktur — bağlama sessizce atlanır.
-  document.getElementById("onceki-buton")?.addEventListener("click", () => gec(aktif - 1));
-  document.getElementById("sonraki-buton")?.addEventListener("click", () => gec(aktif + 1));
-  document.querySelectorAll(".adim-nokta").forEach((b) =>
-    b.addEventListener("click", () => gec(+b.dataset.sayfa)));
-  document.addEventListener("keydown", (e) => {
-    // ERİŞİLEBİLİRLİK (denetim 2026-08-24): ok tuşlarının KENDİ anlamı olan
-    // denetimlerde sayfa çevrilmez — kaydırıcıyı (range) klavyeyle kullanan
-    // öğrenci istemeden sayfa atlıyordu. Sayfa scripti e.preventDefault()
-    // çağırdıysa da karışılmaz.
-    if (e.defaultPrevented) return;
-    const h = e.target;
-    if (h && h.closest && h.closest(
-      'input, textarea, select, [contenteditable="true"], [role="slider"], ' +
-      '[role="spinbutton"], [role="listbox"], [role="menu"], [role="radiogroup"]')) return;
-    if (e.key === "ArrowRight") gec(aktif + 1);
-    if (e.key === "ArrowLeft") gec(aktif - 1);
-  });
-
-  /* ============ OTOMATİK GEÇİŞ (oto_gecis) ============================
-     Sorun: footer kapatılınca "Sonraki" düğmesi kalmıyor; ileri gitmenin
-     yolu etkinliğin BİTTİĞİNİ anlamaktan geçiyor. Sinyaller (ilki açık,
-     diğerleri var olan içerikle de çalışsın diye):
-       1. window.SABLON_TAMAM(N)  → sayfa "bitti" der (sözleşmede tanımlı)
-       2. EGITSEL.dontVer(kok, "dogru", …) → doğru dönüt bandı gösterildi
-       3. EGITSEL.kilitle(kok, seçici, true) → etkileşim topluca kilitlendi
-     YANLIŞ POZİTİF FRENİ: sinyal geçişi ANINDA yapmaz, GERİ SAYIM başlatır.
-     Çok soruluk sayfada öğrenci sıradaki soruya dokununca sayım İPTAL olur
-     (dinleyici YAKALAMA fazında: iptal, sayımı başlatan sinyalden önce
-     çalışır, kendini iptal etmez). Son dokunuştan sonra sayım tamamlanır.
-     İptalden sonra hap "Devam ▸" olarak KALIR: öğrenci hiçbir durumda
-     kilitli kalmaz. Son sayfada hap hiç görünmez. */
-  let otoHap = null, otoZaman = null, otoKalan = 0;
-
-  function otoHapKur() {
-    otoHap = document.createElement("button");
-    otoHap.id = "oto-gecis";
-    otoHap.type = "button";
-    otoHap.innerHTML = '<span class="sayim"></span><span>Devam</span>'
-      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"'
-      + ' stroke-linecap="round" stroke-linejoin="round" style="width:1em;height:1em;">'
-      + '<path d="M9 5l7 7-7 7"/></svg>';
-    otoHap.addEventListener("click", () => gec(aktif + 1));
-    document.getElementById("cerceve").appendChild(otoHap);
-  }
-
-  function otoSayimDurdur() {                 // sayım iptal, hap görünür kalır
-    clearInterval(otoZaman);
-    otoZaman = null;
-    otoHap?.classList.remove("sayiyor");
-  }
-
-  function otoSifirla() {                     // sayfa değişti → hap gizlensin
-    otoSayimDurdur();
-    otoHap?.classList.remove("gorunur");
-  }
-
-  // Sesli içerik (2026-08-24 kullanıcı şikayeti: «tebrik modalı anlatım
-  // sırasında gelip duruyor»): anlatım ÇALARKEN tamamlanma sinyali hap
-  // GÖSTERMEZ — bekletilir, anlatım durunca/bitince işlenir.
-  let bekleyenTamam = null;
-  window.addEventListener("sablon:anlatim-durum", (e) => {
-    if (!e.detail.caliyor && bekleyenTamam) {
-      const b = bekleyenTamam; bekleyenTamam = null;
-      otoTamamlandi(b[0], b[1]);
-    }
-  });
-  function otoTamamlandi(n, sure) {
-    if (!OTO_GECIS || !otoHap) return;
-    if (n !== undefined && +n !== aktif) return;   // başka sayfanın sinyali
-    if (aktif >= SAYFA_SAYISI) return;             // son sayfa: gidecek yer yok
-    if (window.SABLON_ANLATIM_CALIYOR) { bekleyenTamam = [n, sure]; return; }
-    otoHap.classList.add("gorunur", "sayiyor");
-    otoKalan = sure || GECIS_SANIYE;
-    otoHap.querySelector(".sayim").textContent = otoKalan;
-    clearInterval(otoZaman);
-    otoZaman = setInterval(() => {
-      otoKalan -= 1;
-      if (otoKalan <= 0) { otoSayimDurdur(); gec(aktif + 1); return; }
-      otoHap.querySelector(".sayim").textContent = otoKalan;
-    }, 1000);
-  }
-  // Sayfa parçaları için açık API (sözleşme madde 2g)
-  window.SABLON_TAMAM = otoTamamlandi;
-
-  if (OTO_GECIS) {
-    otoHapKur();
-    // Sayfaya dokunuş = etkinlik sürüyor → sayımı iptal et. YAKALAMA fazı
-    // şart: normal fazda, sinyali doğuran tıklamanın kendisi sayımı iptal
-    // ederdi (önce içerik dontVer der, sonra bizim dinleyici çalışırdı).
-    const sayfalarEl = document.getElementById("sayfalar");
-    sayfalarEl.addEventListener("pointerdown", otoSayimDurdur, true);
-    document.addEventListener("keydown", (e) => {
-      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") otoSayimDurdur();
-    }, true);
-    // Var olan içerik SABLON_TAMAM çağırmaz; EGITSEL sarmalanır.
-    // `sonDonutYanlis`: yanlış cevapta şıklar kilitlenip DOĞRUSU gösteriliyor
-    // (sözleşme 2e) — 3 sn o düzeltmeyi okumaya yetmez, sayım uzatılır.
-    let sonDonutYanlis = false;
-    const asilDontVer = window.EGITSEL.dontVer;
-    window.EGITSEL.dontVer = function (kok, tip, mesaj) {
-      const sonuc = asilDontVer.apply(this, arguments);
-      sonDonutYanlis = tip !== "dogru";
-      if (!sonDonutYanlis) otoTamamlandi();
-      return sonuc;
-    };
-    const asilKilitle = window.EGITSEL.kilitle;
-    window.EGITSEL.kilitle = function (kok, secici, kilitli) {
-      const sonuc = asilKilitle.apply(this, arguments);
-      // Kilit AÇILDIYSA etkinlik sürüyor demektir (animasyon/tur arası kilit):
-      // sayım durur, yoksa geçiş öğrencinin ortasında olur.
-      if (kilitli === false) { otoSayimDurdur(); return sonuc; }
-      otoTamamlandi(undefined, sonDonutYanlis ? YANLIS_SANIYE : GECIS_SANIYE);
-      return sonuc;
-    };
-  }
-
-  window.addEventListener("DOMContentLoaded", () => {
-    // D4 (2026-09-24): çekimin istediği / yenilemeden dönülen sayfa, yoksa 1.
-    const ilk = sayfaEl(baslangicSayfasi) || document.querySelector(".sayfa");
-    if (ilk) {
-      const no = +ilk.id.replace("sayfa-", "") || 1;
-      aktif = no;
-      ilk.classList.add("aktif");
-      const yeniden = initOncesi(no, ilk);
-      if (typeof SAYFA_INIT[no] === "function") {
-        try { SAYFA_INIT[no](ilk); } catch (e) { console.error("SAYFA_INIT[" + no + "]", e); window.JS_HATA_KAYDET(no, e, "SAYFA_INIT"); initHatasi(no, e); }
-      }
-      initSonrasi(no, ilk, yeniden);
-      svgLatexDuzelt(ilk);
-      // Montaj göstergeyi «1 / N» basar; açılan sayfanın numarası + rozeti buradan yazılır.
-      sayfaDurumYaz(no);
-    }
-    menuKur();
-    noktalariGuncelle();
-  });
-
-  // ---- 3B araç köprüsü (panel için; içerik davranışını DEĞİŞTİRMEZ) ----
-  // Üretilen sayfalarda kamera SAYFA_INIT kapanışında `const` olarak durur ve
-  // dışarıdan erişilemez. Bu köprü her render çağrısının kullandığı kamerayı
-  // window.SAHNE3B'ye yazar; panel kamera açısını böyle okuyabilir.
-  //
-  // ⚠ PROTOTİP YAMASI ÇALIŞMAZ: bu three.js sürümünde `render`, prototipte
-  // DEĞİL örneğin KENDİ ÜZERİNDE tanımlı (kurucu içinde atanıyor) ve prototipi
-  // gölgeliyor. Bu yüzden KURUCU sarmalanır; `prototype` aktarıldığı için
-  // `instanceof THREE.WebGLRenderer` çalışmaya devam eder (sınandı).
-  if (typeof THREE !== "undefined" && THREE.WebGLRenderer) {
-    const AsilRenderer = THREE.WebGLRenderer;
-
-    /* ---- ÇÖZÜNÜRLÜK DÜZELTMESİ (2026-08-17 raporu, P0) -------------------
-       Sayfalar `setPixelRatio(min(devicePixelRatio, 2))` yazıyor; bu ÇERÇEVE
-       ÖLÇEĞİNİ (k) görmez. 1280×720 sahne 1920×1080 pencerede k=1,5 ile
-       büyütülünce WebGL tamponu gerekenin 1/k'sı kadar kalıyor, üstüne
-       ResizeObserver de transform'u ölçmediği için hiç tetiklenmiyor.
-       ÖLÇÜM (21642, 1920×1080, DPR 1,25): tampon 822×571, gereken 1541×1071
-       → yeterlilik 0,53 (piksel sayısında %28). Düzeltme İÇERİKTE değil
-       BURADA yapılır: köprü zaten her renderer'ı sarıyor, etkin oranı da o
-       hesaplar — 48 mevcut three.js sayfası tek satır değişmeden düzelir. */
-    const MAKS_PIKSEL = 8e6;        // GPU tampon tavanı (~8 MP)
-    // SSAA çarpanı (2026-09-11, ölçüldü): MSAA 4× DPR 1 ekranda ince metal boru/halka
-    // siluetinde 4 kademeli basamak bırakıyor (DPR 2'de yarıya iniyor; MSAA örneklemi
-    // bağlam özniteliğiyle artmıyor, Chrome 4 verir). DPR·ölçek < 1,5 iken tampon bu
-    // kat büyük çizilir, tarayıcı küçültür; 8 MP bütçesi ve 3 tavanı yine geçerli.
-    // Bedel: DPR 1'de ~2,25× fragment yükü — zayıf GPU'da FPS düşerse 1 yap.
-    const SSAA_CARPANI = 1.5;
-    // (kayitlar yukarıda, HAZIR SİNYALİ bölümünde tanımlı: THREE'siz montajda da okunur.)
-
-    function etkinOran(kayit) {
-      const m = window.SABLON_GORSEL_METRIK
-             || {scale: 1, dpr: window.devicePixelRatio || 1};
-      const ekranOrani = (m.dpr || 1) * (m.scale || 1);
-      const istenen = ekranOrani < 1.5 ? ekranOrani * SSAA_CARPANI : ekranOrani;  // SSAA (2026-09-11)
-      const w = kayit.w || 1, h = kayit.h || 1;
-      const butce = Math.sqrt(MAKS_PIKSEL / Math.max(1, w * h));
-      // Alt sınır 0,75: bütçe taşsa bile sahne ekrandakinden çok kabalaşmasın.
-      return Math.max(0.75, Math.min(istenen, 3, butce));
-    }
-
-    function oraniUygula(kayit) {
-      if (!kayit.w || !kayit.h) return;           // setSize henüz çağrılmadı
-      const oran = etkinOran(kayit);
-      if (Math.abs(oran - (kayit.sonOran || 0)) < 0.01) return;
-      kayit.sonOran = oran;
-      kayit.ickullanim = true;                    // sarmalayıcı özyinelemesin
-      try { kayit.asilSetPixelRatio(oran); } finally { kayit.ickullanim = false; }
-    }
-
-    // Ölçek/DPR değişince tüm CANLI renderer'ların tamponu yeniden kurulur.
-    // Kopmuş canvas'lar (sayfa yıkıldı) listeden düşer.
-    addEventListener("sablon:goruntu-degisti", () => {
-      for (let i = kayitlar.length - 1; i >= 0; i--) {
-        const k = kayitlar[i];
-        if (!k.r.domElement || !k.r.domElement.isConnected) { kayitlar.splice(i, 1); continue; }
-        oraniUygula(k);
-        // Kamera en-boy oranı DEĞİŞMEZ (mantıksal boyut sabit), bu yüzden
-        // updateProjectionMatrix gerekmez; yalnız tampon büyür.
-      }
-    });
-
-    /* ═══════ BAĞLAM GERİ GELİNCE SAHNE ONARIMI (Y1, 2026-09-24 Chrome/WebGL denetimi) ═══════
-       three r155 bağlam geri gelince dokuları KAYNAK görüntüden yeniden yükler; render
-       target İÇERİĞİNİ (PMREM ortam haritası, küp kamera, gölge haritası) üretemez —
-       uygulamaya özgü durumu uygulama kurar (three #5507/#11435, MDN
-       webglcontextrestored). Ölçüldü (FB.6.1-b s7, tek GPU çökmesi): PMREM'in payı
-       225,2 → 184,2, doku tuvalleriyle birlikte 64,3; hiçbir hata kaydı yoktu.
-       Kapsam: 444 3B sayfanın 173'ünde PMREM (kurallar m16), 289'unda tuval dokusu.
-         (a) PMREM üreticisinin fromScene/fromEquirectangular/fromCubemap çağrıları
-             kaydedilir (renderer, kaynak, sigma, near, far, çıktı hedefi);
-         (b) three'nin kendi dinleyicisinden SONRA koşan webglcontextrestored
-             işleyicisi haritayı AYNI hedefe yeniden üretir — sahne, malzeme ve
-             sayfa kapanışındaki doku başvuruları olduğu gibi geçerli kalır; hedef
-             boyu uymazsa yeni hedef üretilir ve eski→yeni eşlemeyle
-             scene.environment/background ve malzeme dokuları değiştirilir;
-         (c) BİR KEZ güncellenen küp kameralar (CubeCamera) yeniden çekilir —
-             kendi dokusunu yansıtan ayna o an gizlenir (geri besleme döngüsü);
-         (d) shadowMap.needsUpdate = true (autoUpdate=false sayfa gölgeyi başka
-             türlü hiç yeniden çizmez);
-         (e) döngüsüz (talep üzerine çizen) sayfa için son kare bir kez çizilir.
-       Doku tuvalleri başlık betiğinde CPU'ya alındı; ikisi birlikte s7'de
-       225,3 → 225,3 (fark 0,00), s16'da fark 1,36/255 (kaynağı animasyon). */
-    const pmremKayit = [];          // {r, tur, kaynak, sigma, near, far, rt}
-    const PMREM_KAYIT_SINIR = 24;   // her karede yeniden üreten sayfa belleği şişirmesin
-    const kupKayit = new Map();     // CubeCamera → {r, sahne}: son update çağrısı
-    let kupAsil = null;
-    const PM = THREE.PMREMGenerator && THREE.PMREMGenerator.prototype;
-    const pmremAsil = PM && typeof PM.fromScene === "function"
-      ? {sahne: PM.fromScene, es: PM.fromEquirectangular, kup: PM.fromCubemap} : null;
-    function pmremHedefBagla(k, rt) {
-      k.rt = rt;
-      // Sayfa hedefi bırakınca kayıt da düşer.
-      rt.addEventListener("dispose", function birak() {
-        rt.removeEventListener("dispose", birak);
-        const i = pmremKayit.indexOf(k);
-        if (k.rt === rt && i >= 0) pmremKayit.splice(i, 1);
-      });
-    }
-    function pmremKaydet(uretec, tur, kaynak, ek, rt) {
-      if (!rt || !rt.texture || !uretec || !uretec._renderer) return;
-      const k = {r: uretec._renderer, tur: tur, kaynak: kaynak,
-                 sigma: ek[0], near: ek[1], far: ek[2], rt: null};
-      pmremHedefBagla(k, rt);
-      pmremKayit.push(k);
-      if (pmremKayit.length > PMREM_KAYIT_SINIR) pmremKayit.shift();
-    }
-    if (pmremAsil) {
-      PM.fromScene = function (sahne, sigma, near, far) {
-        const rt = pmremAsil.sahne.apply(this, arguments);
-        pmremKaydet(this, "sahne", sahne, [sigma, near, far], rt);
-        return rt;
-      };
-      [["es", "fromEquirectangular"], ["kup", "fromCubemap"]].forEach(([tur, ad]) => {
-        const asil = pmremAsil[tur];
-        if (typeof asil !== "function") return;
-        PM[ad] = function (doku, hedef) {
-          const rt = asil.apply(this, arguments);
-          // Hedefli çağrı var olan haritanın TAZELENMESİDİR (three'nin iç önbelleği
-          // böyle çağırır); ilk kayıt yeter.
-          if (!hedef) pmremKaydet(this, tur, doku, [], rt);
-          return rt;
-        };
-      });
-    }
-    if (THREE.CubeCamera && typeof THREE.CubeCamera.prototype.update === "function") {
-      kupAsil = THREE.CubeCamera.prototype.update;
-      THREE.CubeCamera.prototype.update = function (renderer, sahne) {
-        kupKayit.set(this, {r: renderer, sahne: sahne});
-        return kupAsil.apply(this, arguments);
-      };
-    }
-
-    // Haritayı AYNI hedefe yeniden üretir: iç _allocateTargets (r155) ara hedefleri
-    // yine kurar, çıktı olarak eski hedefi döndürür. İç ad yoksa ya da boy uymazsa
-    // yeni hedef döner — çağıran eşlemeyle başvuruları değiştirir.
-    function pmremYeniden(k) {
-      const g = new THREE.PMREMGenerator(k.r);
-      const ayir = g._allocateTargets;
-      if (typeof ayir === "function") {
-        g._allocateTargets = function () {
-          const yeni = ayir.apply(this, arguments);
-          if (yeni && yeni.width === k.rt.width && yeni.height === k.rt.height) {
-            yeni.dispose();
-            return k.rt;
-          }
-          return yeni;
-        };
-      }
-      try {
-        return k.tur === "sahne" ? pmremAsil.sahne.call(g, k.kaynak, k.sigma, k.near, k.far)
-                                 : pmremAsil[k.tur].call(g, k.kaynak);
-      } finally { g.dispose(); }
-    }
-    function dokulariDegistir(kayit, esle) {
-      (kayit.sahneler || []).forEach((s) => {
-        if (esle.has(s.environment)) s.environment = esle.get(s.environment);
-        if (esle.has(s.background)) s.background = esle.get(s.background);
-        s.traverse((o) => {
-          const ms = Array.isArray(o.material) ? o.material : (o.material ? [o.material] : []);
-          for (const m of ms) {
-            for (const ad in m) {
-              const d = m[ad];
-              if (d && d.isTexture && esle.has(d)) { m[ad] = esle.get(d); m.needsUpdate = true; }
-            }
-          }
-        });
-      });
-    }
-    function kupYeniden(kk, v) {
-      const hedef = kk.renderTarget, s = v.sahne;
-      if (!hedef || !s || typeof s.traverse !== "function") return;
-      const doku = hedef.texture, gizli = [];
-      s.traverse((o) => {
-        if (!o.visible || !o.material) return;
-        const ms = Array.isArray(o.material) ? o.material : [o.material];
-        if (ms.some((m) => m && m.envMap === doku)) { o.visible = false; gizli.push(o); }
-      });
-      try { kupAsil.call(kk, v.r, s); }
-      catch (e) { console.warn("küp kamera onarımı", e); }
-      finally { gizli.forEach((o) => { o.visible = true; }); }
-    }
-    function sahneyiOnar(kayit) {
-      const r = kayit.r;
-      try { if (r.getContext().isContextLost()) return; } catch (e) { return; }
-      const esle = new Map();
-      for (const k of pmremKayit.slice()) {
-        if (k.r !== r) continue;
-        try {
-          const eski = k.rt, rt = pmremYeniden(k);
-          if (rt && rt !== eski) { esle.set(eski.texture, rt.texture); pmremHedefBagla(k, rt); }
-        } catch (e) { console.warn("PMREM onarımı", e); }
-      }
-      if (esle.size) dokulariDegistir(kayit, esle);
-      // Gölge haritası küp kameradan ÖNCE de tazelenir: yoksa küp yüzleri boş (sıfır
-      // derinlikli) haritayla çizilir ve yansımadaki zemin tümden gölgede kalır.
-      const golgeTazele = () => { try { if (r.shadowMap) r.shadowMap.needsUpdate = true; } catch (e) {} };
-      golgeTazele();
-      if (kupAsil) kupKayit.forEach((v, kk) => { if (v.r === r) kupYeniden(kk, v); });
-      golgeTazele();
-      if (kayit.cizSahne) { try { r.render(kayit.cizSahne, kayit.cizKamera); } catch (e) {} }
-      window.__GL_ONARIM__ = (window.__GL_ONARIM__ || 0) + 1;   // teşhis/kabul sayacı
-    }
-
-    // Y2 bekçisinin renderer tarafı (katman/deneme/yenileme yukarıda, IIFE kapsamında).
-    function glKayboldu(kayit) {
-      if (kayit.bilincliKayip) return;          // forceContextLoss (bkz. KopruluRenderer)
-      kayit.kayipT = performance.now();
-      // KAYIP KAYNAĞI (2026-09-25, S3): tek metin («GPU süreci çöktü») 16 bağlam tahliyesini
-      // ve sayfanın kendi ext.loseContext'ini de altyapı gösteriyordu. «kendi»: başlıktaki
-      // sarmalayıcı sayfanın loseContext çağrısını gördü; «dis»: çökme, sıfırlama ya da
-      // tahliye — hangisi olduğunu çekim hattı konsoldan ayırır (gorsel_denetim R7).
-      // Öğrenci tarafı (katman/yenileme) iki kaynakta da eskisi gibidir.
-      const kendi = typeof window.__TUVAL_KENDI_KAYIP__ === "function"
-        && window.__TUVAL_KENDI_KAYIP__(kayit.r.domElement);
-      window.JS_HATA_KAYDET(kayitSayfaNo(kayit), {message: "CONTEXT_LOST — WebGL bağlamı "
-        + "kayboldu (kaynak=" + (kendi ? "kendi" : "dis") + ")"}, "WEBGL");
-      clearTimeout(kayit.kayipZaman);
-      kayit.kayipZaman = setTimeout(() => {
-        const t = kayit.r.domElement;
-        if (kayit.kayipT && t && t.isConnected) glKatmanGoster(t, kayitSayfaNo(kayit));
-      }, GL_KAYIP_BEKLE);
-    }
-    function glGeriGeldi(kayit) {
-      kayit.kayipT = 0;
-      clearTimeout(kayit.kayipZaman);
-      glKatmanKaldir(kayit.r.domElement);
-      glKuruldu();                 // GPU yine çalışıyor: F5 işareti eskidi
-      // three kendi onarımını AYNI olayda yaptı (dinleyicisi önce kaydoldu);
-      // uygulamaya özgü durum bir görev sonra kurulur.
-      setTimeout(() => sahneyiOnar(kayit), 0);
-    }
-
-    /* ═══════ GÖRÜNMEYEN TUVAL ÇİZİLMEZ (D7, 2026-09-24 Chrome/WebGL denetimi) ═══════
-       Köprü yalnız .aktif sınıfına bakıyordu: panel önizleme sekmesi display:none
-       iken (arayuz_v2) aynı kökenli gizli iframe'deki sahne görünürkenki hızla
-       çiziyordu (2 sn'de 120 kare). Tuval IntersectionObserver ile izlenir; belge
-       gizliyse (document.hidden) ya da DOM'daki tuval görünmüyorsa EKRAN çizimi
-       atlanır (döngü sürer, kare boşa gitmez). Atlanan son çağrı saklanır, tuval
-       görünür olunca BİR KEZ çizilir: talep üzerine çizen sayfa da güncel kalır.
-       DOM'a bağlı olmayan tuval (doku kaynağı gibi) hiç atlanmaz; yardımcı
-       çizimler (PMREM/küp/ayna) etkilenmez; montaj içi .aktif kuralı yerinde.
-       YARDIMCI HEDEF İKİ DALDA DA MUAF (2026-09-24 gece doğrulaması): PMREMGenerator
-       bulanıklaştırma/mip zincirini, _textureToCubeUV'yi ve arka plan kutusunu
-       Scene DEĞİL Mesh + orto kamerayla CubeUV hedefine çizer; muafiyet yalnız
-       Scene dalındaydı. Etkin olmayan sayfada (çökme sırasında başka sayfadayken),
-       gizli iframe'de ya da gizli belgede kurulan/onarılan harita yarım kalıyordu:
-       FB.6.1 s7 225,27 → 184,26 (raporun «PMREM payı»), gizli sekmede INIT'te
-       çökme olmadan da. Muafiyet dalın başına alınınca üç durum da 225,27. */
-    function yardimciHedef(rt) {
-      return !!rt && (rt.isWebGLCubeRenderTarget === true
-        || (!!rt.texture && THREE.CubeUVReflectionMapping != null
-            && rt.texture.mapping === THREE.CubeUVReflectionMapping));
-    }
-    const tuvalKaydi = new WeakMap();
-    const gorunurlukIzle = typeof IntersectionObserver === "function"
-      ? new IntersectionObserver((girdiler) => {
-          for (const g of girdiler) {
-            const k = tuvalKaydi.get(g.target);
-            if (!k) continue;
-            k.gorunmez = !g.isIntersecting;
-            if (!k.gorunmez) bekleyenKareyiCiz(k);
-          }
-        })
-      : null;
-    function gorunmuyor(k) {
-      if (document.hidden) return true;
-      const t = k.r.domElement;
-      return k.gorunmez === true && !!t && t.isConnected;
-    }
-    function bekleyenKareyiCiz(k) {
-      const s = k.bekSahne, c = k.bekKamera;
-      if (!s || gorunmuyor(k)) return;
-      k.bekSahne = k.bekKamera = null;
-      try { k.r.render(s, c); } catch (e) {}
-    }
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) kayitlar.forEach(bekleyenKareyiCiz);
-    });
-
-    // Y3: three yükleyicileri (doku, GLB) ertelenmiş iş sayılır. Kanca yükleme
-    // yöneticisidir: ImageLoader/FileLoader/TextureLoader/GLTFLoader.load hepsi
-    // itemStart/itemEnd çağırır (hata yolunda da itemEnd gelir). Sayfanın kendi
-    // LoadingManager'ı da sayılsın diye kurucu sarılır (prototip aktarılır:
-    // instanceof bozulmaz). GLTFLoader.parse (VARLIK3B: gömülü GLB) yöneticiye
-    // uğramadan eşzamansız çözer — ayrıca sayılır.
-    function yuklemeSay(ym) {
-      if (!ym || ym.__bekleyenSayar || typeof ym.itemStart !== "function") return ym;
-      ym.__bekleyenSayar = true;
-      const bas = ym.itemStart, son = ym.itemEnd;
-      ym.itemStart = function () { window.__BEKLEYEN++; return bas.apply(this, arguments); };
-      ym.itemEnd = function () {
-        try { return son.apply(this, arguments); } finally { window.__BEKLEYEN--; }
-      };
-      return ym;
-    }
-    yuklemeSay(THREE.DefaultLoadingManager);
-    if (typeof THREE.LoadingManager === "function") {
-      const AsilYukleme = THREE.LoadingManager;
-      const SayanYukleme = function (a, b, c) { return yuklemeSay(new AsilYukleme(a, b, c)); };
-      SayanYukleme.prototype = AsilYukleme.prototype;
-      THREE.LoadingManager = SayanYukleme;
-    }
-    if (THREE.GLTFLoader && typeof THREE.GLTFLoader.prototype.parse === "function") {
-      const asilParse = THREE.GLTFLoader.prototype.parse;
-      THREE.GLTFLoader.prototype.parse = function (veri, yol, bitti, hata) {
-        let acik = true;
-        const kapat = () => { if (acik) { acik = false; window.__BEKLEYEN--; } };
-        window.__BEKLEYEN++;
-        try {
-          return asilParse.call(this, veri, yol,
-            function () { try { if (bitti) return bitti.apply(this, arguments); } finally { kapat(); } },
-            function () { try { if (hata) return hata.apply(this, arguments); } finally { kapat(); } });
-        } catch (e) { kapat(); throw e; }
-      };
-    }
-
-    function KopruluRenderer(arg) {
-      // D9 (2026-09-24): «high-performance» bu makinede etkisiz (üç tercihte de Intel
-      // Arc D3D11) ve spesifikasyona göre arka plandaki high-performance bağlamların
-      // düşürülmesi «çok olası». Varsayılan artık «default»; sayfanın kendi değeri
-      // (57 sayfa yazıyor) Object.assign ile yine kazanır.
-      const opt = Object.assign({ antialias: true, alpha: true, powerPreference: "default" }, arg || {});
-      const sayfaNo = aktif;                  // INIT eşzamanlı koşar: kuran sayfa budur
-      window.__GL_OLUSTURMA_HATASI__ = "";
-      // DÜŞEN KURULUMUN DİNLEYİCİLERİ SÖKÜLÜR (2026-09-24 gece doğrulaması): three r155
-      // kurucusu webglcontextlost/restored/creationerror dinleyicilerini getContext'ten
-      // ÖNCE sayfanın tuvaline takar, kurulum düşünce sökmez. Çekimdeki INIT yeniden
-      // denemesi aynı tuvalde ikinci renderer kurunca, sonraki bağlam geri gelişinde
-      // ölü renderer'ın onContextRestore'u «reading 'autoReset'» atıyor ve kayda sahte
-      // bir sayfa hatası düşüyordu (fb61 s15). Kurucu süresince tuvale takılanlar toplanır.
-      const tuval = opt.canvas && typeof opt.canvas.addEventListener === "function" ? opt.canvas : null;
-      const takilan = [];
-      const kendiEkle = tuval && Object.prototype.hasOwnProperty.call(tuval, "addEventListener")
-        ? tuval.addEventListener : null;
-      if (tuval) {
-        const ekle = tuval.addEventListener;
-        tuval.addEventListener = function (tip, fn, secenek) {
-          takilan.push([tip, fn, secenek]);
-          return ekle.apply(this, arguments);
-        };
-      }
-      let r;
-      try { r = new AsilRenderer(opt); }
-      catch (e) {
-        if (tuval) {
-          takilan.forEach((x) => { try { tuval.removeEventListener(x[0], x[1], x[2]); } catch (e2) {} });
-          try { delete tuval.__glHataDinle; } catch (e2) {}   // oluşturma iletisi dinleyicisi yeniden takılsın
-        }
-        const ileti = String(window.__GL_OLUSTURMA_HATASI__ || "").slice(0, 160);
-        const hataMetni = String((e && e.message) || e || "").slice(0, 160);
-        // SAYFA KUSURU MU, ALTYAPI MI (2026-09-24 gece doğrulaması): aynı tuvalde önce
-        // getContext('2d') çağıran sayfa da «Error creating WebGL context» alır (Chrome:
-        // «Canvas has an existing context of a different type»); bu kayıt ALTYAPI
-        // sayılıyor, modele «kodu DEĞİŞTİRME» gidiyor, bekçi öğrencinin sayfasını iki kez
-        // yenileyip «Chrome'u yeniden başlatın» diyordu.
-        // KARAR ÇEKİMDE PYTHON'DA (2026-09-25, S1 — tasarım P4/S1/S2/S5): kayıt artık
-        // yapılandırılmıştır ve e.message'ı HEP taşır (offscreen DOMException metni
-        // düşüyordu, S2): «WEBGL KURULUM tuval=<tür>/<kayip|canli|-> yoklama=<var|yok|
-        // atlandi> durum=«statusMessage|yok» hata=«e.message»» (+ @çağıran sayfa satırı).
-        // Buradaki ayrım yalnız ÖĞRENCİ tarafınındır (katman/yenileme): önce TUVAL KANITI
-        // — tuvalde 2d/devredilmiş bağlam sayfa kusurudur, kayıp webgl bağlamı kaybın
-        // ardılıdır (katman). Kanıt karar vermezse eski taze tuval yoklaması (glYoklama):
-        // kurulabiliyorsa sayfa kusuru sayılır. Yoklama kayıp tuvalli çökmede «sayfa»
-        // diyordu ve GPU yeniden kurulumunu eşzamanlı beklerken ana iş parçacığını 0,4-3,6
-        // sn kilitliyordu (S1) — o durumu artık kanıt ayırır, yoklama koşmaz.
-        const tk = tuval && typeof window.__TUVAL_KANITI__ === "function"
-          ? window.__TUVAL_KANITI__(tuval) : {tur: "yok", kayip: null};
-        let yoklama = "atlandi", sayfaKusuru;
-        if (/^(2d|bitmaprenderer|webgpu|devredildi)$/.test(tk.tur)
-            || /transferred its control to offscreen/.test(hataMetni + " " + ileti)) {
-          sayfaKusuru = true;
-        } else if (/^(webgl2?|experimental-webgl)$/.test(tk.tur) && tk.kayip === true) {
-          sayfaKusuru = false;
-        } else {
-          sayfaKusuru = glYoklama();
-          yoklama = sayfaKusuru ? "var" : "yok";
-        }
-        // @yer: yığının köprü sonrası ilk satırı — sayfanın renderer kurduğu satır.
-        let yer = "";
-        try {
-          const y = String(new Error().stack || "").split("\n");
-          const i = y.findIndex((s) => /KopruluRenderer/.test(s));
-          if (i > 0 && y[i + 1]) yer = y[i + 1];
-        } catch (e2) {}
-        const kayitHata = {message: "KURULUM tuval=" + tk.tur + "/"
-          + (tk.kayip === true ? "kayip" : tk.kayip === false ? "canli" : "-")
-          + " yoklama=" + yoklama + " durum=«" + (ileti || "yok") + "» hata=«" + hataMetni + "»"};
-        if (yer) kayitHata.stack = "WEBGL\n" + yer;
-        window.JS_HATA_KAYDET(sayfaNo, kayitHata, "WEBGL");
-        // Tek kayıt (S5): fırlatılan hata INIT catch'inde/global dinleyicide ikinci satır
-        // olmasın (three'nin «precision» TypeError'ı ayrı kayıt oluyordu).
-        try { e.__jsKayitNo = sayfaNo; } catch (e2) {}
-        if (sayfaKusuru) {
-          try { e.__glSayfaKusuru = true; } catch (e2) {}  // initHatasi katman açmasın
-          throw e;
-        }
-        // Y2: bağlam kurulamadı (alan adı engeli / GPU modu düştü / kayıp tuval).
-        // Sayfa hatayı kendi yutsa bile initSonrasi düştüğünü görür.
-        glDusenSayfalar.add(sayfaNo);
-        // INIT dışında (zamanlayıcı, tıklama) düştüyse katman hemen konur.
-        if (initSayfasi !== sayfaNo && sayfaEl(sayfaNo)) {
-          glKatmanGoster(sayfaEl(sayfaNo).querySelector(".bolum.sahne") || sayfaEl(sayfaNo), sayfaNo);
-        }
-        throw e;
-      } finally {
-        if (tuval) {
-          if (kendiEkle) tuval.addEventListener = kendiEkle;
-          else delete tuval.addEventListener;
-        }
-      }
-      glKuruldu();
-      try {
-        if (typeof THREE !== "undefined") {
-          if (THREE.ACESFilmicToneMapping) {
-            r.toneMapping = THREE.ACESFilmicToneMapping;
-            r.toneMappingExposure = 0.9;  // StudyoOrtami başlangıcı; sayfanın açık ayarı bunu değiştirebilir.
-          }
-          if (r.shadowMap) {
-            r.shadowMap.enabled = true;
-            if (THREE.PCFSoftShadowMap) r.shadowMap.type = THREE.PCFSoftShadowMap;
-          }
-        }
-      } catch (e) {}
-      const kayit = {r: r,
-                     asilSetPixelRatio: r.setPixelRatio.bind(r),
-                     ickullanim: false,
-                     sayfaNo: sayfaNo};           // Y3: tuval DOM'a girmeden de sayfası bilinir
-      kayitlar.push(kayit);
-      // Y1/Y2: bekçi ve onarım dinleyicileri three'ninkilerden SONRA kaydolur (three
-      // kurucusunda kaydetti) — onarım three'nin kendi geri yüklemesinin ardından koşar.
-      r.domElement.addEventListener("webglcontextlost", () => glKayboldu(kayit));
-      r.domElement.addEventListener("webglcontextrestored", () => glGeriGeldi(kayit));
-      // Sayfanın KENDİ istediği kayıp (forceContextLoss: renderer'ı bırakıyor) GPU
-      // arızası değildir (2026-09-24 gece): kayıt, katman ve yenileme yok.
-      const asilKayip = r.forceContextLoss;
-      if (typeof asilKayip === "function") {
-        r.forceContextLoss = function () { kayit.bilincliKayip = true; return asilKayip.apply(this, arguments); };
-      }
-      tuvalKaydi.set(r.domElement, kayit);          // D7: görünürlük izlemesi
-      if (gorunurlukIzle) gorunurlukIzle.observe(r.domElement);
-
-      const asilSetSize = r.setSize.bind(r);
-      r.setSize = function (w, h, stilGuncelle) {
-        if (kayit.ickullanim) return asilSetSize(w, h, stilGuncelle);
-        kayit.w = w; kayit.h = h;                 // MANTIKSAL boyut saklanır
-        asilSetSize(w, h, stilGuncelle);
-        kayit.sonOran = 0;                        // boyut değişti → oran tazelensin
-        oraniUygula(kayit);
-        return this;
-      };
-      // Sayfanın kendi setPixelRatio çağrısı YOK SAYILMAZ ama ÜST SINIR olarak
-      // da alınmaz: doğru oranı yalnız çerçeve ölçeğini bilen taraf hesaplar.
-      r.setPixelRatio = function () { oraniUygula(kayit); return this; };
-
-      const asilRender = r.render.bind(r);
-      r.render = function (sahne, kamera) {
-        // SON İŞLEM ZİNCİRİ (2026-09-03, postprocessing.js): EffectComposer
-        // geçişleri tam-ekran dörtgeni (Mesh) orto kamerayla çizer — Scene
-        // değildir. Bu çağrılar köprünün kamera kaydına/yuva izdüşümüne
-        // GİRMEZ: girseydi sonKamera orto kameraya dönüp 3B yuvalar ve panel
-        // kamera açısı bozulurdu. Sahne çizimi (RenderPass) yine kaydedilir.
-        if (!sahne || sahne.isScene !== true) {
-          // PMREM'in Mesh geçişleri (CubeUV hedefi) gizlilikten ÖNCE muaf — bkz. D7 notu.
-          if (yardimciHedef(r.getRenderTarget ? r.getRenderTarget() : null)) {
-            return asilRender(sahne, kamera);
-          }
-          // Gizli sayfa kuralı (aşağıda) bu çizimler için de geçerli: bloom'un
-          // kare başına ~10 dörtgen çizimi gizli sayfada GPU'yu boşa yakmasın.
-          if (kayit.sayfaEl === undefined) {
-            kayit.sayfaEl = r.domElement.closest ? r.domElement.closest(".sayfa") : null;
-          }
-          if (kayit.sayfaEl && !kayit.sayfaEl.classList.contains("aktif")) return;
-          if (gorunmuyor(kayit)) return;          // D7: gizli belge / görünmeyen tuval
-          return asilRender(sahne, kamera);
-        }
-        // YARDIMCI ÇİZİMLER KAYDA GİRMEZ (2026-09-03 ölçümü): PMREMGenerator
-        // (CubeUV hedefi) ve CubeCamera (küp hedefi) RoomEnvironment gibi yardımcı
-        // sahneleri aynı renderer'la çizer; kayda girince panel «ortam haritası
-        // yok / ışık yok» okuyordu (13 kutu + 1 PointLight). Yalnız çizilir.
-        if (yardimciHedef(r.getRenderTarget ? r.getRenderTarget() : null)) {
-          return asilRender(sahne, kamera);
-        }
-        // YARDIMCI KAMERA (2026-09-05, Reflector.js portu; 13.09 geri geldi): düz ayna
-        // sahneyi aynalanmış bir kamerayla dokuya çizer; o kamera userData.yardimci
-        // damgası taşır. Kayda ve 3B yuva izdüşümüne girmez — girse vuruş
-        // alanları her karede ayna kamerasına göre kayardı (nested render,
-        // ana çizimin İÇİNDE tetiklenir ve sonuncu o olur).
-        if (kamera && kamera.userData && kamera.userData.yardimci === true) {
-          return asilRender(sahne, kamera);
-        }
-        // Y1: bağlam geri gelince eşlenecek sahneler (yardımcı sahneler hariç).
-        (kayit.sahneler || (kayit.sahneler = new Set())).add(sahne);
-        // AÇIK GEOMETRİ ÇİFT YÜZ (2026-10-12, kullanıcı: «mekanik çözümü 3B'ler için geri
-        // getir»; FB.4.4.2 s1: tava tabanı tek yüzlü CircleGeometry +π/2 döndürülmüş —
-        // normal aşağı bakıyor, üstten arka yüz çizilmiyor, alev tabandan geçip görünüyordu;
-        // gövde de openEnded silindir). Düz (Circle/Plane/Ring/Shape) ve açık uçlu (openEnded)
-        // geometrilerin tek yüzlü (FrontSide=0) malzemesi DoubleSide (2) yapılır. İlk çizimde
-        // ve 2 sn sonra bir kez daha (geç eklenen nesneler); işlenen sahne yeniden taranmaz.
-        if (!kayit.cifYuzSahneler) kayit.cifYuzSahneler = new WeakSet();
-        if (!kayit.cifYuzSahneler.has(sahne)) {
-          kayit.cifYuzSahneler.add(sahne);
-          const cifYuz = (s) => { try { s.traverse((o) => {
-            if (!o.isMesh || !o.geometry || !o.material) return;
-            // Oda duvarları içe bakan FrontSide kalmalı; dış kamera aradaki duvarı görmemeli.
-            if (o.parent && o.parent.userData && o.parent.userData.oda && /^oda_.*_duvar$/.test(o.name || "")) return;
-            const g = o.geometry, t = String(g.type || ""), p = g.parameters || {};
-            const acik = /^(Circle|Plane|Ring|Shape)Geometry$/.test(t)
-                      || (/^(Cylinder|Cone)Geometry$/.test(t) && p.openEnded === true);
-            if (!acik) return;
-            (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => {
-              if (m && m.side === 0) { m.side = 2; m.needsUpdate = true; } });
-          }); } catch (e) {} };
-          cifYuz(sahne);
-          setTimeout(() => cifYuz(sahne), 2000);
-        }
-        const k = (window.SAHNE3B = window.SAHNE3B || {kameralar: []});
-        // SAYFA BAŞINA KAYIT (2026-09-03, ışık sürgüleri): gizli sayfaların rAF
-        // döngüsü de buraya düşer; «son*» alanlar yalnız AKTİF sayfanın çizimiyle
-        // güncellenir, her renderer'ın kendi kaydı k.kayitlar'da durur (panel ve
-        // isik-yama aktif/kendi sayfasının sahnesini buradan bulur).
-        if (kayit.sayfaEl === undefined) {
-          kayit.sayfaEl = r.domElement.closest ? r.domElement.closest(".sayfa") : null;
-        }
-        if (!Array.isArray(k.kayitlar)) k.kayitlar = [];
-        let ky = k.kayitlar.find((x) => x.renderer === r);
-        if (!ky) { ky = {renderer: r, tuval: r.domElement, sayfaEl: kayit.sayfaEl}; k.kayitlar.push(ky); }
-        ky.sahne = sahne; ky.kamera = kamera;
-        // EKRANA çizilen sahne ayrı tutulur (2026-09-03 ölçümü): PMREMGenerator /
-        // RoomEnvironment gibi hedefe (render target) çizilen yardımcı sahneler
-        // «sahne»yi eziyordu — sayfa 3 kaydı 13 kutu + 1 PointLight çıktı. Bloom'lu
-        // sayfada ekran çizimi dörtgendir (yukarıda elenir), RenderPass sahnesi
-        // «sahne» alanında kalır; okuyucular ekranSahne || sahne kullanır.
-        const ekrana = !r.getRenderTarget || r.getRenderTarget() === null;
-        if (ekrana) { ky.ekranSahne = sahne; ky.ekranKamera = kamera; }
-        if (!kayit.sayfaEl || kayit.sayfaEl.classList.contains("aktif")) {
-          if (ekrana || !k.sonSahne) {
-            k.sonKamera = kamera;
-            k.sonSahne = sahne;
-          }
-          k.sonRenderer = r;   // panel ışık/pozlama sürgüleri (2026-09-03)
-        }
-        // Parça SAHNE3B'yi kendi nesnesiyle EZEBİLİYOR (2026-08-15 BTY.5.1.5:
-        // rötuş ajanı {scene,camera,...} atadı, kameralar kayboldu ve HER
-        // render TypeError ile öldü — sahne simsiyah). Köprü kendi alanını
-        // her çağrıda tazeler; içerik köprü yüzünden ASLA çökmez.
-        if (!Array.isArray(k.kameralar)) k.kameralar = [];
-        if (kamera && !k.kameralar.includes(kamera)) k.kameralar.push(kamera);
-        // GİZLİ SAHNE ÇİZİLMEZ (rapor P1): 61 animasyonlu sayfanın yalnız 5'i
-        // duraklat kancası kaydediyor; geri kalanının rAF döngüsü sayfa
-        // gizlenince de dönüyor ve GPU'yu bölüşüyor (aktif sahne kare
-        // düşürüyor). Sayfa ataları içinde .sayfa varsa ve .aktif DEĞİLSE
-        // çizim atlanır — döngü çalışmaya devam eder, yalnız kare boşa
-        // gitmez. Tek sayfalık içerikte .sayfa hep aktiftir → etkisiz.
-        // (sayfaEl yukarıda, kayıt bloğunda çözülür.)
-        if (kayit.sayfaEl && !kayit.sayfaEl.classList.contains("aktif")) return;
-        // D7: gizli belge / görünmeyen tuval — ekran çizimi saklanır, görünür olunca çizilir.
-        if (gorunmuyor(kayit)) {
-          if (ekrana) { kayit.bekSahne = sahne; kayit.bekKamera = kamera; }
-          return;
-        }
-        // Y1(e): bağlam geri gelince yinelenecek son ekran karesi.
-        if (ekrana) { kayit.cizSahne = sahne; kayit.cizKamera = kamera; }
-        // Y3: aktif sayfanın etkinleştikten sonraki İLK çizimi — hazır denetimi uyanır
-        // (aşağıdaki 1,5 sn'lik işlerin sayacı bu görevde kurulur, denetim sonra koşar).
-        if (cizilenSayfa !== aktif && kayitSayfaNo(kayit) === aktif) {
-          cizilenSayfa = aktif;
-          hazirZamanla();
-        }
-        // 3B yuva vuruş alanları HER KAREDE izdüşümden tazelenir (kamera ya da
-        // orbit değişince kayar). Kanca yalnız egitsel3b.js gömülüyse vardır;
-        // yoksa bu satır sessiz no-op'tur — köprü içerik yüzünden çökmez.
-        if (EGITSEL._yuva3BKare) EGITSEL._yuva3BKare(sahne, kamera, r.domElement);
-        // DOKU ÖLÇEĞİ OTOMATİĞİ (2026-09-05, kullanıcı: «zeminler berbat»; 13.09 geri geldi):
-        // ortak doku kütüphanesi gömülüyse (MALZEME3B) sahnenin ilk çiziminde ve 1,5 sn
-        // sonra bir kez daha, 1:1 gerilmiş yardımcı dokuları büyük yüzeye göre döşer —
-        // model yuzeyDoku/kutuDoku çağırmayı unutsa da 28 birimlik zemin bulanık lekeye dönmez.
-        if (window.MALZEME3B_OTO && !sahne.userData.__m3bOto) {
-          sahne.userData.__m3bOto = 1;
-          try { window.MALZEME3B_OTO(sahne, r); } catch (e) {}
-          const isSayfa = isBasla(kayitSayfaNo(kayit));   // Y3: ertelenmiş iş (hazır sözleşmesi)
-          setTimeout(function () {
-            try { window.MALZEME3B_OTO(sahne, r); } catch (e) {} finally { isBitti(isSayfa); }
-          }, 1500);
-        }
-        // KONUM ÖLÇÜMÜ (2026-09-06, denemeler/konum-hatalari; 2026-09-11 — 8c2a9012'den
-        // taşındı): kütüphane gömülüyse ilk çizimden
-        // 1,5 sn sonra BİR KEZ Box3 raporu — sahne.userData.konumRaporu + console.info.
-        // YALNIZ ÖLÇER, sahneyi OYNATMAZ (0,5 birim boşluk gezegen için niyet, masa için
-        // hata; otomatik oturtma kullanıcı ilkesiyle yok). Yer seçimi: yukarıdaki erken
-        // dönüşler (composer dörtgeni — Scene değil; PMREM/CubeCamera yardımcı sahnesi;
-        // gizli sayfa) ölçülmemesi GEREKEN çizimlerdir — sahne ancak EKRANA/RenderPass'e
-        // AKTİF sayfada ilk kez çizildiğinde damgalanır; bloom'lu sayfa da buraya düşer.
-        if (window.KONUM3B && !sahne.userData.__k3bOlc) {
-          sahne.userData.__k3bOlc = 1;
-          const olcSayfa = isBasla(kayitSayfaNo(kayit));  // Y3: bulgu yazılmadan hazır denmesin
-          setTimeout(function () {
-            try {
-              // HESAP DENETİMİ (2026-09-26, başlık betiği): NaN konumlu nesne/kamera → HESAP kaydı.
-              try { if (window.HESAP3B) window.HESAP3B(sahne, kayitSayfaNo(kayit), kamera); } catch (e3) {}
-              var rp = window.KONUM3B.olc(sahne, kamera);
-              // EŞ DÜZLEM (z-fighting) bulgusu denetim bandına (2026-09-06): tek başına GÖRÜLEBİLİR kusur
-              // (tepeden bakışta çizgi çizgi zemin), görsel tur bandı okur ve birini 0,01 kaldırır. Öteki
-              // KONUM3B bulguları (HAVADA/GÖMÜLÜ) niyet olabilir — onlar yalnız log (kullanıcı ilkesi).
-              if (rp && rp.esDuzlem && rp.esDuzlem.length && window.JS_HATA_KAYDET) {
-                var sec = r.domElement.closest ? r.domElement.closest(".sayfa") : null;
-                var no = sec ? (+String(sec.id).replace("sayfa-", "") || 0) : 0;
-                var e0 = rp.esDuzlem[0];
-                // 2026-09-11 ÜÇ EKSEN (kullanıcı: FB.6.1 s11 fener ucu kapak-mercek çakışması): mesaj eksen + konum söyler
-                // (e0.eksen/e0.konum; eski e0.y yalnız y ekseninde dolu — eski kütüphane gömülüyse ona geri düşer), tavsiye
-                // kapak-mercek / disk-etiket çiftini de kapsar. JS_HATA_KAYDET 160 karakterde keser: ölçüm verisi önde durur.
-                window.JS_HATA_KAYDET(no, new Error("EŞ DÜZLEM (z-fighting, çizgili titreme): " + e0.a + " ile " + e0.b + " " + e0.yuz +
-                  " aynı " + (e0.eksen || "y") + "=" + (e0.konum != null ? e0.konum : e0.y) + ", örtüşme " + e0.ortusme + " birim² (" + rp.esDuzlem.length +
-                  " çift) — birini 0.01 kaldır/indir ya da kapağı/diski ayır (kapak-mercek, disk-etiket: eksen boyunca >= 0.01 birim ya da polygonOffset) (sözleşme 16 EŞ DÜZLEM YASAĞI)"), "KONUM3B");
-              }
-            } catch (e) {} finally { isBitti(olcSayfa); }
-          }, 1500);
-        }
-        // NOT (2026-08-18): burada bir «isimliği kameraya döndür» kancası
-        // vardı. Kullanıcı plakalı isimliği (tabela) kaldırttı; yazı artık
-        // nesnenin YÜZEYİNE basılıyor ve nesneyle birlikte döndüğü için
-        // kare başına hizalama GEREKMİYOR — kanca da kaldırıldı.
-        return asilRender(sahne, kamera);
-      };
-      return r;
-    }
-    KopruluRenderer.prototype = AsilRenderer.prototype;
-    THREE.WebGLRenderer = KopruluRenderer;
-  }
-
-  // Giriş kapağı: "Başla" (ya da Esc) kapağı kaldırır, içerik açığa çıkar.
-  // Kapak yoksa bu blok hiçbir şey yapmaz.
-  const kapak = document.getElementById("ekran-kapak");
-  if (kapak) {
-    const kapagiKapat = () => {
-      kapak.classList.add("kapali");
-      const ilk = sayfaEl(aktif);
-      if (ilk) ilk.focus?.();
-    };
-    document.getElementById("btnBasla")?.addEventListener("click", kapagiKapat);
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !kapak.classList.contains("kapali")) kapagiKapat();
-    });
-  }
-})();
-</script>
-
-<script src="ortak/266154ffc0c981b9.js"></script>
+<script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>
 /* ============ SAYFAYA DÖNÜŞTE SIFIRLAMA (geoeba uzman notları 2. tur, 2026-10-06) ============
    «Sayfalar arası geçişte / ileri-geri yapıldığında etkinlikler sıfırlanmıyor, aynı noktada
@@ -12608,21 +10881,6 @@ window.SAYFA_INIT[11] = function (kok) {
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', baslat);
   else baslat();
-})();
-</script>
-<script>/* esk-son-sayfa-sonraki */
-(function () {
-  var dugme = document.getElementById("sonraki-buton");
-  if (!dugme) { return; }
-  dugme.addEventListener("click", function () {
-    var sayfalar = [].slice.call(document.querySelectorAll("section[id]")).filter(function (s) {
-      return /^sayfa-\d+$/.test(s.id);
-    });
-    var son = sayfalar[sayfalar.length - 1];
-    if (!son || !son.classList.contains("aktif")) { return; }
-    var mesaj = "İçeriğin sonuna geldin. Önceki sayfalara dönüp yeniden deneyebilirsin.";
-    if (window.EGITSEL && window.EGITSEL.dontVer) { window.EGITSEL.dontVer(son, "bilgi", mesaj); }
-  });
 })();
 </script>
 </body>
