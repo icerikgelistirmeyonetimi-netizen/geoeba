@@ -20,9 +20,435 @@
 })();
 </script>
 <style>html.sablon-donus #ekran-kapak { display: none !important; }</style>
-<script src="ortak/7c10e67e8c59bec7.js"></script>
+<script>
+/* Sayfa modülü kayıt defterleri — parça script'lerinden ÖNCE tanımlı olmalı */
+window.SAYFA_INIT = {}; window.SAYFA_TAMAM = {};
+window.SAYFA_DURAKLAT = {}; window.SAYFA_DEVAM = {};
+/* JS ÇALIŞMA ZAMANI HATASI KAYDI (2026-09-06, konum-hataları teşhisi: FIZ.11.4 s22
+   tanımsız değişkenle SAYFA_INIT yarıda kaldı, 3B tuval bembeyaz çıktı ve görsel tur
+   kareyi KABUL ETTİ — hat hiçbir yerde hatayı dinlemiyordu). Köprünün try/catch'i
+   hatayı yutar, window "error" olayı hiç tetiklenmez; bu yüzden kayıt catch'ten
+   AÇIKÇA yapılır. Eşzamansız hatalar (rAF döngüsü, olay işleyici, setTimeout)
+   global dinleyiciyle o an AKTİF sayfaya yazılır. Denetim betiği (gorsel_denetim)
+   sayfanın kaydını okur ve ENGEL bulgusu üretir. İçerik davranışı DEĞİŞMEZ.
+   2026-09-11: 2e0036a0'dan taşındı (denetim raporu 6b) — 10.09 17:35 koşusunda bu
+   köprü 7 sayfadaki «SAYFA_INIT scene is not defined @at gokKuresi» hatasını görsel
+   prompta taşıdı, tur onardı (karne 2,4 → 4,9); HEAD'de köprü yoktu. */
+window.__JS_HATALAR__ = {};
+window.JS_HATA_KAYDET = function (no, e, kaynak) {
+  try {
+    no = +no || 0;
+    var m = (e && (e.message || (e.reason && e.reason.message))) || String(e && e.reason || e || "hata");
+    var yer = (e && e.stack && String(e.stack).split("\n").slice(1, 2)[0]) || "";
+    if (e && e.lineno) yer = ":" + e.lineno + (e.colno ? ":" + e.colno : "");
+    var kayit = (kaynak ? kaynak + " " : "") + String(m).slice(0, 160) + (yer ? " @" + String(yer).trim().slice(0, 80) : "");
+    var L = window.__JS_HATALAR__[no] || (window.__JS_HATALAR__[no] = []);
+    if (L.indexOf(kayit) < 0 && L.length < 5) L.push(kayit);
+  } catch (e2) {}
+};
+(function () {
+  function aktifNo() {
+    var el = document.querySelector(".sayfa.aktif");
+    return el ? (+String(el.id).replace("sayfa-", "") || 0) : 0;
+  }
+  window.addEventListener("error", function (ev) {
+    if (ev && ev.target && ev.target !== window && !ev.error && !ev.message) return; // kaynak yükleme hatası (img/script) — JS değil
+    window.JS_HATA_KAYDET(aktifNo(), ev.error || ev, "");
+  });
+  window.addEventListener("unhandledrejection", function (ev) {
+    window.JS_HATA_KAYDET(aktifNo(), ev, "promise");
+  });
+})();
+/* Sesli içerik (2026-08-24): SAYFA_ANLATIM[n] = function(olay){...} — anlatım
+   motoru her söylenen kelimede {kelime, indeks, t} ile çağırır; sayfa bununla
+   anlatıma senkron kurgular kurabilir. Bildirimsel yol daha kolaydır: sahne
+   öğesine data-anlatim-kelime="..." ver, motor o kelime söylenirken öğeyi
+   kendiliğinden gösterir (data-anlatim-etki="ciz|vurgula" ile çizim/vurgu). */
+window.SAYFA_ANLATIM = {};
+
+/* EGITSEL — projeye özgü küçük yardımcılar (sözleşme 2b: parçalar YALNIZ
+   çağırır, yeniden yazmaz). Savunmacı: yanlış kullanımda patlamaz,
+   console.warn + zararsız düşüş. */
+window.EGITSEL = {
+  /* Dönüt: TOAST olarak verilir (kullanıcı kararı 2026-08-15 — sayfa içi
+     .durum-bandi kaldırıldı, tüm bildirimler toast'tır). `kok` imzada
+     KALIR: 200+ mevcut parça dontVer(kok, ...) diye çağırıyor.
+     tip: "dogru" | "yanlis" */
+  dontVer: function (kok, tip, mesaj) {
+    /* Nötr tipler (2026-09-26, geoeba parti raporu 7.4.x): bazı sayfalar
+       yönlendirmeyi dontVer(kok, "uyari", …) diye veriyor; eskiden her
+       bilinmeyen tip «yanlis»a dönüp kırmızı + yanlış sesi basıyordu. */
+    if (tip === "uyari" || tip === "bilgi" || tip === "notr" || tip === "ipucu") {
+      if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj); }
+      return;
+    }
+    tip = tip === "dogru" ? "dogru" : "yanlis";
+    if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj, tip); }
+    else { console.warn("EGITSEL.dontVer: SABLON_TOAST yok"); }
+  },
+  /* Tek-seçim grubu: kok üzerinde olay delegasyonu — seçiciyle eşleşen
+     öğelere (SONRADAN eklenenler dahil) tıklamada .secili'yi tek öğede
+     tutar, cb(el, el.dataset.deger) çağırır. ayarlar.toggle=true ise
+     seçili öğeye ikinci tıklama seçimi kaldırır (cb(null, undefined)). */
+  secimGrubu: function (kok, secici, cb, ayarlar) {
+    if (!kok || !kok.addEventListener) {
+      console.warn("EGITSEL.secimGrubu: geçersiz kok");
+      return;
+    }
+    ayarlar = ayarlar || {};
+    kok.addEventListener("click", function (ev) {
+      var el = ev.target && ev.target.closest ? ev.target.closest(secici) : null;
+      if (!el || !kok.contains(el)) { return; }
+      if (el.disabled || el.classList.contains("locked")) { return; }
+      if (ayarlar.toggle && el.classList.contains("secili")) {
+        el.classList.remove("secili");
+        if (typeof cb === "function") { cb(null, undefined); }
+        return;
+      }
+      var ogeler = kok.querySelectorAll(secici);
+      Array.prototype.forEach.call(ogeler, function (o) { o.classList.remove("secili"); });
+      el.classList.add("secili");
+      if (typeof cb === "function") { cb(el, el.dataset ? el.dataset.deger : undefined); }
+    });
+  },
+  /* Kilitle/aç: eşleşen buton ve şıkları topluca disabled + .locked yapar.
+     kilitli=false ile açar. */
+  kilitle: function (kok, secici, kilitli) {
+    var ogeler = kok && kok.querySelectorAll ? kok.querySelectorAll(secici) : [];
+    Array.prototype.forEach.call(ogeler, function (el) {
+      if ("disabled" in el) { el.disabled = kilitli !== false; }
+      el.classList.toggle("locked", kilitli !== false);
+    });
+  },
+
+  /* ÇOKTAN SEÇMELİ DEĞERLENDİRME MOTORU (2026-09-26, geoeba uzman raporu:
+     «değerlendirme soruları kendi içinde ileri-geri yapılamıyor», «sonucu
+     gör dediğinde kaç doğru kaç yanlış gösteren ekran çıkmıyor», «baştan
+     başlayınca bazı sorular çözülmüş geliyor», «lisede sorular 5 şıklı
+     olmalı», «en az 2 seçim hakkı verilmeli, yanlışta hemen doğru cevap
+     gelmemeli»). Her değerlendirme sayfası bu mekaniği kendisi yazıyordu ve
+     her biri başka eksik taşıyordu; motor TEK doğruluk kaynağıdır.
+       EGITSEL.degerlendirme(kok, {
+         sorular: [{metin, siklar: [{metin, dogru}], donut}],  // şık sayısı serbest (≤6)
+         hak: 2,                // soru başına deneme hakkı
+         karistir: true,        // şık sırası (soru başına BİR kez karışır)
+         soruDegisti: function (i, soru) {},     // sahneyi soruya eşle
+         sahneOnEki: "s7-soru-",  // isteğe bağlı: <g id="s7-soru-K"> grupları etkin soruya göre
+                                  // gösterilir/gizlenir (K = 1..n; esk değerlendirme sözleşmesi)
+         cevaplandi: function (i, dogruMu, soru) {},
+         bitti: function (dogru, toplam) {}
+       })
+     Arayüz .kontrol-govde / .kontrol-eylem İÇİNE kurulur (içerikleri
+     değiştirilir); metin ve şıklar LaTeX içerebilir (MathJax dizilir). */
+  degerlendirme: function (kok, ayar) {
+    ayar = ayar || {};
+    var sorular = (ayar.sorular || []).filter(function (s) { return s && s.siklar && s.siklar.length; });
+    var govde = ayar.govde || (kok && kok.querySelector(".kontrol-govde"));
+    var eylem = ayar.eylem || (kok && kok.querySelector(".kontrol-eylem"));
+    if (!govde || !sorular.length) { console.warn("EGITSEL.degerlendirme: govde/soru yok"); return null; }
+    var HAK = Math.max(1, ayar.hak || 2);
+    var HARF = ["A", "B", "C", "D", "E", "F"];
+    var durum, aktif = 0, sonucEkrani = false;
+
+    function karisik(n) {
+      var d = [];
+      for (var i = 0; i < n; i++) { d.push(i); }
+      if (ayar.karistir === false) { return d; }
+      for (var j = d.length - 1; j > 0; j--) {
+        var k = Math.floor(Math.random() * (j + 1)); var t = d[j]; d[j] = d[k]; d[k] = t;
+      }
+      return d;
+    }
+    function sifirla() {
+      durum = sorular.map(function (s) {
+        return { sira: karisik(s.siklar.length), denenen: [], sonuc: "bos" };  // bos|devam|dogru|yanlis
+      });
+      aktif = 0; sonucEkrani = false;
+    }
+    function el(etiket, sinif, metin) {
+      var e = document.createElement(etiket);
+      if (sinif) { e.className = sinif; }
+      if (metin !== undefined) { e.innerHTML = metin; }
+      return e;
+    }
+    function diz(kap) {
+      try {
+        if (window.MathJax && window.MathJax.typesetPromise) { window.MathJax.typesetPromise([kap]); }
+        else if (window.MathJax && window.MathJax.typeset) { window.MathJax.typeset([kap]); }
+      } catch (e) { /* dizgi hatası etkileşimi durdurmaz */ }
+    }
+    function sayim() {
+      var s = { dogru: 0, yanlis: 0, bos: 0 };
+      durum.forEach(function (d) { if (d.sonuc === "dogru") s.dogru++; else if (d.sonuc === "yanlis") s.yanlis++; else s.bos++; });
+      return s;
+    }
+    // SORU BÖLÜMÜ STANDARDI (2026-10-08, kullanıcı: «kimisinde soru sayısı yazıyor kiminde noktalarla
+    // ifade edilmiş, standart yok; soru sayısı bölümü alan kullanımı açısından daha efektif olabilir»):
+    // numaralı yuvarlaklar panelin BAŞLIK SATIRININ sağına yerleşir (ayrı satır yer kaplamaz);
+    // «Soru i / n» yalnız ekran okuyucuya söylenir. Başlık satırı yoksa eski yerinde (deg-ust) kalır.
+    function noktalar(ust) {
+      var bas = kok.querySelector(".panel-basi .baslik-satiri") || kok.querySelector(".baslik-satiri");
+      var eski = bas && bas.querySelector(".soru-sayac");
+      if (eski) { eski.remove(); }
+      var kap = el("div", "deg-noktalar soru-sayac");
+      kap.setAttribute("role", "group");
+      kap.setAttribute("aria-label", "Sorular");
+      sorular.forEach(function (_, i) {
+        var d = durum[i];
+        var b = el("button", "deg-nokta soru-nokta tiklanir " + d.sonuc + (i === aktif && !sonucEkrani ? " aktif" : ""), String(i + 1));
+        b.type = "button";
+        b.setAttribute("aria-label", (i + 1) + ". soru" + (d.sonuc === "dogru" ? ", doğru" : d.sonuc === "yanlis" ? ", yanlış" : ""));
+        b.addEventListener("click", function () { git(i); });
+        kap.appendChild(b);
+      });
+      var sr = el("span", "sr-only", sonucEkrani ? "Sonuçlar" : "Soru " + (aktif + 1) + " / " + sorular.length);
+      sr.setAttribute("aria-live", "polite");
+      kap.appendChild(sr);
+      (bas || ust).appendChild(kap);
+      if (bas && window.EGITSEL.baslikTekrariniGizle) { window.EGITSEL.baslikTekrariniGizle(bas); }
+    }
+    function eylemKur(dugmeler) {
+      if (!eylem) { return; }
+      eylem.innerHTML = "";
+      var satir = el("div", "deg-eylem");
+      dugmeler.forEach(function (d) {
+        var b = el("button", "buton" + (d.birincil ? " birincil" : ""), d.metin);
+        b.type = "button";
+        if (d.pasif) { b.disabled = true; }
+        b.addEventListener("click", d.is);
+        satir.appendChild(b);
+      });
+      eylem.appendChild(satir);
+    }
+    // Soru sahnesi grupları (sahneOnEki): yalnız etkin sorunun grubu görünür
+    function sahneGoster() {
+      if (!ayar.sahneOnEki) { return; }
+      for (var k = 1; k <= sorular.length; k++) {
+        var g = kok.querySelector("#" + ayar.sahneOnEki + k);
+        if (g) { g.style.display = k === aktif + 1 ? "" : "none"; }
+      }
+    }
+    function ciz() {
+      sonucEkrani = false;
+      var soru = sorular[aktif], d = durum[aktif];
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      noktalar(ust);
+      if (ust.childNodes.length) { kap.appendChild(ust); }
+      // soru metni kutusuz ve büyük (.soru-metni — yazı standardı)
+      kap.appendChild(el("div", "soru-metni deg-metin", soru.metin || ""));
+      var liste = el("div", "deg-siklar");
+      var bitmis = d.sonuc === "dogru" || d.sonuc === "yanlis";
+      d.sira.forEach(function (asilNo, gorunen) {
+        var sik = soru.siklar[asilNo];
+        var b = el("button", "parca-btn");
+        b.type = "button";
+        b.appendChild(el("span", "kutucuk", HARF[gorunen] || String(gorunen + 1)));
+        b.appendChild(el("span", "", sik.metin));
+        var denendi = d.denenen.indexOf(asilNo) > -1;
+        if (denendi && !sik.dogru) { b.classList.add("yanlis-secim"); b.disabled = true; }
+        if (bitmis) {
+          b.disabled = true;
+          if (sik.dogru) { b.classList.add("dogru-secim"); }
+          else if (!denendi) { b.classList.add("soluk"); }
+        }
+        b.addEventListener("click", function () { sec(asilNo); });
+        liste.appendChild(b);
+      });
+      kap.appendChild(liste);
+      govde.appendChild(kap);
+      diz(govde);
+      var son = aktif === sorular.length - 1;
+      eylemKur([
+        { metin: "Önceki", pasif: aktif === 0, is: function () { git(aktif - 1); } },
+        // 2. tur uzman notu (7.1.1, 2026-10-06): son soruda düğme «sonraki ekran» değil «Testi Bitir»
+        { metin: son ? "Testi Bitir" : "Sonraki", birincil: true,
+          is: function () { if (son) { sonuc(); } else { git(aktif + 1); } } }
+      ]);
+      sahneGoster();
+      if (typeof ayar.soruDegisti === "function") {
+        try { ayar.soruDegisti(aktif, soru); } catch (e) { console.error("degerlendirme.soruDegisti", e); }
+      }
+    }
+    function sec(asilNo) {
+      var soru = sorular[aktif], d = durum[aktif];
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis" || d.denenen.indexOf(asilNo) > -1) { return; }
+      d.denenen.push(asilNo);
+      var dogruMu = !!soru.siklar[asilNo].dogru;
+      // 3. tur (6. sınıf genel): iki seçenekli soruda bir yanlıştan sonra doğru cevap gösterilir —
+      // hak, yanlış şık sayısını aşmaz; soru başına `hak` verilebilir
+      var hak = soru.hak || Math.min(HAK, Math.max(1, soru.siklar.length - 1));
+      var kalan = hak - d.denenen.length;
+      if (dogruMu) {
+        d.sonuc = "dogru";
+        window.EGITSEL.dontVer(kok, "dogru", soru.donut || "Doğru seçim.");
+      } else if (kalan > 0) {
+        d.sonuc = "devam";
+        // 2. tur (R17): hak 3 iken ilk yanlışta da «Bir hakkın» diyordu — kalan hakkı yaz
+        var KALAN_AD = ["", "Bir", "İki", "Üç", "Dört"];
+        window.EGITSEL.dontVer(kok, "yanlis", (KALAN_AD[kalan] || String(kalan)) + " hakkın daha var, tekrar dene.");
+      } else {
+        d.sonuc = "yanlis";
+        window.EGITSEL.dontVer(kok, "yanlis", soru.donut || "Doğru seçenek işaretlendi.");
+      }
+      ciz();
+      if (d.sonuc === "dogru" || d.sonuc === "yanlis") {
+        if (typeof ayar.cevaplandi === "function") {
+          try { ayar.cevaplandi(aktif, d.sonuc === "dogru", soru); } catch (e) { console.error("degerlendirme.cevaplandi", e); }
+        }
+      }
+    }
+    function git(i) {
+      if (i < 0 || i >= sorular.length) { return; }
+      aktif = i;
+      ciz();
+    }
+    function sonuc() {
+      sonucEkrani = true;
+      var s = sayim(), n = sorular.length;
+      govde.innerHTML = "";
+      var kap = el("div", "deg-kap");
+      var ust = el("div", "deg-ust");
+      ust.appendChild(el("span", "etiket", "Sonuçlar"));
+      noktalar(ust);
+      kap.appendChild(ust);
+      var kutu = el("div", "panel deg-sonuc");
+      kutu.appendChild(el("div", "deg-puan buyuk-sayi", s.dogru + " / " + n));
+      var sayac = el("div", "deg-sayac");
+      sayac.appendChild(el("span", "d", "Doğru: " + s.dogru));
+      sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
+      sayac.appendChild(el("span", "b", "Boş: " + s.bos));
+      kutu.appendChild(sayac);
+      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kap.appendChild(kutu);
+      govde.appendChild(kap);
+      eylemKur([
+        { metin: "Soruları İncele", is: function () { git(0); } },
+        { metin: "Tekrar Çöz", birincil: true, is: function () { sifirla(); ciz(); } }
+      ]);
+      if (typeof ayar.bitti === "function") {
+        try { ayar.bitti(s.dogru, n); } catch (e) { console.error("degerlendirme.bitti", e); }
+      }
+    }
+    sifirla();
+    // Üretim/görsel denetim kancası: window.__BASLANGIC_SORU__ (1 tabanlı) → test o sorudan başlar
+    // (soru sırası zaten karışmaz; yalnız şıklar karışır)
+    var basla = parseInt(window.__BASLANGIC_SORU__, 10);
+    if (basla >= 1 && basla <= sorular.length) { aktif = basla - 1; }
+    ciz();
+    return { git: git, sonuc: sonuc, sifirla: function () { sifirla(); ciz(); } };
+  },
+
+  /* 2B TUVAL YÜKSEK ÇÖZÜNÜRLÜK (2026-08-17 çözünürlük raporu, P0)
+     ---------------------------------------------------------------
+     SORUN: <canvas width="970"> yazınca tampon 970 fiziksel pikselde
+     donar. Çerçeve 1280×720'yi transform:scale(k) ile büyütüyor; 1920×1080
+     pencerede k=1,5 ve DPR 1,25 iken tuval ekranda 1411 CSS px yer kaplıyor,
+     gereken fiziksel genişlik 1763 px — ölçülen yeterlilik 0,55. Yani yazılar
+     ve çapraz çizgiler yarı çözünürlükte esnetiliyor.
+
+     KULLANIM (parça kodunda, çizimden önce):
+       var ctx = EGITSEL.tuvalHazirla(canvas, 970, 630);
+     Bundan sonra ÇİZİM MANTIKSAL koordinatta yapılır (0..970, 0..630) —
+     tek satır çizim kodu değişmez. Tampon fiziksel piksele kurulur,
+     ctx başlangıç dönüşümü ölçeği taşır.
+
+     ⚠ MANTIKSAL BOYUT canvas.width DEĞİLDİR: canvas.width artık FİZİKSEL
+     piksel verir. Genişlik gereken yerde hazırlayıcının döndürdüğü
+     ctx.mantiksalW / ctx.mantiksalH kullanılır. İşaretçi koordinatı için
+     EGITSEL.tuvalNoktasi(canvas, olay) çağrılır.
+
+     Ölçek/DPR değişiminde tampon kendiliğinden yeniden kurulur; tuval
+     TEMİZLENDİĞİ için sayfa yeniden çizmelidir — bunun için tuvala
+     `yeniden-ciz` olayı gönderilir (rAF ile çizen sayfada gereksiz):
+         tuval.addEventListener("yeniden-ciz", ciz);                       */
+  tuvalHazirla: function (tuval, mantiksalW, mantiksalH) {
+    if (!tuval || !tuval.getContext) { console.warn("tuvalHazirla: tuval yok"); return null; }
+    var mw = mantiksalW || tuval.clientWidth || tuval.width || 1;
+    var mh = mantiksalH || tuval.clientHeight || tuval.height || 1;
+    tuval._mantiksalW = mw; tuval._mantiksalH = mh;
+    // Kutu ölçüsü CSS'ten gelmeli; width/height ÖZNİTELİĞİ artık tampon
+    // ölçüsüdür ve düzeni belirlememelidir.
+    if (!tuval.style.width) { tuval.style.width = "100%"; }
+    if (!tuval.style.height) { tuval.style.height = "100%"; }
+    var ctx = tuval.getContext("2d");
+    window.EGITSEL._tuvalKur(tuval, ctx);
+    if (!tuval._olcekBagli) {
+      tuval._olcekBagli = true;
+      addEventListener("sablon:goruntu-degisti", function () {
+        if (!tuval.isConnected) return;
+        window.EGITSEL._tuvalKur(tuval, ctx);
+        tuval.dispatchEvent(new CustomEvent("yeniden-ciz"));
+      });
+    }
+    return ctx;
+  },
+
+  _tuvalKur: function (tuval, ctx) {
+    var m = window.SABLON_GORSEL_METRIK
+         || {scale: 1, dpr: window.devicePixelRatio || 1};
+    var kutu = tuval.getBoundingClientRect();
+    // Kutu henüz ölçülemiyorsa (gizli sayfa) mantıksal boyut × etkin oran.
+    var cssW = kutu.width || (tuval._mantiksalW * (m.scale || 1));
+    var cssH = kutu.height || (tuval._mantiksalH * (m.scale || 1));
+    // getBoundingClientRect ZATEN transform'u içerir → ayrıca k ile çarpma.
+    var pw = Math.max(1, Math.round(cssW * (m.dpr || 1)));
+    var ph = Math.max(1, Math.round(cssH * (m.dpr || 1)));
+    var enBuyuk = 8e6;                       // tampon tavanı (~8 MP)
+    if (pw * ph > enBuyuk) {
+      var s = Math.sqrt(enBuyuk / (pw * ph));
+      pw = Math.round(pw * s); ph = Math.round(ph * s);
+    }
+    if (tuval.width !== pw) { tuval.width = pw; }
+    if (tuval.height !== ph) { tuval.height = ph; }
+    ctx.setTransform(pw / tuval._mantiksalW, 0, 0, ph / tuval._mantiksalH, 0, 0);
+    ctx.mantiksalW = tuval._mantiksalW;
+    ctx.mantiksalH = tuval._mantiksalH;
+  },
+
+  /* İşaretçi olayını MANTIKSAL tuval koordinatına çevirir. canvas.width
+     ARTIK fiziksel pikseldir; eski `e.offsetX * c.width / rect.width`
+     hesabı yanlış sonuç verir. */
+  tuvalNoktasi: function (tuval, olay) {
+    var kutu = tuval.getBoundingClientRect();
+    var mw = tuval._mantiksalW || tuval.width;
+    var mh = tuval._mantiksalH || tuval.height;
+    return {x: kutu.width ? (olay.clientX - kutu.left) * mw / kutu.width : 0,
+            y: kutu.height ? (olay.clientY - kutu.top) * mh / kutu.height : 0};
+  }
+};
+
+/* MathJax yapılandırması — tex-svg gömülmeden ÖNCE tanımlı olmalı.
+   Tek-dolar ($...$) varsayılanda kapalıdır; eski üretimler tek-dolar
+   kullandığından açıyoruz (2026-08-11 tespiti: MAT.7.4'te 5 sayfa).
+
+   ⚠ SVG ATLANIR (2026-08-18 kullanıcı bildirimi «latex metinler de bozuk
+   görünüyor», ölçüldü ve DOM'da doğrulandı): MathJax bir SVG <text> düğümü
+   içindeki `\( … \)` ifadesini de tipograflıyor ve yerine <mjx-container>
+   koyuyor. mjx-container bir HTML öğesidir; SVG ad alanında BİLİNMEYEN
+   öğedir ve tarayıcı onu HİÇ ÇİZMEZ — formül ekrandan tümüyle kayboluyor
+   (ölçüm: 15 <text> düğümü, devre şemalarında \(R_1\), \(I_1\) etiketleri).
+   Çözüm iki parçalı: (1) MathJax SVG'ye HİÇ girmez — yarım iş yapıp düğümü
+   bozmasın; (2) aşağıdaki `svgLatexDuzelt` o metni Unicode'a çevirir
+   (R₁, 45°, CO₂). SVG içinde tipografik matematik zaten MÜMKÜN DEĞİLDİR;
+   seçenek «düz okunur metin» ile «hiçbir şey» arasındadır.
+
+   KESİR TAM BOY (2026-09-16 kullanıcı bildirimi, MAT.4.1.7 s1): satır içi
+   \frac MathJax'ta küçültülmüş kipte çizilir, rakamlar gövde yazısının ~%70'i
+   kalıyordu. İlkokul (1-4) matematikte \frac = \dfrac (rakamlar gövde boyunda). */
+window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
+                          displayMath: [["\\[", "\\]"], ["$$", "$$"]],
+                          macros: /^MAT\.[1-4]\./.test("MAT.H.4.3")
+                                  ? { frac: ["\\dfrac{#1}{#2}", 2] } : {} },
+                   options: { skipHtmlTags: ["script", "noscript", "style",
+                                             "textarea", "pre", "code",
+                                             "annotation", "annotation-xml",
+                                             "svg"] } };
+</script>
 <script src="ortak/f5b3f5fac24e774b.js"></script>
-<script src="ortak/b47118f55e978615.js"></script>
+<script src="ortak/27c9562c7880c36e.js"></script>
 <script src="ortak/17f319aeaf055a36.js"></script>
 <script>/* RoundedBoxGeometry.js — yerel gömme */
 /* three.js r155 örnek portu — RoundedBoxGeometry (examples/jsm/geometries/RoundedBoxGeometry.js)
@@ -187,543 +613,6 @@
 } )();
 
 </script>
-<script>/* StudyoOrtami.js — yerel gömme */
-/* 2026-09-11 — 8c2a9012 (10 Eylül main yedeği) sürümünden bayt bayt taşındı;
- * kullanıcı kararı «StudyoOrtami olsun bir deneyelim». Yalnız bu dosya taşındı:
- * malzeme3b kataloğu, gezegen dokuları, Reflector ve kontak gölgesi/bloom
- * bentleri kapsam dışıdır. Dosyanın gövdesi aşağıda değiştirilmeden durur. */
-/* StudyoOrtami — PMREM ortam sahnesi (RoomEnvironment'ın yerine; 2026-09-05).
- * Lisans: bu depo. Neden: RoomEnvironment nötr beyaz bir odadır — yansımada
- * «beş beyaz nokta + düz koyu alt yarı», ufuk yok; cam/krom kenarı zeminde
- * erir, vernik/sır/clearcoat okunmaz (ölçüldü: 5 mercekli galeri eleştirisi,
- * denemeler/malzeme-galerisi/ortam-deneyi). Bu sahne: üstte gök, ufukta açık
- * şerit, altta koyu zemin degradesi (ufuk çizgisi yansımada görünür) + bir
- * yumuşak ana panel + yan dolgu + arka rim şeridi. Parlaklık, difüz beyaz
- * yüzeyde RoomEnvironment×0.45 ile aynı aydınlığı verecek şekilde KALİBRE
- * edildi (kalibrasyon: denemeler/malzeme-galerisi/ortam-kalibrasyon.html) —
- * yani envMapIntensity 1 ile kullanılır, 0.45 traverse satırı GEREKMEZ.
- * Kullanım:
- *   scene.environment = new THREE.PMREMGenerator(renderer)
- *       .fromScene(new THREE.StudyoOrtami(), 0.04).texture;
- * ayar (isteğe bağlı): gok / ufuk / zeminUst / zemin (CSS renk;
- * yalnız özel atmosferde değiştirilir; açık fon rengi alt yarıya kopyalanmaz),
- * anaSiddet (varsayılan 3.5), dolguSiddet (1.0),
- * rimSiddet (1.8). Montaj bu dosyayı yalnız sayfada «StudyoOrtami» geçince
- * gömer (uretici/sablon.py kutuphane_dosyalari). */
-( function () {
-
-	THREE.StudyoOrtami = function ( ayar ) {
-
-		ayar = ayar || {};
-		const s = new THREE.Scene();
-
-		// Gök küresi: degrade doku (üst gök → ufuk şeridi → koyu zemin)
-		const c = document.createElement( 'canvas' ); c.width = 4; c.height = 256;
-		const g = c.getContext( '2d' ), gr = g.createLinearGradient( 0, 0, 0, 256 );
-		gr.addColorStop( 0.00, ayar.gok || '#8fb6dc' );
-		gr.addColorStop( 0.46, ayar.ufuk || '#e9eef3' );
-		gr.addColorStop( 0.52, ayar.zeminUst || '#5a6068' );
-		gr.addColorStop( 1.00, ayar.zemin || '#26292e' );
-		g.fillStyle = gr; g.fillRect( 0, 0, 4, 256 );
-		const t = new THREE.CanvasTexture( c );
-		if ( THREE.SRGBColorSpace ) t.colorSpace = THREE.SRGBColorSpace;
-		const kure = new THREE.Mesh( new THREE.SphereGeometry( 50, 32, 24 ),
-			new THREE.MeshBasicMaterial( { map: t, side: THREE.BackSide } ) );
-		s.add( kure );
-
-		function panel( w, h, x, y, z, siddet ) {
-
-			const m = new THREE.Mesh( new THREE.PlaneGeometry( w, h ),
-				new THREE.MeshBasicMaterial( { side: THREE.DoubleSide } ) );
-			m.material.color.setScalar( siddet );
-			m.position.set( x, y, z ); m.lookAt( 0, 0, 0 );
-			s.add( m );
-
-		}
-
-		// KALİBRASYON (2026-09-05, ortam-kalibrasyon.html, ACES 0.9, difüz beyaz küre + gri zemin):
-		//   RoomEnvironment × 0.45 → küre tepesi 232 · gölge tarafı 180 · zemin 185 (üretim tabanı)
-		//   StudyoOrtami  × 1.0  → 232 · 176 · 190 (ana 3.5 / dolgu 1.0 / rim 1.8) → difüz aydınlık eş, krom ortalaması 192 → 95 (ufuk + koyu zemin: gerçek kontrast)
-		panel( 14, 8, - 8, 14, 6, ayar.anaSiddet != null ? ayar.anaSiddet : 3.5 );    // ana yumuşak panel (tepe-sol-ön): geniş, orta parlak → yumuşak vurgu
-		panel( 6, 12, 16, 5, - 4, ayar.dolguSiddet != null ? ayar.dolguSiddet : 1.0 ); // yan dolgu
-		panel( 20, 3, 0, 6, - 20, ayar.rimSiddet != null ? ayar.rimSiddet : 1.8 );    // arka rim şeridi: kenar ışığı / ufuk parlaması
-		return s;
-
-	};
-
-} )();
-
-</script>
-<script>/* RGBELoader.js — yerel gömme */
-/* RGBELoader — three.js r155 examples/jsm/loaders/RGBELoader.js GLOBAL PORTU (MIT, bkz. LISANS-three-ports.txt).
- * 2026-10-12: Poly Haven HDRI ortam ışığı (sahneAmbiyansi) için; ES modül importları THREE.* olarak yeniden yazıldı,
- * gövde değiştirilmedi. Kullanım: new THREE.RGBELoader().parse(arrayBuffer) → DataTexture (equirect). */
-( function () {
-
-// https://github.com/mrdoob/three.js/issues/5552
-// http://en.wikipedia.org/wiki/RGBE_image_format
-
-class RGBELoader extends THREE.DataTextureLoader {
-
-	constructor( manager ) {
-
-		super( manager );
-
-		this.type = THREE.HalfFloatType;
-
-	}
-
-	// adapted from http://www.graphics.cornell.edu/~bjw/rgbe.html
-
-	parse( buffer ) {
-
-		const
-			/* return codes for rgbe routines */
-			//RGBE_RETURN_SUCCESS = 0,
-			RGBE_RETURN_FAILURE = - 1,
-
-			/* default error routine.  change this to change error handling */
-			rgbe_read_error = 1,
-			rgbe_write_error = 2,
-			rgbe_format_error = 3,
-			rgbe_memory_error = 4,
-			rgbe_error = function ( rgbe_error_code, msg ) {
-
-				switch ( rgbe_error_code ) {
-
-					case rgbe_read_error: console.error( 'THREE.RGBELoader Read Error: ' + ( msg || '' ) );
-						break;
-					case rgbe_write_error: console.error( 'THREE.RGBELoader Write Error: ' + ( msg || '' ) );
-						break;
-					case rgbe_format_error: console.error( 'THREE.RGBELoader Bad File Format: ' + ( msg || '' ) );
-						break;
-					default:
-					case rgbe_memory_error: console.error( 'THREE.RGBELoader: Error: ' + ( msg || '' ) );
-
-				}
-
-				return RGBE_RETURN_FAILURE;
-
-			},
-
-			/* offsets to red, green, and blue components in a data (float) pixel */
-			//RGBE_DATA_RED = 0,
-			//RGBE_DATA_GREEN = 1,
-			//RGBE_DATA_BLUE = 2,
-
-			/* number of floats per pixel, use 4 since stored in rgba image format */
-			//RGBE_DATA_SIZE = 4,
-
-			/* flags indicating which fields in an rgbe_header_info are valid */
-			RGBE_VALID_PROGRAMTYPE = 1,
-			RGBE_VALID_FORMAT = 2,
-			RGBE_VALID_DIMENSIONS = 4,
-
-			NEWLINE = '\n',
-
-			fgets = function ( buffer, lineLimit, consume ) {
-
-				const chunkSize = 128;
-
-				lineLimit = ! lineLimit ? 1024 : lineLimit;
-				let p = buffer.pos,
-					i = - 1, len = 0, s = '',
-					chunk = String.fromCharCode.apply( null, new Uint16Array( buffer.subarray( p, p + chunkSize ) ) );
-
-				while ( ( 0 > ( i = chunk.indexOf( NEWLINE ) ) ) && ( len < lineLimit ) && ( p < buffer.byteLength ) ) {
-
-					s += chunk; len += chunk.length;
-					p += chunkSize;
-					chunk += String.fromCharCode.apply( null, new Uint16Array( buffer.subarray( p, p + chunkSize ) ) );
-
-				}
-
-				if ( - 1 < i ) {
-
-					/*for (i=l-1; i>=0; i--) {
-						byteCode = m.charCodeAt(i);
-						if (byteCode > 0x7f && byteCode <= 0x7ff) byteLen++;
-						else if (byteCode > 0x7ff && byteCode <= 0xffff) byteLen += 2;
-						if (byteCode >= 0xDC00 && byteCode <= 0xDFFF) i--; //trail surrogate
-					}*/
-					if ( false !== consume ) buffer.pos += len + i + 1;
-					return s + chunk.slice( 0, i );
-
-				}
-
-				return false;
-
-			},
-
-			/* minimal header reading.  modify if you want to parse more information */
-			RGBE_ReadHeader = function ( buffer ) {
-
-
-				// regexes to parse header info fields
-				const magic_token_re = /^#\?(\S+)/,
-					gamma_re = /^\s*GAMMA\s*=\s*(\d+(\.\d+)?)\s*$/,
-					exposure_re = /^\s*EXPOSURE\s*=\s*(\d+(\.\d+)?)\s*$/,
-					format_re = /^\s*FORMAT=(\S+)\s*$/,
-					dimensions_re = /^\s*\-Y\s+(\d+)\s+\+X\s+(\d+)\s*$/,
-
-					// RGBE format header struct
-					header = {
-
-						valid: 0, /* indicate which fields are valid */
-
-						string: '', /* the actual header string */
-
-						comments: '', /* comments found in header */
-
-						programtype: 'RGBE', /* listed at beginning of file to identify it after "#?". defaults to "RGBE" */
-
-						format: '', /* RGBE format, default 32-bit_rle_rgbe */
-
-						gamma: 1.0, /* image has already been gamma corrected with given gamma. defaults to 1.0 (no correction) */
-
-						exposure: 1.0, /* a value of 1.0 in an image corresponds to <exposure> watts/steradian/m^2. defaults to 1.0 */
-
-						width: 0, height: 0 /* image dimensions, width/height */
-
-					};
-
-				let line, match;
-
-				if ( buffer.pos >= buffer.byteLength || ! ( line = fgets( buffer ) ) ) {
-
-					return rgbe_error( rgbe_read_error, 'no header found' );
-
-				}
-
-				/* if you want to require the magic token then uncomment the next line */
-				if ( ! ( match = line.match( magic_token_re ) ) ) {
-
-					return rgbe_error( rgbe_format_error, 'bad initial token' );
-
-				}
-
-				header.valid |= RGBE_VALID_PROGRAMTYPE;
-				header.programtype = match[ 1 ];
-				header.string += line + '\n';
-
-				while ( true ) {
-
-					line = fgets( buffer );
-					if ( false === line ) break;
-					header.string += line + '\n';
-
-					if ( '#' === line.charAt( 0 ) ) {
-
-						header.comments += line + '\n';
-						continue; // comment line
-
-					}
-
-					if ( match = line.match( gamma_re ) ) {
-
-						header.gamma = parseFloat( match[ 1 ] );
-
-					}
-
-					if ( match = line.match( exposure_re ) ) {
-
-						header.exposure = parseFloat( match[ 1 ] );
-
-					}
-
-					if ( match = line.match( format_re ) ) {
-
-						header.valid |= RGBE_VALID_FORMAT;
-						header.format = match[ 1 ];//'32-bit_rle_rgbe';
-
-					}
-
-					if ( match = line.match( dimensions_re ) ) {
-
-						header.valid |= RGBE_VALID_DIMENSIONS;
-						header.height = parseInt( match[ 1 ], 10 );
-						header.width = parseInt( match[ 2 ], 10 );
-
-					}
-
-					if ( ( header.valid & RGBE_VALID_FORMAT ) && ( header.valid & RGBE_VALID_DIMENSIONS ) ) break;
-
-				}
-
-				if ( ! ( header.valid & RGBE_VALID_FORMAT ) ) {
-
-					return rgbe_error( rgbe_format_error, 'missing format specifier' );
-
-				}
-
-				if ( ! ( header.valid & RGBE_VALID_DIMENSIONS ) ) {
-
-					return rgbe_error( rgbe_format_error, 'missing image size specifier' );
-
-				}
-
-				return header;
-
-			},
-
-			RGBE_ReadPixels_RLE = function ( buffer, w, h ) {
-
-				const scanline_width = w;
-
-				if (
-					// run length encoding is not allowed so read flat
-					( ( scanline_width < 8 ) || ( scanline_width > 0x7fff ) ) ||
-					// this file is not run length encoded
-					( ( 2 !== buffer[ 0 ] ) || ( 2 !== buffer[ 1 ] ) || ( buffer[ 2 ] & 0x80 ) )
-				) {
-
-					// return the flat buffer
-					return new Uint8Array( buffer );
-
-				}
-
-				if ( scanline_width !== ( ( buffer[ 2 ] << 8 ) | buffer[ 3 ] ) ) {
-
-					return rgbe_error( rgbe_format_error, 'wrong scanline width' );
-
-				}
-
-				const data_rgba = new Uint8Array( 4 * w * h );
-
-				if ( ! data_rgba.length ) {
-
-					return rgbe_error( rgbe_memory_error, 'unable to allocate buffer space' );
-
-				}
-
-				let offset = 0, pos = 0;
-
-				const ptr_end = 4 * scanline_width;
-				const rgbeStart = new Uint8Array( 4 );
-				const scanline_buffer = new Uint8Array( ptr_end );
-				let num_scanlines = h;
-
-				// read in each successive scanline
-				while ( ( num_scanlines > 0 ) && ( pos < buffer.byteLength ) ) {
-
-					if ( pos + 4 > buffer.byteLength ) {
-
-						return rgbe_error( rgbe_read_error );
-
-					}
-
-					rgbeStart[ 0 ] = buffer[ pos ++ ];
-					rgbeStart[ 1 ] = buffer[ pos ++ ];
-					rgbeStart[ 2 ] = buffer[ pos ++ ];
-					rgbeStart[ 3 ] = buffer[ pos ++ ];
-
-					if ( ( 2 != rgbeStart[ 0 ] ) || ( 2 != rgbeStart[ 1 ] ) || ( ( ( rgbeStart[ 2 ] << 8 ) | rgbeStart[ 3 ] ) != scanline_width ) ) {
-
-						return rgbe_error( rgbe_format_error, 'bad rgbe scanline format' );
-
-					}
-
-					// read each of the four channels for the scanline into the buffer
-					// first red, then green, then blue, then exponent
-					let ptr = 0, count;
-
-					while ( ( ptr < ptr_end ) && ( pos < buffer.byteLength ) ) {
-
-						count = buffer[ pos ++ ];
-						const isEncodedRun = count > 128;
-						if ( isEncodedRun ) count -= 128;
-
-						if ( ( 0 === count ) || ( ptr + count > ptr_end ) ) {
-
-							return rgbe_error( rgbe_format_error, 'bad scanline data' );
-
-						}
-
-						if ( isEncodedRun ) {
-
-							// a (encoded) run of the same value
-							const byteValue = buffer[ pos ++ ];
-							for ( let i = 0; i < count; i ++ ) {
-
-								scanline_buffer[ ptr ++ ] = byteValue;
-
-							}
-							//ptr += count;
-
-						} else {
-
-							// a literal-run
-							scanline_buffer.set( buffer.subarray( pos, pos + count ), ptr );
-							ptr += count; pos += count;
-
-						}
-
-					}
-
-
-					// now convert data from buffer into rgba
-					// first red, then green, then blue, then exponent (alpha)
-					const l = scanline_width; //scanline_buffer.byteLength;
-					for ( let i = 0; i < l; i ++ ) {
-
-						let off = 0;
-						data_rgba[ offset ] = scanline_buffer[ i + off ];
-						off += scanline_width; //1;
-						data_rgba[ offset + 1 ] = scanline_buffer[ i + off ];
-						off += scanline_width; //1;
-						data_rgba[ offset + 2 ] = scanline_buffer[ i + off ];
-						off += scanline_width; //1;
-						data_rgba[ offset + 3 ] = scanline_buffer[ i + off ];
-						offset += 4;
-
-					}
-
-					num_scanlines --;
-
-				}
-
-				return data_rgba;
-
-			};
-
-		const RGBEByteToRGBFloat = function ( sourceArray, sourceOffset, destArray, destOffset ) {
-
-			const e = sourceArray[ sourceOffset + 3 ];
-			const scale = Math.pow( 2.0, e - 128.0 ) / 255.0;
-
-			destArray[ destOffset + 0 ] = sourceArray[ sourceOffset + 0 ] * scale;
-			destArray[ destOffset + 1 ] = sourceArray[ sourceOffset + 1 ] * scale;
-			destArray[ destOffset + 2 ] = sourceArray[ sourceOffset + 2 ] * scale;
-			destArray[ destOffset + 3 ] = 1;
-
-		};
-
-		const RGBEByteToRGBHalf = function ( sourceArray, sourceOffset, destArray, destOffset ) {
-
-			const e = sourceArray[ sourceOffset + 3 ];
-			const scale = Math.pow( 2.0, e - 128.0 ) / 255.0;
-
-			// clamping to 65504, the maximum representable value in float16
-			destArray[ destOffset + 0 ] = THREE.DataUtils.toHalfFloat( Math.min( sourceArray[ sourceOffset + 0 ] * scale, 65504 ) );
-			destArray[ destOffset + 1 ] = THREE.DataUtils.toHalfFloat( Math.min( sourceArray[ sourceOffset + 1 ] * scale, 65504 ) );
-			destArray[ destOffset + 2 ] = THREE.DataUtils.toHalfFloat( Math.min( sourceArray[ sourceOffset + 2 ] * scale, 65504 ) );
-			destArray[ destOffset + 3 ] = THREE.DataUtils.toHalfFloat( 1 );
-
-		};
-
-		const byteArray = new Uint8Array( buffer );
-		byteArray.pos = 0;
-		const rgbe_header_info = RGBE_ReadHeader( byteArray );
-
-		if ( RGBE_RETURN_FAILURE !== rgbe_header_info ) {
-
-			const w = rgbe_header_info.width,
-				h = rgbe_header_info.height,
-				image_rgba_data = RGBE_ReadPixels_RLE( byteArray.subarray( byteArray.pos ), w, h );
-
-			if ( RGBE_RETURN_FAILURE !== image_rgba_data ) {
-
-				let data, type;
-				let numElements;
-
-				switch ( this.type ) {
-
-					case THREE.FloatType:
-
-						numElements = image_rgba_data.length / 4;
-						const floatArray = new Float32Array( numElements * 4 );
-
-						for ( let j = 0; j < numElements; j ++ ) {
-
-							RGBEByteToRGBFloat( image_rgba_data, j * 4, floatArray, j * 4 );
-
-						}
-
-						data = floatArray;
-						type = THREE.FloatType;
-						break;
-
-					case THREE.HalfFloatType:
-
-						numElements = image_rgba_data.length / 4;
-						const halfArray = new Uint16Array( numElements * 4 );
-
-						for ( let j = 0; j < numElements; j ++ ) {
-
-							RGBEByteToRGBHalf( image_rgba_data, j * 4, halfArray, j * 4 );
-
-						}
-
-						data = halfArray;
-						type = THREE.HalfFloatType;
-						break;
-
-					default:
-
-						console.error( 'THREE.RGBELoader: unsupported type: ', this.type );
-						break;
-
-				}
-
-				return {
-					width: w, height: h,
-					data: data,
-					header: rgbe_header_info.string,
-					gamma: rgbe_header_info.gamma,
-					exposure: rgbe_header_info.exposure,
-					type: type
-				};
-
-			}
-
-		}
-
-		return null;
-
-	}
-
-	setDataType( value ) {
-
-		this.type = value;
-		return this;
-
-	}
-
-	load( url, onLoad, onProgress, onError ) {
-
-		function onLoadCallback( texture, texData ) {
-
-			switch ( texture.type ) {
-
-				case THREE.FloatType:
-				case THREE.HalfFloatType:
-
-					texture.colorSpace = THREE.LinearSRGBColorSpace;
-					texture.minFilter = THREE.LinearFilter;
-					texture.magFilter = THREE.LinearFilter;
-					texture.generateMipmaps = false;
-					texture.flipY = true;
-
-					break;
-
-			}
-
-			if ( onLoad ) onLoad( texture, texData );
-
-		}
-
-		return super.load( url, onLoadCallback, onProgress, onError );
-
-	}
-
-}
-
-
-THREE.RGBELoader = RGBELoader;
-} )();
-
-</script>
-<script src="ortak/a10810bcb36709d6.js"></script>
 <script src="ortak/c94ff30389b6f9ad.js"></script>
 <script>/* pdnd-svg.js — yerel gömme */
 /* pdnd-svg.js — Pragmatic DnD'yi SVG düğümlerine açan köprü.
@@ -1094,10 +983,7 @@ THREE.RGBELoader = RGBELoader;
 
 </script>
 <script src="ortak/d85e518ebf6759fa.js"></script>
-<script src="ortak/006945e5ce8c4c9d.js"></script>
-<script src="ortak/91e3416dcfa6bab1.js"></script>
-<script src="ortak/f7acca3b3f0936e8.js"></script><script>/* EBA logosu (sablon/kutuphane/eba-logo.svg) */
-window.EBA_LOGO="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4MjAuMDMgMjIwIiB3aWR0aD0iODIwLjAzIiBoZWlnaHQ9IjIyMCI+PHRpdGxlPkVCQSBsb2dvc3UgKyB0YXNpeWljaSB0aXAsIHlhdGF5PC90aXRsZT48ZGVmcz48Y2xpcFBhdGggaWQ9ImViYUljIj48Y2lyY2xlIGN4PSIxMTAiIGN5PSIxMTAiIHI9IjQxLjA4Ii8+PC9jbGlwUGF0aD48L2RlZnM+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMCA1NSkgc2NhbGUoMS4wOSkiPjxwYXRoIGZpbGw9IiNEMDMyMzgiIGZpbGwtcnVsZT0iZXZlbm9kZCIgZD0iTTQ3OC42MDEgMTguNDIzQzQ3Ni43NyA5LjM5OCA0NjkuNjYzIDIuMjk2IDQ2MC42MzkgMC40NjVDNDU5LjE0OSAwLjE2IDQ1Ny42MDYgMCA0NTYuMDI2IDBMMzU0LjY5OSAwQzM1My4xMTkgMCAzNTEuNTc2IDAuMTYgMzUwLjA4NiAwLjQ2NUMzNDEuMDYyIDIuMjk2IDMzMy45NiA5LjM5OCAzMzIuMTI5IDE4LjQyM0MzMzEuODI0IDE5LjkxMyAzMzEuNjY0IDIxLjQ1NiAzMzEuNjY0IDIzLjAzNkwzMzEuNjY0IDEwMS4zMzVMMzUwLjA4NiAxMDEuMzM1TDM1MC4wODYgNzMuNjk5TDQ2MC42MzkgNzMuNjk5TDQ2MC42MzkgMTAxLjMzNUw0NzkuMDY2IDEwMS4zMzVMNDc5LjA2NiAyMy4wMzZDNDc5LjA2NiAyMS40NTYgNDc4LjkwNiAxOS45MTMgNDc4LjYwMSAxOC40MjNNMzUwLjA4NiA1NS4yNzNMMzUwLjA4NiAyOS45NDFDMzUwLjA4NiAyMy41NzkgMzU1LjI0NiAxOC40MjMgMzYxLjYwOCAxOC40MjNMNDQ5LjEyMSAxOC40MjNDNDU1LjQ4MyAxOC40MjMgNDYwLjYzOSAyMy41NzkgNDYwLjYzOSAyOS45NDFMNDYwLjYzOSA1NS4yNzNMMzUwLjA4NiA1NS4yNzNNMTguNDI3IDI5Ljk0MUwxOC40MjcgNDEuNDYyTDM2Ljg2NyA0MS40NjJMMTI4Ljk3NiA0MS40NThMMTI4Ljk3NiA1OS44ODFMMzAuMjQyIDU5Ljg4MUMzMC4xNDMgNTkuODczIDMwLjA0NCA1OS44NzMgMjkuOTQ1IDU5Ljg3M0MyOS44NDcgNTkuODczIDI5Ljc0OCA1OS44NzMgMjkuNjQ5IDU5Ljg4MUwxOC40MjcgNTkuODgxTDE4LjQyNyA3MS4zOTVDMTguNDI3IDc3Ljc1NyAyMy41ODMgODIuOTEzIDI5Ljk0NSA4Mi45MTNMMTQ3LjQwMyA4Mi45MTNMMTQ3LjQwMyAxMDEuMzM1TDIzLjAzNiAxMDEuMzM1QzIxLjQ1NiAxMDEuMzM1IDE5LjkxNyAxMDEuMTc1IDE4LjQyNyAxMDAuODc1QzkuNDAzIDk5LjA0NCAyLjI5NyA5MS45MzcgMC40NjYgODIuOTEzQzAuMTYxIDgxLjQyMyAwIDc5Ljg4IDAgNzguM0wwIDIzLjAzNkMwIDIxLjQ1NiAwLjE2MSAxOS45MTMgMC40NjYgMTguNDIzQzIuMjk3IDkuMzk4IDkuNDAzIDIuMjkyIDE4LjQyNyAwLjQ2MUMxOS45MTcgMC4xNiAyMS40NTYgMCAyMy4wMzYgMEwxNDcuNDAzIDBMMTQ3LjQwMyAxOC40MjNMMjkuOTQ1IDE4LjQyM0MyMy41ODMgMTguNDIzIDE4LjQyNyAyMy41NzkgMTguNDI3IDI5Ljk0MU0zMTMuMjM2IDM2Ljg1TDMxMy4yMzYgMjMuMDM2QzMxMy4yMzYgMjEuNDU2IDMxMy4wNzYgMTkuOTEzIDMxMi43NzIgMTguNDIzQzMxMC45NCA5LjM5OCAzMDMuODM0IDIuMjkyIDI5NC44MDYgMC40NjFDMjkzLjMyIDAuMTU2IDI5MS43NzcgMCAyOTAuMjAxIDBMMTY1LjgyNiAwTDE2NS44MjYgMTAxLjMzNUwyOTAuMjAxIDEwMS4zMzVDMjkxLjc3NyAxMDEuMzM1IDI5My4zMiAxMDEuMTc5IDI5NC44MDYgMTAwLjg3NUMzMDMuODM0IDk5LjA0NCAzMTAuOTQgOTEuOTM3IDMxMi43NzIgODIuOTEzQzMxMy4wNzYgODEuNDIzIDMxMy4yMzYgNzkuODggMzEzLjIzNiA3OC4zTDMxMy4yMzYgNjQuNDg2QzMxMy4yMzYgNjIuOTEgMzEzLjA3NiA2MS4zNjcgMzEyLjc3NiA1OS44ODFDMzEyLjA4NCA1Ni40NzggMzEwLjY0NCA1My4zNDcgMzA4LjYzNiA1MC42NjhDMzEwLjY0NCA0Ny45ODkgMzEyLjA4NCA0NC44NTggMzEyLjc3NiA0MS40NTRDMzEzLjA3NiAzOS45NjkgMzEzLjIzNiAzOC40MjYgMzEzLjIzNiAzNi44NU0yODMuNDMyIDgyLjkxM0MyODMuMzgyIDgyLjkxNyAyODMuMzMzIDgyLjkxNyAyODMuMjg0IDgyLjkxN0MyODMuMjM0IDgyLjkxNyAyODMuMTg1IDgyLjkxNyAyODMuMTM2IDgyLjkxM0wxODQuMjUzIDgyLjkxM0wxODQuMjUzIDU5Ljg4MUwyODMuMTM2IDU5Ljg4MUMyODMuMTg1IDU5Ljg3NyAyODMuMjM0IDU5Ljg3NyAyODMuMjg0IDU5Ljg3N0MyODMuMzMzIDU5Ljg3NyAyODMuMzgyIDU5Ljg3NyAyODMuNDMyIDU5Ljg4MUMyODkuNzI4IDU5Ljk1OSAyOTQuODA2IDY1LjA4MiAyOTQuODA2IDcxLjM5NUMyOTQuODA2IDc3LjcwNyAyODkuNzI4IDgyLjgzNCAyODMuNDMyIDgyLjkxM00yODMuNTggNDEuNDU0QzI4My40ODEgNDEuNDYyIDI4My4zODIgNDEuNDYyIDI4My4yODQgNDEuNDYyQzI4My4xODUgNDEuNDYyIDI4My4wODYgNDEuNDYyIDI4Mi45ODcgNDEuNDU0TDE4NC4yNTMgNDEuNDU0TDE4NC4yNTMgMTguNDIzTDI4My4yODQgMTguNDIzQzI4OS42NDYgMTguNDIzIDI5NC44MDYgMjMuNTc5IDI5NC44MDYgMjkuOTQxQzI5NC44MDYgMzYuMjA0IDI4OS44MDYgNDEuMzAyIDI4My41OCA0MS40NTQiLz48L2c+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNjAwLjAzIDApIj48cmVjdCB4PSIwIiB5PSIwIiB3aWR0aD0iMjIwIiBoZWlnaHQ9IjIyMCIgcng9IjM2Ljg1IiByeT0iMzYuODUiIGZpbGw9IiNEMDMyMzgiLz48ZyBmaWxsPSJub25lIiBzdHJva2U9IiMyMzFGMjAiIHN0cm9rZS13aWR0aD0iMTUuMjciIHN0cm9rZS1saW5lY2FwPSJyb3VuZCI+PHBhdGggZD0iTTMwLjYyIDExMEg2MS4yOSIvPjxwYXRoIGQ9Ik0xNTguNzEgMTEwSDE4OS4zOCIvPjwvZz48Y2lyY2xlIGN4PSIxMTAiIGN5PSIxMTAiIHI9IjQ4LjcxIiBmaWxsPSJub25lIiBzdHJva2U9IiMyMzFGMjAiIHN0cm9rZS13aWR0aD0iMTUuMjYiLz48ZyBjbGlwLXBhdGg9InVybCgjZWJhSWMpIj48Y2lyY2xlIGN4PSIxMTAiIGN5PSIxMTAiIHI9IjQxLjA4IiBmaWxsPSIjRkZGRkZGIi8+PGNpcmNsZSBjeD0iMTEwIiBjeT0iMTEwIiByPSIxMy45NSIgZmlsbD0iI0QwMzIzOCIvPjwvZz48L2c+PC9zdmc+DQo=";</script><script src="ortak/baface1d4f45afe0.js"></script>
+<script src="ortak/25bc6bc279de577f.js"></script>
 <!-- 🔊 Dönüt sesleri: montaj `window.SABLON_SES = {dogru:…, yanlis:…}` basar
      (base64 data URI). Gövde sonundaki toast() bunu hazır bulmalı, o yüzden
      BURADA — kütüphanelerden sonra, sayfa betiklerinden önce. Dosya yoksa
@@ -1108,9 +994,9 @@ window.EBA_LOGO="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vc
      yanındaki <ad>-ses/ klasöründe, göreli yolla. Ayar kapalıysa yuva BOŞ kalır
      ve gövde sonundaki anlatım motoru hiç kurulmaz. -->
 
-<link rel="stylesheet" href="ortak/fdd1eaef88ec7048.css">
+<link rel="stylesheet" href="ortak/e69c53cf44e7d3b8.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-16 19:02
+  montaj: 2026-10-16 20:58
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-28 17:28
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-28 17:31
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-28 17:28
@@ -1165,7 +1051,7 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
   <div class="sahne-kap">
     <svg viewBox="0 0 806 630" preserveAspectRatio="xMidYMid meet" role="img">
       <title>Koch Eğrisi Başlangıç Şekli ve Kural Çözümlemesi</title>
-      <defs><linearGradient id="s1-st-zemin-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#f6f6f9"/><stop offset="100%" stop-color="#e7e5f0"/></linearGradient><linearGradient id="s1-st-kart-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#f6f6f9"/></linearGradient><linearGradient id="s1-st-vurgu-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#d9d5eb"/><stop offset="100%" stop-color="#a297d8"/></linearGradient><linearGradient id="s1-st-ikincil-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#e6cec7"/><stop offset="100%" stop-color="#d2937f"/></linearGradient><radialGradient id="s1-st-golge-grad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f1f1f4" stop-opacity="0.28"/><stop offset="100%" stop-color="#e7e5f0" stop-opacity="0"/></radialGradient>
+      <defs><linearGradient id="s1-st-zemin-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#faf8f5"/><stop offset="100%" stop-color="#f3eee6"/></linearGradient><linearGradient id="s1-st-kart-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#faf8f5"/></linearGradient><linearGradient id="s1-st-vurgu-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#e8f0fc"/><stop offset="100%" stop-color="#4b7fc7"/></linearGradient><linearGradient id="s1-st-ikincil-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ecf3ed"/><stop offset="100%" stop-color="#72a57e"/></linearGradient><radialGradient id="s1-st-golge-grad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.28"/><stop offset="100%" stop-color="#f3eee6" stop-opacity="0"/></radialGradient>
         <linearGradient id="s1-grad-zemin" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#faf8f5" />
           <stop offset="100%" stop-color="#f3eee6" />
@@ -1185,8 +1071,9 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
       </defs>
   <g id="s1-studyo-arka" pointer-events="none" aria-hidden="true">
     <path d="M 0.0 560.7 Q 201.5 546.8 403.0 560.7 T 806.0 560.7" fill="none" stroke="url(#s1-st-vurgu-grad)" stroke-width="1.2" opacity="0.28"/>
+    <path d="M 17.7 45.9 L 17.7 17.6 L 46.0 17.6" fill="none" stroke="url(#s1-st-vurgu-grad)" stroke-width="1.8" stroke-linecap="round" opacity="0.45"/>
     <ellipse cx="403.0" cy="554.4" rx="61.7" ry="7.9" fill="url(#s1-st-golge-grad)" opacity="0.55"/>
-    <ellipse cx="403.0" cy="200.0" rx="61.7" ry="5.5" fill="#262833" opacity="0.10"/>
+    <ellipse cx="81.8" cy="609.6" rx="1.5" ry="1.5" fill="#f3eee6" opacity="0.45"/>
   </g>
 
       
@@ -1295,10 +1182,6 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
           <text class="svg-metin" x="205" y="542" text-anchor="middle" dominant-baseline="central" fill="#235aa8">1/3 Oran</text>
         </g>
       </g>
-    
-  <g id="s1-studyo-parlama" pointer-events="none" aria-hidden="true">
-    <path d="M 108.0 48.0 L 476.2 48.0 Q 293.2 50.5 108.0 54.0 Z" fill="#ffffff" opacity="0.52"/>
-  </g>
 </svg>
   </div>
 </section>
@@ -1705,7 +1588,7 @@ window.SAYFA_INIT[1] = function (kok) {
 <section class="bolum sahne s2-sahne-zemini">
   <div class="sahne-kap">
     <svg viewBox="0 0 705 630" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Sierpiński Üçgeni Benzerlik Oranı Sahnesi">
-      <defs><linearGradient id="s2-st-zemin-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#f6f6f9"/><stop offset="100%" stop-color="#e7e5f0"/></linearGradient><linearGradient id="s2-st-kart-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#f6f6f9"/></linearGradient><linearGradient id="s2-st-vurgu-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#d9d5eb"/><stop offset="100%" stop-color="#a297d8"/></linearGradient><linearGradient id="s2-st-ikincil-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#e6cec7"/><stop offset="100%" stop-color="#d2937f"/></linearGradient><radialGradient id="s2-st-golge-grad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f1f1f4" stop-opacity="0.28"/><stop offset="100%" stop-color="#e7e5f0" stop-opacity="0"/></radialGradient>
+      <defs><linearGradient id="s2-st-zemin-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#fbf8f3"/><stop offset="100%" stop-color="#f4ede2"/></linearGradient><linearGradient id="s2-st-kart-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#fbf8f3"/></linearGradient><linearGradient id="s2-st-vurgu-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#dce6f2"/><stop offset="100%" stop-color="#2c4668"/></linearGradient><linearGradient id="s2-st-ikincil-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#faebd4"/><stop offset="100%" stop-color="#d89234"/></linearGradient><radialGradient id="s2-st-golge-grad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#eae4dc" stop-opacity="0.28"/><stop offset="100%" stop-color="#f4ede2" stop-opacity="0"/></radialGradient>
         <linearGradient id="s2-grad-zemin" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#fbf8f3" />
           <stop offset="100%" stop-color="#f4ede2" />
@@ -1737,8 +1620,9 @@ window.SAYFA_INIT[1] = function (kok) {
       </defs>
   <g id="s2-studyo-arka" pointer-events="none" aria-hidden="true">
     <path d="M 0.0 560.7 Q 176.2 546.8 352.5 560.7 T 705.0 560.7" fill="none" stroke="url(#s2-st-vurgu-grad)" stroke-width="1.2" opacity="0.28"/>
+    <path d="M 15.5 45.9 L 15.5 17.6 L 43.8 17.6" fill="none" stroke="url(#s2-st-vurgu-grad)" stroke-width="1.8" stroke-linecap="round" opacity="0.45"/>
     <ellipse cx="352.5" cy="554.4" rx="57.7" ry="7.4" fill="url(#s2-st-golge-grad)" opacity="0.55"/>
-    <ellipse cx="352.5" cy="552.0" rx="30.4" ry="5.5" fill="#262833" opacity="0.10"/>
+    <ellipse cx="71.6" cy="609.6" rx="1.5" ry="1.5" fill="#f4ede2" opacity="0.45"/>
   </g>
 
       <!-- ARKA KATMAN: Dekoratif zemin ve kılavuz çizgileri -->
@@ -1868,10 +1752,6 @@ window.SAYFA_INIT[1] = function (kok) {
           <text x="595" y="103" text-anchor="middle" class="svg-metin" fill="#2c4668">Adım 1</text>
         </g>
       </g>
-    
-  <g id="s2-studyo-parlama" pointer-events="none" aria-hidden="true">
-    <path d="M 322.1 524.0 L 362.1 524.0 Q 338.1 526.5 322.1 528.0 Z" fill="#ffffff" opacity="0.52"/>
-  </g>
 </svg>
   </div>
 </section>
@@ -2720,7 +2600,7 @@ window.SAYFA_INIT[3] = function (kok) {
   <div class="sahne-kap">
     <svg viewBox="0 0 705 630" preserveAspectRatio="xMidYMid meet" role="img">
       <title>Sierpiński Üçgeni Adım ve Parça Sayısı İlişkisi</title>
-      <defs><linearGradient id="s4-st-zemin-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#f6f6f9"/><stop offset="100%" stop-color="#e7e5f0"/></linearGradient><linearGradient id="s4-st-kart-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#f6f6f9"/></linearGradient><linearGradient id="s4-st-vurgu-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#d9d5eb"/><stop offset="100%" stop-color="#a297d8"/></linearGradient><linearGradient id="s4-st-ikincil-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#e6cec7"/><stop offset="100%" stop-color="#d2937f"/></linearGradient><radialGradient id="s4-st-golge-grad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f1f1f4" stop-opacity="0.28"/><stop offset="100%" stop-color="#e7e5f0" stop-opacity="0"/></radialGradient>
+      <defs><linearGradient id="s4-st-zemin-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#fbf9f4"/><stop offset="100%" stop-color="#f3efe6"/></linearGradient><linearGradient id="s4-st-kart-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#fbf9f4"/></linearGradient><linearGradient id="s4-st-vurgu-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#164264"/><stop offset="100%" stop-color="#225982"/></linearGradient><linearGradient id="s4-st-ikincil-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#2c7a5f"/><stop offset="100%" stop-color="#48a382"/></linearGradient><radialGradient id="s4-st-golge-grad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#727a82" stop-opacity="0.28"/><stop offset="100%" stop-color="#f3efe6" stop-opacity="0"/></radialGradient>
         
         <linearGradient id="s4-fon-grad" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stop-color="#fbf9f4"/>
@@ -2764,8 +2644,9 @@ window.SAYFA_INIT[3] = function (kok) {
       </defs>
   <g id="s4-studyo-arka" pointer-events="none" aria-hidden="true">
     <path d="M 0.0 560.7 Q 176.2 546.8 352.5 560.7 T 705.0 560.7" fill="none" stroke="url(#s4-st-vurgu-grad)" stroke-width="1.2" opacity="0.28"/>
+    <path d="M 15.5 45.9 L 15.5 17.6 L 43.8 17.6" fill="none" stroke="url(#s4-st-vurgu-grad)" stroke-width="1.8" stroke-linecap="round" opacity="0.45"/>
     <ellipse cx="352.5" cy="554.4" rx="57.7" ry="7.4" fill="url(#s4-st-golge-grad)" opacity="0.55"/>
-    <ellipse cx="352.5" cy="633.0" rx="57.7" ry="5.5" fill="#262833" opacity="0.10"/>
+    <ellipse cx="71.6" cy="609.6" rx="1.5" ry="1.5" fill="#f3efe6" opacity="0.45"/>
   </g>
 
       
@@ -2960,10 +2841,6 @@ window.SAYFA_INIT[3] = function (kok) {
           <text class="svg-not" x="587" y="380" text-anchor="middle" dominant-baseline="central" fill="#225982">27 parça</text>
         </g>
       </g>
-    
-  <g id="s4-studyo-parlama" pointer-events="none" aria-hidden="true">
-    <path d="M 46.0 492.0 L 428.5 492.0 Q 238.6 494.5 46.0 498.0 Z" fill="#ffffff" opacity="0.52"/>
-  </g>
 </svg>
   </div>
 </section>
@@ -4480,7 +4357,7 @@ window.SAYFA_INIT[5] = function (kok) {
   <div class="sahne-kap">
     <svg viewBox="0 0 806 630" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Koch kar tanesi Çevre ve Alan Değişimi">
       <title>Koch kar tanesi Çevre ve Alan Değişimi</title>
-      <defs><linearGradient id="s6-st-zemin-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#f6f6f9"/><stop offset="100%" stop-color="#e7e5f0"/></linearGradient><linearGradient id="s6-st-kart-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#f6f6f9"/></linearGradient><linearGradient id="s6-st-vurgu-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#d9d5eb"/><stop offset="100%" stop-color="#a297d8"/></linearGradient><linearGradient id="s6-st-ikincil-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#e6cec7"/><stop offset="100%" stop-color="#d2937f"/></linearGradient><radialGradient id="s6-st-golge-grad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f1f1f4" stop-opacity="0.28"/><stop offset="100%" stop-color="#e7e5f0" stop-opacity="0"/></radialGradient>
+      <defs><linearGradient id="s6-st-zemin-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#fdfbf7"/><stop offset="100%" stop-color="#f5efe4"/></linearGradient><linearGradient id="s6-st-kart-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#fdfbf7"/></linearGradient><linearGradient id="s6-st-vurgu-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#fef7ec"/><stop offset="100%" stop-color="#fae6bd"/></linearGradient><linearGradient id="s6-st-ikincil-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1c3664"/><stop offset="100%" stop-color="#28518e"/></linearGradient><radialGradient id="s6-st-golge-grad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#e8e2d8" stop-opacity="0.28"/><stop offset="100%" stop-color="#f5efe4" stop-opacity="0"/></radialGradient>
         <linearGradient id="s6-grad-zemin" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stop-color="#fdfbf7" />
           <stop offset="100%" stop-color="#f5efe4" />
@@ -4496,8 +4373,9 @@ window.SAYFA_INIT[5] = function (kok) {
       </defs>
   <g id="s6-studyo-arka" pointer-events="none" aria-hidden="true">
     <path d="M 0.0 560.7 Q 201.5 546.8 403.0 560.7 T 806.0 560.7" fill="none" stroke="url(#s6-st-vurgu-grad)" stroke-width="1.2" opacity="0.28"/>
+    <path d="M 17.7 45.9 L 17.7 17.6 L 46.0 17.6" fill="none" stroke="url(#s6-st-vurgu-grad)" stroke-width="1.8" stroke-linecap="round" opacity="0.45"/>
     <ellipse cx="403.0" cy="554.4" rx="61.7" ry="7.9" fill="url(#s6-st-golge-grad)" opacity="0.55"/>
-    <ellipse cx="403.0" cy="75.0" rx="61.7" ry="5.5" fill="#262833" opacity="0.10"/>
+    <ellipse cx="81.8" cy="609.6" rx="1.5" ry="1.5" fill="#f5efe4" opacity="0.45"/>
   </g>
 
       
@@ -4623,10 +4501,6 @@ window.SAYFA_INIT[5] = function (kok) {
         <text x="705" y="455" text-anchor="middle" fill="#787066" class="svg-not">Çevre: 7,11s</text>
         <text x="705" y="476" text-anchor="middle" fill="#787066" class="svg-not">Alan: 1,57 A₀</text>
       </g>
-    
-  <g id="s6-studyo-parlama" pointer-events="none" aria-hidden="true">
-    <path d="M 230.0 27.0 L 446.9 27.0 Q 337.1 29.5 230.0 33.0 Z" fill="#ffffff" opacity="0.52"/>
-  </g>
 </svg>
   </div>
 </section>
@@ -5107,7 +4981,7 @@ window.SAYFA_INIT[6] = function (kok) {
   <div class="sahne-kap">
     <svg viewBox="0 0 705 630" preserveAspectRatio="xMidYMid meet" role="img">
       <title>Fraktal Değerlendirme Soruları Sahnesi</title>
-      <defs><linearGradient id="s7-st-zemin-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#f6f6f9"/><stop offset="100%" stop-color="#e7e5f0"/></linearGradient><linearGradient id="s7-st-kart-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#f6f6f9"/></linearGradient><linearGradient id="s7-st-vurgu-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#d9d5eb"/><stop offset="100%" stop-color="#a297d8"/></linearGradient><linearGradient id="s7-st-ikincil-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#e6cec7"/><stop offset="100%" stop-color="#d2937f"/></linearGradient><radialGradient id="s7-st-golge-grad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#f1f1f4" stop-opacity="0.28"/><stop offset="100%" stop-color="#e7e5f0" stop-opacity="0"/></radialGradient>
+      <defs>
         <linearGradient id="s7-grad-zemin" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="#f4f7f6"/>
           <stop offset="100%" stop-color="#eaf0ee"/>
@@ -5146,8 +5020,7 @@ window.SAYFA_INIT[6] = function (kok) {
       <path d="M0,480 Q350,440 705,480 L705,630 L0,630 Z" fill="#eaf0ee" data-sahne-rol="dekor"/>
       <ellipse cx="352" cy="550" rx="300" ry="24" fill="#ccd1cb" opacity="0.3" data-sahne-rol="dekor"/>
 
-      <!-- SORU 1 SAHNESİ: Fraktal Yapı Taşları (Başlangıç Şekli ve Tekrarlanan Kural) -->
-<g id="s7-deg-studyo-cerceve" pointer-events="none"><polyline points="26,10 679,10 693,24 693,606 679,620 26,620 12,606 12,24 26,10" fill="none" stroke="#d9d5eb" stroke-width="1.5" stroke-opacity="0.52" stroke-linejoin="round"/><polyline points="27,15 678,15 688,25 688,605 678,615 27,615 17,605 17,25 27,15" fill="none" stroke="#ffffff" stroke-width="1.2" stroke-opacity="0.72" stroke-linejoin="round"/><polyline points="31,13 674,13 675,14 675,18 674,19 31,19 30,18 30,14 31,13" fill="url(#s7-st-vurgu-grad)" fill-opacity="0.26"/><polyline points="20,529 103,536 186,539 269,536 352,529 436,522 519,519 602,522 685,529" fill="none" stroke="#d9d5eb" stroke-width="1.1" stroke-opacity="0.22" stroke-linecap="round"/><polyline points="20,575 103,572 186,567 269,562 352,559 436,562 519,567 602,572 685,575" fill="none" stroke="#e6cec7" stroke-width="1" stroke-opacity="0.2"/><polyline points="21,37 21,19 39,19" fill="none" stroke="#a297d8" stroke-width="1.8" stroke-opacity="0.45" stroke-linecap="round" stroke-linejoin="round"/><polyline points="28,23 31,26 28,29 25,26 28,23" fill="#e6cec7" fill-opacity="0.55"/><polyline points="684,37 684,19 666,19" fill="none" stroke="#a297d8" stroke-width="1.8" stroke-opacity="0.45" stroke-linecap="round" stroke-linejoin="round"/><polyline points="677,23 680,26 677,29 674,26 677,23" fill="#e6cec7" fill-opacity="0.55"/><polyline points="21,593 21,611 39,611" fill="none" stroke="#a297d8" stroke-width="1.8" stroke-opacity="0.45" stroke-linecap="round" stroke-linejoin="round"/><polyline points="28,601 31,604 28,607 25,604 28,601" fill="#e6cec7" fill-opacity="0.55"/><polyline points="684,593 684,611 666,611" fill="none" stroke="#a297d8" stroke-width="1.8" stroke-opacity="0.45" stroke-linecap="round" stroke-linejoin="round"/><polyline points="677,601 680,604 677,607 674,604 677,601" fill="#e6cec7" fill-opacity="0.55"/><polyline points="17,193 25,193" fill="none" stroke="#a6a2b9" stroke-width="1.1" stroke-opacity="0.35"/><polyline points="680,193 688,193" fill="none" stroke="#a6a2b9" stroke-width="1.1" stroke-opacity="0.35"/><polyline points="17,315 25,315" fill="none" stroke="#a6a2b9" stroke-width="1.1" stroke-opacity="0.35"/><polyline points="680,315 688,315" fill="none" stroke="#a6a2b9" stroke-width="1.1" stroke-opacity="0.35"/><polyline points="17,437 25,437" fill="none" stroke="#a6a2b9" stroke-width="1.1" stroke-opacity="0.35"/><polyline points="680,437 688,437" fill="none" stroke="#a6a2b9" stroke-width="1.1" stroke-opacity="0.35"/></g><g id="s7-soru-1" class="s7-soru-sahne" data-sahne-nesne="soru1"><g class="s7-alt-studyo" pointer-events="none"><polyline points="40,32 673,32 685,44 685,572 673,584 40,584 28,572 28,44 40,32" fill="#262833" fill-opacity="0.06"/><polyline points="36,26 669,26 681,38 681,566 669,578 36,578 24,566 24,38 36,26" fill="url(#s7-st-kart-grad)" fill-opacity="0.86" stroke="#d9d5eb" stroke-width="1.5" stroke-opacity="0.58" stroke-linejoin="round"/><polyline points="38,32 667,32 675,40 675,564 667,572 38,572 30,564 30,40 38,32" fill="none" stroke="#e6cec7" stroke-width="1" stroke-dasharray="6 4" stroke-opacity="0.36"/><polyline points="39,29 666,29 667,30 667,33 666,34 39,34 38,33 38,30 39,29" fill="#ffffff" fill-opacity="0.72"/><polyline points="144,570 560,570 572,580 132,580 144,570" fill="url(#s7-st-vurgu-grad)" fill-opacity="0.22" stroke="#a297d8" stroke-width="1.1" stroke-opacity="0.38" stroke-linejoin="round"/><polyline points="150,573 554,573" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-opacity="0.65"/><polyline points="33,48 33,35 46,35" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="38,38 40,40 38,42 36,40 38,38" fill="#d2937f" fill-opacity="0.52"/><polyline points="672,48 672,35 659,35" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="667,38 669,40 667,42 665,40 667,38" fill="#d2937f" fill-opacity="0.52"/><polyline points="33,556 33,569 46,569" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="38,562 40,564 38,566 36,564 38,562" fill="#d2937f" fill-opacity="0.52"/><polyline points="672,556 672,569 659,569" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="667,562 669,564 667,566 665,564 667,562" fill="#d2937f" fill-opacity="0.52"/></g>
+      <!-- SORU 1 SAHNESİ: Fraktal Yapı Taşları (Başlangıç Şekli ve Tekrarlanan Kural) --><g id="s7-soru-1" class="s7-soru-sahne" data-sahne-nesne="soru1">
 <defs>
   <linearGradient id="s7-q1-grad-baskin-ana" x1="20%" y1="0%" x2="80%" y2="100%">
     <stop offset="0%" stop-color="#b9e0da"></stop>
@@ -5220,7 +5093,7 @@ window.SAYFA_INIT[6] = function (kok) {
 
 
 <g id="s7-q1-katman-arka">
-  <ellipse cx="352.5" cy="485" rx="310" ry="34" fill="url(#s7-q1-grad-stage-base)" opacity="0.45"></ellipse>
+  <ellipse cx="352.5" cy="485" rx="310" ry="34" fill="url(#s7-q1-grad-stage-base)" opacity="0.45"/>
   <path d="M 65,485 Q 352.5,524 640,485" stroke="#cbd3d0" stroke-width="2" fill="none" opacity="0.5"></path>
 
   <path d="M 249,441 C 290,441 310,460 352.5,460 C 395,460 415,441 456,441" fill="none" stroke="#cbd3d0" stroke-width="7" stroke-linecap="round"></path>
@@ -5237,43 +5110,43 @@ window.SAYFA_INIT[6] = function (kok) {
   <path d="M 395,272 C 410,287 435,297 467,277" fill="none" stroke="#5cb8aa" stroke-width="2" stroke-linecap="round"></path>
 
   <path d="M 248,240 L 258,246 L 248,252" fill="none" stroke="#e5b458" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-  <circle cx="238" cy="246" r="3" fill="#5c6bc0"></circle>
+  <circle cx="238" cy="246" r="3" fill="#5c6bc0"/>
   <path d="M 445,240 L 455,246 L 445,252" fill="none" stroke="#e5b458" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-  <circle cx="465" cy="246" r="3" fill="#5c6bc0"></circle>
+  <circle cx="465" cy="246" r="3" fill="#5c6bc0"/>
 
   
-  <ellipse cx="170" cy="482" rx="100" ry="16" fill="#909c98" opacity="0.4"></ellipse>
-  <ellipse cx="170" cy="482" rx="70" ry="10" fill="#132c27" opacity="0.25"></ellipse>
+  <ellipse cx="170" cy="482" rx="100" ry="16" fill="#909c98" opacity="0.4"/>
+  <ellipse cx="170" cy="482" rx="70" ry="10" fill="#132c27" opacity="0.25"/>
   <path d="M 75,452 L 265,452 L 273,476 Q 170,492 67,476 Z" fill="url(#s7-q1-grad-notr-govde)" stroke="#132c27" stroke-width="2.5" stroke-linejoin="round"></path>
-  <ellipse cx="170" cy="452" rx="90" ry="16" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2"></ellipse>
+  <ellipse cx="170" cy="452" rx="90" ry="16" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2"/>
   <path d="M 91,415 L 249,415 L 249,452 Q 170,466 91,452 Z" fill="url(#s7-q1-grad-baskin-koyu)" stroke="#132c27" stroke-width="2.5" stroke-linejoin="round"></path>
   <path d="M 110,416 L 130,416 L 130,453 Q 120,456 110,454 Z" fill="#ffffff" opacity="0.12"></path>
   <path d="M 91,434 Q 170,448 249,434 L 249,440 Q 170,454 91,440 Z" fill="url(#s7-q1-grad-ikincil)" stroke="#132c27" stroke-width="1.5"></path>
-  <ellipse cx="170" cy="415" rx="79" ry="16" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2.5"></ellipse>
-  <ellipse cx="170" cy="415" rx="66" ry="12" fill="url(#s7-q1-grad-disc)" stroke="#1b6156" stroke-width="1.5"></ellipse>
-  <ellipse cx="170" cy="413" rx="55" ry="9" fill="#ffffff" opacity="0.3"></ellipse>
-  <ellipse cx="170" cy="415" rx="30" ry="6" fill="#5c6bc0" opacity="0.4"></ellipse>
-  <line x1="95" y1="415" x2="103" y2="415" stroke="#132c27" stroke-width="2"></line>
-  <line x1="237" y1="415" x2="245" y2="415" stroke="#132c27" stroke-width="2"></line>
-  <polygon points="150,415 190,415 220,307 120,307" fill="url(#s7-q1-grad-glow-beam)" opacity="0.35"></polygon>
-  <ellipse cx="170" cy="415" rx="52" ry="9" fill="#12433b" opacity="0.3"></ellipse>
+  <ellipse cx="170" cy="415" rx="79" ry="16" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2.5"/>
+  <ellipse cx="170" cy="415" rx="66" ry="12" fill="url(#s7-q1-grad-disc)" stroke="#1b6156" stroke-width="1.5"/>
+  <ellipse cx="170" cy="413" rx="55" ry="9" fill="#ffffff" opacity="0.3"/>
+  <ellipse cx="170" cy="415" rx="30" ry="6" fill="#5c6bc0" opacity="0.4"/>
+  <line x1="95" y1="415" x2="103" y2="415" stroke="#132c27" stroke-width="2"/>
+  <line x1="237" y1="415" x2="245" y2="415" stroke="#132c27" stroke-width="2"/>
+  <polygon points="150,415 190,415 220,307 120,307" fill="url(#s7-q1-grad-glow-beam)" opacity="0.35"/>
+  <ellipse cx="170" cy="415" rx="52" ry="9" fill="#12433b" opacity="0.3"/>
 
   
-  <ellipse cx="535" cy="482" rx="100" ry="16" fill="#909c98" opacity="0.4"></ellipse>
-  <ellipse cx="535" cy="482" rx="70" ry="10" fill="#132c27" opacity="0.25"></ellipse>
+  <ellipse cx="535" cy="482" rx="100" ry="16" fill="#909c98" opacity="0.4"/>
+  <ellipse cx="535" cy="482" rx="70" ry="10" fill="#132c27" opacity="0.25"/>
   <path d="M 440,452 L 630,452 L 638,476 Q 535,492 432,476 Z" fill="url(#s7-q1-grad-notr-govde)" stroke="#132c27" stroke-width="2.5" stroke-linejoin="round"></path>
-  <ellipse cx="535" cy="452" rx="90" ry="16" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2"></ellipse>
+  <ellipse cx="535" cy="452" rx="90" ry="16" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2"/>
   <path d="M 456,415 L 614,415 L 614,452 Q 535,466 456,452 Z" fill="url(#s7-q1-grad-baskin-koyu)" stroke="#132c27" stroke-width="2.5" stroke-linejoin="round"></path>
   <path d="M 475,416 L 495,416 L 495,453 Q 485,456 475,454 Z" fill="#ffffff" opacity="0.12"></path>
   <path d="M 456,434 Q 535,448 614,434 L 614,440 Q 535,454 456,440 Z" fill="url(#s7-q1-grad-ikincil)" stroke="#132c27" stroke-width="1.5"></path>
-  <ellipse cx="535" cy="415" rx="79" ry="16" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2.5"></ellipse>
-  <ellipse cx="535" cy="415" rx="66" ry="12" fill="url(#s7-q1-grad-disc)" stroke="#1b6156" stroke-width="1.5"></ellipse>
-  <ellipse cx="535" cy="413" rx="55" ry="9" fill="#ffffff" opacity="0.3"></ellipse>
-  <ellipse cx="535" cy="415" rx="30" ry="6" fill="#5c6bc0" opacity="0.4"></ellipse>
-  <line x1="460" y1="415" x2="468" y2="415" stroke="#132c27" stroke-width="2"></line>
-  <line x1="602" y1="415" x2="610" y2="415" stroke="#132c27" stroke-width="2"></line>
-  <polygon points="515,415 555,415 565,364 505,364" fill="url(#s7-q1-grad-glow-beam)" opacity="0.35"></polygon>
-  <ellipse cx="535" cy="415" rx="52" ry="9" fill="#12433b" opacity="0.3"></ellipse>
+  <ellipse cx="535" cy="415" rx="79" ry="16" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2.5"/>
+  <ellipse cx="535" cy="415" rx="66" ry="12" fill="url(#s7-q1-grad-disc)" stroke="#1b6156" stroke-width="1.5"/>
+  <ellipse cx="535" cy="413" rx="55" ry="9" fill="#ffffff" opacity="0.3"/>
+  <ellipse cx="535" cy="415" rx="30" ry="6" fill="#5c6bc0" opacity="0.4"/>
+  <line x1="460" y1="415" x2="468" y2="415" stroke="#132c27" stroke-width="2"/>
+  <line x1="602" y1="415" x2="610" y2="415" stroke="#132c27" stroke-width="2"/>
+  <polygon points="515,415 555,415 565,364 505,364" fill="url(#s7-q1-grad-glow-beam)" opacity="0.35"/>
+  <ellipse cx="535" cy="415" rx="52" ry="9" fill="#12433b" opacity="0.3"/>
 </g>
 
 
@@ -5285,64 +5158,64 @@ window.SAYFA_INIT[6] = function (kok) {
     <path d="M 170,143 L 107,253 Q 140,226 170,196 Z" fill="#ffffff" opacity="0.32"></path>
     <path d="M 165,153 L 95,273" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.25" fill="none"></path>
 
-    <circle cx="170" cy="250.00" r="32" fill="none" stroke="#5cb8aa" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"></circle>
-    <circle cx="170" cy="250.00" r="4.5" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
-    <line x1="170" y1="136.67" x2="170" y2="306.67" stroke="#1b6156" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.4"></line>
+    <circle cx="170" cy="250.00" r="32" fill="none" stroke="#5cb8aa" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"/>
+    <circle cx="170" cy="250.00" r="4.5" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
+    <line x1="170" y1="136.67" x2="170" y2="306.67" stroke="#1b6156" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.4"/>
 
     
-    <circle cx="137.28" cy="306.67" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
-    <circle cx="202.72" cy="306.67" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
-    <circle cx="104.57" cy="250.00" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
-    <circle cx="137.28" cy="193.33" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
-    <circle cx="235.43" cy="250.00" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
-    <circle cx="202.72" cy="193.33" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
+    <circle cx="137.28" cy="306.67" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
+    <circle cx="202.72" cy="306.67" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
+    <circle cx="104.57" cy="250.00" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
+    <circle cx="137.28" cy="193.33" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
+    <circle cx="235.43" cy="250.00" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
+    <circle cx="202.72" cy="193.33" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
   </g>
 
   
   <g id="s7-q1-nesne-merkez">
-    <ellipse cx="352.5" cy="302" rx="42" ry="9" fill="#909c98" opacity="0.3"></ellipse>
-    <circle cx="352.5" cy="246" r="48" fill="url(#s7-q1-grad-ikincil)" stroke="#132c27" stroke-width="2.5"></circle>
+    <ellipse cx="352.5" cy="302" rx="42" ry="9" fill="#909c98" opacity="0.3"/>
+    <circle cx="352.5" cy="246" r="48" fill="url(#s7-q1-grad-ikincil)" stroke="#132c27" stroke-width="2.5"/>
 
     
-    <line x1="395.5" y1="246.0" x2="399.5" y2="246.0" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"></line>
-    <line x1="389.8" y1="267.5" x2="393.3" y2="269.5" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"></line>
-    <line x1="374.0" y1="283.3" x2="376.0" y2="286.8" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"></line>
-    <line x1="352.5" y1="289.0" x2="352.5" y2="293.0" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"></line>
-    <line x1="331.0" y1="283.3" x2="329.0" y2="286.8" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"></line>
-    <line x1="315.2" y1="267.5" x2="311.7" y2="269.5" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"></line>
-    <line x1="309.5" y1="246.0" x2="305.5" y2="246.0" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"></line>
-    <line x1="315.2" y1="224.5" x2="311.7" y2="222.5" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"></line>
-    <line x1="331.0" y1="208.7" x2="329.0" y2="205.2" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"></line>
-    <line x1="352.5" y1="203.0" x2="352.5" y2="199.0" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"></line>
-    <line x1="374.0" y1="208.7" x2="376.0" y2="205.2" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"></line>
-    <line x1="389.8" y1="224.5" x2="393.3" y2="222.5" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"></line>
+    <line x1="395.5" y1="246.0" x2="399.5" y2="246.0" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="389.8" y1="267.5" x2="393.3" y2="269.5" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="374.0" y1="283.3" x2="376.0" y2="286.8" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="352.5" y1="289.0" x2="352.5" y2="293.0" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="331.0" y1="283.3" x2="329.0" y2="286.8" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="315.2" y1="267.5" x2="311.7" y2="269.5" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="309.5" y1="246.0" x2="305.5" y2="246.0" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="315.2" y1="224.5" x2="311.7" y2="222.5" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"/>
+    <polyline points="331.0,208.7 329.0,205.2" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"/>
+    <polyline points="352.5,203.0 352.5,199.0" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"/>
+    <polyline points="374.0,208.7 376.0,205.2" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"/>
+    <polyline points="389.8,224.5 393.3,222.5" stroke="#132c27" stroke-width="1.8" stroke-linecap="round"/>
 
-    <circle cx="352.5" cy="246" r="39" fill="url(#s7-q1-grad-baskin-koyu)" stroke="#132c27" stroke-width="2"></circle>
-    <circle cx="352.5" cy="246" r="30" fill="none" stroke="#5cb8aa" stroke-width="1" stroke-dasharray="3 3" opacity="0.4"></circle>
-    <line x1="320" y1="246" x2="385" y2="246" stroke="#5cb8aa" stroke-width="1" stroke-dasharray="2 3" opacity="0.3"></line>
-    <line x1="352.5" y1="213.5" x2="352.5" y2="278.5" stroke="#5cb8aa" stroke-width="1" stroke-dasharray="2 3" opacity="0.3"></line>
+    <circle cx="352.5" cy="246" r="39" fill="url(#s7-q1-grad-baskin-koyu)" stroke="#132c27" stroke-width="2"/>
+    <circle cx="352.5" cy="246" r="30" fill="none" stroke="#5cb8aa" stroke-width="1" stroke-dasharray="3 3" opacity="0.4"/>
+    <polyline points="320,246 385,246" stroke="#5cb8aa" stroke-width="1" stroke-dasharray="2 3" opacity="0.3"/>
+    <polyline points="352.5,213.5 352.5,278.5" stroke="#5cb8aa" stroke-width="1" stroke-dasharray="2 3" opacity="0.3"/>
 
     
-    <line x1="327.5" y1="232" x2="377.5" y2="232" stroke="#f7d896" stroke-width="3" stroke-linecap="round"></line>
-    <circle cx="327.5" cy="232" r="3.5" fill="#e5b458" stroke="#132c27" stroke-width="1.2"></circle>
-    <circle cx="377.5" cy="232" r="3.5" fill="#e5b458" stroke="#132c27" stroke-width="1.2"></circle>
+    <polyline points="327.5,232 377.5,232" stroke="#f7d896" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="327.5" cy="232" r="3.5" fill="#e5b458" stroke="#132c27" stroke-width="1.2"/>
+    <circle cx="377.5" cy="232" r="3.5" fill="#e5b458" stroke="#132c27" stroke-width="1.2"/>
 
     
     <path d="M 347,240 L 352.5,245 L 358,240" fill="none" stroke="#e5b458" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></path>
 
     
     <path d="M 327.5,260 L 344.17,260 L 352.5,246 L 360.83,260 L 377.5,260" fill="none" stroke="#5c6bc0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"></path>
-    <circle cx="327.5" cy="260" r="3" fill="#ffffff" stroke="#132c27" stroke-width="1"></circle>
-    <circle cx="344.17" cy="260" r="3" fill="#ffffff" stroke="#132c27" stroke-width="1"></circle>
-    <circle cx="352.5" cy="246" r="3.5" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
-    <circle cx="360.83" cy="260" r="3" fill="#ffffff" stroke="#132c27" stroke-width="1"></circle>
-    <circle cx="377.5" cy="260" r="3" fill="#ffffff" stroke="#132c27" stroke-width="1"></circle>
+    <circle cx="327.5" cy="260" r="3" fill="#ffffff" stroke="#132c27" stroke-width="1"/>
+    <circle cx="344.17" cy="260" r="3" fill="#ffffff" stroke="#132c27" stroke-width="1"/>
+    <circle cx="352.5" cy="246" r="3.5" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
+    <circle cx="360.83" cy="260" r="3" fill="#ffffff" stroke="#132c27" stroke-width="1"/>
+    <circle cx="377.5" cy="260" r="3" fill="#ffffff" stroke="#132c27" stroke-width="1"/>
 
     
     <path d="M 318,235 A 39 39 0 0 1 382,223 Q 352.5,246 318,235 Z" fill="#ffffff" opacity="0.28"></path>
 
     
-    <rect x="262" y="306" width="181" height="30" rx="15" fill="url(#s7-q1-grad-ikincil-acik)" stroke="#132c27" stroke-width="2"></rect>
+    <rect x="262" y="306" width="181" height="30" rx="15" fill="url(#s7-q1-grad-ikincil-acik)" stroke="#132c27" stroke-width="2"/>
     <text x="352.5" y="321" text-anchor="middle" dominant-baseline="central" fill="#132c27" font-weight="bold">Kural Uygulaması</text>
   </g>
 
@@ -5363,57 +5236,57 @@ window.SAYFA_INIT[6] = function (kok) {
     <path d="M 535,144 L 507,192 Q 525,177 535,167 Z" fill="#ffffff" opacity="0.35"></path>
     <path d="M 441,197 L 467,242 Q 455,222 447,207 Z" fill="#ffffff" opacity="0.30"></path>
     <path d="M 507,312 L 530,354 Q 523,337 515,324 Z" fill="#ffffff" opacity="0.25"></path>
-    <line x1="531" y1="150" x2="505" y2="190" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.25"></line>
+    <polyline points="531,150 505,190" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.25"/>
 
     
-    <circle cx="535" cy="250.00" r="32" fill="none" stroke="#5cb8aa" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"></circle>
-    <circle cx="535" cy="250.00" r="5" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
+    <circle cx="535" cy="250.00" r="32" fill="none" stroke="#5cb8aa" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.5"/>
+    <circle cx="535" cy="250.00" r="5" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
 
     
-    <circle cx="535.00" cy="136.67" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
-    <circle cx="633.15" cy="193.33" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
-    <circle cx="633.15" cy="306.67" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
-    <circle cx="535.00" cy="363.33" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
-    <circle cx="436.85" cy="306.67" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
-    <circle cx="436.85" cy="193.33" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"></circle>
+    <circle cx="535.00" cy="136.67" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
+    <circle cx="633.15" cy="193.33" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
+    <circle cx="633.15" cy="306.67" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
+    <circle cx="535.00" cy="363.33" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
+    <circle cx="436.85" cy="306.67" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
+    <circle cx="436.85" cy="193.33" r="4" fill="#5c6bc0" stroke="#132c27" stroke-width="1.2"/>
 
     
-    <circle cx="502.28" cy="306.67" r="2.5" fill="#e5b458" stroke="#132c27" stroke-width="1"></circle>
-    <circle cx="567.72" cy="306.67" r="2.5" fill="#e5b458" stroke="#132c27" stroke-width="1"></circle>
-    <circle cx="600.43" cy="250.00" r="2.5" fill="#e5b458" stroke="#132c27" stroke-width="1"></circle>
-    <circle cx="567.72" cy="193.33" r="2.5" fill="#e5b458" stroke="#132c27" stroke-width="1"></circle>
-    <circle cx="502.28" cy="193.33" r="2.5" fill="#e5b458" stroke="#132c27" stroke-width="1"></circle>
-    <circle cx="469.57" cy="250.00" r="2.5" fill="#e5b458" stroke="#132c27" stroke-width="1"></circle>
+    <circle cx="502.28" cy="306.67" r="2.5" fill="#e5b458" stroke="#132c27" stroke-width="1"/>
+    <circle cx="567.72" cy="306.67" r="2.5" fill="#e5b458" stroke="#132c27" stroke-width="1"/>
+    <circle cx="600.43" cy="250.00" r="2.5" fill="#e5b458" stroke="#132c27" stroke-width="1"/>
+    <circle cx="567.72" cy="193.33" r="2.5" fill="#e5b458" stroke="#132c27" stroke-width="1"/>
+    <circle cx="502.28" cy="193.33" r="2.5" fill="#e5b458" stroke="#132c27" stroke-width="1"/>
+    <circle cx="469.57" cy="250.00" r="2.5" fill="#e5b458" stroke="#132c27" stroke-width="1"/>
   </g>
 </g>
 
 
 <g id="s7-q1-katman-on">
   
-  <rect x="222" y="47" width="261" height="38" rx="19" fill="#909c98" opacity="0.25"></rect>
-  <rect x="219.5" y="44" width="266" height="38" rx="19" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2.5"></rect>
-  <circle cx="235.5" cy="63" r="6" fill="#e5b458" stroke="#132c27" stroke-width="1.5"></circle>
-  <circle cx="469.5" cy="63" r="6" fill="#e5b458" stroke="#132c27" stroke-width="1.5"></circle>
+  <rect x="222" y="47" width="261" height="38" rx="19" fill="#909c98" opacity="0.25"/>
+  <rect x="219.5" y="44" width="266" height="38" rx="19" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2.5"/>
+  <circle cx="235.5" cy="63" r="6" fill="#e5b458" stroke="#132c27" stroke-width="1.5"/>
+  <circle cx="469.5" cy="63" r="6" fill="#e5b458" stroke="#132c27" stroke-width="1.5"/>
   <text x="352.5" y="63" text-anchor="middle" dominant-baseline="central" fill="#132c27" font-weight="bold">Fraktal Oluşum Süreci</text>
 
   
-  <line x1="285" y1="96" x2="420" y2="96" stroke="#cbd3d0" stroke-width="2.5" stroke-dasharray="4 3"></line>
-  <circle cx="285" cy="96" r="7" fill="#5cb8aa" stroke="#132c27" stroke-width="2"></circle>
-  <circle cx="352.5" cy="96" r="7" fill="#e5b458" stroke="#132c27" stroke-width="2"></circle>
-  <circle cx="420" cy="96" r="7" fill="#2d8a7c" stroke="#132c27" stroke-width="2"></circle>
+  <polyline points="285,96 420,96" stroke="#cbd3d0" stroke-width="2.5" stroke-dasharray="4 3"/>
+  <circle cx="285" cy="96" r="7" fill="#5cb8aa" stroke="#132c27" stroke-width="2"/>
+  <circle cx="352.5" cy="96" r="7" fill="#e5b458" stroke="#132c27" stroke-width="2"/>
+  <circle cx="420" cy="96" r="7" fill="#2d8a7c" stroke="#132c27" stroke-width="2"/>
 
   
-  <rect x="75" y="520" width="190" height="38" rx="19" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2.5"></rect>
+  <rect x="75" y="520" width="190" height="38" rx="19" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2.5"/>
   <text x="170" y="539" text-anchor="middle" dominant-baseline="central" fill="#132c27" font-weight="bold">Başlangıç Motifi</text>
 
   
-  <rect x="440" y="520" width="190" height="38" rx="19" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2.5"></rect>
+  <rect x="440" y="520" width="190" height="38" rx="19" fill="url(#s7-q1-grad-notr)" stroke="#132c27" stroke-width="2.5"/>
   <text x="535" y="539" text-anchor="middle" dominant-baseline="central" fill="#132c27" font-weight="bold">1. Adım</text>
 </g>
 </g>
 
       <!-- SORU 2 SAHNESİ: Koch kar tanesi Kenar Bölme Oranı -->
-      <g id="s7-soru-2" class="s7-soru-sahne" data-sahne-nesne="soru2" style="display:none;"><g class="s7-alt-studyo" pointer-events="none"><polyline points="36,24 669,24 677,32 677,598 669,606 36,606 28,598 28,32 36,24" fill="none" stroke="#e6cec7" stroke-width="1" stroke-dasharray="6 4" stroke-opacity="0.32"/><polyline points="144,602 560,602 572,612 132,612 144,602" fill="url(#s7-st-vurgu-grad)" fill-opacity="0.22" stroke="#a297d8" stroke-width="1.1" stroke-opacity="0.38" stroke-linejoin="round"/><polyline points="150,605 554,605" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-opacity="0.65"/><polyline points="33,42 33,29 46,29" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="38,32 40,34 38,36 36,34 38,32" fill="#d2937f" fill-opacity="0.52"/><polyline points="672,42 672,29 659,29" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="667,32 669,34 667,36 665,34 667,32" fill="#d2937f" fill-opacity="0.52"/><polyline points="33,588 33,601 46,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="38,594 40,596 38,598 36,596 38,594" fill="#d2937f" fill-opacity="0.52"/><polyline points="672,588 672,601 659,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="667,594 669,596 667,598 665,596 667,594" fill="#d2937f" fill-opacity="0.52"/></g>
+      <g id="s7-soru-2" class="s7-soru-sahne" data-sahne-nesne="soru2" style="display:none;">
 <defs>
   <linearGradient id="s7-q2-grad-baskin-main" x1="0%" y1="0%" x2="100%" y2="100%">
     <stop offset="0%" stop-color="#e6f4f1"></stop>
@@ -5466,154 +5339,154 @@ window.SAYFA_INIT[6] = function (kok) {
 
 
 <g id="s7-q2-katman-arka">
-  <ellipse cx="185" cy="166" rx="84" ry="12" fill="#ccd1cb" opacity="0.45"></ellipse>
-  <ellipse cx="520" cy="204" rx="92" ry="14" fill="#ccd1cb" opacity="0.45"></ellipse>
+  <ellipse cx="185" cy="166" rx="84" ry="12" fill="#ccd1cb" opacity="0.45"/>
+  <ellipse cx="520" cy="204" rx="92" ry="14" fill="#ccd1cb" opacity="0.45"/>
 
-  <rect x="42" y="264" width="621" height="336" rx="24" fill="#ccd1cb" opacity="0.35"></rect>
-  <rect x="40" y="260" width="625" height="338" rx="24" fill="url(#s7-q2-grad-panel)" stroke="#ccd1cb" stroke-width="1.5"></rect>
-  <rect x="48" y="268" width="609" height="322" rx="18" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.85"></rect>
+  <rect x="42" y="264" width="621" height="336" rx="24" fill="#ccd1cb" opacity="0.35"/>
+  <rect x="40" y="260" width="625" height="338" rx="24" fill="url(#s7-q2-grad-panel)" stroke="#ccd1cb" stroke-width="1.5"/>
+  <rect x="48" y="268" width="609" height="322" rx="18" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.85"/>
 </g>
 
 
 <g id="s7-q2-katman-orta">
-  <polygon points="185.00,31.86 257.00,156.57 113.00,156.57" fill="url(#s7-q2-grad-baskin-main)" stroke="#1c332e" stroke-width="3" stroke-linejoin="round"></polygon>
+  <polygon points="185.00,31.86 257.00,156.57 113.00,156.57" fill="url(#s7-q2-grad-baskin-main)" stroke="#1c332e" stroke-width="3" stroke-linejoin="round"/>
   <path d="M 185.00,39.86 L 122.00,148.00 A 6 6 0 0 0 132.00,151.00 L 185.00,58.00 Z" fill="#ffffff" opacity="0.35"></path>
 
-  <circle cx="161.00" cy="73.43" r="3.5" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"></circle>
-  <circle cx="137.00" cy="115.00" r="3.5" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"></circle>
-  <circle cx="209.00" cy="73.43" r="3.5" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"></circle>
-  <circle cx="233.00" cy="115.00" r="3.5" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"></circle>
-  <circle cx="161.00" cy="156.57" r="3.5" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"></circle>
-  <circle cx="209.00" cy="156.57" r="3.5" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"></circle>
+  <circle cx="161.00" cy="73.43" r="3.5" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"/>
+  <circle cx="137.00" cy="115.00" r="3.5" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"/>
+  <circle cx="209.00" cy="73.43" r="3.5" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"/>
+  <circle cx="233.00" cy="115.00" r="3.5" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"/>
+  <circle cx="161.00" cy="156.57" r="3.5" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"/>
+  <circle cx="209.00" cy="156.57" r="3.5" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"/>
 
-  <circle cx="185.00" cy="31.86" r="7" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2.5"></circle>
-  <circle cx="257.00" cy="156.57" r="7" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2.5"></circle>
-  <circle cx="113.00" cy="156.57" r="7" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2.5"></circle>
+  <circle cx="185.00" cy="31.86" r="7" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2.5"/>
+  <circle cx="257.00" cy="156.57" r="7" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2.5"/>
+  <circle cx="113.00" cy="156.57" r="7" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2.5"/>
 
   <path d="M 285.00,115.00 Q 352.50,88.00 415.00,115.00" stroke="#3a9688" stroke-width="4" stroke-linecap="round" fill="none" marker-end="url(#s7-q2-marker-arrow)"></path>
   <path d="M 290.00,126.00 Q 352.50,102.00 408.00,126.00" stroke="#78c4b8" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 4" fill="none"></path>
 
-  <polygon points="520.00,31.86 544.00,73.43 592.00,73.43 568.00,115.00 592.00,156.57 544.00,156.57 520.00,198.14 496.00,156.57 448.00,156.57 472.00,115.00 448.00,73.43 496.00,73.43" fill="url(#s7-q2-grad-baskin-main)" stroke="#1c332e" stroke-width="3" stroke-linejoin="round"></polygon>
-  <polygon points="520.00,31.86 592.00,156.57 448.00,156.57" fill="none" stroke="#236b60" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.45"></polygon>
+  <polygon points="520.00,31.86 544.00,73.43 592.00,73.43 568.00,115.00 592.00,156.57 544.00,156.57 520.00,198.14 496.00,156.57 448.00,156.57 472.00,115.00 448.00,73.43 496.00,73.43" fill="url(#s7-q2-grad-baskin-main)" stroke="#1c332e" stroke-width="3" stroke-linejoin="round"/>
+  <polygon points="520.00,31.86 592.00,156.57 448.00,156.57" fill="none" stroke="#236b60" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.45"/>
 
-  <polygon points="544.00,73.43 592.00,73.43 568.00,115.00" fill="url(#s7-q2-grad-ikincil-soft)" stroke="#1c332e" stroke-width="1.5" stroke-linejoin="round" opacity="0.85"></polygon>
-  <polygon points="544.00,156.57 520.00,198.14 496.00,156.57" fill="url(#s7-q2-grad-ikincil-soft)" stroke="#1c332e" stroke-width="1.5" stroke-linejoin="round" opacity="0.85"></polygon>
-  <polygon points="472.00,115.00 448.00,73.43 496.00,73.43" fill="url(#s7-q2-grad-ikincil-soft)" stroke="#1c332e" stroke-width="1.5" stroke-linejoin="round" opacity="0.85"></polygon>
+  <polygon points="544.00,73.43 592.00,73.43 568.00,115.00" fill="url(#s7-q2-grad-ikincil-soft)" stroke="#1c332e" stroke-width="1.5" stroke-linejoin="round" opacity="0.85"/>
+  <polygon points="544.00,156.57 520.00,198.14 496.00,156.57" fill="url(#s7-q2-grad-ikincil-soft)" stroke="#1c332e" stroke-width="1.5" stroke-linejoin="round" opacity="0.85"/>
+  <polygon points="472.00,115.00 448.00,73.43 496.00,73.43" fill="url(#s7-q2-grad-ikincil-soft)" stroke="#1c332e" stroke-width="1.5" stroke-linejoin="round" opacity="0.85"/>
 
   <path d="M 520.00,39.86 L 498.00,76.00 L 454.00,76.00 L 476.00,112.00" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.45"></path>
 
-  <circle cx="520.00" cy="31.86" r="6" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"></circle>
-  <circle cx="592.00" cy="73.43" r="5.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"></circle>
-  <circle cx="592.00" cy="156.57" r="6" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"></circle>
-  <circle cx="520.00" cy="198.14" r="5.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"></circle>
-  <circle cx="448.00" cy="156.57" r="6" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"></circle>
-  <circle cx="448.00" cy="73.43" r="5.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"></circle>
+  <circle cx="520.00" cy="31.86" r="6" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"/>
+  <circle cx="592.00" cy="73.43" r="5.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"/>
+  <circle cx="592.00" cy="156.57" r="6" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"/>
+  <circle cx="520.00" cy="198.14" r="5.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"/>
+  <circle cx="448.00" cy="156.57" r="6" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"/>
+  <circle cx="448.00" cy="73.43" r="5.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"/>
 
-  <rect x="165.00" y="360.00" width="375.00" height="10.00" rx="5" fill="#ccd1cb" opacity="0.35"></rect>
-  <rect x="165.00" y="350.00" width="375.00" height="16.00" rx="8" fill="url(#s7-q2-grad-rod)" stroke="#1c332e" stroke-width="2.5"></rect>
-  <rect x="171.00" y="352.50" width="363.00" height="3.50" rx="1.75" fill="#ffffff" opacity="0.45"></rect>
+  <rect x="165.00" y="360.00" width="375.00" height="10.00" rx="5" fill="#ccd1cb" opacity="0.35"/>
+  <rect x="165.00" y="350.00" width="375.00" height="16.00" rx="8" fill="url(#s7-q2-grad-rod)" stroke="#1c332e" stroke-width="2.5"/>
+  <rect x="171.00" y="352.50" width="363.00" height="3.50" rx="1.75" fill="#ffffff" opacity="0.45"/>
 
-  <rect x="290.00" y="350.00" width="125.00" height="16.00" fill="#faeedb" opacity="0.45" stroke="#e8a838" stroke-width="2" stroke-dasharray="4 2"></rect>
+  <rect x="290.00" y="350.00" width="125.00" height="16.00" fill="#faeedb" opacity="0.45" stroke="#e8a838" stroke-width="2" stroke-dasharray="4 2"/>
 
-  <circle cx="165.00" cy="358.00" r="7.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"></circle>
-  <circle cx="290.00" cy="358.00" r="6.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"></circle>
-  <circle cx="415.00" cy="358.00" r="6.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"></circle>
-  <circle cx="540.00" cy="358.00" r="7.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"></circle>
+  <circle cx="165.00" cy="358.00" r="7.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"/>
+  <circle cx="290.00" cy="358.00" r="6.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"/>
+  <circle cx="415.00" cy="358.00" r="6.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"/>
+  <circle cx="540.00" cy="358.00" r="7.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"/>
 
-  <line x1="168.00" y1="338.00" x2="287.00" y2="338.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="2 2"></line>
-  <line x1="168.00" y1="334.00" x2="168.00" y2="342.00" stroke="#6b7570" stroke-width="1.5"></line>
-  <line x1="287.00" y1="334.00" x2="287.00" y2="342.00" stroke="#6b7570" stroke-width="1.5"></line>
-  <line x1="225.50" y1="334.00" x2="225.50" y2="342.00" stroke="#3a9688" stroke-width="2"></line>
-  <line x1="229.50" y1="334.00" x2="229.50" y2="342.00" stroke="#3a9688" stroke-width="2"></line>
+  <polyline points="168.00,338.00 287.00,338.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="2 2"/>
+  <polyline points="168.00,334.00 168.00,342.00" stroke="#6b7570" stroke-width="1.5"/>
+  <polyline points="287.00,334.00 287.00,342.00" stroke="#6b7570" stroke-width="1.5"/>
+  <polyline points="225.50,334.00 225.50,342.00" stroke="#3a9688" stroke-width="2"/>
+  <polyline points="229.50,334.00 229.50,342.00" stroke="#3a9688" stroke-width="2"/>
 
-  <line x1="293.00" y1="338.00" x2="412.00" y2="338.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="2 2"></line>
-  <line x1="293.00" y1="334.00" x2="293.00" y2="342.00" stroke="#6b7570" stroke-width="1.5"></line>
-  <line x1="412.00" y1="334.00" x2="412.00" y2="342.00" stroke="#6b7570" stroke-width="1.5"></line>
-  <line x1="350.50" y1="334.00" x2="350.50" y2="342.00" stroke="#e8a838" stroke-width="2"></line>
-  <line x1="354.50" y1="334.00" x2="354.50" y2="342.00" stroke="#e8a838" stroke-width="2"></line>
+  <polyline points="293.00,338.00 412.00,338.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="2 2"/>
+  <polyline points="293.00,334.00 293.00,342.00" stroke="#6b7570" stroke-width="1.5"/>
+  <polyline points="412.00,334.00 412.00,342.00" stroke="#6b7570" stroke-width="1.5"/>
+  <polyline points="350.50,334.00 350.50,342.00" stroke="#e8a838" stroke-width="2"/>
+  <polyline points="354.50,334.00 354.50,342.00" stroke="#e8a838" stroke-width="2"/>
 
-  <line x1="418.00" y1="338.00" x2="537.00" y2="338.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="2 2"></line>
-  <line x1="418.00" y1="334.00" x2="418.00" y2="342.00" stroke="#6b7570" stroke-width="1.5"></line>
-  <line x1="537.00" y1="334.00" x2="537.00" y2="342.00" stroke="#6b7570" stroke-width="1.5"></line>
-  <line x1="475.50" y1="334.00" x2="475.50" y2="342.00" stroke="#3a9688" stroke-width="2"></line>
-  <line x1="479.50" y1="334.00" x2="479.50" y2="342.00" stroke="#3a9688" stroke-width="2"></line>
+  <polyline points="418.00,338.00 537.00,338.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="2 2"/>
+  <polyline points="418.00,334.00 418.00,342.00" stroke="#6b7570" stroke-width="1.5"/>
+  <polyline points="537.00,334.00 537.00,342.00" stroke="#6b7570" stroke-width="1.5"/>
+  <polyline points="475.50,334.00 475.50,342.00" stroke="#3a9688" stroke-width="2"/>
+  <polyline points="479.50,334.00 479.50,342.00" stroke="#3a9688" stroke-width="2"/>
 
   <path d="M 352.50,374.00 L 352.50,398.00" stroke="#5c6bc0" stroke-width="3" stroke-linecap="round" marker-end="url(#s7-q2-marker-arrow-down)"></path>
 
-  <ellipse cx="227.50" cy="530.00" rx="65.00" ry="7.00" fill="#ccd1cb" opacity="0.3"></ellipse>
-  <ellipse cx="477.50" cy="530.00" rx="65.00" ry="7.00" fill="#ccd1cb" opacity="0.3"></ellipse>
-  <ellipse cx="352.50" cy="530.00" rx="70.00" ry="9.00" fill="#ccd1cb" opacity="0.35"></ellipse>
+  <ellipse cx="227.50" cy="530.00" rx="65.00" ry="7.00" fill="#ccd1cb" opacity="0.3"/>
+  <ellipse cx="477.50" cy="530.00" rx="65.00" ry="7.00" fill="#ccd1cb" opacity="0.3"/>
+  <ellipse cx="352.50" cy="530.00" rx="70.00" ry="9.00" fill="#ccd1cb" opacity="0.35"/>
 
-  <polygon points="290.00,520.00 352.50,411.75 415.00,520.00" fill="url(#s7-q2-grad-ikincil-main)" stroke="#1c332e" stroke-width="2.5" stroke-linejoin="round"></polygon>
+  <polygon points="290.00,520.00 352.50,411.75 415.00,520.00" fill="url(#s7-q2-grad-ikincil-main)" stroke="#1c332e" stroke-width="2.5" stroke-linejoin="round"/>
   <path d="M 352.50,419.00 L 297.00,513.00 L 320.00,513.00 L 352.50,442.00 Z" fill="#ffffff" opacity="0.45"></path>
-  <circle cx="352.50" cy="484.00" r="4" fill="#ffffff" stroke="#e8a838" stroke-width="1.5" opacity="0.7"></circle>
+  <circle cx="352.50" cy="484.00" r="4" fill="#ffffff" stroke="#e8a838" stroke-width="1.5" opacity="0.7"/>
 
-  <line x1="290.00" y1="520.00" x2="415.00" y2="520.00" stroke="#6b7570" stroke-width="2.5" stroke-dasharray="5 4"></line>
+  <polyline points="290.00,520.00 415.00,520.00" stroke="#6b7570" stroke-width="2.5" stroke-dasharray="5 4"/>
 
   <path d="M 165.00,520.00 L 290.00,520.00 L 352.50,411.75 L 415.00,520.00 L 540.00,520.00" stroke="#1c332e" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
   <path d="M 165.00,520.00 L 290.00,520.00 L 352.50,411.75 L 415.00,520.00 L 540.00,520.00" stroke="url(#s7-q2-grad-rod)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
   <path d="M 165.00,520.00 L 290.00,520.00 L 352.50,411.75 L 415.00,520.00 L 540.00,520.00" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.4"></path>
 
-  <line x1="225.50" y1="515.00" x2="225.50" y2="525.00" stroke="#ffffff" stroke-width="2"></line>
-  <line x1="229.50" y1="515.00" x2="229.50" y2="525.00" stroke="#ffffff" stroke-width="2"></line>
+  <polyline points="225.50,515.00 225.50,525.00" stroke="#ffffff" stroke-width="2"/>
+  <polyline points="229.50,515.00 229.50,525.00" stroke="#ffffff" stroke-width="2"/>
 
-  <line x1="324.58" y1="470.10" x2="315.92" y2="465.10" stroke="#ffffff" stroke-width="2"></line>
-  <line x1="326.58" y1="466.64" x2="317.92" y2="461.64" stroke="#ffffff" stroke-width="2"></line>
+  <polyline points="324.58,470.10 315.92,465.10" stroke="#ffffff" stroke-width="2"/>
+  <polyline points="326.58,466.64 317.92,461.64" stroke="#ffffff" stroke-width="2"/>
 
-  <line x1="378.42" y1="466.64" x2="387.08" y2="461.64" stroke="#ffffff" stroke-width="2"></line>
-  <line x1="380.42" y1="470.10" x2="389.08" y2="465.10" stroke="#ffffff" stroke-width="2"></line>
+  <polyline points="378.42,466.64 387.08,461.64" stroke="#ffffff" stroke-width="2"/>
+  <polyline points="380.42,470.10 389.08,465.10" stroke="#ffffff" stroke-width="2"/>
 
-  <line x1="475.50" y1="515.00" x2="475.50" y2="525.00" stroke="#ffffff" stroke-width="2"></line>
-  <line x1="479.50" y1="515.00" x2="479.50" y2="525.00" stroke="#ffffff" stroke-width="2"></line>
+  <polyline points="475.50,515.00 475.50,525.00" stroke="#ffffff" stroke-width="2"/>
+  <polyline points="479.50,515.00 479.50,525.00" stroke="#ffffff" stroke-width="2"/>
 
-  <circle cx="165.00" cy="520.00" r="7.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"></circle>
-  <circle cx="290.00" cy="520.00" r="6.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"></circle>
-  <circle cx="352.50" cy="411.75" r="8" fill="#5c6bc0" stroke="#1c332e" stroke-width="2.5"></circle>
-  <circle cx="352.50" cy="411.75" r="3" fill="#ffffff" opacity="0.85"></circle>
-  <circle cx="415.00" cy="520.00" r="6.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"></circle>
-  <circle cx="540.00" cy="520.00" r="7.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"></circle>
+  <circle cx="165.00" cy="520.00" r="7.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"/>
+  <circle cx="290.00" cy="520.00" r="6.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"/>
+  <circle cx="352.50" cy="411.75" r="8" fill="#5c6bc0" stroke="#1c332e" stroke-width="2.5"/>
+  <circle cx="352.50" cy="411.75" r="3" fill="#ffffff" opacity="0.85"/>
+  <circle cx="415.00" cy="520.00" r="6.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="1.5"/>
+  <circle cx="540.00" cy="520.00" r="7.5" fill="url(#s7-q2-grad-node)" stroke="#1c332e" stroke-width="2"/>
 
-  <line x1="165.00" y1="545.00" x2="290.00" y2="545.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="3 3"></line>
-  <line x1="165.00" y1="541.00" x2="165.00" y2="549.00" stroke="#6b7570" stroke-width="1.5"></line>
-  <line x1="290.00" y1="541.00" x2="290.00" y2="549.00" stroke="#6b7570" stroke-width="1.5"></line>
+  <polyline points="165.00,545.00 290.00,545.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <polyline points="165.00,541.00 165.00,549.00" stroke="#6b7570" stroke-width="1.5"/>
+  <polyline points="290.00,541.00 290.00,549.00" stroke="#6b7570" stroke-width="1.5"/>
 
-  <line x1="290.00" y1="545.00" x2="415.00" y2="545.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="3 3"></line>
-  <line x1="415.00" y1="541.00" x2="415.00" y2="549.00" stroke="#6b7570" stroke-width="1.5"></line>
+  <polyline points="290.00,545.00 415.00,545.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <polyline points="415.00,541.00 415.00,549.00" stroke="#6b7570" stroke-width="1.5"/>
 
-  <line x1="415.00" y1="545.00" x2="540.00" y2="545.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="3 3"></line>
-  <line x1="540.00" y1="541.00" x2="540.00" y2="549.00" stroke="#6b7570" stroke-width="1.5"></line>
+  <polyline points="415.00,545.00 540.00,545.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="3 3"/>
+  <polyline points="540.00,541.00 540.00,549.00" stroke="#6b7570" stroke-width="1.5"/>
 
   <path d="M 425.00,436.00 L 370.00,422.00" stroke="#6b7570" stroke-width="1.5" stroke-dasharray="2 2" fill="none"></path>
 </g>
 
 
 <g id="s7-q2-katman-on">
-  <rect x="130.00" y="185.00" width="110.00" height="28.00" rx="14" fill="url(#s7-q2-grad-ikincil-soft)" stroke="#1c332e" stroke-width="2"></rect>
-  <rect x="136.00" y="188.00" width="98.00" height="5.00" rx="2.5" fill="#ffffff" opacity="0.6"></rect>
+  <rect x="130.00" y="185.00" width="110.00" height="28.00" rx="14" fill="url(#s7-q2-grad-ikincil-soft)" stroke="#1c332e" stroke-width="2"/>
+  <rect x="136.00" y="188.00" width="98.00" height="5.00" rx="2.5" fill="#ffffff" opacity="0.6"/>
   <text x="185.00" y="204.00" text-anchor="middle" fill="#1c332e" font-weight="bold">Başlangıç</text>
 
-  <rect x="283.50" y="68.00" width="138.00" height="26.00" rx="13" fill="#eceee9" stroke="#1c332e" stroke-width="1.5"></rect>
+  <rect x="283.50" y="68.00" width="138.00" height="26.00" rx="13" fill="#eceee9" stroke="#1c332e" stroke-width="1.5"/>
   <text x="352.50" y="85.50" text-anchor="middle" fill="#1c332e" font-weight="600">Fraktal Adımı</text>
 
-  <rect x="438.00" y="222.00" width="164.00" height="28.00" rx="14" fill="url(#s7-q2-grad-ikincil-soft)" stroke="#1c332e" stroke-width="2"></rect>
-  <rect x="444.00" y="225.00" width="152.00" height="5.00" rx="2.5" fill="#ffffff" opacity="0.6"></rect>
+  <rect x="438.00" y="222.00" width="164.00" height="28.00" rx="14" fill="url(#s7-q2-grad-ikincil-soft)" stroke="#1c332e" stroke-width="2"/>
+  <rect x="444.00" y="225.00" width="152.00" height="5.00" rx="2.5" fill="#ffffff" opacity="0.6"/>
   <text x="520.00" y="241.00" text-anchor="middle" fill="#1c332e" font-weight="bold">Koch kar tanesi</text>
 
-  <rect x="240.00" y="276.00" width="225.00" height="28.00" rx="14" fill="#e6f4f1" stroke="#1c332e" stroke-width="2"></rect>
-  <rect x="248.00" y="279.00" width="209.00" height="5.00" rx="2.5" fill="#ffffff" opacity="0.6"></rect>
+  <rect x="240.00" y="276.00" width="225.00" height="28.00" rx="14" fill="#e6f4f1" stroke="#1c332e" stroke-width="2"/>
+  <rect x="248.00" y="279.00" width="209.00" height="5.00" rx="2.5" fill="#ffffff" opacity="0.6"/>
   <text x="352.50" y="295.00" text-anchor="middle" fill="#1c332e" font-weight="bold">Kenar Dönüşüm Kuralı</text>
 
-  <rect x="290.00" y="309.00" width="125.00" height="24.00" rx="11" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"></rect>
+  <rect x="290.00" y="309.00" width="125.00" height="24.00" rx="11" fill="#faeedb" stroke="#1c332e" stroke-width="1.5"/>
   <text x="352.50" y="325.00" text-anchor="middle" fill="#1c332e" font-weight="bold">3 Eşit Parça</text>
 
-  <rect x="425.00" y="423.00" width="115.00" height="26.00" rx="13" fill="#fcf8f0" stroke="#1c332e" stroke-width="1.5"></rect>
-  <rect x="431.00" y="426.00" width="103.00" height="4.50" rx="2.25" fill="#ffffff" opacity="0.6"></rect>
+  <rect x="425.00" y="423.00" width="115.00" height="26.00" rx="13" fill="#fcf8f0" stroke="#1c332e" stroke-width="1.5"/>
+  <rect x="431.00" y="426.00" width="103.00" height="4.50" rx="2.25" fill="#ffffff" opacity="0.6"/>
   <text x="482.50" y="440.50" text-anchor="middle" fill="#1c332e" font-weight="bold">Yeni Üçgen</text>
 </g>
 </g>
 
       <!-- SORU 3 SAHNESİ: Sierpinski Üçgeni Adım Sayısı -->
-      <g id="s7-soru-3" class="s7-soru-sahne" data-sahne-nesne="soru3" style="display:none;"><g class="s7-alt-studyo" pointer-events="none"><polyline points="36,121 669,121 677,129 677,574 669,582 36,582 28,574 28,129 36,121" fill="none" stroke="#e6cec7" stroke-width="1" stroke-dasharray="6 4" stroke-opacity="0.32"/><polyline points="144,578 560,578 572,588 132,588 144,578" fill="url(#s7-st-vurgu-grad)" fill-opacity="0.22" stroke="#a297d8" stroke-width="1.1" stroke-opacity="0.38" stroke-linejoin="round"/><polyline points="150,581 554,581" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-opacity="0.65"/><polyline points="33,139 33,126 46,126" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="38,129 40,131 38,133 36,131 38,129" fill="#d2937f" fill-opacity="0.52"/><polyline points="672,139 672,126 659,126" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="667,129 669,131 667,133 665,131 667,129" fill="#d2937f" fill-opacity="0.52"/><polyline points="33,564 33,577 46,577" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="38,570 40,572 38,574 36,572 38,570" fill="#d2937f" fill-opacity="0.52"/><polyline points="672,564 672,577 659,577" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="667,570 669,572 667,574 665,572 667,570" fill="#d2937f" fill-opacity="0.52"/></g>
+      <g id="s7-soru-3" class="s7-soru-sahne" data-sahne-nesne="soru3" style="display:none;">
 <defs>
   <linearGradient id="s7-q3-grad-masa" x1="0%" y1="0%" x2="0%" y2="100%">
     <stop offset="0%" stop-color="#f4faf8"></stop>
@@ -5652,118 +5525,118 @@ window.SAYFA_INIT[6] = function (kok) {
 </defs>
 
 <g id="s7-q3-katman-arka">
-  <ellipse cx="352.5" cy="546" rx="310" ry="20" fill="#102621" opacity="0.14"></ellipse>
+  <ellipse cx="352.5" cy="546" rx="310" ry="20" fill="#102621" opacity="0.14"/>
   <path d="M 46,504 C 46,528 60,538 96,538 L 609,538 C 645,538 659,528 659,504 L 659,475 L 46,475 Z" fill="url(#s7-q3-grad-masa-kenar)" stroke="#102621" stroke-width="2.5" stroke-linejoin="round"></path>
-  <rect x="46" y="135" width="613" height="369" rx="36" fill="url(#s7-q3-grad-masa)" stroke="#102621" stroke-width="2.5" filter="url(#s7-q3-golge)"></rect>
-  <rect x="58" y="147" width="589" height="345" rx="26" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.6"></rect>
-  <rect x="64" y="153" width="577" height="333" rx="22" fill="none" stroke="#9ab2ab" stroke-width="1.2" stroke-dasharray="8,6" opacity="0.4"></rect>
+  <rect x="46" y="135" width="613" height="369" rx="36" fill="url(#s7-q3-grad-masa)" stroke="#102621" stroke-width="2.5" filter="url(#s7-q3-golge)"/>
+  <rect x="58" y="147" width="589" height="345" rx="26" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.6"/>
+  <rect x="64" y="153" width="577" height="333" rx="22" fill="none" stroke="#9ab2ab" stroke-width="1.2" stroke-dasharray="8,6" opacity="0.4"/>
 </g>
 
 <g id="s7-q3-katman-orta">
   
-  <circle cx="243.8" cy="250" r="15" fill="#fdf8f0" stroke="#102621" stroke-width="2"></circle>
-  <circle cx="243.8" cy="250" r="12" fill="none" stroke="#f3e7d3" stroke-width="1"></circle>
+  <circle cx="243.8" cy="250" r="15" fill="#fdf8f0" stroke="#102621" stroke-width="2"/>
+  <circle cx="243.8" cy="250" r="12" fill="none" stroke="#f3e7d3" stroke-width="1"/>
   <path d="M 239.5,250 L 248.5,250 M 245.0,246.5 L 248.5,250 L 245.0,253.5" fill="none" stroke="#e59b2c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
   
   
-  <circle cx="461.3" cy="250" r="15" fill="#fdf8f0" stroke="#102621" stroke-width="2"></circle>
-  <circle cx="461.3" cy="250" r="12" fill="none" stroke="#f3e7d3" stroke-width="1"></circle>
+  <circle cx="461.3" cy="250" r="15" fill="#fdf8f0" stroke="#102621" stroke-width="2"/>
+  <circle cx="461.3" cy="250" r="12" fill="none" stroke="#f3e7d3" stroke-width="1"/>
   <path d="M 457.0,250 L 466.0,250 M 462.5,246.5 L 466.0,250 L 462.5,253.5" fill="none" stroke="#e59b2c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"></path>
   
-  <ellipse cx="135.0" cy="386" rx="98" ry="18" fill="#102621" opacity="0.18"></ellipse>
+  <ellipse cx="135.0" cy="386" rx="98" ry="18" fill="#102621" opacity="0.18"/>
   <path d="M 39.0,340 L 39.0,374 C 39.0,388 231.0,388 231.0,374 L 231.0,340 Z" fill="url(#s7-q3-grad-kaide-govde)" stroke="#102621" stroke-width="2.5"></path>
   <path d="M 39.0,374 C 39.0,388 231.0,388 231.0,374" fill="none" stroke="#102621" stroke-width="2.5"></path>
-  <ellipse cx="135.0" cy="340" rx="96" ry="21" fill="url(#s7-q3-grad-kaide-ust)" stroke="#102621" stroke-width="2.5"></ellipse>
-  <ellipse cx="135.0" cy="338" rx="88" ry="17" fill="none" stroke="#ffffff" stroke-width="1.8" opacity="0.6"></ellipse>
-  <ellipse cx="135.0" cy="332" rx="86" ry="8" fill="#102621" opacity="0.22"></ellipse>
+  <ellipse cx="135.0" cy="340" rx="96" ry="21" fill="url(#s7-q3-grad-kaide-ust)" stroke="#102621" stroke-width="2.5"/>
+  <ellipse cx="135.0" cy="338" rx="88" ry="17" fill="none" stroke="#ffffff" stroke-width="1.8" opacity="0.6"/>
+  <ellipse cx="135.0" cy="332" rx="86" ry="8" fill="#102621" opacity="0.22"/>
   
-  <ellipse cx="352.5" cy="386" rx="98" ry="18" fill="#102621" opacity="0.18"></ellipse>
+  <ellipse cx="352.5" cy="386" rx="98" ry="18" fill="#102621" opacity="0.18"/>
   <path d="M 256.5,340 L 256.5,374 C 256.5,388 448.5,388 448.5,374 L 448.5,340 Z" fill="url(#s7-q3-grad-kaide-govde)" stroke="#102621" stroke-width="2.5"></path>
   <path d="M 256.5,374 C 256.5,388 448.5,388 448.5,374" fill="none" stroke="#102621" stroke-width="2.5"></path>
-  <ellipse cx="352.5" cy="340" rx="96" ry="21" fill="url(#s7-q3-grad-kaide-ust)" stroke="#102621" stroke-width="2.5"></ellipse>
-  <ellipse cx="352.5" cy="338" rx="88" ry="17" fill="none" stroke="#ffffff" stroke-width="1.8" opacity="0.6"></ellipse>
-  <ellipse cx="352.5" cy="332" rx="86" ry="8" fill="#102621" opacity="0.22"></ellipse>
+  <ellipse cx="352.5" cy="340" rx="96" ry="21" fill="url(#s7-q3-grad-kaide-ust)" stroke="#102621" stroke-width="2.5"/>
+  <ellipse cx="352.5" cy="338" rx="88" ry="17" fill="none" stroke="#ffffff" stroke-width="1.8" opacity="0.6"/>
+  <ellipse cx="352.5" cy="332" rx="86" ry="8" fill="#102621" opacity="0.22"/>
   
-  <ellipse cx="570.0" cy="386" rx="98" ry="18" fill="#102621" opacity="0.18"></ellipse>
+  <ellipse cx="570.0" cy="386" rx="98" ry="18" fill="#102621" opacity="0.18"/>
   <path d="M 474.0,340 L 474.0,374 C 474.0,388 666.0,388 666.0,374 L 666.0,340 Z" fill="url(#s7-q3-grad-kaide-govde)" stroke="#102621" stroke-width="2.5"></path>
   <path d="M 474.0,374 C 474.0,388 666.0,388 666.0,374" fill="none" stroke="#102621" stroke-width="2.5"></path>
-  <ellipse cx="570.0" cy="340" rx="96" ry="21" fill="url(#s7-q3-grad-kaide-ust)" stroke="#102621" stroke-width="2.5"></ellipse>
-  <ellipse cx="570.0" cy="338" rx="88" ry="17" fill="none" stroke="#ffffff" stroke-width="1.8" opacity="0.6"></ellipse>
-  <ellipse cx="570.0" cy="332" rx="86" ry="8" fill="#102621" opacity="0.22"></ellipse>
+  <ellipse cx="570.0" cy="340" rx="96" ry="21" fill="url(#s7-q3-grad-kaide-ust)" stroke="#102621" stroke-width="2.5"/>
+  <ellipse cx="570.0" cy="338" rx="88" ry="17" fill="none" stroke="#ffffff" stroke-width="1.8" opacity="0.6"/>
+  <ellipse cx="570.0" cy="332" rx="86" ry="8" fill="#102621" opacity="0.22"/>
 </g>
 
 <g id="s7-q3-katman-on">
   
-  <polygon points="135.0,184.5 219.0,330.0 51.0,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="2.8" stroke-linejoin="round"></polygon>
+  <polygon points="135.0,184.5 219.0,330.0 51.0,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="2.8" stroke-linejoin="round"/>
   <path d="M 135.0,184.5 L 51.0,330.0 L 88.0,318.0 L 135.0,196.0 Z" fill="#ffffff" opacity="0.25"></path>
-  <ellipse cx="118.0" cy="214.0" rx="7" ry="18" transform="rotate(-30 118.0 214.0)" fill="#ffffff" opacity="0.3"></ellipse>
+  <ellipse cx="118.0" cy="214.0" rx="7" ry="18" transform="rotate(-30 118.0 214.0)" fill="#ffffff" opacity="0.3"/>
 
   
-  <polygon points="310.5,257.2 394.5,257.2 352.5,330.0" fill="url(#s7-q3-grad-kesik)" stroke="#9ab2ab" stroke-width="1.8" stroke-dasharray="5,4" stroke-linejoin="round"></polygon>
-  <polygon points="310.5,257.2 394.5,257.2 352.5,322.0" fill="#102621" opacity="0.08"></polygon>
+  <polygon points="310.5,257.2 394.5,257.2 352.5,330.0" fill="url(#s7-q3-grad-kesik)" stroke="#9ab2ab" stroke-width="1.8" stroke-dasharray="5,4" stroke-linejoin="round"/>
+  <polygon points="310.5,257.2 394.5,257.2 352.5,322.0" fill="#102621" opacity="0.08"/>
   
-  <polygon points="352.5,184.5 394.5,257.2 310.5,257.2" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="2.4" stroke-linejoin="round"></polygon>
+  <polygon points="352.5,184.5 394.5,257.2 310.5,257.2" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="2.4" stroke-linejoin="round"/>
   <path d="M 352.5,184.5 L 310.5,257.2 L 328.0,257.2 Z" fill="#ffffff" opacity="0.25"></path>
   
-  <polygon points="310.5,257.2 352.5,330.0 268.5,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="2.4" stroke-linejoin="round"></polygon>
+  <polygon points="310.5,257.2 352.5,330.0 268.5,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="2.4" stroke-linejoin="round"/>
   <path d="M 310.5,257.2 L 268.5,330.0 L 286.0,330.0 Z" fill="#ffffff" opacity="0.25"></path>
   
-  <polygon points="394.5,257.2 436.5,330.0 352.5,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="2.4" stroke-linejoin="round"></polygon>
+  <polygon points="394.5,257.2 436.5,330.0 352.5,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="2.4" stroke-linejoin="round"/>
   <path d="M 394.5,257.2 L 352.5,330.0 L 370.0,330.0 Z" fill="#ffffff" opacity="0.25"></path>
 
   
   
-  <polygon points="528.0,257.2 612.0,257.2 570.0,330.0" fill="url(#s7-q3-grad-kesik)" stroke="#9ab2ab" stroke-width="1.8" stroke-dasharray="5,4" stroke-linejoin="round"></polygon>
-  <polygon points="528.0,257.2 612.0,257.2 570.0,322.0" fill="#102621" opacity="0.08"></polygon>
+  <polygon points="528.0,257.2 612.0,257.2 570.0,330.0" fill="url(#s7-q3-grad-kesik)" stroke="#9ab2ab" stroke-width="1.8" stroke-dasharray="5,4" stroke-linejoin="round"/>
+  <polygon points="528.0,257.2 612.0,257.2 570.0,322.0" fill="#102621" opacity="0.08"/>
   
   
-  <polygon points="549.0,220.9 591.0,220.9 570.0,257.2" fill="url(#s7-q3-grad-kesik)" stroke="#9ab2ab" stroke-width="1.3" stroke-dasharray="3,3" stroke-linejoin="round"></polygon>
-  <polygon points="507.0,293.6 549.0,293.6 528.0,330.0" fill="url(#s7-q3-grad-kesik)" stroke="#9ab2ab" stroke-width="1.3" stroke-dasharray="3,3" stroke-linejoin="round"></polygon>
-  <polygon points="591.0,293.6 633.0,293.6 612.0,330.0" fill="url(#s7-q3-grad-kesik)" stroke="#9ab2ab" stroke-width="1.3" stroke-dasharray="3,3" stroke-linejoin="round"></polygon>
-  <polygon points="570.0,184.5 591.0,220.8 549.0,220.8" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"></polygon>
-  <line x1="570.0" y1="184.5" x2="549.0" y2="220.8" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"></line>
-  <polygon points="549.0,220.8 570.0,257.2 528.0,257.2" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"></polygon>
-  <line x1="549.0" y1="220.8" x2="528.0" y2="257.2" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"></line>
-  <polygon points="591.0,220.8 612.0,257.2 570.0,257.2" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"></polygon>
-  <line x1="591.0" y1="220.8" x2="570.0" y2="257.2" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"></line>
-  <polygon points="528.0,257.2 549.0,293.6 507.0,293.6" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"></polygon>
-  <line x1="528.0" y1="257.2" x2="507.0" y2="293.6" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"></line>
-  <polygon points="507.0,293.6 528.0,330.0 486.0,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"></polygon>
-  <line x1="507.0" y1="293.6" x2="486.0" y2="330.0" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"></line>
-  <polygon points="549.0,293.6 570.0,330.0 528.0,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"></polygon>
-  <line x1="549.0" y1="293.6" x2="528.0" y2="330.0" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"></line>
-  <polygon points="612.0,257.2 633.0,293.6 591.0,293.6" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"></polygon>
-  <line x1="612.0" y1="257.2" x2="591.0" y2="293.6" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"></line>
-  <polygon points="591.0,293.6 612.0,330.0 570.0,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"></polygon>
-  <line x1="591.0" y1="293.6" x2="570.0" y2="330.0" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"></line>
-  <polygon points="633.0,293.6 654.0,330.0 612.0,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"></polygon>
-  <line x1="633.0" y1="293.6" x2="612.0" y2="330.0" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"></line>
+  <polygon points="549.0,220.9 591.0,220.9 570.0,257.2" fill="url(#s7-q3-grad-kesik)" stroke="#9ab2ab" stroke-width="1.3" stroke-dasharray="3,3" stroke-linejoin="round"/>
+  <polygon points="507.0,293.6 549.0,293.6 528.0,330.0" fill="url(#s7-q3-grad-kesik)" stroke="#9ab2ab" stroke-width="1.3" stroke-dasharray="3,3" stroke-linejoin="round"/>
+  <polygon points="591.0,293.6 633.0,293.6 612.0,330.0" fill="url(#s7-q3-grad-kesik)" stroke="#9ab2ab" stroke-width="1.3" stroke-dasharray="3,3" stroke-linejoin="round"/>
+  <polygon points="570.0,184.5 591.0,220.8 549.0,220.8" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"/>
+  <polyline points="570.0,184.5 549.0,220.8" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"/>
+  <polygon points="549.0,220.8 570.0,257.2 528.0,257.2" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"/>
+  <polyline points="549.0,220.8 528.0,257.2" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"/>
+  <polygon points="591.0,220.8 612.0,257.2 570.0,257.2" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"/>
+  <polyline points="591.0,220.8 570.0,257.2" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"/>
+  <polygon points="528.0,257.2 549.0,293.6 507.0,293.6" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"/>
+  <polyline points="528.0,257.2 507.0,293.6" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"/>
+  <polygon points="507.0,293.6 528.0,330.0 486.0,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"/>
+  <polyline points="507.0,293.6 486.0,330.0" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"/>
+  <polygon points="549.0,293.6 570.0,330.0 528.0,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"/>
+  <polyline points="549.0,293.6 528.0,330.0" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"/>
+  <polygon points="612.0,257.2 633.0,293.6 591.0,293.6" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"/>
+  <polyline points="612.0,257.2 591.0,293.6" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"/>
+  <polygon points="591.0,293.6 612.0,330.0 570.0,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"/>
+  <polyline points="591.0,293.6 570.0,330.0" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"/>
+  <polygon points="633.0,293.6 654.0,330.0 612.0,330.0" fill="url(#s7-q3-grad-ucgen)" stroke="#102621" stroke-width="1.8" stroke-linejoin="round"/>
+  <polyline points="633.0,293.6 612.0,330.0" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" opacity="0.45"/>
   
-  <rect x="77.0" y="420" width="116" height="38" rx="10" fill="#102621" opacity="0.16"></rect>
-  <rect x="77.0" y="416" width="116" height="38" rx="10" fill="url(#s7-q3-grad-plaket)" stroke="#102621" stroke-width="2.2"></rect>
-  <line x1="85.0" y1="421" x2="185.0" y2="421" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.7"></line>
-  <circle cx="89.0" cy="435" r="2.2" fill="#d8be96" stroke="#102621" stroke-width="1"></circle>
-  <circle cx="181.0" cy="435" r="2.2" fill="#d8be96" stroke="#102621" stroke-width="1"></circle>
+  <rect x="77.0" y="420" width="116" height="38" rx="10" fill="#102621" opacity="0.16"/>
+  <rect x="77.0" y="416" width="116" height="38" rx="10" fill="url(#s7-q3-grad-plaket)" stroke="#102621" stroke-width="2.2"/>
+  <polyline points="85.0,421 185.0,421" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+  <circle cx="89.0" cy="435" r="2.2" fill="#d8be96" stroke="#102621" stroke-width="1"/>
+  <circle cx="181.0" cy="435" r="2.2" fill="#d8be96" stroke="#102621" stroke-width="1"/>
   <text x="135.0" y="440" text-anchor="middle" dominant-baseline="central" fill="#102621">0. Adım</text>
   
-  <rect x="294.5" y="420" width="116" height="38" rx="10" fill="#102621" opacity="0.16"></rect>
-  <rect x="294.5" y="416" width="116" height="38" rx="10" fill="url(#s7-q3-grad-plaket)" stroke="#102621" stroke-width="2.2"></rect>
-  <line x1="302.5" y1="421" x2="402.5" y2="421" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.7"></line>
-  <circle cx="306.5" cy="435" r="2.2" fill="#d8be96" stroke="#102621" stroke-width="1"></circle>
-  <circle cx="398.5" cy="435" r="2.2" fill="#d8be96" stroke="#102621" stroke-width="1"></circle>
+  <rect x="294.5" y="420" width="116" height="38" rx="10" fill="#102621" opacity="0.16"/>
+  <rect x="294.5" y="416" width="116" height="38" rx="10" fill="url(#s7-q3-grad-plaket)" stroke="#102621" stroke-width="2.2"/>
+  <polyline points="302.5,421 402.5,421" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+  <circle cx="306.5" cy="435" r="2.2" fill="#d8be96" stroke="#102621" stroke-width="1"/>
+  <circle cx="398.5" cy="435" r="2.2" fill="#d8be96" stroke="#102621" stroke-width="1"/>
   <text x="352.5" y="440" text-anchor="middle" dominant-baseline="central" fill="#102621">1. Adım</text>
   
-  <rect x="512.0" y="420" width="116" height="38" rx="10" fill="#102621" opacity="0.16"></rect>
-  <rect x="512.0" y="416" width="116" height="38" rx="10" fill="url(#s7-q3-grad-plaket)" stroke="#102621" stroke-width="2.2"></rect>
-  <line x1="520.0" y1="421" x2="620.0" y2="421" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.7"></line>
-  <circle cx="524.0" cy="435" r="2.2" fill="#d8be96" stroke="#102621" stroke-width="1"></circle>
-  <circle cx="616.0" cy="435" r="2.2" fill="#d8be96" stroke="#102621" stroke-width="1"></circle>
+  <rect x="512.0" y="420" width="116" height="38" rx="10" fill="#102621" opacity="0.16"/>
+  <rect x="512.0" y="416" width="116" height="38" rx="10" fill="url(#s7-q3-grad-plaket)" stroke="#102621" stroke-width="2.2"/>
+  <polyline points="520.0,421 620.0,421" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+  <circle cx="524.0" cy="435" r="2.2" fill="#d8be96" stroke="#102621" stroke-width="1"/>
+  <circle cx="616.0" cy="435" r="2.2" fill="#d8be96" stroke="#102621" stroke-width="1"/>
   <text x="570.0" y="440" text-anchor="middle" dominant-baseline="central" fill="#102621">2. Adım</text>
 </g>
 </g>
 
       <!-- SORU 4 SAHNESİ: Koch Eğrisi Çevre ve Parça Sayısı -->
-      <g id="s7-soru-4" class="s7-soru-sahne" data-sahne-nesne="soru4" style="display:none;"><g class="s7-alt-studyo" pointer-events="none"><polyline points="58,32 648,32 656,40 656,598 648,606 58,606 50,598 50,40 58,32" fill="none" stroke="#e6cec7" stroke-width="1" stroke-dasharray="6 4" stroke-opacity="0.32"/><polyline points="144,602 560,602 572,612 132,612 144,602" fill="url(#s7-st-vurgu-grad)" fill-opacity="0.22" stroke="#a297d8" stroke-width="1.1" stroke-opacity="0.38" stroke-linejoin="round"/><polyline points="150,605 554,605" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-opacity="0.65"/><polyline points="54,50 54,37 68,37" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="60,40 62,42 60,44 58,42 60,40" fill="#d2937f" fill-opacity="0.52"/><polyline points="650,50 650,37 638,37" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="646,40 648,42 646,44 644,42 646,40" fill="#d2937f" fill-opacity="0.52"/><polyline points="54,588 54,601 68,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="60,594 62,596 60,598 58,596 60,594" fill="#d2937f" fill-opacity="0.52"/><polyline points="650,588 650,601 638,601" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="646,594 648,596 646,598 644,596 646,594" fill="#d2937f" fill-opacity="0.52"/></g>
+      <g id="s7-soru-4" class="s7-soru-sahne" data-sahne-nesne="soru4" style="display:none;">
 <defs>
   <linearGradient id="s7-q4-grad-zemin-0" x1="0" y1="0" x2="0" y2="1">
     <stop offset="0%" stop-color="#eaf5f2"></stop>
@@ -5810,57 +5683,57 @@ window.SAYFA_INIT[6] = function (kok) {
 
 
 <g id="s7-q4-katman-arka">
-  <ellipse cx="352.5" cy="192" rx="275" ry="12" fill="#18332d" opacity="0.18"></ellipse>
-  <rect x="75" y="46" width="555" height="142" rx="20" fill="url(#s7-q4-grad-zemin-0)" stroke="#18332d" stroke-width="2.5"></rect>
+  <ellipse cx="352.5" cy="192" rx="275" ry="12" fill="#18332d" opacity="0.18"/>
+  <rect x="75" y="46" width="555" height="142" rx="20" fill="url(#s7-q4-grad-zemin-0)" stroke="#18332d" stroke-width="2.5"/>
   <path d="M 95,50 L 610,50" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.6"></path>
-  <rect x="85" y="56" width="535" height="12" rx="6" fill="#eaf5f2" opacity="0.5"></rect>
+  <rect x="85" y="56" width="535" height="12" rx="6" fill="#eaf5f2" opacity="0.5"/>
 
-  <ellipse cx="352.5" cy="588" rx="285" ry="14" fill="#18332d" opacity="0.18"></ellipse>
-  <rect x="75" y="276" width="555" height="308" rx="22" fill="url(#s7-q4-grad-zemin-1)" stroke="#18332d" stroke-width="2.5"></rect>
+  <ellipse cx="352.5" cy="588" rx="285" ry="14" fill="#18332d" opacity="0.18"/>
+  <rect x="75" y="276" width="555" height="308" rx="22" fill="url(#s7-q4-grad-zemin-1)" stroke="#18332d" stroke-width="2.5"/>
   <path d="M 97,280 L 608,280" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.6"></path>
-  <rect x="85" y="286" width="535" height="14" rx="7" fill="#eaf5f2" opacity="0.5"></rect>
-  <line x1="95" y1="450" x2="610" y2="450" stroke="#cbd5d1" stroke-width="1.2" stroke-dasharray="4 4" opacity="0.5"></line>
-  <polygon points="272.5,450 352.5,311.44 432.5,450" fill="#eaf5f2" stroke="#7ac4b7" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.65"></polygon>
+  <rect x="85" y="286" width="535" height="14" rx="7" fill="#eaf5f2" opacity="0.5"/>
+  <polyline points="95,450 610,450" stroke="#cbd5d1" stroke-width="1.2" stroke-dasharray="4 4" opacity="0.5"/>
+  <polygon points="272.5,450 352.5,311.44 432.5,450" fill="#eaf5f2" stroke="#7ac4b7" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.65"/>
   <path d="M 112.5,460 L 272.5,460 L 352.5,324 L 432.5,460 L 592.5,460" stroke="#18332d" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" opacity="0.14" fill="none"></path>
 </g>
 
 
 <g id="s7-q4-katman-orta">
-  <ellipse cx="352.5" cy="138" rx="242" ry="7" fill="#18332d" opacity="0.22"></ellipse>
-  <rect x="112.5" y="122" width="480" height="18" rx="9" fill="url(#s7-q4-grad-bar-0)" stroke="#18332d" stroke-width="3"></rect>
-  <rect x="116" y="124" width="473" height="5" rx="2.5" fill="#ffffff" opacity="0.45"></rect>
+  <ellipse cx="352.5" cy="138" rx="242" ry="7" fill="#18332d" opacity="0.22"/>
+  <rect x="112.5" y="122" width="480" height="18" rx="9" fill="url(#s7-q4-grad-bar-0)" stroke="#18332d" stroke-width="3"/>
+  <rect x="116" y="124" width="473" height="5" rx="2.5" fill="#ffffff" opacity="0.45"/>
 
-  <line x1="272.5" y1="120" x2="272.5" y2="142" stroke="#18332d" stroke-width="2.5" stroke-linecap="round"></line>
-  <circle cx="272.5" cy="131" r="2.5" fill="#ffffff"></circle>
-  <line x1="432.5" y1="120" x2="432.5" y2="142" stroke="#18332d" stroke-width="2.5" stroke-linecap="round"></line>
-  <circle cx="432.5" cy="131" r="2.5" fill="#ffffff"></circle>
+  <polyline points="272.5,120 272.5,142" stroke="#18332d" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="272.5" cy="131" r="2.5" fill="#ffffff"/>
+  <polyline points="432.5,120 432.5,142" stroke="#18332d" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="432.5" cy="131" r="2.5" fill="#ffffff"/>
 
-  <circle cx="112.5" cy="131" r="11" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.8"></circle>
-  <circle cx="112.5" cy="131" r="4.5" fill="#e59e35" stroke="#18332d" stroke-width="1.2"></circle>
-  <circle cx="110.5" cy="129" r="2" fill="#ffffff" opacity="0.75"></circle>
-  <circle cx="592.5" cy="131" r="11" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.8"></circle>
-  <circle cx="592.5" cy="131" r="4.5" fill="#e59e35" stroke="#18332d" stroke-width="1.2"></circle>
-  <circle cx="590.5" cy="129" r="2" fill="#ffffff" opacity="0.75"></circle>
+  <circle cx="112.5" cy="131" r="11" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.8"/>
+  <circle cx="112.5" cy="131" r="4.5" fill="#e59e35" stroke="#18332d" stroke-width="1.2"/>
+  <circle cx="110.5" cy="129" r="2" fill="#ffffff" opacity="0.75"/>
+  <circle cx="592.5" cy="131" r="11" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.8"/>
+  <circle cx="592.5" cy="131" r="4.5" fill="#e59e35" stroke="#18332d" stroke-width="1.2"/>
+  <circle cx="590.5" cy="129" r="2" fill="#ffffff" opacity="0.75"/>
 
-  <rect x="242.5" y="58" width="220" height="34" rx="17" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2"></rect>
-  <circle cx="262.5" cy="75" r="7" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.5"></circle>
-  <circle cx="260.5" cy="73" r="2" fill="#ffffff" opacity="0.7"></circle>
+  <rect x="242.5" y="58" width="220" height="34" rx="17" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2"/>
+  <circle cx="262.5" cy="75" r="7" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.5"/>
+  <circle cx="260.5" cy="73" r="2" fill="#ffffff" opacity="0.7"/>
   <text x="360" y="81" text-anchor="middle" fill="#18332d" font-weight="bold">Başlangıç: C₀</text>
 
   <path d="M 112.5,152 L 112.5,162 L 352.5,162 L 592.5,162 L 592.5,152" fill="none" stroke="#18332d" stroke-width="2" stroke-linecap="round"></path>
-  <rect x="312.5" y="150" width="80" height="24" rx="12" fill="url(#s7-q4-grad-tag)" stroke="#18332d" stroke-width="1.6"></rect>
+  <rect x="312.5" y="150" width="80" height="24" rx="12" fill="url(#s7-q4-grad-tag)" stroke="#18332d" stroke-width="1.6"/>
   <text x="352.5" y="166" text-anchor="middle" fill="#18332d" font-weight="bold">C₀</text>
 
   <path d="M 352.5,198 L 352.5,232" stroke="#18332d" stroke-width="5" stroke-linecap="round"></path>
   <path d="M 352.5,198 L 352.5,232" stroke="url(#s7-q4-grad-flow)" stroke-width="2.5" stroke-linecap="round"></path>
 
-  <ellipse cx="352.5" cy="235" rx="114" ry="19" fill="#18332d" opacity="0.12"></ellipse>
-  <rect x="242.5" y="214" width="220" height="34" rx="17" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2"></rect>
-  <polygon points="252.5,227 266.5,227 259.5,235" fill="#3d9485" stroke="#18332d" stroke-width="1.2"></polygon>
+  <ellipse cx="352.5" cy="235" rx="114" ry="19" fill="#18332d" opacity="0.12"/>
+  <rect x="242.5" y="214" width="220" height="34" rx="17" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2"/>
+  <polygon points="252.5,227 266.5,227 259.5,235" fill="#3d9485" stroke="#18332d" stroke-width="1.2"/>
   <text x="363.4" y="236" text-anchor="middle" fill="#18332d" font-weight="bold">1. Adım Dönüşümü</text>
   <path d="M 352.5,248 L 352.5,268" stroke="#18332d" stroke-width="5" stroke-linecap="round"></path>
   <path d="M 352.5,248 L 352.5,268" stroke="url(#s7-q4-grad-flow)" stroke-width="2.5" stroke-linecap="round"></path>
-  <polygon points="342.5,264 352.5,276 362.5,264" fill="#3d9485" stroke="#18332d" stroke-width="2" stroke-linejoin="round"></polygon>
+  <polygon points="342.5,264 352.5,276 362.5,264" fill="#3d9485" stroke="#18332d" stroke-width="2" stroke-linejoin="round"/>
 
   <path d="M 112.5,450 L 272.5,450 L 352.5,311.44 L 432.5,450 L 592.5,450" fill="none" stroke="#18332d" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"></path>
   <path d="M 112.5,450 L 272.5,450 L 352.5,311.44 L 432.5,450 L 592.5,450" fill="none" stroke="url(#s7-q4-grad-koch)" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -5869,43 +5742,43 @@ window.SAYFA_INIT[6] = function (kok) {
   <path d="M 354,314 L 429,446" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.55"></path>
   <path d="M 436,448 L 589,448" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.55"></path>
 
-  <circle cx="112.5" cy="450" r="10" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.6"></circle>
-  <circle cx="112.5" cy="450" r="4" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.2"></circle>
-  <circle cx="110.7" cy="448.2" r="1.6" fill="#ffffff" opacity="0.8"></circle>
+  <circle cx="112.5" cy="450" r="10" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.6"/>
+  <circle cx="112.5" cy="450" r="4" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.2"/>
+  <circle cx="110.7" cy="448.2" r="1.6" fill="#ffffff" opacity="0.8"/>
 
-  <circle cx="272.5" cy="450" r="10" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.6"></circle>
-  <circle cx="272.5" cy="450" r="4" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.2"></circle>
-  <circle cx="270.7" cy="448.2" r="1.6" fill="#ffffff" opacity="0.8"></circle>
+  <circle cx="272.5" cy="450" r="10" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.6"/>
+  <circle cx="272.5" cy="450" r="4" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.2"/>
+  <circle cx="270.7" cy="448.2" r="1.6" fill="#ffffff" opacity="0.8"/>
 
-  <circle cx="352.5" cy="311.44" r="10" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.6"></circle>
-  <circle cx="352.5" cy="311.44" r="4" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.2"></circle>
-  <circle cx="350.7" cy="309.64" r="1.6" fill="#ffffff" opacity="0.8"></circle>
+  <circle cx="352.5" cy="311.44" r="10" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.6"/>
+  <circle cx="352.5" cy="311.44" r="4" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.2"/>
+  <circle cx="350.7" cy="309.64" r="1.6" fill="#ffffff" opacity="0.8"/>
 
-  <circle cx="432.5" cy="450" r="10" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.6"></circle>
-  <circle cx="432.5" cy="450" r="4" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.2"></circle>
-  <circle cx="430.7" cy="448.2" r="1.6" fill="#ffffff" opacity="0.8"></circle>
+  <circle cx="432.5" cy="450" r="10" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.6"/>
+  <circle cx="432.5" cy="450" r="4" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.2"/>
+  <circle cx="430.7" cy="448.2" r="1.6" fill="#ffffff" opacity="0.8"/>
 
-  <circle cx="592.5" cy="450" r="10" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.6"></circle>
-  <circle cx="592.5" cy="450" r="4" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.2"></circle>
-  <circle cx="590.7" cy="448.2" r="1.6" fill="#ffffff" opacity="0.8"></circle>
+  <circle cx="592.5" cy="450" r="10" fill="url(#s7-q4-grad-node)" stroke="#18332d" stroke-width="2.6"/>
+  <circle cx="592.5" cy="450" r="4" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.2"/>
+  <circle cx="590.7" cy="448.2" r="1.6" fill="#ffffff" opacity="0.8"/>
 
-  <circle cx="192.5" cy="419" r="14" fill="#18332d" opacity="0.18"></circle>
-  <circle cx="192.5" cy="416" r="14" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2"></circle>
+  <circle cx="192.5" cy="419" r="14" fill="#18332d" opacity="0.18"/>
+  <circle cx="192.5" cy="416" r="14" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2"/>
   <path d="M 184.5,410 A 10 10 0 0 1 200.5,410" stroke="#ffffff" stroke-width="1.6" fill="none" opacity="0.7"></path>
   <text x="192.5" y="421" text-anchor="middle" fill="#18332d" font-weight="bold">1</text>
 
-  <circle cx="290.0" cy="365" r="14" fill="#18332d" opacity="0.18"></circle>
-  <circle cx="290.0" cy="362" r="14" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2"></circle>
+  <circle cx="290.0" cy="365" r="14" fill="#18332d" opacity="0.18"/>
+  <circle cx="290.0" cy="362" r="14" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2"/>
   <path d="M 282.0,356 A 10 10 0 0 1 298.0,356" stroke="#ffffff" stroke-width="1.6" fill="none" opacity="0.7"></path>
   <text x="290.0" y="367" text-anchor="middle" fill="#18332d" font-weight="bold">2</text>
 
-  <circle cx="415.0" cy="365" r="14" fill="#18332d" opacity="0.18"></circle>
-  <circle cx="415.0" cy="362" r="14" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2"></circle>
+  <circle cx="415.0" cy="365" r="14" fill="#18332d" opacity="0.18"/>
+  <circle cx="415.0" cy="362" r="14" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2"/>
   <path d="M 407.0,356 A 10 10 0 0 1 423.0,356" stroke="#ffffff" stroke-width="1.6" fill="none" opacity="0.7"></path>
   <text x="415.0" y="367" text-anchor="middle" fill="#18332d" font-weight="bold">3</text>
 
-  <circle cx="512.5" cy="419" r="14" fill="#18332d" opacity="0.18"></circle>
-  <circle cx="512.5" cy="416" r="14" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2"></circle>
+  <circle cx="512.5" cy="419" r="14" fill="#18332d" opacity="0.18"/>
+  <circle cx="512.5" cy="416" r="14" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2"/>
   <path d="M 504.5,410 A 10 10 0 0 1 520.5,410" stroke="#ffffff" stroke-width="1.6" fill="none" opacity="0.7"></path>
   <text x="512.5" y="421" text-anchor="middle" fill="#18332d" font-weight="bold">4</text>
 </g>
@@ -5913,25 +5786,25 @@ window.SAYFA_INIT[6] = function (kok) {
 
 <g id="s7-q4-katman-on">
   <path d="M 112.5,466 L 112.5,476 L 272.5,476 L 272.5,466" fill="none" stroke="#18332d" stroke-width="1.6" stroke-linecap="round"></path>
-  <rect x="157.5" y="464" width="70" height="24" rx="11" fill="url(#s7-q4-grad-tag)" stroke="#18332d" stroke-width="1.4"></rect>
+  <rect x="157.5" y="464" width="70" height="24" rx="11" fill="url(#s7-q4-grad-tag)" stroke="#18332d" stroke-width="1.4"/>
   <text x="192.5" y="480" text-anchor="middle" fill="#18332d" font-weight="bold">¹⁄₃ C₀</text>
 
   <path d="M 432.5,466 L 432.5,476 L 592.5,476 L 592.5,466" fill="none" stroke="#18332d" stroke-width="1.6" stroke-linecap="round"></path>
-  <rect x="477.5" y="464" width="70" height="24" rx="11" fill="url(#s7-q4-grad-tag)" stroke="#18332d" stroke-width="1.4"></rect>
+  <rect x="477.5" y="464" width="70" height="24" rx="11" fill="url(#s7-q4-grad-tag)" stroke="#18332d" stroke-width="1.4"/>
   <text x="512.5" y="480" text-anchor="middle" fill="#18332d" font-weight="bold">¹⁄₃ C₀</text>
 
-  <rect x="312.5" y="464" width="80" height="24" rx="11" fill="url(#s7-q4-grad-tag)" stroke="#8a9994" stroke-width="1.2" stroke-dasharray="3 3"></rect>
+  <rect x="312.5" y="464" width="80" height="24" rx="11" fill="url(#s7-q4-grad-tag)" stroke="#8a9994" stroke-width="1.2" stroke-dasharray="3 3"/>
   <text x="352.5" y="480" text-anchor="middle" fill="#8a9994" font-weight="bold">¹⁄₃ C₀</text>
 
-  <rect x="232.5" y="522" width="240" height="36" rx="18" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2.2"></rect>
-  <circle cx="254.5" cy="540" r="7" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.5"></circle>
-  <circle cx="252.5" cy="538" r="2" fill="#ffffff" opacity="0.7"></circle>
+  <rect x="232.5" y="522" width="240" height="36" rx="18" fill="url(#s7-q4-grad-badge)" stroke="#18332d" stroke-width="2.2"/>
+  <circle cx="254.5" cy="540" r="7" fill="url(#s7-q4-grad-gold)" stroke="#18332d" stroke-width="1.5"/>
+  <circle cx="252.5" cy="538" r="2" fill="#ffffff" opacity="0.7"/>
   <text x="358" y="546" text-anchor="middle" fill="#18332d" font-weight="bold">1. Adım: C₁</text>
 </g>
 </g>
 
       <!-- SORU 5 SAHNESİ: Menger Süngeri Hacim Değişimi -->
-      <g id="s7-soru-5" class="s7-soru-sahne" data-sahne-nesne="soru5" style="display:none;"><g class="s7-alt-studyo" pointer-events="none"><polyline points="40,137 630,137 642,149 642,520 630,532 40,532 28,520 28,149 40,137" fill="#262833" fill-opacity="0.06"/><polyline points="36,131 626,131 638,143 638,514 626,526 36,526 24,514 24,143 36,131" fill="url(#s7-st-kart-grad)" fill-opacity="0.86" stroke="#d9d5eb" stroke-width="1.5" stroke-opacity="0.58" stroke-linejoin="round"/><polyline points="38,137 624,137 632,145 632,512 624,520 38,520 30,512 30,145 38,137" fill="none" stroke="#e6cec7" stroke-width="1" stroke-dasharray="6 4" stroke-opacity="0.36"/><polyline points="39,134 623,134 624,135 624,138 623,139 39,139 38,138 38,135 39,134" fill="#ffffff" fill-opacity="0.72"/><polyline points="123,518 539,518 551,528 111,528 123,518" fill="url(#s7-st-vurgu-grad)" fill-opacity="0.22" stroke="#a297d8" stroke-width="1.1" stroke-opacity="0.38" stroke-linejoin="round"/><polyline points="129,521 533,521" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-opacity="0.65"/><polyline points="33,153 33,140 46,140" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="38,143 40,145 38,147 36,145 38,143" fill="#d2937f" fill-opacity="0.52"/><polyline points="629,153 629,140 616,140" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="624,143 626,145 624,147 622,145 624,143" fill="#d2937f" fill-opacity="0.52"/><polyline points="33,504 33,517 46,517" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="38,510 40,512 38,514 36,512 38,510" fill="#d2937f" fill-opacity="0.52"/><polyline points="629,504 629,517 616,517" fill="none" stroke="#a297d8" stroke-width="1.5" stroke-opacity="0.48" stroke-linecap="round" stroke-linejoin="round"/><polyline points="624,510 626,512 624,514 622,512 624,510" fill="#d2937f" fill-opacity="0.52"/></g>
+      <g id="s7-soru-5" class="s7-soru-sahne" data-sahne-nesne="soru5" style="display:none;">
 <defs>
   <linearGradient id="s7-q5-grad-cube-top" x1="0%" y1="0%" x2="100%" y2="100%">
     <stop offset="0%" stop-color="#c5ede5"></stop>
@@ -5977,125 +5850,125 @@ window.SAYFA_INIT[6] = function (kok) {
 
 
 <g id="s7-q5-katman-zemin">
-  <ellipse cx="205" cy="428" rx="116" ry="26" fill="#a4e0d6" opacity="0.25"></ellipse>
+  <ellipse cx="205" cy="428" rx="116" ry="26" fill="#a4e0d6" opacity="0.25"/>
   <path d="M 95 414 A 110 24 0 0 0 315 414 L 315 423 A 110 24 0 0 1 95 423 Z" fill="#e6ddcf" stroke="#133832" stroke-width="2"></path>
-  <ellipse cx="205" cy="414" rx="110" ry="24" fill="url(#s7-q5-grad-pedestal-top)" stroke="#133832" stroke-width="2"></ellipse>
-  <ellipse cx="205" cy="412" rx="103" ry="19" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.4"></ellipse>
-  <ellipse cx="205" cy="404" rx="76" ry="15" fill="#a4e0d6" opacity="0.2"></ellipse>
+  <ellipse cx="205" cy="414" rx="110" ry="24" fill="url(#s7-q5-grad-pedestal-top)" stroke="#133832" stroke-width="2"/>
+  <ellipse cx="205" cy="412" rx="103" ry="19" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.4"/>
+  <ellipse cx="205" cy="404" rx="76" ry="15" fill="#a4e0d6" opacity="0.2"/>
 
-  <ellipse cx="500" cy="428" rx="116" ry="26" fill="#a4e0d6" opacity="0.25"></ellipse>
+  <ellipse cx="500" cy="428" rx="116" ry="26" fill="#a4e0d6" opacity="0.25"/>
   <path d="M 390 414 A 110 24 0 0 0 610 414 L 610 423 A 110 24 0 0 1 390 423 Z" fill="#e6ddcf" stroke="#133832" stroke-width="2"></path>
-  <ellipse cx="500" cy="414" rx="110" ry="24" fill="url(#s7-q5-grad-pedestal-top)" stroke="#133832" stroke-width="2"></ellipse>
-  <ellipse cx="500" cy="412" rx="103" ry="19" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.4"></ellipse>
-  <ellipse cx="500" cy="404" rx="76" ry="15" fill="#a4e0d6" opacity="0.2"></ellipse>
+  <ellipse cx="500" cy="414" rx="110" ry="24" fill="url(#s7-q5-grad-pedestal-top)" stroke="#133832" stroke-width="2"/>
+  <ellipse cx="500" cy="412" rx="103" ry="19" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.4"/>
+  <ellipse cx="500" cy="404" rx="76" ry="15" fill="#a4e0d6" opacity="0.2"/>
 </g>
 
 
 <g id="s7-q5-katman-orta">
   <g id="s7-q5-sol-kup">
-    <polygon points="205.0,275.0 314.12,212.0 205.0,149.0 95.88,212.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="2.5" stroke-linejoin="round"></polygon>
-    <polygon points="205.0,275.0 95.88,212.0 95.88,338.0 205.0,401.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="2.5" stroke-linejoin="round"></polygon>
-    <polygon points="205.0,275.0 314.12,212.0 314.12,338.0 205.0,401.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="2.5" stroke-linejoin="round"></polygon>
+    <polygon points="205.0,275.0 314.12,212.0 205.0,149.0 95.88,212.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="2.5" stroke-linejoin="round"/>
+    <polygon points="205.0,275.0 95.88,212.0 95.88,338.0 205.0,401.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="2.5" stroke-linejoin="round"/>
+    <polygon points="205.0,275.0 314.12,212.0 314.12,338.0 205.0,401.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="2.5" stroke-linejoin="round"/>
 
-    <line x1="168.63" y1="254.0" x2="277.75" y2="191.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"></line>
-    <line x1="132.25" y1="233.0" x2="241.37" y2="170.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"></line>
-    <line x1="241.37" y1="254.0" x2="132.25" y2="191.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"></line>
-    <line x1="277.75" y1="233.0" x2="168.63" y2="170.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"></line>
-    <line x1="168.63" y1="254.0" x2="168.63" y2="380.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"></line>
-    <line x1="132.25" y1="233.0" x2="132.25" y2="359.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"></line>
-    <line x1="205.0" y1="317.0" x2="95.88" y2="254.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"></line>
-    <line x1="205.0" y1="359.0" x2="95.88" y2="296.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"></line>
-    <line x1="241.37" y1="254.0" x2="241.37" y2="380.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"></line>
-    <line x1="277.75" y1="233.0" x2="277.75" y2="359.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"></line>
-    <line x1="205.0" y1="317.0" x2="314.12" y2="254.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"></line>
-    <line x1="205.0" y1="359.0" x2="314.12" y2="296.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"></line>
-    <circle cx="205.0" cy="233.0" r="2.2" fill="#ffffff" opacity="0.6"></circle>
-    <circle cx="205.0" cy="233.0" r="1.2" fill="#133832" opacity="0.4"></circle>
-    <circle cx="241.37" cy="212.0" r="2.2" fill="#ffffff" opacity="0.6"></circle>
-    <circle cx="241.37" cy="212.0" r="1.2" fill="#133832" opacity="0.4"></circle>
-    <circle cx="168.63" cy="212.0" r="2.2" fill="#ffffff" opacity="0.6"></circle>
-    <circle cx="168.63" cy="212.0" r="1.2" fill="#133832" opacity="0.4"></circle>
-    <circle cx="205.0" cy="191.0" r="2.2" fill="#ffffff" opacity="0.6"></circle>
-    <circle cx="205.0" cy="191.0" r="1.2" fill="#133832" opacity="0.4"></circle>
+    <polyline points="168.63,254.0 277.75,191.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"/>
+    <polyline points="132.25,233.0 241.37,170.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"/>
+    <polyline points="241.37,254.0 132.25,191.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"/>
+    <polyline points="277.75,233.0 168.63,170.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"/>
+    <polyline points="168.63,254.0 168.63,380.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"/>
+    <polyline points="132.25,233.0 132.25,359.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"/>
+    <polyline points="205.0,317.0 95.88,254.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"/>
+    <polyline points="205.0,359.0 95.88,296.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"/>
+    <polyline points="241.37,254.0 241.37,380.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"/>
+    <polyline points="277.75,233.0 277.75,359.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"/>
+    <polyline points="205.0,317.0 314.12,254.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"/>
+    <polyline points="205.0,359.0 314.12,296.0" stroke="#133832" stroke-width="1.6" stroke-dasharray="5 3" opacity="0.45"/>
+    <circle cx="205.0" cy="233.0" r="2.2" fill="#ffffff" opacity="0.6"/>
+    <circle cx="205.0" cy="233.0" r="1.2" fill="#133832" opacity="0.4"/>
+    <circle cx="241.37" cy="212.0" r="2.2" fill="#ffffff" opacity="0.6"/>
+    <circle cx="241.37" cy="212.0" r="1.2" fill="#133832" opacity="0.4"/>
+    <circle cx="168.63" cy="212.0" r="2.2" fill="#ffffff" opacity="0.6"/>
+    <circle cx="168.63" cy="212.0" r="1.2" fill="#133832" opacity="0.4"/>
+    <circle cx="205.0" cy="191.0" r="2.2" fill="#ffffff" opacity="0.6"/>
+    <circle cx="205.0" cy="191.0" r="1.2" fill="#133832" opacity="0.4"/>
 
-    <line x1="205.0" y1="275.0" x2="205.0" y2="401.0" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" opacity="0.4"></line>
-    <line x1="205.0" y1="149.0" x2="314.12" y2="212.0" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" opacity="0.4"></line>
-    <ellipse cx="188" cy="190" rx="36" ry="12" transform="rotate(-26 188 190)" fill="#ffffff" opacity="0.35"></ellipse>
+    <polyline points="205.0,275.0 205.0,401.0" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" opacity="0.4"/>
+    <polyline points="205.0,149.0 314.12,212.0" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" opacity="0.4"/>
+    <ellipse cx="188" cy="190" rx="36" ry="12" transform="rotate(-26 188 190)" fill="#ffffff" opacity="0.35"/>
     <path d="M 108 210 Q 156 178 200 156" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.4"></path>
-    <ellipse cx="122" cy="245" rx="8" ry="24" transform="rotate(18 122 245)" fill="#ffffff" opacity="0.2"></ellipse>
+    <ellipse cx="122" cy="245" rx="8" ry="24" transform="rotate(18 122 245)" fill="#ffffff" opacity="0.2"/>
 
-    <line x1="95.88" y1="212" x2="38" y2="212" stroke="#757d77" stroke-width="1.5" stroke-linecap="round"></line>
-    <line x1="95.88" y1="338" x2="38" y2="338" stroke="#757d77" stroke-width="1.5" stroke-linecap="round"></line>
-    <line x1="48" y1="212" x2="48" y2="258" stroke="#2a7b88" stroke-width="2" stroke-linecap="round"></line>
-    <polygon points="48,212 44,221 52,221" fill="#2a7b88"></polygon>
-    <line x1="48" y1="292" x2="48" y2="338" stroke="#2a7b88" stroke-width="2" stroke-linecap="round"></line>
-    <polygon points="48,338 44,329 52,329" fill="#2a7b88"></polygon>
+    <polyline points="95.88,212 38,212" stroke="#757d77" stroke-width="1.5" stroke-linecap="round"/>
+    <polyline points="95.88,338 38,338" stroke="#757d77" stroke-width="1.5" stroke-linecap="round"/>
+    <polyline points="48,212 48,258" stroke="#2a7b88" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="48,212 44,221 52,221" fill="#2a7b88"/>
+    <polyline points="48,292 48,338" stroke="#2a7b88" stroke-width="2" stroke-linecap="round"/>
+    <polygon points="48,338 44,329 52,329" fill="#2a7b88"/>
     <text x="48" y="279" text-anchor="middle" fill="#133832" font-weight="bold">1 birim</text>
   </g>
 
   <g id="s7-q5-orta-akis">
     <path d="M 352.5 192 L 352.5 210" fill="none" stroke="#e5b967" stroke-width="1.8" stroke-dasharray="3 3"></path>
-    <polygon points="352.5,218.0 342.5,212.2 352.5,206.4 362.5,212.2" fill="#faeedb" stroke="#a0712a" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.95"></polygon>
-    <polygon points="352.5,218.0 342.5,212.2 342.5,223.8 352.5,229.6" fill="#e5b967" stroke="#a0712a" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.9"></polygon>
-    <polygon points="352.5,218.0 362.5,212.2 362.5,223.8 352.5,229.6" fill="#a0712a" stroke="#a0712a" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.9"></polygon>
-    <rect x="281" y="160" width="144" height="28" rx="8" fill="url(#s7-q5-grad-badge)" stroke="#a0712a" stroke-width="1.2"></rect>
+    <polygon points="352.5,218.0 342.5,212.2 352.5,206.4 362.5,212.2" fill="#faeedb" stroke="#a0712a" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.95"/>
+    <polygon points="352.5,218.0 342.5,212.2 342.5,223.8 352.5,229.6" fill="#e5b967" stroke="#a0712a" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.9"/>
+    <polygon points="352.5,218.0 362.5,212.2 362.5,223.8 352.5,229.6" fill="#a0712a" stroke="#a0712a" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.9"/>
+    <rect x="281" y="160" width="144" height="28" rx="8" fill="url(#s7-q5-grad-badge)" stroke="#a0712a" stroke-width="1.2"/>
     <text x="352.5" y="179" text-anchor="middle" fill="#133832" font-weight="bold">7 küp çıkarılır</text>
 
     <path d="M 324 278 L 366 278 L 366 271 L 388 284 L 366 297 L 366 290 L 324 290 Z" fill="#133832" opacity="0.2"></path>
     <path d="M 322 275 L 364 275 L 364 268 L 386 281 L 364 294 L 364 287 L 322 287 Z" fill="url(#s7-q5-grad-arrow)" stroke="#133832" stroke-width="2.5" stroke-linejoin="round"></path>
-    <line x1="326" y1="277" x2="362" y2="277" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.6"></line>
-    <rect x="305" y="324" width="95" height="30" rx="15" fill="url(#s7-q5-grad-card)" stroke="#133832" stroke-width="2"></rect>
+    <polyline points="326,277 362,277" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+    <rect x="305" y="324" width="95" height="30" rx="15" fill="url(#s7-q5-grad-card)" stroke="#133832" stroke-width="2"/>
     <text x="352.5" y="344" text-anchor="middle" fill="#133832" font-weight="bold">1. Adım</text>
   </g>
 
   <g id="s7-q5-sag-menger">
-    <polygon points="500.0,191.0 463.63,170.0 500.0,149.0 536.37,170.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="463.63,212.0 427.25,191.0 463.63,170.0 500.0,191.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="536.37,212.0 500.0,191.0 536.37,170.0 572.75,191.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="463.63,212.0 500.0,191.0 500.0,233.0 463.63,254.0" fill="url(#s7-q5-grad-sponge-deep)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="572.75,233.0 536.37,212.0 572.75,191.0 609.12,212.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="427.25,233.0 390.88,212.0 427.25,191.0 463.63,212.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="536.37,212.0 500.0,191.0 500.0,233.0 536.37,254.0" fill="url(#s7-q5-grad-sponge-inner-wall)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="536.37,254.0 500.0,233.0 536.37,212.0 572.75,233.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="572.75,233.0 609.12,212.0 609.12,254.0 572.75,275.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="463.63,254.0 427.25,233.0 463.63,212.0 500.0,233.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="427.25,233.0 390.88,212.0 390.88,254.0 427.25,275.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="536.37,254.0 572.75,233.0 572.75,275.0 536.37,296.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="572.75,275.0 536.37,254.0 536.37,296.0 572.75,317.0" fill="url(#s7-q5-grad-sponge-inner-wall)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="572.75,275.0 609.12,254.0 609.12,296.0 572.75,317.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="427.25,275.0 390.88,254.0 390.88,296.0 427.25,317.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="427.25,275.0 463.63,254.0 463.63,296.0 427.25,317.0" fill="url(#s7-q5-grad-sponge-deep)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="500.0,275.0 463.63,254.0 500.0,233.0 536.37,254.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="463.63,254.0 427.25,233.0 427.25,275.0 463.63,296.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="427.25,317.0 390.88,296.0 390.88,338.0 427.25,359.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="536.37,338.0 500.0,317.0 536.37,296.0 572.75,317.0" fill="url(#s7-q5-grad-sponge-inner-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="500.0,275.0 463.63,254.0 463.63,296.0 500.0,317.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="500.0,275.0 536.37,254.0 536.37,296.0 500.0,317.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="572.75,317.0 609.12,296.0 609.12,338.0 572.75,359.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="463.63,338.0 427.25,317.0 463.63,296.0 500.0,317.0" fill="url(#s7-q5-grad-sponge-inner-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="500.0,317.0 463.63,296.0 463.63,338.0 500.0,359.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="500.0,317.0 536.37,296.0 536.37,338.0 500.0,359.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="536.37,338.0 572.75,317.0 572.75,359.0 536.37,380.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="463.63,338.0 427.25,317.0 427.25,359.0 463.63,380.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="500.0,359.0 463.63,338.0 463.63,380.0 500.0,401.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
-    <polygon points="500.0,359.0 536.37,338.0 536.37,380.0 500.0,401.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"></polygon>
+    <polygon points="500.0,191.0 463.63,170.0 500.0,149.0 536.37,170.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="463.63,212.0 427.25,191.0 463.63,170.0 500.0,191.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="536.37,212.0 500.0,191.0 536.37,170.0 572.75,191.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="463.63,212.0 500.0,191.0 500.0,233.0 463.63,254.0" fill="url(#s7-q5-grad-sponge-deep)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="572.75,233.0 536.37,212.0 572.75,191.0 609.12,212.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="427.25,233.0 390.88,212.0 427.25,191.0 463.63,212.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="536.37,212.0 500.0,191.0 500.0,233.0 536.37,254.0" fill="url(#s7-q5-grad-sponge-inner-wall)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="536.37,254.0 500.0,233.0 536.37,212.0 572.75,233.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="572.75,233.0 609.12,212.0 609.12,254.0 572.75,275.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="463.63,254.0 427.25,233.0 463.63,212.0 500.0,233.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="427.25,233.0 390.88,212.0 390.88,254.0 427.25,275.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="536.37,254.0 572.75,233.0 572.75,275.0 536.37,296.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="572.75,275.0 536.37,254.0 536.37,296.0 572.75,317.0" fill="url(#s7-q5-grad-sponge-inner-wall)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="572.75,275.0 609.12,254.0 609.12,296.0 572.75,317.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="427.25,275.0 390.88,254.0 390.88,296.0 427.25,317.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="427.25,275.0 463.63,254.0 463.63,296.0 427.25,317.0" fill="url(#s7-q5-grad-sponge-deep)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="500.0,275.0 463.63,254.0 500.0,233.0 536.37,254.0" fill="url(#s7-q5-grad-cube-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="463.63,254.0 427.25,233.0 427.25,275.0 463.63,296.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="427.25,317.0 390.88,296.0 390.88,338.0 427.25,359.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="536.37,338.0 500.0,317.0 536.37,296.0 572.75,317.0" fill="url(#s7-q5-grad-sponge-inner-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="500.0,275.0 463.63,254.0 463.63,296.0 500.0,317.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="500.0,275.0 536.37,254.0 536.37,296.0 500.0,317.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="572.75,317.0 609.12,296.0 609.12,338.0 572.75,359.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="463.63,338.0 427.25,317.0 463.63,296.0 500.0,317.0" fill="url(#s7-q5-grad-sponge-inner-top)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="500.0,317.0 463.63,296.0 463.63,338.0 500.0,359.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="500.0,317.0 536.37,296.0 536.37,338.0 500.0,359.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="536.37,338.0 572.75,317.0 572.75,359.0 536.37,380.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="463.63,338.0 427.25,317.0 427.25,359.0 463.63,380.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="500.0,359.0 463.63,338.0 463.63,380.0 500.0,401.0" fill="url(#s7-q5-grad-cube-left)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
+    <polygon points="500.0,359.0 536.37,338.0 536.37,380.0 500.0,401.0" fill="url(#s7-q5-grad-cube-right)" stroke="#133832" stroke-width="1.8" stroke-linejoin="round"/>
 
-    <line x1="500.0" y1="275.0" x2="500.0" y2="401.0" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" opacity="0.45"></line>
-    <line x1="500.0" y1="275.0" x2="463.63" y2="254.0" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.4"></line>
-    <line x1="500.0" y1="275.0" x2="536.37" y2="254.0" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.4"></line>
+    <polyline points="500.0,275.0 500.0,401.0" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" opacity="0.45"/>
+    <polyline points="500.0,275.0 463.63,254.0" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
+    <polyline points="500.0,275.0 536.37,254.0" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.4"/>
     <path d="M 402 210 Q 451 178 495 156" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.4"></path>
-    <ellipse cx="452" cy="188" rx="20" ry="7" transform="rotate(-26 452 188)" fill="#ffffff" opacity="0.3"></ellipse>
-    <ellipse cx="417" cy="245" rx="6" ry="18" transform="rotate(18 417 245)" fill="#ffffff" opacity="0.22"></ellipse>
-    <polygon points="500.0,149.0 609.12,212.0 609.12,338.0 500.0,401.0 390.88,338.0 390.88,212.0" fill="none" stroke="#133832" stroke-width="2.8" stroke-linejoin="round"></polygon>
+    <ellipse cx="452" cy="188" rx="20" ry="7" transform="rotate(-26 452 188)" fill="#ffffff" opacity="0.3"/>
+    <ellipse cx="417" cy="245" rx="6" ry="18" transform="rotate(18 417 245)" fill="#ffffff" opacity="0.22"/>
+    <polygon points="500.0,149.0 609.12,212.0 609.12,338.0 500.0,401.0 390.88,338.0 390.88,212.0" fill="none" stroke="#133832" stroke-width="2.8" stroke-linejoin="round"/>
   </g>
 </g>
 
 
 <g id="s7-q5-katman-on">
-  <rect x="130" y="468" width="150" height="38" rx="10" fill="url(#s7-q5-grad-card)" stroke="#133832" stroke-width="2"></rect>
+  <rect x="130" y="468" width="150" height="38" rx="10" fill="url(#s7-q5-grad-card)" stroke="#133832" stroke-width="2"/>
   <text x="205" y="492" text-anchor="middle" fill="#133832" font-weight="bold">Birim Küp</text>
 
-  <rect x="415" y="468" width="170" height="38" rx="10" fill="url(#s7-q5-grad-card)" stroke="#133832" stroke-width="2"></rect>
+  <rect x="415" y="468" width="170" height="38" rx="10" fill="url(#s7-q5-grad-card)" stroke="#133832" stroke-width="2"/>
   <text x="500" y="492" text-anchor="middle" fill="#133832" font-weight="bold">Menger Süngeri</text>
 </g>
 </g>
@@ -6281,9 +6154,9 @@ window.SAYFA_INIT[7] = function (kok) {
 
 </div>
 
-<script src="ortak/63a3414730e0c23a.js"></script>
+<script src="ortak/bcd72ad666299776.js"></script>
 
-<script src="ortak/266154ffc0c981b9.js"></script>
+<script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>
 /* ============ SAYFAYA DÖNÜŞTE SIFIRLAMA (geoeba uzman notları 2. tur, 2026-10-06) ============
    «Sayfalar arası geçişte / ileri-geri yapıldığında etkinlikler sıfırlanmıyor, aynı noktada
@@ -6942,21 +6815,6 @@ window.SAYFA_INIT[7] = function (kok) {
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', baslat);
   else baslat();
-})();
-</script>
-<script>/* esk-son-sayfa-sonraki */
-(function () {
-  var dugme = document.getElementById("sonraki-buton");
-  if (!dugme) { return; }
-  dugme.addEventListener("click", function () {
-    var sayfalar = [].slice.call(document.querySelectorAll("section[id]")).filter(function (s) {
-      return /^sayfa-\d+$/.test(s.id);
-    });
-    var son = sayfalar[sayfalar.length - 1];
-    if (!son || !son.classList.contains("aktif")) { return; }
-    var mesaj = "İçeriğin sonuna geldin. Önceki sayfalara dönüp yeniden deneyebilirsin.";
-    if (window.EGITSEL && window.EGITSEL.dontVer) { window.EGITSEL.dontVer(son, "bilgi", mesaj); }
-  });
 })();
 </script>
 </body>
