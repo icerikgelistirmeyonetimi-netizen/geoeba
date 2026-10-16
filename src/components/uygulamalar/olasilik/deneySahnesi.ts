@@ -746,6 +746,15 @@ function olay<K extends keyof DeneySahnesiOlayHaritasi>(tur: K, detay: DeneySahn
   return new CustomEvent(tur, { detail: detay });
 }
 
+/**
+ * Şablon kameraları (para, sayı küpü, çark, torba, kart) en az bu en-boy oranı için ayarlı. Kap daha
+ * dikse (geniş yerleşimde sahne kartı sütunu doldurup uzayınca) kamera hedeften uzaklaşır: yatay kadraj
+ * korunur, nesne yandan kırpılmaz ve kartı taşacak kadar büyümez.
+ */
+const KAMERA_EN_DAR_ORAN = 1.3;
+/** Bu yükseklikten (CSS px) uzun kapta nesneler büyümeyi bırakır: kamera geri çekilir, çevresinde boşluk kalır. */
+const KAMERA_OLCEK_YUKSEKLIGI = 600;
+
 export class DeneySahnesi extends EventTarget {
   private readonly kap: HTMLElement;
   private readonly secenekler: Required<DeneySahnesiSecenekleri>;
@@ -758,6 +767,9 @@ export class DeneySahnesi extends EventTarget {
 
   private nesneler = new THREE.Group();
   private sablon: Sablon | null = null;
+  /** Şablonun ayarlı kamera konumu ve bakış noktası; en-boy oranına kameraYerlestir uydurur (Galton'da null) */
+  private kameraTaban: { konum: THREE.Vector3; hedef: THREE.Vector3 } | null = null;
+  private kapYuksekligi = 1;
   private animasyon: Animasyon | null = null;
   private dongude = false;
   private duraklatildi = false;
@@ -904,9 +916,11 @@ export class DeneySahnesi extends EventTarget {
     const w = Math.max(1, this.kap.clientWidth);
     const h = Math.max(1, this.kap.clientHeight);
     this.renderer.setSize(w, h, false);
+    this.kapYuksekligi = h;
     this.kamera.aspect = w / h;
     this.kamera.updateProjectionMatrix();
     if (this.galton) this.galtonKamerasi();
+    else this.kameraYerlestir();
     this.ciz();
   }
 
@@ -1020,35 +1034,48 @@ export class DeneySahnesi extends EventTarget {
     switch (sablon.tur) {
       case 'para':
         this.paraKur();
-        this.kamera.position.set(0, 2.1, 3.1);
-        this.kamera.lookAt(0, 0.3, 0);
+        this.kameraKur([0, 2.1, 3.1], [0, 0.3, 0]);
         break;
       case 'zar':
         this.zarKur(sablon.ikiZar ? 2 : 1);
-        this.kamera.position.set(0, 2.6, 3.8);
-        this.kamera.lookAt(0, 0.3, 0);
+        this.kameraKur([0, 2.6, 3.8], [0, 0.3, 0]);
         break;
       case 'cark':
         this.carkKur(sablon.dilimler);
-        this.kamera.position.set(0, 3.4, 2.7);
-        this.kamera.lookAt(0, 0.1, 0);
+        this.kameraKur([0, 3.4, 2.7], [0, 0.1, 0]);
         break;
       case 'torba':
         this.torbaKur();
-        this.kamera.position.set(0, 2.5, 3.9);
-        this.kamera.lookAt(0, 0.45, 0.2);
+        this.kameraKur([0, 2.5, 3.9], [0, 0.45, 0.2]);
         break;
       case 'kart':
         this.kartKur();
-        this.kamera.position.set(0, 2.8, 3.2);
-        this.kamera.lookAt(0, 0.2, 0);
+        this.kameraKur([0, 2.8, 3.2], [0, 0.2, 0]);
         break;
       case 'galton':
+        this.kameraTaban = null;
         this.galtonKur(sablon);
         this.galtonKamerasi();
         break;
     }
     this.ciz();
+  }
+
+  private kameraKur(konum: readonly [number, number, number], hedef: readonly [number, number, number]): void {
+    this.kameraTaban = { konum: new THREE.Vector3(...konum), hedef: new THREE.Vector3(...hedef) };
+    this.kameraYerlestir();
+  }
+
+  /**
+   * Ayarlı kamerayı kaba uydurur: KAMERA_EN_DAR_ORAN'dan dik ya da KAMERA_OLCEK_YUKSEKLIGI'ndan uzun kapta
+   * bakış ekseni boyunca geri çekilir.
+   */
+  private kameraYerlestir(): void {
+    const t = this.kameraTaban;
+    if (!t) return;
+    const kat = Math.max(1, KAMERA_EN_DAR_ORAN / Math.max(0.1, this.kamera.aspect), this.kapYuksekligi / KAMERA_OLCEK_YUKSEKLIGI);
+    this.kamera.position.subVectors(t.konum, t.hedef).multiplyScalar(kat).add(t.hedef);
+    this.kamera.lookAt(t.hedef);
   }
 
   private nesneleriSok(): void {

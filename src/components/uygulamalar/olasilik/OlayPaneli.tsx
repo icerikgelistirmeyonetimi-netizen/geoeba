@@ -47,6 +47,11 @@ export interface OlayPaneliProps {
   gerceklesen: number;
   /** Deney sürerken düzenleme kapalı */
   kilitli: boolean;
+  /**
+   * Çizilecek bölüm. Geniş yerleşim paneli böler: ayarlar sol sütunda, üç olasılık kartı sahnenin altında yan yana
+   * (sığmayınca alt alta) durur. Varsayılan: ikisi alt alta.
+   */
+  bolum?: 'hepsi' | 'ayarlar' | 'kartlar';
 }
 
 const secimSinifi = (aktif: boolean) =>
@@ -81,7 +86,7 @@ function radyoOzellikleri(i: number, adet: number, secili: boolean, sec: (j: num
   };
 }
 
-export function OlayPaneli({ sablon, onSablon, oznel, oznelKilitli, onOznel, onKilit, deneme, gerceklesen, kilitli }: OlayPaneliProps) {
+export function OlayPaneli({ sablon, onSablon, oznel, oznelKilitli, onOznel, onKilit, deneme, gerceklesen, kilitli, bolum = 'hepsi' }: OlayPaneliProps) {
   const teorik = teorikOlasilik(sablon);
   const deneysel = kesirSadelestir(gerceklesen, deneme);
   const deneyselOran = deneme > 0 ? gerceklesen / deneme : 0;
@@ -89,88 +94,96 @@ export function OlayPaneli({ sablon, onSablon, oznel, oznelKilitli, onOznel, onK
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="rounded-[var(--radius)] border border-border bg-card p-4 shadow-[0_18px_40px_-18px_rgba(6,40,45,.35)]" aria-label="Olay ayarları">
-        <Baslik>Rastgele olay</Baslik>
-        <div className="mt-3 flex flex-col gap-3">
-          {sablon.tur === 'para' && <ParaAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
-          {sablon.tur === 'zar' && <ZarAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
-          {sablon.tur === 'cark' && <CarkAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
-          {sablon.tur === 'torba' && <TorbaAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
-          {sablon.tur === 'kart' && <KartAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
-          {sablon.tur === 'galton' && <GaltonAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
-        </div>
-        {uyarilar.length > 0 && (
-          <ul className="mt-3 flex flex-col gap-1" role="alert">
-            {uyarilar.map((u) => (
-              <li key={u.mesaj} className="rounded-md bg-destructive/10 px-3 py-2 text-[13px] font-medium text-destructive">
-                {u.mesaj}
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-3 text-sm text-muted-foreground">
-          İstenen durum: <strong className="text-foreground">{istenenAdi(sablon)}</strong>
-        </p>
-      </section>
-
-      <section className="grid grid-cols-1 gap-3" aria-label="Olasılık panelleri">
-        {/* ÖZNEL */}
-        <div className="rounded-[var(--radius)] border border-border bg-card p-4" style={{ borderTop: '4px solid #b9884a' }}>
-          <div className="flex items-center justify-between gap-2">
-            <Baslik>Öznel olasılık</Baslik>
-            <button
-              type="button"
-              onClick={onKilit}
-              className="min-h-[44px] rounded-full border border-border px-3 text-[13px] font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-              aria-pressed={oznelKilitli}
-            >
-              {oznelKilitli ? 'Kilidi aç' : 'Kilitle'}
-            </button>
+      {bolum !== 'kartlar' && (
+        <section className="rounded-[var(--radius)] border border-border bg-card p-4 shadow-[0_18px_40px_-18px_rgba(6,40,45,.35)]" aria-label="Olay ayarları">
+          <Baslik>Rastgele olay</Baslik>
+          <div className="mt-3 flex flex-col gap-3">
+            {sablon.tur === 'para' && <ParaAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
+            {sablon.tur === 'zar' && <ZarAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
+            {sablon.tur === 'cark' && <CarkAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
+            {sablon.tur === 'torba' && <TorbaAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
+            {sablon.tur === 'kart' && <KartAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
+            {sablon.tur === 'galton' && <GaltonAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
           </div>
-          <p className="mt-2 text-lg font-bold text-foreground">
-            Bence olasılık <span className="text-[#8f6a33] dark:text-[#d4a76a]">%{oznel}</span>
+          {uyarilar.length > 0 && (
+            <ul className="mt-3 flex flex-col gap-1" role="alert">
+              {uyarilar.map((u) => (
+                <li key={u.mesaj} className="rounded-md bg-destructive/10 px-3 py-2 text-[13px] font-medium text-destructive">
+                  {u.mesaj}
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-3 text-sm text-muted-foreground">
+            İstenen durum: <strong className="text-foreground">{istenenAdi(sablon)}</strong>
           </p>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={1}
-            value={oznel}
-            disabled={oznelKilitli}
-            onChange={(e) => onOznel(Number(e.target.value))}
-            aria-label="Öznel olasılık tahmini, yüzde"
-            className="mt-2 h-11 w-full cursor-pointer accent-[#b9884a] disabled:cursor-not-allowed"
-          />
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            {deneme === 0 && !oznelKilitli ? 'Deneye başlamadan önce tahminini seç.' : oznelKilitli ? 'Tahmin kilitli; deney sonuçlarıyla karşılaştır.' : 'Tahmini değiştirebilirsin.'}
-          </p>
-        </div>
+        </section>
+      )}
 
-        {/* TEORİK */}
-        <div className="rounded-[var(--radius)] border border-border bg-card p-4" style={{ borderTop: '4px solid #2a9d94' }}>
-          <Baslik>Teorik olasılık</Baslik>
-          <p className="mt-2 text-lg font-bold text-foreground">
-            <span className="text-[#1f7a72] dark:text-[#5cc4bb]">{yuzdeMetni(teorik.deger)}</span>{' '}
-            <span className="text-sm font-semibold text-muted-foreground">({kesirMetni(teorik.kesir)})</span>
-          </p>
-          <p className="mt-1 break-words font-mono text-[13px] text-muted-foreground" data-teorik-formul>
-            {teorik.formul}
-          </p>
-        </div>
+      {bolum !== 'ayarlar' && (
+        <section
+          className={bolum === 'kartlar' ? 'grid gap-3' : 'grid grid-cols-1 gap-3'}
+          style={bolum === 'kartlar' ? { gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' } : undefined}
+          aria-label="Olasılık panelleri"
+        >
+          {/* ÖZNEL */}
+          <div className="rounded-[var(--radius)] border border-border bg-card p-4" style={{ borderTop: '4px solid #b9884a' }}>
+            <div className="flex items-center justify-between gap-2">
+              <Baslik>Öznel olasılık</Baslik>
+              <button
+                type="button"
+                onClick={onKilit}
+                className="min-h-[44px] rounded-full border border-border px-3 text-[13px] font-semibold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-pressed={oznelKilitli}
+              >
+                {oznelKilitli ? 'Kilidi aç' : 'Kilitle'}
+              </button>
+            </div>
+            <p className="mt-2 text-lg font-bold text-foreground">
+              Bence olasılık <span className="text-[#8f6a33] dark:text-[#d4a76a]">%{oznel}</span>
+            </p>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={oznel}
+              disabled={oznelKilitli}
+              onChange={(e) => onOznel(Number(e.target.value))}
+              aria-label="Öznel olasılık tahmini, yüzde"
+              className="mt-2 h-11 w-full cursor-pointer accent-[#b9884a] disabled:cursor-not-allowed"
+            />
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              {deneme === 0 && !oznelKilitli ? 'Deneye başlamadan önce tahminini seç.' : oznelKilitli ? 'Tahmin kilitli; deney sonuçlarıyla karşılaştır.' : 'Tahmini değiştirebilirsin.'}
+            </p>
+          </div>
 
-        {/* DENEYSEL */}
-        <div className="rounded-[var(--radius)] border border-border bg-card p-4" style={{ borderTop: '4px solid #216a78' }}>
-          <Baslik>Deneysel olasılık</Baslik>
-          <p className="mt-2 text-lg font-bold text-foreground" aria-live="polite" data-deneysel>
-            <span className="text-ada-deniz dark:text-[#5cc4bb]">{deneme > 0 ? yuzdeMetni(deneyselOran) : '—'}</span>{' '}
-            <span className="text-sm font-semibold text-muted-foreground">
-              ({gerceklesen} / {deneme}
-              {deneme > 0 ? ` = ${kesirMetni(deneysel)}` : ''})
-            </span>
-          </p>
-          <p className="mt-1 text-[13px] text-muted-foreground">Gerçekleşen / toplam deneme</p>
-        </div>
-      </section>
+          {/* TEORİK */}
+          <div className="rounded-[var(--radius)] border border-border bg-card p-4" style={{ borderTop: '4px solid #2a9d94' }}>
+            <Baslik>Teorik olasılık</Baslik>
+            <p className="mt-2 text-lg font-bold text-foreground">
+              <span className="text-[#1f7a72] dark:text-[#5cc4bb]">{yuzdeMetni(teorik.deger)}</span>{' '}
+              <span className="text-sm font-semibold text-muted-foreground">({kesirMetni(teorik.kesir)})</span>
+            </p>
+            <p className="mt-1 break-words font-mono text-[13px] text-muted-foreground" data-teorik-formul>
+              {teorik.formul}
+            </p>
+          </div>
+
+          {/* DENEYSEL */}
+          <div className="rounded-[var(--radius)] border border-border bg-card p-4" style={{ borderTop: '4px solid #216a78' }}>
+            <Baslik>Deneysel olasılık</Baslik>
+            <p className="mt-2 text-lg font-bold text-foreground" aria-live="polite" data-deneysel>
+              <span className="text-ada-deniz dark:text-[#5cc4bb]">{deneme > 0 ? yuzdeMetni(deneyselOran) : '—'}</span>{' '}
+              <span className="text-sm font-semibold text-muted-foreground">
+                ({gerceklesen} / {deneme}
+                {deneme > 0 ? ` = ${kesirMetni(deneysel)}` : ''})
+              </span>
+            </p>
+            <p className="mt-1 text-[13px] text-muted-foreground">Gerçekleşen / toplam deneme</p>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

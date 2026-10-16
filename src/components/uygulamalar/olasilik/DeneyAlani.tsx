@@ -36,6 +36,8 @@ export interface DeneyAlaniProps {
   sayimlar?: Record<string, number>;
   /** İadesiz çekilişte modelin kalan adetleri; tek çekilişin sonunda güncellenir. */
   torbaKalan?: readonly number[];
+  /** Geniş yerleşimde sütunun kalan yüksekliğini doldurur (olağan yükseklik en az değer olur) */
+  doldur?: boolean;
 }
 
 /** Şablon nesnelerini yeniden kurmayı gerektiren alanlar (istenen durum değişimi kurmaz). */
@@ -57,7 +59,7 @@ function kurulumAnahtari(s: Sablon): string {
 }
 
 export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(function DeneyAlani(
-  { sablon, koyu, azHareket, gizli = false, onBitti, sonSonuc, animasyonda, toplu = false, sayimlar = BOS_SAYIM, torbaKalan },
+  { sablon, koyu, azHareket, gizli = false, onBitti, sonSonuc, animasyonda, toplu = false, sayimlar = BOS_SAYIM, torbaKalan, doldur = false },
   ref
 ) {
   const kapRef = useRef<HTMLDivElement>(null);
@@ -246,12 +248,14 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
 
   const gosterilen = gosterilenSonuc(webgl, sablon, sonSonuc, svgSonuc);
   const olcek = birikim ? yiginOlcegi(birikim, GALTON_YIGIN_KAPASITE) : null;
+  // Galton dik bir tahta: kart biraz daha uzun, tahta ve çiviler büyük görünür
+  const olaganYukseklik = sablon.tur === 'galton' ? 'min(420px, 44vh)' : 'min(300px, 34vh)';
 
   const kart = (
     <div
       className="relative w-full overflow-hidden rounded-[var(--radius)] border border-border bg-card shadow-[0_18px_40px_-18px_rgba(6,40,45,.55)]"
-      // Galton dik bir tahta: kart biraz daha uzun, tahta ve çiviler büyük görünür
-      style={{ height: sablon.tur === 'galton' ? 'min(420px, 44vh)' : 'min(300px, 34vh)', minHeight: 220 }}
+      // Dolduran yerleşimde kart sütunda kalan yeri alır; olağan yükseklik altına inmez
+      style={doldur ? { flex: '1 1 0%', minHeight: `max(220px, ${olaganYukseklik})` } : { height: olaganYukseklik, minHeight: 220 }}
       onClick={() => sahneRef.current?.hizlandir()}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -308,7 +312,7 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
   // yeniden açılınca, tema değişince) başka şablona geçişte tuval belgeden kopuyordu: sayı küpü / para kartı boş kalıyordu.
   // canli sr-only (mutlak konumlu): sarmalayıcıda boşluk eklemez.
   return (
-    <div className="flex flex-col gap-1.5" data-deney-alani-kabi>
+    <div className={doldur ? 'flex flex-1 flex-col gap-1.5' : 'flex flex-col gap-1.5'} data-deney-alani-kabi>
       {kart}
       {canli}
       {birikim && (

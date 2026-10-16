@@ -1063,7 +1063,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/e69c53cf44e7d3b8.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-16 17:43
+  montaj: 2026-10-16 18:52
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-17 15:17
   sayfa 2: bilinmiyor (damgasız eski üretim)
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 15:20
@@ -9418,7 +9418,7 @@ window.SAYFA_INIT[13] = function (kok) {
       if (basSatir && basSatir.querySelector('.soru-sayac') && window.EGITSEL && window.EGITSEL.baslikTekrariniGizle) {
         window.EGITSEL.baslikTekrariniGizle(basSatir);
       }
-      // 0.5) Miras alınan <g stroke="..."> temizliği ve çizgi-kesişim halesi (paint-order: stroke fill)
+      // 0.5) Miras alınan <g stroke="..."> temizliği
       var tumTextler = sayfa.querySelectorAll('svg text');
       for (var hIdx = 0; hIdx < tumTextler.length; hIdx++) {
         var th = tumTextler[hIdx];
@@ -9426,7 +9426,6 @@ window.SAYFA_INIT[13] = function (kok) {
         if (!th.hasAttribute('stroke') && th.closest('g[stroke]')) {
           th.setAttribute('stroke', 'none');
         }
-        haloUygula(th);
       }
       // 1) Görünür yazı tabanı: ölçekli SVG'deki küçük yazıyı büyüt (en çok ×UST)
       // Etkileşim sonrası metin/konum/görünürlük değişebildiği için data-yt-ust ve tspan dy sıfırlanıp yeniden ölçülür
@@ -9452,7 +9451,7 @@ window.SAYFA_INIT[13] = function (kok) {
         var hedef = ozgun * s < TABAN - 0.25 ? Math.min(TABAN / s, ozgun * UST) : ozgun;
         boyAyarla(t, hedef, ozgun);
       }
-      // 2) Etiket zeminleri + Kutu içine sığdırma + Yan engel (çizgi/nokta/kutu) çakışma önleyici
+      // 2) Etiket zeminleri + Kutu içine sığdırma + Dinamik zıtlık + Yan engel çakışma önleyici
       var svgler = sayfa.querySelectorAll('svg');
       for (var v = 0; v < svgler.length; v++) {
         var sv = svgler[v];
@@ -9473,20 +9472,77 @@ window.SAYFA_INIT[13] = function (kok) {
     if (!m) return 1;
     return (0.2126 * (+m[1]) + 0.7152 * (+m[2]) + 0.0722 * (+m[3])) / 255;
   }
-  function haloUygula(t) {
-    if (t.hasAttribute('data-yt-halo')) return;
+  function sekilParlaklik(el, svg) {
+    if (!el) return 1;
+    var st = getComputedStyle(el);
+    var f = el.getAttribute('fill') || st.fill || '';
+    if (/url\(/i.test(f)) {
+      var gm = f.match(/#([a-zA-Z0-9_-]+)/);
+      var grad = gm && ((svg && svg.querySelector('#' + gm[1])) || document.getElementById(gm[1]));
+      if (grad) {
+        var duraklar = grad.querySelectorAll('stop');
+        if (duraklar.length) {
+          var top = 0;
+          for (var i = 0; i < duraklar.length; i++) {
+            top += renkParlaklik(getComputedStyle(duraklar[i]).stopColor);
+          }
+          return top / duraklar.length;
+        }
+      }
+    }
+    return renkParlaklik(st.fill);
+  }
+  function haloTemizle(t) {
+    if (t.hasAttribute('data-yt-halo')) {
+      t.style.removeProperty('paint-order');
+      t.style.removeProperty('stroke');
+      t.style.removeProperty('stroke-width');
+      t.style.removeProperty('stroke-linejoin');
+      t.style.removeProperty('stroke-linecap');
+      t.removeAttribute('data-yt-halo');
+    }
+  }
+  function dinamikZitlikOnar(t, enKucuk, svg) {
+    if (t.hasAttribute('data-yt-zitlik')) {
+      t.style.removeProperty('fill');
+      t.removeAttribute('data-yt-zitlik');
+    }
+    if (!enKucuk || enKucuk.fillNone || enKucuk.op < 0.55) return;
+    var bgL = sekilParlaklik(enKucuk.el, svg);
+    var fgL = renkParlaklik(getComputedStyle(t).fill);
+    if (bgL > 0.52 && fgL > 0.55) {
+      t.style.setProperty('fill', '#1b1c3a', 'important');
+      t.setAttribute('data-yt-zitlik', '1');
+    } else if (bgL < 0.22 && fgL < 0.22) {
+      t.style.setProperty('fill', '#fbf8f1', 'important');
+      t.setAttribute('data-yt-zitlik', '1');
+    }
+  }
+  function haloUygula(t, tb, enKucuk, cizgiKutulari, svg, sr) {
+    haloTemizle(t);
+    // Bir kutu, daire, rozet, dilim veya renkli şekil içindeki yazılara asla beyaz kenarlık (halo) verme
+    if (enKucuk) {
+      var kAlan = enKucuk.r.width * enKucuk.r.height;
+      if (kAlan < sr.width * sr.height * 0.22 || sekilParlaklik(enKucuk.el, svg) < 0.85) return;
+    }
     var st = getComputedStyle(t);
     if (st.stroke && st.stroke !== 'none' && parseFloat(st.strokeWidth) > 0.5) return;
-    if (renkParlaklik(st.fill) > 0.45) return; // açık renkli yazı (koyu rozet üstü) muaf
-    // Yalnızca arkasında rozet/kutu olmayan (doğrudan sahne/grafik/çizgi üstündeki) yazılara zemin halesi ver
-    var prev = t.previousElementSibling;
-    if (prev && prev.nodeName === 'rect') {
-      var rb = ekran(prev), tb = ekran(t);
-      if (rb && tb && rb.height < tb.height * 3.2 && rb.width < tb.width * 3.5) return;
+    if (renkParlaklik(st.fill) > 0.38) return;
+    // Yalnızca yazı kutusunun içinden/üzerinden gerçekten bir çizgi/eğri geçiyorsa zemin halesi ver
+    var ah = tb.height * 0.18;
+    var kesiyor = false;
+    for (var i = 0; i < cizgiKutulari.length; i++) {
+      var cb = cizgiKutulari[i];
+      if (Math.min(tb.right, cb.right) - Math.max(tb.left, cb.left) > 1 &&
+          Math.min(tb.bottom - ah, cb.bottom) - Math.max(tb.top + ah, cb.top) > 1) {
+        kesiyor = true;
+        break;
+      }
     }
+    if (!kesiyor) return;
     t.style.setProperty('paint-order', 'stroke fill');
     t.style.setProperty('stroke', '#fbf8f1');
-    t.style.setProperty('stroke-width', '3.2px');
+    t.style.setProperty('stroke-width', '2.6px');
     t.style.setProperty('stroke-linejoin', 'round');
     t.style.setProperty('stroke-linecap', 'round');
     t.setAttribute('data-yt-halo', '1');
@@ -9536,32 +9592,44 @@ window.SAYFA_INIT[13] = function (kok) {
   function kutuyaVeEngeleSigdir(svg) {
     var sr = ekran(svg);
     if (!sr) return;
-    var kutular = svg.querySelectorAll('rect, circle, ellipse, polygon');
+    var kutular = svg.querySelectorAll('rect, circle, ellipse, polygon, path');
     var kList = [];
+    var cizgiKutulari = [];
     for (var i = 0; i < kutular.length; i++) {
       var k = kutular[i];
       if (!gorunurMu(k)) continue;
+      var tag = k.nodeName.toLowerCase();
       var st = getComputedStyle(k);
       var op = parseFloat(st.opacity);
       var fOp = parseFloat(k.getAttribute('fill-opacity') || st.fillOpacity || '1');
       var hasStroke = st.stroke && st.stroke !== 'none' && parseFloat(st.strokeWidth || '1') > 0.4 && parseFloat(st.strokeOpacity || '1') >= 0.35;
-      var fillNone = !st.fill || st.fill === 'none';
-      // Parlama şeridi veya gölge katmanı (kenarlığı yok ve yarı saydam) kutu sayılmaz
-      if (!hasStroke && (fillNone || op * fOp < 0.6)) continue;
+      var fillNone = !st.fill || st.fill === 'none' || k.getAttribute('fill') === 'none';
       var kb = ekran(k);
-      if (!kb || kb.width < 22 || kb.height < 14) continue;
+      if (!kb) continue;
+      if (hasStroke && (fillNone || tag === 'path' || tag === 'polygon')) {
+        cizgiKutulari.push(kb);
+      }
+      if (tag === 'path') {
+        var dAttr = k.getAttribute('d') || '';
+        if (fillNone || op * fOp < 0.55 || !/[Zz]\s*$/.test(dAttr)) continue;
+      } else {
+        // Parlama şeridi veya gölge katmanı (kenarlığı yok ve yarı saydam) kutu sayılmaz
+        if (!hasStroke && (fillNone || op * fOp < 0.6)) continue;
+      }
+      if (kb.width < 22 || kb.height < 14) continue;
       if (kb.width > sr.width * 0.78 && kb.height > sr.height * 0.78) continue; // tam sahne zemini muaf
-      kList.push({ el: k, r: kb, tag: k.nodeName.toLowerCase() });
+      kList.push({ el: k, r: kb, tag: tag, fillNone: fillNone, op: op * fOp });
     }
-    var cizgiler = svg.querySelectorAll('line');
+    var cizgiler = svg.querySelectorAll('line, polyline');
     var lList = [];
     for (var li = 0; li < cizgiler.length; li++) {
       var ln = cizgiler[li];
       if (!gorunurMu(ln)) continue;
       var lb = ekran(ln);
       if (!lb) continue;
+      cizgiKutulari.push(lb);
       // Kısa yatay lejant/işaret çizgileri (genişliği 8..90px, yüksekliği <= 8px)
-      if (lb.width >= 8 && lb.width <= sr.width * 0.22 && lb.height <= 8) {
+      if (ln.nodeName.toLowerCase() === 'line' && lb.width >= 8 && lb.width <= sr.width * 0.22 && lb.height <= 8) {
         lList.push({ el: ln, r: lb });
       }
     }
@@ -9586,7 +9654,7 @@ window.SAYFA_INIT[13] = function (kok) {
       var tcx = tb.left + tb.width / 2, tcy = tb.top + tb.height / 2;
       var anchor = t.getAttribute('text-anchor') || getComputedStyle(t).textAnchor || 'start';
 
-      // A) En küçük kapsayan kutuyu bul (varsa içine ve yan duvarlarına sığdır)
+      // A) En küçük kapsayan kutuyu bul (varsa zıtlığını koru, içine ve yan duvarlarına sığdır)
       var enKucuk = null, enAlan = 1e12;
       for (var ki = 0; ki < kList.length; ki++) {
         var kd = kList[ki].r;
@@ -9595,7 +9663,9 @@ window.SAYFA_INIT[13] = function (kok) {
           if (alan < enAlan) { enAlan = alan; enKucuk = kList[ki]; }
         }
       }
-      if (enKucuk) {
+      dinamikZitlikOnar(t, enKucuk, svg);
+      haloUygula(t, tb, enKucuk, cizgiKutulari, svg, sr);
+      if (enKucuk && enKucuk.tag !== 'path') {
         var kr = enKucuk.r;
         var icGen = kr.width - 8;
         if (enKucuk.tag === 'circle' || enKucuk.tag === 'ellipse') {
@@ -9823,7 +9893,7 @@ window.SAYFA_INIT[13] = function (kok) {
       childList: true,
       characterData: true,
       attributes: true,
-      attributeFilter: ['class', 'style', 'opacity', 'display', 'visibility', 'transform', 'x', 'y', 'hidden']
+      attributeFilter: ['class', 'style', 'opacity', 'display', 'visibility', 'transform', 'x', 'y', 'hidden', 'fill', 'stroke']
     });
     sayfalar.addEventListener('input', function () { planla(35); }, true);
     sayfalar.addEventListener('change', etkilesimSonrasi, true);

@@ -123,10 +123,13 @@ function temaIcerikSayisi(
 }
 
 const KAZANIM_KLASORU = `${VARLIK_ONEKI}/kazanim-icerikleri`;
+// Her yayında değişen sürüm (next.config): yayından sonra tarayıcı önbellekteki eski içeriği göstermesin
+const YAYIN_SURUMU = process.env.NEXT_PUBLIC_YAYIN_SURUMU ?? '';
+const SURUM_EKI = YAYIN_SURUMU ? `?v=${encodeURIComponent(YAYIN_SURUMU)}` : '';
 let kazanimListesiSozu: Promise<Record<string, KazanimIcerigi>> | null = null;
 
 function kazanimListesi(): Promise<Record<string, KazanimIcerigi>> {
-  kazanimListesiSozu ??= fetch(`${KAZANIM_KLASORU}/liste.json`)
+  kazanimListesiSozu ??= fetch(`${KAZANIM_KLASORU}/liste.json${SURUM_EKI}`)
     .then((yanit) => (yanit.ok ? yanit.json() : null))
     .then((veri) => (veri?.kazanimlar as Record<string, KazanimIcerigi> | undefined) ?? {})
     .catch(() => ({}));
@@ -683,7 +686,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
   const icerikUnitesi = icerik ? paneldekiUniteler.find((u) => u.id === icerik.uniteId) : undefined;
   const acikSayfalar = icerik?.konu.code ? konuSayfalari(kazanimlar[icerik.konu.code]) : [];
   const acikKazanim: IcerikSayfasi | undefined = acikSayfalar[icerikSirasi] ?? acikSayfalar[0];
-  const icerikAdresi = acikKazanim ? `${KAZANIM_KLASORU}/${encodeURIComponent(acikKazanim.dosya)}` : null;
+  const icerikAdresi = acikKazanim ? `${KAZANIM_KLASORU}/${encodeURIComponent(acikKazanim.dosya)}${SURUM_EKI}` : null;
   const kokStili = kademe ? ({ '--vurgu': kademe.renk } as React.CSSProperties) : undefined;
   const siniflar = kademe ? ADA_SINIFLARI[kademe.id] : [];
 
