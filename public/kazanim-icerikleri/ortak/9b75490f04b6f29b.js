@@ -41,22 +41,7 @@
      yazsın»): KEŞİF/UYGULA/DEĞERLENDİRME rozeti panel başlığında ayrı satır açıyordu
      (ilkokul boylarında ~40px). Sayaç FOOTER'daysa «1 / 6 · Keşif» yazılır ve panel rozeti
      gizlenir (body.etiket-altta); sayaç bannerda ya da hiç yoksa rozet panelde kalır. */
-  // İLK SAYFADA «ÖNCEKİ», SON SAYFADA «SONRAKİ» YOK (2026-10-13, kullanıcı): düğme
-  // görünmez ama yer tutar (visibility) — footer'ın space-between düzeni bozulmaz,
-  // sayaç ortada kalır; klavye ve ekran okuyucu için de kapanır.
-  function oncekiGuncelle(no) {
-    const gizle = (kimlik, kosul) => {
-      const b = document.getElementById(kimlik);
-      if (!b) return;
-      b.style.visibility = kosul ? "hidden" : "";
-      b.setAttribute("aria-hidden", kosul ? "true" : "false");
-      b.tabIndex = kosul ? -1 : 0;
-    };
-    gizle("onceki-buton", no <= 1);
-    gizle("sonraki-buton", no >= SAYFA_SAYISI);
-  }
   function sayfaDurumYaz(no) {
-    oncekiGuncelle(no);
     const durum = document.getElementById("sayfa-durum");
     if (!durum) return;
     let metin = no + " / " + SAYFA_SAYISI;
@@ -170,8 +155,7 @@
     if (initDustu.has(no)) return true;
     const L = window.__JS_HATALAR__ && window.__JS_HATALAR__[no];
     // HESAP kaydı (2026-09-26) kod durması değildir: sahne çizilir, ilk çizim beklenir.
-    // YERLES3B kaydı (2026-10-12) da ölçümdür, kod durması değildir.
-    return !!(L && L.some((s) => !/^KONUM3B(\s|$)|^(\S+\s+)?EŞ DÜZLEM|^HESAP(\s|$)|^YERLES3B(\s|$)/.test(String(s))));
+    return !!(L && L.some((s) => !/^KONUM3B(\s|$)|^(\S+\s+)?EŞ DÜZLEM|^HESAP(\s|$)/.test(String(s))));
   }
   function hazirDenetle() {
     hazirZamanli = false;
@@ -1438,101 +1422,7 @@
       r.setPixelRatio = function () { oraniUygula(kayit); return this; };
 
       const asilRender = r.render.bind(r);
-      // KUŞ BAKIŞI ÇEKİM (2026-10-12, kullanıcı: «çözümleri uygula» — aynalama/konum denetimi):
-      // çekim kopyası window.__KUSBAKISI__ koyunca ekrana çizilen sahne, sahnenin kutusunu kaplayan
-      // tepeden ortografik kamerayla çizilir. Ekranın SAĞI = asıl kameranın sağı, ÜSTÜ = asıl
-      // kameradan UZAK (cam.up = kameranın bakış yönü). Zemin/deniz gibi 40 birimden büyük
-      // nesneler kutuya girmez. Yalnız çekimde; normal sayfada kamera değişmez.
-      function kusBakisi(sahne, kamera) {
-        try {
-          const kutu = new THREE.Box3(), tmp = new THREE.Box3(), b = new THREE.Vector3();
-          sahne.updateMatrixWorld(true);
-          sahne.traverse((o) => {
-            if (!o.isMesh || !o.visible || !o.geometry) return;
-            tmp.setFromObject(o); tmp.getSize(b);
-            if (!isFinite(b.x) || Math.max(b.x, b.y, b.z) > 40 || Math.max(b.x, b.y, b.z) < 0.01) return;
-            kutu.union(tmp);
-          });
-          if (kutu.isEmpty()) return kamera;
-          const boyut = kutu.getSize(new THREE.Vector3()), merkez = kutu.getCenter(new THREE.Vector3());
-          const yari = Math.max(boyut.x, boyut.z) * 0.6 + 0.5;
-          const en = r.domElement.width || 1, boy = r.domElement.height || 1, oran = en / boy;
-          const k = kayit.kusKamera || (kayit.kusKamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000));
-          k.left = -yari * oran; k.right = yari * oran; k.top = yari; k.bottom = -yari;
-          k.near = 0.1; k.far = boyut.y + 200;
-          const yon = new THREE.Vector3(0, 0, -1);
-          if (kamera && kamera.getWorldDirection) kamera.getWorldDirection(yon);
-          yon.y = 0; if (yon.lengthSq() < 1e-9) yon.set(0, 0, -1); yon.normalize();
-          k.up.copy(yon);
-          k.position.set(merkez.x, kutu.max.y + 100, merkez.z);
-          k.lookAt(merkez.x, kutu.min.y, merkez.z);
-          k.updateProjectionMatrix(); k.updateMatrixWorld(true);
-          return k;
-        } catch (e) { return kamera; }
-      }
-      // YAKIN ÇEKİM IZGARASI (2026-10-13, kullanıcı: «parça konumlandırmada sorunlar devam ediyor — kesin çözüm»):
-      // çekim kopyası window.__YAKIN__ koyunca normal kare çizildikten sonra tuval, bileşik nesnelerin (≥3 parçalı
-      // sahne çocukları; oda/tezgâh/kapı/pencere ve GLB varlıkları hariç, en çok 4) her birine sığdırılmış
-      // kamerayla hücre hücre yeniden çizilir — eleştirmen parça birleşimini bu kareden okur. Yalnız çekimde.
-      function yakinAdaylar(sahne) {
-        const adaylar = [], tmp = new THREE.Box3(), b = new THREE.Vector3();
-        sahne.children.forEach((c) => {
-          if (c.isLight || c.isCamera || !c.visible) return;
-          if (/^(oda|tezgah|duvar_raf|kapi|pencere)$/.test(c.name || "") || /^(DOGA3B|VARLIK3B|BIYO3B)_/.test(c.name || "")) return;
-          if (c.userData && (c.userData.oda || c.userData.pencere || c.userData.zemin || c.userData.konumDisi || c.userData.varlik)) return;
-          let n = 0; c.traverseVisible((o) => { if (o.isMesh && o.geometry) n++; });
-          if (n < 3 || n > 60) return;
-          tmp.setFromObject(c); if (tmp.isEmpty()) return; tmp.getSize(b);
-          if (!isFinite(b.x) || Math.max(b.x, b.y, b.z) > 40 || Math.max(b.x, b.y, b.z) < 0.05) return;
-          adaylar.push({ nesne: c, parca: n });
-        });
-        adaylar.sort((p, q) => q.parca - p.parca);
-        return adaylar.slice(0, 4).map((a) => a.nesne);
-      }
-      function yakinIzgara(sahne, kamera) {
-        try {
-          if (!window.KONUM3B || !kamera.isPerspectiveCamera) return;
-          const adaylar = yakinAdaylar(sahne); if (!adaylar.length) return;
-          // Render hedefi bağlıysa (sonIslem / EffectComposer RenderPass) viewport ve scissor HEDEFİN alanlarıdır:
-          // renderer.setViewport ekrana yöneliktir, hedefe uygulanmaz (ölçüldü: hücreler yok sayılıp son aday
-          // tam kare çiziliyordu). Hedef pikselleri = tampon boyutu; ekranda CSS boyutu.
-          const rt = r.getRenderTarget ? r.getRenderTarget() : null;
-          let en, boy;
-          if (rt) { en = rt.width; boy = rt.height; } else { const olcu = r.getSize(new THREE.Vector2()); en = olcu.x; boy = olcu.y; }
-          const n = adaylar.length, kol = n > 1 ? 2 : 1, sat = n > 2 ? 2 : 1;
-          const cw = Math.floor(en / kol), ch = Math.floor(boy / sat);
-          const k = kayit.yakinKamera || (kayit.yakinKamera = kamera.clone());
-          const eskiAutoClear = r.autoClear;
-          function hucre(cx, cy, w, h, test) {
-            if (rt) { rt.viewport.set(cx, cy, w, h); rt.scissor.set(cx, cy, w, h); rt.scissorTest = test; r.setRenderTarget(rt); }
-            else { r.setScissorTest(test); r.setViewport(cx, cy, w, h); r.setScissor(cx, cy, w, h); }
-          }
-          for (let i = 0; i < n; i++) {
-            const cx = (i % kol) * cw, cy = boy - ch * (Math.floor(i / kol) + 1);   // WebGL: y alttan
-            hucre(cx, cy, cw, ch, true);
-            k.copy(kamera); k.aspect = cw / ch; k.updateProjectionMatrix();
-            window.KONUM3B.kadrajaSigdir(k, [adaylar[i]], { pay: 1.15 });
-            k.updateMatrixWorld(true);
-            r.autoClear = true; asilRender(sahne, k);
-          }
-          for (let j = n; j < kol * sat; j++) {   // boş hücre: genel görünüm (bağlam) — normal kamera, hücre oranında
-            const cx = (j % kol) * cw, cy = boy - ch * (Math.floor(j / kol) + 1);
-            hucre(cx, cy, cw, ch, true);
-            k.copy(kamera); k.aspect = cw / ch; k.updateProjectionMatrix(); k.updateMatrixWorld(true);
-            r.autoClear = true; asilRender(sahne, k);
-          }
-          hucre(0, 0, en, boy, false); r.autoClear = eskiAutoClear;
-        } catch (e) {}
-      }
-      function kopruluRender(sahne, kamera) {
-        // Son işlem zincirli sayfada (EffectComposer) sahne bir render hedefine çizilir (RenderPass),
-        // ekrana yalnız dörtgen gider — ölçüldü (FB.4.3.1 s3): hedef=null şartı kuş bakışını
-        // atlıyordu. Şart: Scene + gerçek kamera + yardımcı (PMREM/CubeCamera) hedef DEĞİL.
-        if (window.__KUSBAKISI__ && sahne && sahne.isScene === true && kamera && kamera.isCamera
-            && !(kamera.userData && kamera.userData.yardimci)
-            && !yardimciHedef(r.getRenderTarget ? r.getRenderTarget() : null)) {
-          kamera = kusBakisi(sahne, kamera);
-        }
+      r.render = function (sahne, kamera) {
         // SON İŞLEM ZİNCİRİ (2026-09-03, postprocessing.js): EffectComposer
         // geçişleri tam-ekran dörtgeni (Mesh) orto kamerayla çizer — Scene
         // değildir. Bu çağrılar köprünün kamera kaydına/yuva izdüşümüne
@@ -1580,10 +1470,8 @@
           kayit.cifYuzSahneler.add(sahne);
           const cifYuz = (s) => { try { s.traverse((o) => {
             if (!o.isMesh || !o.geometry || !o.material) return;
-            // ODA DUVARLARI TEK YÜZLÜ KALIR (13.10): odaKur duvarları içe bakar; kamera odanın
-            // dışına düşünce (ölçüldü FB.6.5.3.2 s5: z = 5,8 > ön duvar 5) aradaki duvar çizilmemeli.
-            // Çift yüz yapılınca ön duvarın arka yüzü kadrajı kapatıyordu. Pencere dış düzlemi de aynı.
-            if (/^(oda_|pencere_dis|kapi_)/.test(o.name || "")) return;
+            // Oda duvarları içe bakan FrontSide kalmalı; dış kamera aradaki duvarı görmemeli.
+            if (o.parent && o.parent.userData && o.parent.userData.oda && /^oda_.*_duvar$/.test(o.name || "")) return;
             const g = o.geometry, t = String(g.type || ""), p = g.parameters || {};
             const acik = /^(Circle|Plane|Ring|Shape)Geometry$/.test(t)
                       || (/^(Cylinder|Cone)Geometry$/.test(t) && p.openEnded === true);
@@ -1693,17 +1581,6 @@
                   " aynı " + (e0.eksen || "y") + "=" + (e0.konum != null ? e0.konum : e0.y) + ", örtüşme " + e0.ortusme + " birim² (" + rp.esDuzlem.length +
                   " çift) — birini 0.01 kaldır/indir ya da kapağı/diski ayır (kapak-mercek, disk-etiket: eksen boyunca >= 0.01 birim ya da polygonOffset) (sözleşme 16 EŞ DÜZLEM YASAĞI)"), "KONUM3B");
               }
-              // KOPUK PARÇA (2026-10-13, kullanıcı: «parça konumlandırmada sorunlar devam ediyor — kesin çözüm»):
-              // bileşik nesnenin kardeşlerine değmeyen ve desteksiz parçası denetim bandına gider (KOPUK3B);
-              // onarım turu KONUM3B.eklemle ile birleştirir. HAVADA/GÖMÜLÜ gibi niyet olamaz.
-              if (rp && rp.kopuk && rp.kopuk.length && window.JS_HATA_KAYDET) {
-                var secK = r.domElement.closest ? r.domElement.closest(".sayfa") : null;
-                var noK = secK ? (+String(secK.id).replace("sayfa-", "") || 0) : 0;
-                var k0 = rp.kopuk[0];
-                window.JS_HATA_KAYDET(noK, new Error("KOPUK PARÇA: '" + k0.birim + "' içinde '" + k0.parca + "' en yakın parçası '" + k0.enYakin +
-                  "' ile birleşmiyor, boşluk " + k0.bosluk + " birim (" + rp.kopuk.length + " parça) — KONUM3B.eklemle(parca, referans, {refUc:'ust', parcaUc:'alt', eksen:'ayni'}) " +
-                  "ile ucunu referansın ucuna bağla ya da KONUM3B.ustuneKoy(alt, parca, true) ile oturt; elle ofset yazma (sözleşme 16h)"), "KOPUK3B");
-              }
             } catch (e) {} finally { isBitti(olcSayfa); }
           }, 1500);
         }
@@ -1712,15 +1589,6 @@
         // nesnenin YÜZEYİNE basılıyor ve nesneyle birlikte döndüğü için
         // kare başına hizalama GEREKMİYOR — kanca da kaldırıldı.
         return asilRender(sahne, kamera);
-      }
-      r.render = function (sahne, kamera) {
-        var sonuc = kopruluRender(sahne, kamera);
-        if (window.__YAKIN__ && sahne && sahne.isScene === true && kamera && kamera.isCamera
-            && !(kamera.userData && kamera.userData.yardimci)
-            && !yardimciHedef(r.getRenderTarget ? r.getRenderTarget() : null)) {
-          yakinIzgara(sahne, kamera);   // normal kare + hooklar koştuktan SONRA tuvalin üstüne ızgara
-        }
-        return sonuc;
       };
       return r;
     }
