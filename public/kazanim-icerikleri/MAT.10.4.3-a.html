@@ -679,6 +679,288 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 } )();
 
 </script>
+<script>/* Reflector.js — yerel gömme */
+/* three.js r155 örnek portu — Reflector (examples/jsm/objects/Reflector.js)
+ * Lisans: MIT (three.js yazarları). Global yapı (THREE.*) için IIFE olarak
+ * uyarlandı; ES modül/importmap yok. Düz AYNA / parlak zemin / durgun su için
+ * gerçek sahne yansıması: sahne her karede aynalanmış kamerayla bir dokuya
+ * çizilir (CubeCamera düz yüzeyde yanlış paralaks verir, bu doğru olanıdır).
+ * Kullanım:
+ *   var ayna = new THREE.Reflector(new THREE.PlaneGeometry(2, 1.2), {
+ *     clipBias: 0.003, textureWidth: 1024, textureHeight: 1024, color: 0x8a8a8a });
+ *   ayna.position.set(x, y, z); ayna.rotation.y = a;   // düzlemin +Z normali bakış tarafıdır
+ *   scene.add(ayna);
+ * Bedel: kare başına bir tam sahne çizimi daha (yansıma dokusu). Yüzey sayısı
+ * 1-2 ile sınırlı tutulur; hareket yoksa yine her kare çizer.
+ * Montaj bu dosyayı yalnız sayfada «Reflector» geçince gömer
+ * (uretici/sablon.py kutuphane_dosyalari). 2026-09-05. */
+( function () {
+
+	class Reflector extends THREE.Mesh {
+
+		constructor( geometry, options = {} ) {
+
+			super( geometry );
+
+			this.isReflector = true;
+			this.type = 'Reflector';
+			this.camera = new THREE.PerspectiveCamera();
+			// PORT EKİ: yardımcı kamera damgası — şablon köprüsü (sablon.html) bu
+			// kamerayla yapılan çizimi kayda/3B yuva izdüşümüne almaz (aksi hâlde
+			// yuva vuruş alanları her karede ayna kamerasına göre kayardı).
+			this.camera.userData.yardimci = true;
+
+			const scope = this;
+
+			const color = ( options.color !== undefined ) ? new THREE.Color( options.color ) : new THREE.Color( 0x7F7F7F );
+			const textureWidth = options.textureWidth || 512;
+			const textureHeight = options.textureHeight || 512;
+			const clipBias = options.clipBias || 0;
+			const shader = options.shader || Reflector.ReflectorShader;
+			const multisample = ( options.multisample !== undefined ) ? options.multisample : 4;
+
+			//
+
+			const reflectorPlane = new THREE.Plane();
+			const normal = new THREE.Vector3();
+			const reflectorWorldPosition = new THREE.Vector3();
+			const cameraWorldPosition = new THREE.Vector3();
+			const rotationMatrix = new THREE.Matrix4();
+			const lookAtPosition = new THREE.Vector3( 0, 0, - 1 );
+			const clipPlane = new THREE.Vector4();
+
+			const view = new THREE.Vector3();
+			const target = new THREE.Vector3();
+			const q = new THREE.Vector4();
+
+			const textureMatrix = new THREE.Matrix4();
+			const virtualCamera = this.camera;
+
+			const renderTarget = new THREE.WebGLRenderTarget( textureWidth, textureHeight, { samples: multisample, type: THREE.HalfFloatType } );
+
+			const material = new THREE.ShaderMaterial( {
+				uniforms: THREE.UniformsUtils.clone( shader.uniforms ),
+				fragmentShader: shader.fragmentShader,
+				vertexShader: shader.vertexShader
+			} );
+
+			material.uniforms[ 'tDiffuse' ].value = renderTarget.texture;
+			material.uniforms[ 'color' ].value = color;
+			material.uniforms[ 'textureMatrix' ].value = textureMatrix;
+
+			this.material = material;
+
+			this.onBeforeRender = function ( renderer, scene, camera ) {
+
+				// PORT EKİ (2026-09-05): kırılma (transmission) geçişi opak nesneleri
+				// mipmap'li yarı-float bir hedefe çizerken bu kancayı da tetikler;
+				// içeride yeniden sahne çizmek o paylaşılan hedefi ezer ve camın
+				// arkası ayna görüntüsüyle bozulur. Böyle bir hedef etkinken yansıma
+				// dokusu TAZELENMEZ (son kare kullanılır). EffectComposer hedefleri
+				// mipmap'siz olduğundan bloom zincirinde ayna yine her kare çizilir.
+				const etkinHedef = renderer.getRenderTarget();
+				if ( etkinHedef && etkinHedef.texture && etkinHedef.texture.generateMipmaps === true ) return;
+
+				reflectorWorldPosition.setFromMatrixPosition( scope.matrixWorld );
+				cameraWorldPosition.setFromMatrixPosition( camera.matrixWorld );
+
+				rotationMatrix.extractRotation( scope.matrixWorld );
+
+				normal.set( 0, 0, 1 );
+				normal.applyMatrix4( rotationMatrix );
+
+				view.subVectors( reflectorWorldPosition, cameraWorldPosition );
+
+				// Avoid rendering when reflector is facing away
+
+				if ( view.dot( normal ) > 0 ) return;
+
+				view.reflect( normal ).negate();
+				view.add( reflectorWorldPosition );
+
+				rotationMatrix.extractRotation( camera.matrixWorld );
+
+				lookAtPosition.set( 0, 0, - 1 );
+				lookAtPosition.applyMatrix4( rotationMatrix );
+				lookAtPosition.add( cameraWorldPosition );
+
+				target.subVectors( reflectorWorldPosition, lookAtPosition );
+				target.reflect( normal ).negate();
+				target.add( reflectorWorldPosition );
+
+				virtualCamera.position.copy( view );
+				virtualCamera.up.set( 0, 1, 0 );
+				virtualCamera.up.applyMatrix4( rotationMatrix );
+				virtualCamera.up.reflect( normal );
+				virtualCamera.lookAt( target );
+
+				virtualCamera.far = camera.far; // Used in WebGLBackground
+
+				virtualCamera.updateMatrixWorld();
+				virtualCamera.projectionMatrix.copy( camera.projectionMatrix );
+
+				// Update the texture matrix
+				textureMatrix.set(
+					0.5, 0.0, 0.0, 0.5,
+					0.0, 0.5, 0.0, 0.5,
+					0.0, 0.0, 0.5, 0.5,
+					0.0, 0.0, 0.0, 1.0
+				);
+				textureMatrix.multiply( virtualCamera.projectionMatrix );
+				textureMatrix.multiply( virtualCamera.matrixWorldInverse );
+				textureMatrix.multiply( scope.matrixWorld );
+
+				// Now update projection matrix with new clip plane, implementing code from: http://www.terathon.com/code/oblique.html
+				// Paper explaining this technique: http://www.terathon.com/lengyel/Lengyel-Oblique.pdf
+				reflectorPlane.setFromNormalAndCoplanarPoint( normal, reflectorWorldPosition );
+				reflectorPlane.applyMatrix4( virtualCamera.matrixWorldInverse );
+
+				clipPlane.set( reflectorPlane.normal.x, reflectorPlane.normal.y, reflectorPlane.normal.z, reflectorPlane.constant );
+
+				const projectionMatrix = virtualCamera.projectionMatrix;
+
+				q.x = ( Math.sign( clipPlane.x ) + projectionMatrix.elements[ 8 ] ) / projectionMatrix.elements[ 0 ];
+				q.y = ( Math.sign( clipPlane.y ) + projectionMatrix.elements[ 9 ] ) / projectionMatrix.elements[ 5 ];
+				q.z = - 1.0;
+				q.w = ( 1.0 + projectionMatrix.elements[ 10 ] ) / projectionMatrix.elements[ 14 ];
+
+				// Calculate the scaled plane vector
+				clipPlane.multiplyScalar( 2.0 / clipPlane.dot( q ) );
+
+				// Replacing the third row of the projection matrix
+				projectionMatrix.elements[ 2 ] = clipPlane.x;
+				projectionMatrix.elements[ 6 ] = clipPlane.y;
+				projectionMatrix.elements[ 10 ] = clipPlane.z + 1.0 - clipBias;
+				projectionMatrix.elements[ 14 ] = clipPlane.w;
+
+				// Render
+
+				scope.visible = false;
+
+				const currentRenderTarget = renderer.getRenderTarget();
+
+				const currentXrEnabled = renderer.xr.enabled;
+				const currentShadowAutoUpdate = renderer.shadowMap.autoUpdate;
+
+				renderer.xr.enabled = false; // Avoid camera modification
+				renderer.shadowMap.autoUpdate = false; // Avoid re-computing shadows
+
+				renderer.setRenderTarget( renderTarget );
+
+				renderer.state.buffers.depth.setMask( true ); // make sure the depth buffer is writable so it can be properly cleared, see #18897
+
+				if ( renderer.autoClear === false ) renderer.clear();
+				renderer.render( scene, virtualCamera );
+
+				renderer.xr.enabled = currentXrEnabled;
+				renderer.shadowMap.autoUpdate = currentShadowAutoUpdate;
+
+				renderer.setRenderTarget( currentRenderTarget );
+
+				// Restore viewport
+
+				const viewport = camera.viewport;
+
+				if ( viewport !== undefined ) {
+
+					renderer.state.viewport( viewport );
+
+				}
+
+				scope.visible = true;
+
+			};
+
+			this.getRenderTarget = function () {
+
+				return renderTarget;
+
+			};
+
+			this.dispose = function () {
+
+				renderTarget.dispose();
+				scope.material.dispose();
+
+			};
+
+		}
+
+	}
+
+	Reflector.ReflectorShader = {
+
+		uniforms: {
+
+			'color': {
+				value: null
+			},
+
+			'tDiffuse': {
+				value: null
+			},
+
+			'textureMatrix': {
+				value: null
+			}
+
+		},
+
+		vertexShader: /* glsl */`
+			uniform mat4 textureMatrix;
+			varying vec4 vUv;
+
+			#include <common>
+			#include <logdepthbuf_pars_vertex>
+
+			void main() {
+
+				vUv = textureMatrix * vec4( position, 1.0 );
+
+				gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+				#include <logdepthbuf_vertex>
+
+			}`,
+
+		fragmentShader: /* glsl */`
+			uniform vec3 color;
+			uniform sampler2D tDiffuse;
+			varying vec4 vUv;
+
+			#include <logdepthbuf_pars_fragment>
+
+			float blendOverlay( float base, float blend ) {
+
+				return( base < 0.5 ? ( 2.0 * base * blend ) : ( 1.0 - 2.0 * ( 1.0 - base ) * ( 1.0 - blend ) ) );
+
+			}
+
+			vec3 blendOverlay( vec3 base, vec3 blend ) {
+
+				return vec3( blendOverlay( base.r, blend.r ), blendOverlay( base.g, blend.g ), blendOverlay( base.b, blend.b ) );
+
+			}
+
+			void main() {
+
+				#include <logdepthbuf_fragment>
+
+				vec4 base = texture2DProj( tDiffuse, vUv );
+
+				gl_FragColor = vec4( blendOverlay( base.rgb, color ), 1.0 );
+
+				#include <tonemapping_fragment>
+				#include <colorspace_fragment>
+
+			}`
+	};
+
+	THREE.Reflector = Reflector;
+
+} )();
+
+</script>
 <script src="ortak/c94ff30389b6f9ad.js"></script>
 <script>/* pdnd-svg.js — yerel gömme */
 /* pdnd-svg.js — Pragmatic DnD'yi SVG düğümlerine açan köprü.
@@ -1062,7 +1344,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/e69c53cf44e7d3b8.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-16 15:23
+  montaj: 2026-10-16 17:43
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 07:51
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 07:50
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 07:53
@@ -4053,8 +4335,8 @@ window.SAYFA_INIT[5] = function (kok) {
           <rect id="s6-bg-belirleyen" x="50" y="300" width="335" height="304" rx="16" fill="url(#s6-grad-panel)" stroke="#b0bec5" stroke-width="2" filter="url(#s6-golge)" />
           <line x1="68" y1="302" x2="368" y2="302" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.8" />
           <rect id="s6-border-belirleyen" x="54" y="304" width="327" height="296" rx="14" fill="none" stroke="#428bca" stroke-width="2" stroke-dasharray="8 6" />
-          <rect x="70" y="316" width="190" height="30" rx="10" fill="#9bb2d4" />
-          <text x="217" y="337" class="svg-metin" fill="#1b1c3a" text-anchor="middle">Tek başına alanı belirler</text>
+          <rect x="68" y="314" width="299" height="34" rx="10" fill="#9bb2d4" />
+          <text x="217.5" y="337" class="svg-metin" fill="#1b1c3a" text-anchor="middle">Tek başına alanı belirler</text>
           
           <!-- Yuva 1: Kenar Uzunluğu -->
           <g id="s6-yuva-kenar" transform="translate(68, 362)">
@@ -4082,8 +4364,8 @@ window.SAYFA_INIT[5] = function (kok) {
           <rect id="s6-bg-belirlemeyen" x="415" y="300" width="335" height="304" rx="16" fill="url(#s6-grad-panel)" stroke="#b0bec5" stroke-width="2" filter="url(#s6-golge)" />
           <line x1="433" y1="302" x2="733" y2="302" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.8" />
           <rect id="s6-border-belirlemeyen" x="419" y="304" width="327" height="296" rx="14" fill="none" stroke="#7a8a99" stroke-width="2" stroke-dasharray="8 6" />
-          <rect x="435" y="316" width="210" height="30" rx="10" fill="#acb8c3" />
-          <text x="582" y="337" class="svg-metin" fill="#1b1c3a" text-anchor="middle">Tek başına belirlemez</text>
+          <rect x="433" y="314" width="299" height="34" rx="10" fill="#acb8c3" />
+          <text x="582.5" y="337" class="svg-metin" fill="#1b1c3a" text-anchor="middle">Tek başına belirlemez</text>
 
           <!-- Yuva 1: İç Açılar -->
           <g id="s6-yuva-acilar" transform="translate(433, 358)">
@@ -4797,8 +5079,9 @@ window.SAYFA_INIT[7] = function (kok) {
   var h_px = kap.clientHeight || 550;
 
   var scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf3efe8);
-  scene.fog = new THREE.Fog(0xa0c3da, 28, 95);
+  // Gök ve sis aynı renk: ufukta su gökle dikişsiz birleşir
+  scene.background = new THREE.Color(0xd3e3ee);
+  scene.fog = new THREE.Fog(0xd3e3ee, 28, 95);
 
   var camera = new THREE.PerspectiveCamera(45, w / h_px, 0.5, 200);
   camera.position.set(-11, 5.5, 8.5);
@@ -4858,12 +5141,24 @@ window.SAYFA_INIT[7] = function (kok) {
   var dalga1 = dalgaNormali(256, 1, 0), dalga2 = dalgaNormali(256, 1.7, 2.1);
   dalga1.repeat.set(10, 10);
   dalga2.repeat.set(6, 6);
+  // Su: altta gerçek yansıtıcı, üstte dalgalı yarı saydam katman.
+  // (transmission'lı su tekneyi kırıp yanında hayalet kopya ve ufukta leke üretiyordu)
+  var pikselOran = renderer.getPixelRatio();
+  var suAynasi = new THREE.Reflector(new THREE.PlaneGeometry(300, 300), {
+    clipBias: 0.003,
+    textureWidth: Math.min(1024, Math.round(w * pikselOran)),
+    textureHeight: Math.min(1024, Math.round(h_px * pikselOran)),
+    color: 0x6a90aa
+  });
+  suAynasi.rotation.x = -Math.PI / 2;
+  suAynasi.position.y = -0.03;
+  scene.add(suAynasi);
+
   var suMat = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff, metalness: 0, roughness: 0.04,
-    transmission: 1, ior: 1.33, thickness: 1.0,
-    attenuationColor: new THREE.Color(0x2f8fbf), attenuationDistance: 1.2,
+    color: 0x1d6896, metalness: 0, roughness: 0.16,
+    transparent: true, opacity: 0.68, depthWrite: false,
     normalMap: dalga1, normalScale: new THREE.Vector2(0.45, 0.45),
-    clearcoat: 0.3, clearcoatRoughness: 0.1, clearcoatNormalMap: dalga2, clearcoatNormalScale: new THREE.Vector2(0.25, 0.25),
+    clearcoat: 0.4, clearcoatRoughness: 0.12, clearcoatNormalMap: dalga2, clearcoatNormalScale: new THREE.Vector2(0.25, 0.25),
     envMapIntensity: 0.35
   });
   var suYuzeyi = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), suMat);
