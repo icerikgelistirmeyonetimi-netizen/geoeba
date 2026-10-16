@@ -1,0 +1,21 @@
+const fs=require('fs');const b='src/components/uygulamalar/veri-grafik/';const edit=(f,fn)=>fs.writeFileSync(b+f,fn(fs.readFileSync(b+f,'utf8')));
+edit('DaireGrafigi.tsx',s=>s.replace('  oransiz?: boolean;','  oransiz?: boolean;\n  /** Ortaokulda merkez açı gösterimi ve hesabı yoktur. */\n  acisiz?: boolean;').replace('  oransiz = false,','  oransiz = false,\n  acisiz = false,').replace('? `${satirEtiketi(tablo, dilimler[i].satir)}: ${sayi(dilimler[i].deger)}`','? `${satirEtiketi(tablo, dilimler[i].satir)} — ${sayi(dilimler[i].deger)}`').replace(': `${satirEtiketi(tablo, dilimler[i].satir)}: ${sayi(dilimler[i].deger)} (${sayiMetni(oranlar.acilar[i], 1)}°, %${sayiMetni(oranlar.yuzdeler[i], 1)})`',': `${satirEtiketi(tablo, dilimler[i].satir)} — ${sayi(dilimler[i].deger)} (${acisiz ? "" : `${sayiMetni(oranlar.acilar[i], 1)}°, `}%${sayiMetni(oranlar.yuzdeler[i], 1)})`').replace("(oransiz ? '' : ` (${sayiMetni(oranlar.acilar[i], 1)}°, %${sayiMetni(oranlar.yuzdeler[i], 1)})`)","(oransiz ? '' : ` (${acisiz ? '' : `${sayiMetni(oranlar.acilar[i], 1)}°, `}%${sayiMetni(oranlar.yuzdeler[i], 1)})`)").replace('const aciM = `${sayiMetni(oranlar.acilar[i], 1)}°`;','const aciM = acisiz ? "" : `${sayiMetni(oranlar.acilar[i], 1)}°`;').replace('`${ad}: ${aciM} · ${yuzdeM}`','`${ad} — ${acisiz ? "" : `${aciM}, `}${yuzdeM}`').replace(': `${satirEtiketi(tablo, d.satir)}: ${sayi(Math.max(0, d.deger))} ÷',': acisiz\n          ? `${satirEtiketi(tablo, d.satir)} — ${sayi(Math.max(0, d.deger))}; bütün ${sayi(toplam)}; ${yuzdeEsit ? "" : "yaklaşık "}%${sayiMetni(yuzde, 1)}`\n          : `${satirEtiketi(tablo, d.satir)}: ${sayi(Math.max(0, d.deger))} ÷').replace('{!oransiz &&\n        gosterilen','{!oransiz && !acisiz &&\n        gosterilen').replace(': e.ad\n            ? [[e.ad, 800], [e.aciM, 700], [e.yuzdeM, 600]]',': acisiz\n            ? e.ad ? [[e.ad, 800], [e.yuzdeM, 600]] : [[e.yuzdeM, 700]]\n            : e.ad\n            ? [[e.ad, 800], [e.aciM, 700], [e.yuzdeM, 600]]').replace('`${sayi(d.deger)}, ${aciM}°, %${yuzdeM}`','`${sayi(d.deger)}, ${acisiz ? "" : `${aciM}°, `}%${yuzdeM}`').replace('              oransiz\n                ? surukleVar','              (oransiz || acisiz)\n                ? surukleVar'));
+edit('KategorikGrafikler.tsx',s=>{
+const add=`          {cetele && (
+            <div className="grid gap-4 xl:grid-cols-2" data-ilkokul-tablolari>
+              {(['Çetele tablosu', 'Sıklık tablosu'] as const).map((baslik, tur) => (
+                <section key={baslik} className="overflow-x-auto rounded-lg border border-border bg-card p-4" data-cetele-tablosu={tur === 0 ? '' : undefined} data-siklik-tablosu={tur === 1 ? '' : undefined}>
+                  <h3 className="mb-2 text-base font-bold">{baslik}</h3>
+                  <table className="w-full border-collapse text-sm tabular-nums">
+                    <thead><tr><th className="border border-border px-3 py-2 text-left">{sutunAdi}</th>{(anahtar ? anahtar.kategoriler : ['Öğrenci']).map(k => <th key={k} className="border border-border px-3 py-2">{k}</th>)}</tr></thead>
+                    <tbody>{f.map((x, i) => <tr key={x.kategori}><th className="border border-border px-3 py-2 text-left">{x.kategori}</th>{(anahtar && capraz ? capraz.find(c => c.kategori === x.kategori)?.sayilar ?? [] : [x.sayi]).map((sayi, j) => <td key={j} className="border border-border px-3 py-2 text-center">{tur === 0 ? <span data-cetele-hucresi><Cetele sayi={sayi} renk={kategoriRengi(x.kategori, i)} yukseklik={CETELE_BOYU} /></span> : sayi}</td>)}</tr>)}</tbody>
+                  </table>
+                </section>
+              ))}
+            </div>
+          )}
+`;
+s=s.replace('          {!cetele && tekYonlu && (',add+'          {!cetele && tekYonlu && (');
+s=s.replace('      {anahtar && (\n        <RenkLejanti','      <text x={W - SAG} y={H - 6} textAnchor="end" fontSize={13} fontWeight={700} fill={RENK.metin} data-eksen-adi="yatay">{sutunAdi}</text>\n      {anahtar && (\n        <RenkLejanti');return s;
+});
+edit('NoktaGrafigi.tsx',s=>s.replace("const anahtarYazisi = isaret !== 'nokta' && sekilAnahtari ? sekilAnahtari : null;","const anahtarYazisi = isaret === 'sekil' ? 'Her bir veri bir şekle karşılık gelmektedir.' : isaret === 'nesne' ? sekilAnahtari ?? 'Her bir resim bir veriyi gösterir.' : null;"));

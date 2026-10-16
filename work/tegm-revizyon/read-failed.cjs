@@ -1,0 +1,1 @@
+const fs=require('fs');const r=JSON.parse(fs.readFileSync('work/tegm-revizyon/all-tests.json','utf8'));for(const suite of r.testResults){const failed=suite.assertionResults.filter(t=>t.status==='failed');if(failed.length) console.log(JSON.stringify({file:suite.name,tests:failed.map(t=>({name:t.fullName,error:t.failureMessages[0]}))},null,2));}

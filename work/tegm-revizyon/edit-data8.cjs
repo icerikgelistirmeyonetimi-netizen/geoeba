@@ -1,0 +1,4 @@
+const fs=require('fs');const b='src/components/uygulamalar/veri-grafik/';const edit=(f,fn)=>fs.writeFileSync(b+f,fn(fs.readFileSync(b+f,'utf8').replace(/\r\n/g,'\n')));
+edit('NoktaGrafigi.tsx',s=>s.replace('KareIsareti, NesneIsareti, nesneBul','KareIsareti').replace("                  const nesne = isaret === 'nesne' ? nesneBul(k.kategori) : null;\n",'').replace(/return nesne \? \(\s*<NesneIsareti[^\n]+\s*\) : \(/,'return ('));
+edit('KategorikGrafikler.tsx',s=>s.replace(/\/\*\* "105°"[\s\S]+?export function KategorikIstatistik/,'export function KategorikIstatistik'));
+edit('sinifKurallari.ts',s=>s.replace('7. ve 8. sınıf: bütün grafikler','7. ve 8. sınıf: saçılım dışındaki grafikler').replace('İstatistik sekmesi "Sıklık tablosu" adını alır, tabloda çetele\n * sütunu','İstatistik sekmesi "Çetele ve sıklık tablosu" adını alır, ayrı çizgili tablolar').replace('ILKOKUL_KURALLARI: 4. sınıfın temsilleri','ILKOKUL_KURALLARI: şekil grafiği ve tablolar'));
