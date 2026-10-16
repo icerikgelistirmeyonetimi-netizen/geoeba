@@ -135,8 +135,9 @@ export function RegularPolygonDialog({
     const corners = regularPolygonVertices(sides, radius, targetPos);
     const pts: PointObject[] = [];
     for (let i = 0; i < sides; i++) {
-      const px = Number(corners[i].x.toFixed(2));
-      const py = Number(corners[i].y.toFixed(2));
+      // Köşeleri yuvarlamak eşit kenarları farklı uzunluklara dönüştürür. Yalnız görünüm yuvarlanır.
+      const px = corners[i].x;
+      const py = corners[i].y;
       pts.push({
         id: createId('pt'),
         type: 'point',
@@ -276,7 +277,7 @@ export function RegularPolygonDialog({
         <div className="space-y-1.5 pt-1">
           <div className="flex justify-between items-center text-xs">
             <label className="font-semibold text-foreground" htmlFor="regular-polygon-radius-input">
-              {ilkokul ? 'Büyüklük' : 'Büyüklük (Yarıçap)'}
+              Büyüklük
             </label>
             <div className="flex items-center gap-1">
               <input
@@ -299,7 +300,7 @@ export function RegularPolygonDialog({
             value={radius}
             onChange={(e) => setRadius(parseFloat(e.target.value))}
             className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
-            aria-label="Yarıçap"
+            aria-label="Çokgenin büyüklüğü"
           />
         </div>
 

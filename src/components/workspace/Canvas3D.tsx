@@ -1441,7 +1441,7 @@ export function Canvas3D(props: Canvas3DProps) {
   const koordinatGoster = !!workspace?.viewport.showCoordinates && olculerGorunur;
   // Nokta adı ve ölçü yakınlaşınca büyür (en çok %5), uzaklaşınca alt sınırda kalır; 3B %100'de (zoom 55) 1
   const yaziOlcegi = yaziOlcegi3B(camera.zoom, stil.yaziAltSiniri);
-  const olcuYazim = useMemo(() => ({ ...yazimAyari(stil), tamSayi: tamSayiOlcuEtkin(stil, kademeDuzeyi) }), [stil, kademeDuzeyi]);
+  const olcuYazim = useMemo(() => ({ ...yazimAyari(stil), tamSayi: tamSayiOlcuEtkin(stil, kademeDuzeyi), alanBirimiAcik: kademeDuzeyi === 'ortaokul' }), [stil, kademeDuzeyi]);
   const yaziSurumu = useEtiketYaziSurumu();
   const [pikselOrani] = useState(() => (typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1));
   const [tema, setTema] = useState<Tema3B>(ACIK_TEMA_3B);
@@ -1497,6 +1497,7 @@ export function Canvas3D(props: Canvas3DProps) {
 
   // En güncel prop/durumları olay dinleyicilerine taşımak için
   const latest = useRef({
+    ilkokul3B,
     solids,
     camera,
     dimensions,
@@ -1523,6 +1524,7 @@ export function Canvas3D(props: Canvas3DProps) {
     pikselOrani,
   });
   latest.current = {
+    ilkokul3B,
     solids,
     camera,
     dimensions,
@@ -2663,12 +2665,12 @@ export function Canvas3D(props: Canvas3DProps) {
 
       if (it.type === 'create' && l.onAddSolid) {
         const distPx = Math.hypot(it.currentScreen.x - it.startScreen.x, it.currentScreen.y - it.startScreen.y);
-        const size = Number(Math.max(2, Math.min(8, distPx / 20)).toFixed(1));
+        const size = Number(Math.max(2, Math.min(8, distPx / 20)).toFixed(l.ilkokul3B ? 0 : 1));
         const solidType = CREATE_TYPE_MAP[l.activeTool] || 'cube';
         l.onAddSolid(
           solidType,
           // Dikdörtgen prizma küp olmasın: 4 : 3 : 2 oranı (cisimYerlesimi.cizimOlculeri)
-          cizimOlculeri(solidType, size),
+          cizimOlculeri(solidType, size, l.ilkokul3B),
           it.groundPos ? { x: Number(it.groundPos.x.toFixed(1)), y: Number(it.groundPos.y.toFixed(1)), z: 0 } : undefined
         );
         if (l.setActive3DTool) l.setActive3DTool('select_move');
@@ -3190,7 +3192,7 @@ export function Canvas3D(props: Canvas3DProps) {
           interaction.currentScreen.y - interaction.startScreen.y
         );
         const size = Math.max(2, Math.min(8, distPx / 20));
-        const metin = `≈ ${formatTurkishNumber(size, 1)} br`;
+        const metin = ilkokul3B ? `${Math.round(size)} br` : `≈ ${formatTurkishNumber(size, 1)} br`;
         return (
           <>
             <div

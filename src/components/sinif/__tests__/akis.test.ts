@@ -19,11 +19,11 @@ function calistir(olaylar: AkisOlayi[], baslangic: AkisDurumu = BASLANGIC_DURUMU
   return olaylar.reduce(akisIndirgeyici, baslangic);
 }
 
-const masa = () => calistir([{ tur: 'ATLA' }]);
+const masa = () => calistir([{ tur: 'ATLA' }, { tur: 'OTURUM_ACILDI' }]);
 const ac = (id: string): AkisOlayi => ({ tur: 'PENCERE_AC', id });
 
 describe('akis', () => {
-  it('3B yol: yukleniyor → yaklasma → devir → acilis → masaustu → uygulama', () => {
+  it('3B yol: yaklaşma ve açılış tamamlanınca oturum, seçimden sonra masaüstü', () => {
     let d = BASLANGIC_DURUMU;
     expect(d.faz).toBe('yukleniyor');
     d = akisIndirgeyici(d, { tur: 'MODEL_YUKLENDI' });
@@ -39,6 +39,12 @@ describe('akis', () => {
     expect(d.faz).toBe('acilis');
     expect(d.ucBoyut).toBe(false);
     d = akisIndirgeyici(d, { tur: 'ACILIS_BITTI' });
+    expect(d.faz).toBe('oturum');
+    expect(d.ekran).toBe('oturum');
+    expect(d.ucBoyut).toBe(false);
+    expect(d.pencereler).toEqual([]);
+    expect(akisIndirgeyici(d, ac('cizim'))).toBe(d);
+    d = akisIndirgeyici(d, { tur: 'OTURUM_ACILDI' });
     expect(d.faz).toBe('masaustu');
     expect(d.ekran).toBe('masaustu');
     expect(d.pencereler).toEqual([]);
@@ -48,13 +54,14 @@ describe('akis', () => {
     expect(d.otomatikAcildi).toBe(true);
   });
 
-  it('3B yok: yukleniyor → acilis (tam ekran) → masaustu', () => {
+  it('3B yok: açılış tamamlanınca oturum seçimini bekler', () => {
     const d = calistir([{ tur: 'UCBOYUT_YOK' }]);
     expect(d.faz).toBe('acilis');
     expect(d.ucBoyut).toBe(false);
     expect(d.ekran).toBe('acilis');
     const son = akisIndirgeyici(d, { tur: 'ACILIS_BITTI' });
-    expect(son.faz).toBe('masaustu');
+    expect(son.faz).toBe('oturum');
+    expect(akisIndirgeyici(son, { tur: 'OTURUM_ACILDI' }).faz).toBe('masaustu');
   });
 
   it('yaklaşma sırasında motor hatası açılışa düşürür', () => {
@@ -68,6 +75,8 @@ describe('akis', () => {
     expect(akisIndirgeyici(d, { tur: 'KAMERA_VARDI' })).toBe(d);
     expect(akisIndirgeyici(d, { tur: 'DEVIR_BITTI' })).toBe(d);
     expect(akisIndirgeyici(d, { tur: 'ACILIS_BITTI' })).toBe(d);
+    expect(akisIndirgeyici(d, { tur: 'OTURUM_ACILDI' })).toBe(d);
+    expect(akisIndirgeyici(d, { tur: 'OTURUM_KAPANDI' })).toBe(d);
     expect(akisIndirgeyici(d, ac('cizim'))).toBe(d);
     expect(akisIndirgeyici(d, { tur: 'PENCERE_KUCULT', id: 'cizim' })).toBe(d);
     expect(akisIndirgeyici(d, { tur: 'PENCERE_KAPAT', id: 'cizim' })).toBe(d);
@@ -79,20 +88,71 @@ describe('akis', () => {
     expect(akisIndirgeyici(yaklasma, { tur: 'MODEL_YUKLENDI' })).toBe(yaklasma);
   });
 
-  it('ATLA her fazdan masaüstüne götürür, masaüstünde etkisizdir', () => {
+  it('ATLA: ekran yokken (yükleniyor) ya da zaten tam ekranken (3B\'siz açılış) doğrudan oturuma götürür', () => {
+    for (const olaylar of [[], [{ tur: 'UCBOYUT_YOK' }]] as AkisOlayi[][]) {
+      const d = akisIndirgeyici(calistir(olaylar), { tur: 'ATLA' });
+      expect(d.faz).toBe('oturum');
+      expect(d.ucBoyut).toBe(false);
+      expect(d.ekran).toBe('oturum');
+      expect(d.atlandi).toBe(false);
+      expect(akisIndirgeyici(d, { tur: 'ATLA' })).toBe(d);
+      expect(akisIndirgeyici(d, ac('cizim'))).toBe(d);
+    }
+    const m = calistir([ac('cizim')], masa());
+    expect(akisIndirgeyici(m, { tur: 'ATLA' })).toBe(m);
+  });
+
+  it('ATLA tahtadaki ekran görünürken (yaklaşma, devir) akışı kesmez: atlandı işaretlenir, devir ve açılış animasyonla biter, sonra oturum', () => {
+    // Tahtadaki küçük ekran bir anda tam ekrana sıçramasın (16 Ekim 2026): kamera hızla varır, devir yine animasyondur
+    const yaklasma = calistir([{ tur: 'MODEL_YUKLENDI' }]);
+    const a = akisIndirgeyici(yaklasma, { tur: 'ATLA' });
+    expect(a).toMatchObject({ faz: 'yaklasma', ekran: 'karanlik', ucBoyut: true, atlandi: true });
+    expect(atlanabilir(a.faz, a.atlandi)).toBe(false);
+    expect(akisIndirgeyici(a, { tur: 'ATLA' })).toBe(a);
+    const devir = akisIndirgeyici(a, { tur: 'KAMERA_VARDI' });
+    expect(devir).toMatchObject({ faz: 'devir', atlandi: true });
+    const acilis = akisIndirgeyici(devir, { tur: 'DEVIR_BITTI' });
+    expect(acilis).toMatchObject({ faz: 'acilis', ucBoyut: false, atlandi: true });
+    const oturum = akisIndirgeyici(acilis, { tur: 'ACILIS_BITTI' });
+    expect(oturum).toMatchObject({ faz: 'oturum', ekran: 'oturum', atlandi: false });
+    // Devir sürerken de aynı: akış kesilmez
+    const d2 = akisIndirgeyici(calistir([{ tur: 'MODEL_YUKLENDI' }, { tur: 'KAMERA_VARDI' }]), { tur: 'ATLA' });
+    expect(d2).toMatchObject({ faz: 'devir', atlandi: true });
+    // Atlandıktan sonra düğme kalkar: ikinci ATLA yok sayılır (kısa açılış kendiliğinden oturuma varır)
+    const acilis2 = akisIndirgeyici(d2, { tur: 'DEVIR_BITTI' });
+    expect(akisIndirgeyici(acilis2, { tur: 'ATLA' })).toBe(acilis2);
+    // Atlanmadan devirden gelen açılışta ATLA doğrudan oturuma geçer (ekran zaten tam ekran)
+    const normal = calistir([{ tur: 'MODEL_YUKLENDI' }, { tur: 'KAMERA_VARDI' }, { tur: 'DEVIR_BITTI' }]);
+    expect(normal).toMatchObject({ faz: 'acilis', atlandi: false });
+    expect(akisIndirgeyici(normal, { tur: 'ATLA' }).faz).toBe('oturum');
+  });
+
+  it('oturum değişince açık ve küçük pencereler temizlenir; sahne tekrarlanmadan yeni oturum açılır', () => {
+    let d = calistir([ac('cizim'), ac('veri-grafik'), { tur: 'PENCERE_KUCULT', id: 'cizim' }, { tur: 'BASLAT_MENUSU', acik: true }], masa());
+    expect(d.faz).toBe('uygulama');
+    expect(d.pencereler).toHaveLength(2);
+    expect(d.otomatikAcildi).toBe(true);
+    d = akisIndirgeyici(d, { tur: 'OTURUM_KAPANDI' });
+    expect(d).toMatchObject({ faz: 'oturum', ekran: 'oturum', ucBoyut: false, pencereler: [], acilisSayaci: 0, baslatMenusu: false, otomatikAcildi: false });
+    for (const tur of ['MODEL_YUKLENDI', 'KAMERA_VARDI', 'DEVIR_BITTI', 'ACILIS_BITTI', 'UCBOYUT_YOK', 'OTURUM_KAPANDI'] as const) {
+      expect(akisIndirgeyici(d, { tur })).toBe(d);
+    }
+    const yeni = akisIndirgeyici(d, { tur: 'OTURUM_ACILDI' });
+    expect(yeni).toMatchObject({ faz: 'masaustu', ekran: 'masaustu', ucBoyut: false, pencereler: [], otomatikAcildi: false });
+    expect(akisIndirgeyici(yeni, { tur: 'OTURUM_ACILDI' })).toBe(yeni);
+    expect(akisIndirgeyici(yeni, { tur: 'OTURUM_KAPANDI' }).faz).toBe('oturum');
+  });
+
+  it('oturum açılması yaklaşmayı veya açılış süresini erken bitiremez', () => {
     for (const olaylar of [
-      [],
       [{ tur: 'MODEL_YUKLENDI' }],
       [{ tur: 'MODEL_YUKLENDI' }, { tur: 'KAMERA_VARDI' }],
       [{ tur: 'UCBOYUT_YOK' }],
     ] as AkisOlayi[][]) {
-      const d = akisIndirgeyici(calistir(olaylar), { tur: 'ATLA' });
-      expect(d.faz).toBe('masaustu');
-      expect(d.ucBoyut).toBe(false);
-      expect(d.ekran).toBe('masaustu');
+      const d = calistir(olaylar);
+      expect(akisIndirgeyici(d, { tur: 'OTURUM_ACILDI' })).toBe(d);
+      expect(akisIndirgeyici(d, { tur: 'OTURUM_KAPANDI' })).toBe(d);
     }
-    const m = calistir([ac('cizim')], masa());
-    expect(akisIndirgeyici(m, { tur: 'ATLA' })).toBe(m);
   });
 
   it('tek pencere: aç → küçült → geri getir → kapat → yeniden aç', () => {
@@ -249,9 +309,13 @@ describe('akis', () => {
     expect(masaustunde('masaustu')).toBe(true);
     expect(masaustunde('uygulama')).toBe(true);
     expect(masaustunde('yaklasma')).toBe(false);
+    expect(masaustunde('oturum')).toBe(false);
     expect(atlanabilir('yukleniyor')).toBe(true);
     expect(atlanabilir('acilis')).toBe(true);
     expect(atlanabilir('masaustu')).toBe(false);
+    expect(atlanabilir('oturum')).toBe(false);
+    expect(atlanabilir('yaklasma', true)).toBe(false);
+    expect(SURELER.ACILIS_ATLANDI).toBeLessThan(SURELER.ACILIS_DEVIR_SONRASI);
     expect(SURELER.YAKLASMA).toBe(3400);
     expect(SURELER.HIZLI_BITIS).toBeLessThanOrEqual(400);
     expect(SURELER.DEVIR).toBe(450);

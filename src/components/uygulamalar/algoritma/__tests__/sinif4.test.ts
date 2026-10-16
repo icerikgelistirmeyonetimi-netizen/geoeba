@@ -113,25 +113,25 @@ describe('4. sınıf: hazır kodlar, blok sınırı ve önceki kodlar', () => {
 });
 
 describe('4. sınıf: tahminler, sorular ve başarı cümleleri', () => {
-  it('tahmin et: tam tur 360°, çevre 8 birim, iç döngü 3 × 4 = 12 kez', () => {
+  it('tahmin et: tam tur dört çeyrek dönüş, çevre 8 birim, iç döngü 3 × 4 = 12 kez', () => {
     const tahmin = (id: string) => {
       const g = gorev(id);
       expect(g.baslangic, id).toBe(g.cozum);
       return g.tahmin?.cevap(calistir(g.baslangic as Program, g.dunya, g.hedef));
     };
-    expect(tahmin('s4-aci-5')).toBe(360);
+    expect(tahmin('s4-aci-5')).toBe(4);
     expect(tahmin('s4-sekil-6')).toBe(8);
     expect(tahmin('s4-icice-3')).toBe(12);
   });
 
-  it('sorular: derece, çevre, küp, çizgi örüntüsü, simetri doğrusu', () => {
+  it('sorular: çeyrek dönüş, çevre, küp, çizgi örüntüsü, simetri doğrusu', () => {
     const cevap = (id: string) => {
       const g = gorev(id);
       return g.soru?.cevap(cozumIzi(g));
     };
-    expect(cevap('s4-aci-1')).toBe(90);
-    expect(cevap('s4-aci-2')).toBe(180);
-    expect(cevap('s4-aci-4')).toBe(270);
+    expect(cevap('s4-aci-1')).toBe(1);
+    expect(cevap('s4-aci-2')).toBe(2);
+    expect(cevap('s4-aci-4')).toBe(3);
     expect(cevap('s4-sekil-1')).toBe(12);
     expect(cevap('s4-sekil-2')).toBe(16);
     expect(cevap('s4-sekil-4')).toBe(12);
@@ -142,8 +142,8 @@ describe('4. sınıf: tahminler, sorular ve başarı cümleleri', () => {
 
   it('başarı cümleleri matematiği izden hesaplar', () => {
     const cumle = (id: string) => gorev(id).basari(cozumIzi(gorev(id)));
-    expect(cumle('s4-aci-1')).toBe('Oldu! Robot köşede döndü: 1 × 90° = 90°. Köşedeki açı bir dik açı.');
-    expect(cumle('s4-aci-5')).toBe('Doğru! 4 × 90° = 360°: Robot bir tam tur döndü ve yine başladığı yöne bakıyor.');
+    expect(cumle('s4-aci-1')).toBe('Oldu! Robot köşede döndü: 1 çeyrek dönüş. Köşedeki açı bir dik açı.');
+    expect(cumle('s4-aci-5')).toBe('Doğru! 4 çeyrek dönüş: Robot bir tam tur döndü ve yine başladığı yöne bakıyor.');
     expect(cumle('s4-sekil-1')).toBe('Oldu! 4 kenar × 3 birim = 12 birim: Karenin çevresi 12 birim.');
     expect(cumle('s4-sekil-6')).toBe('Doğru! Bir turda 3 + 1 = 4 birim, 2 turda 2 × 4 = 8 birim: Çevre 8 birim.');
     expect(cumle('s4-icice-3')).toBe('Doğru! Dış döngü 3 tur × iç döngü 4 kez = 12 küp.');

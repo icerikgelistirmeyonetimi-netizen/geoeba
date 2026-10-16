@@ -365,8 +365,8 @@ describe('Keşif kartı (SSR)', () => {
     expect(metin(kart(kitap, { ilkAdim: 2, ozellikler: HEPSI }))).toContain('Ortanca ve aritmetik ortalamayı aç');
     // Sürükleme eylemi düğme değil, yol gösteren yazı
     const gun = kart(ornekBul('gun')!, { ilkAdim: 3 });
-    expect(gun).toMatch(/<span[^>]*data-rehber-eylemi="surukle"/);
-    expect(metin(gun)).toContain('Uyku sınırını sürükle');
+    expect(gun).toMatch(/<span[^>]*data-rehber-eylemi="yok"/);
+    expect(metin(gun)).toContain('Uyku: 11, Diğer: 0 yaz');
   });
 
   it('künye: hassas örnekte kod notu; gerçek veride bağlantılı kaynak (yeni sekmede) ve başlıkta "Gerçek veri"; zenginleştirme rozeti', () => {
@@ -435,7 +435,7 @@ describe('Örnek galerisi (SSR)', () => {
       expect(metin(ilkSpan.slice(0, ilkSpan.indexOf('</span></span>') + 14)), o.id).toBe(o.ad);
       expect(ic, o.id).toContain(`data-mini-grafik="${o.acilis?.sekme ?? o.onerilenGrafik}"`);
       expect(dugme, o.id).toContain('min-h-[56px]');
-      expect(metin(ic), o.id).toContain(`${o.sinif}. sınıf`);
+      if (o.sinif !== null) expect(metin(ic), o.id).toContain(`${o.sinif}. sınıf`);
       // Mini grafik boş değil: çerçeveden başka şekiller var
       expect((ic.match(/<(circle|rect|path) /g) ?? []).length, o.id).toBeGreaterThan(3);
     }

@@ -22,7 +22,7 @@
  * parlaması / halkası) toplamaGorunumBilgisi'nden alır. Panel kapanınca grafik sütununda soru şeridi görünür. Deney
  * araştırmasında özet en az 2 satırken "Atışlar | Deney özeti" küme seçicisi çıkar. Eski örnekleyicinin kaydı
  * açılışta taşınır (durum.ts: durumCoz göçü; eski deney sonuçları "Önceki tabloya dön"de).
- * Durum localStorage'da kalıcıdır ('geoeba_veri-grafik_v1'; 300 ms ertelenerek, sayfa kapanırken hemen yazılır) ve ilk çizimden
+ * Durum localStorage'da oturuma göre kalıcıdır ('geoeba_veri-grafik_v1_<kademe>'; 300 ms ertelenerek, sayfa kapanırken hemen yazılır) ve ilk çizimden
  * önce okunur; ilk açılışta örnek veriyle gelir. Tabloyu değiştiren işlemler (örnek yükleme, Temizle, sütun / satır
  * silme, rehber eylemi) [Geri al]'lı kısa bildirimle (Tost; tablo alanının altında) duyurulur; örnek yükleme korunmaya
  * değer eski tabloyu "Önceki tabloya dön" için saklar (durum.ts: ornegiYukle / tabloDegistir / oncekiTabloyaDon).
@@ -55,6 +55,8 @@
  * kademeyeUyarla). Ortaokul, lise ve Tüm araçlar'da açılış ve kurallar değişmez (Tüm araçlar galeride 1–4'ü de gösterir).
  */
 import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useOturum } from '@/state/OturumContext';
+import { oturumKayitAnahtari } from '@/state/oturumDeposu';
 import { VeriTablosu as VeriTablosuBileseni, tabloDogalGenisligi } from './VeriTablosu';
 import { NoktaGrafigi, yiginYuksekligi, type NoktaSecenekleri } from './NoktaGrafigi';
 import { SutunGrafigi } from './SutunGrafigi';
@@ -120,6 +122,7 @@ import {
   baslangicDurumu,
   bosTabloAc,
   durumKurallari,
+  tabloGirisHatasi,
   kademeyeUyarla,
   ornegiYukle,
   rehberEylemiUygula,
@@ -193,9 +196,9 @@ export function paneliDuzelt(d: Durum): Durum {
  * İlk durum: kayıt varsa o (yalnız istemcide; sunucu çiziminde ve testlerde varsayılan), kademeye uyarlanmış (İlkokul'da
  * değiştirilmemiş 5–8. sınıf örneği yerine 1. sınıf örneği); eksen, sekme ve panel düzeltilmiş
  */
-function ilkDurum(kademe: KademeDuzeyi): Durum {
-  const d = kademeyeUyarla(durumYukle() ?? baslangicDurumu(kademe), kademe);
-  return paneliDuzelt(sekmeDuzelt(eksenDuzelt(d), kademe === 'ilkokul'));
+function ilkDurum(kademe: KademeDuzeyi, depoAnahtari: string): Durum {
+  const d = kademeyeUyarla(durumYukle(depoAnahtari) ?? baslangicDurumu(kademe), kademe);
+  return paneliDuzelt(sekmeDuzelt(eksenDuzelt(d), kademe === 'ilkokul', kademe === 'ortaokul'));
 }
 
 /**
@@ -203,10 +206,10 @@ function ilkDurum(kademe: KademeDuzeyi): Durum {
  * açık eski panel → açık Veri topla paneli, eski deney sonuçları → önceki tablo; VT §9.4); panel kayıttaki gibi açık ya
  * da kapalı gelir.
  */
-function durumYukle(): Durum | null {
+function durumYukle(depoAnahtari: string): Durum | null {
   if (typeof window === 'undefined') return null;
   try {
-    return durumMetindenCoz(window.localStorage.getItem(DEPO_ANAHTARI));
+    return durumMetindenCoz(window.localStorage.getItem(depoAnahtari));
   } catch {
     return null;
   }
@@ -566,17 +569,22 @@ export interface VeriGrafikUygulamasiProps {
 export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUygulamasiProps) {
   /** Kademe menüsünün seçimi (İlkokul: 1–4. sınıf kuralları ve örnekleri) */
   const [kademe] = useKademeDuzeyi();
+  const { kademe: oturumKademesi } = useOturum();
+  // Oturum kapısı kademeler arasında yeniden bağlar. Kapanıştaki son kayıt da açılış anahtarına yazılır.
+  const [depoAnahtari] = useState(() => oturumKayitAnahtari(DEPO_ANAHTARI, oturumKademesi));
+  const ortaokulRef = useRef(kademe === 'ortaokul');
+  ortaokulRef.current = kademe === 'ortaokul';
   const ilkokul = kademe === 'ilkokul';
   const ilkokulRef = useRef(ilkokul);
   ilkokulRef.current = ilkokul;
   // Uygulama yalnız istemcide (tembel) yüklenir: kayıt ilk çizimden önce okunur, varsayılan tablo bir kare bile görünmez
-  const [durum, setDurumHam] = useState<Durum>(() => ilkDurum(kademe));
+  const [durum, setDurumHam] = useState<Durum>(() => ilkDurum(kademe, depoAnahtari));
   /**
    * Bütün durum değişimleri buradan geçer: eksen her zaman geçerli bir değişkende kalır (eksenDuzelt) ve seçili
    * grafik sekmesi tablonun veri türleriyle ve kademenin kurallarıyla çizilebilir kalır (sekmeDuzelt; ör. Saçılım → Nokta)
    */
   const setDurum = useCallback((yeni: React.SetStateAction<Durum>) => {
-    setDurumHam((d) => sekmeDuzelt(eksenDuzelt(typeof yeni === 'function' ? yeni(d) : yeni), ilkokulRef.current));
+    setDurumHam((d) => sekmeDuzelt(eksenDuzelt(typeof yeni === 'function' ? yeni(d) : yeni), ilkokulRef.current, ortaokulRef.current));
   }, []);
   /** Kademe değişince: değiştirilmemiş örnek kademenin açılış örneğine döner, sekme kademenin kurallarına uyar */
   const sonKademe = useRef(kademe);
@@ -666,11 +674,11 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
     if (!d) return;
     bekleyenKayit.current = null;
     try {
-      window.localStorage.setItem(DEPO_ANAHTARI, JSON.stringify(d));
+      window.localStorage.setItem(depoAnahtari, JSON.stringify(d));
     } catch {
       /* depolama kapalı ya da dolu olabilir */
     }
-  }, []);
+  }, [depoAnahtari]);
   useEffect(() => {
     bekleyenKayit.current = durum;
     if (akis) return;
@@ -704,7 +712,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
    * kuralları): görünen sekmeler ve adları, ölçüler, yüzde / açı yazıları, iki grubun tek grafikte karşılaştırılması,
    * nesne / şekil grafiği, çetele
    */
-  const kurallar = useMemo(() => durumKurallari({ ornekId: durum.ornekId, etkinKume }, ilkokul), [durum.ornekId, etkinKume, ilkokul]);
+  const kurallar = useMemo(() => durumKurallari({ ornekId: durum.ornekId, etkinKume }, ilkokul, kademe === 'ortaokul'), [durum.ornekId, etkinKume, ilkokul, kademe]);
   const tekGrafik = kurallar.tekGrafikteKarsilastir;
   const gorunurSekmeler = useMemo(
     () => SEKMELER.filter((s) => kurallar.sekmeler.includes(s.id)).map((s) => ({ ...s, ad: sekmeAdi(s.id, s.ad, kurallar) })),
@@ -810,6 +818,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
    * Tablom değişince örnek artık "değiştirilmemiş" sayılmaz (sonraki örnek yüklemesinde önceki tablo olarak saklanır).
    */
   const tabloyuYaz = (yeni: VeriTablosu, bilgi?: { geriAlMetni: string }) => {
+    const hata = tabloGirisHatasi(yeni);
+    if (hata) { tostGoster(hata); return; }
     const onceki = durum;
     setDurum((d) => arastirmaliDuzenle(d, yeni));
     if (bilgi) geriAlTostu(bilgi.geriAlMetni, onceki, yeni);
@@ -837,6 +847,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const etkinKategorik = etkinSutun >= 0 && tablo.sutunlar[etkinSutun].tur === 'etiket';
   const sayisalDegiskenler = useMemo(() => degiskenler.filter((s) => s.tur === 'sayi'), [degiskenler]);
   /** Sekme kapısının sayımı: sekmeDuzelt ile aynı işlev */
+  const cizgiUygun = ['sinav', 'ekran'].includes(durum.ornekId ?? '') || etkinKume === 'ozet' || !cizgiSiraNotuGerekli(tablo);
+  const grafikKullanilabilir = (s: Sekme) => sekmeKullanilabilir(s, sayisalDegiskenSayisi(tablo)) && (s !== 'cizgi' || cizgiUygun);
   const sayisalSayisi = useMemo(() => sayisalDegiskenSayisi(tablo), [tablo]);
   const kategorikDegiskenler = useMemo(() => degiskenler.filter((s) => s.tur === 'etiket'), [degiskenler]);
   /** Çizgi, kök-yaprak ve saçılım yalnız sayısal değişkenle çizilir: sekmelerde yalnız sayısallar, seçili değişken kategorikse ilk sayısal */
@@ -1625,6 +1637,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
       seciliSatir={seciliGecerli}
       onSatirSec={setSeciliSatir}
       onTablo={tabloyuYaz}
+      sutunEklenebilir={!(etkinKategorik && (kademe === 'ortaokul' || (kurallar.sinif !== null && kurallar.sinif >= 5 && kurallar.sinif <= 8)))}
       vurguluSutun={grafikSutunId}
       sonaKaydir={etkinKume !== 'tablom' || toplamaGorunumu}
       onTemizle={temizle}
@@ -1679,7 +1692,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
             const aktif = sekme === s.id;
             const kimlik = sekmeKimlikleri('veri', s.id);
             // Veri türüne göre: çizgi bir, saçılım iki sayısal değişken ister; yoksa sekme pasif ve nedeni ipucunda
-            const kullanilabilir = sekmeKullanilabilir(s.id, sayisalSayisi);
+            const kullanilabilir = grafikKullanilabilir(s.id);
             return (
               <button
                 key={s.id}
@@ -1690,7 +1703,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                 aria-controls={kimlik.panel}
                 aria-disabled={!kullanilabilir || undefined}
                 tabIndex={aktif ? 0 : -1}
-                title={kullanilabilir ? undefined : sekmeGerekceleri[s.id]}
+                title={kullanilabilir ? undefined : s.id === 'cizgi' && !cizgiUygun ? CIZGI_SIRA_NOTU : sekmeGerekceleri[s.id]}
                 onKeyDown={(e) => {
                   // Ok tuşları kullanılabilir sekmeler arasında dolaşır (roving tabindex); Tab tek durak
                   const liste = gorunurSekmeler;
@@ -1698,7 +1711,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                   if (hedef === null) return;
                   e.preventDefault();
                   const adim = e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'End' ? -1 : 1;
-                  for (let k = 0; k < liste.length && !sekmeKullanilabilir(liste[hedef].id, sayisalSayisi); k++) {
+                  for (let k = 0; k < liste.length && !grafikKullanilabilir(liste[hedef].id); k++) {
                     hedef = (hedef + adim + liste.length) % liste.length;
                   }
                   guncelle({ sekme: liste[hedef].id });
@@ -1714,7 +1727,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                 onClick={() => {
                   // Pasif sekmeye dokunulunca nedeni kısa bildirimle söylenir (title dokunmatik ekranda görünmez)
                   if (kullanilabilir) guncelle({ sekme: s.id });
-                  else tostGoster(sekmeGerekceleri[s.id] ?? 'Bu grafik tablodaki verilerle çizilemiyor.');
+                  else tostGoster(s.id === 'cizgi' && !cizgiUygun ? CIZGI_SIRA_NOTU : sekmeGerekceleri[s.id] ?? 'Bu grafik tablodaki verilerle çizilemiyor.');
                 }}
               >
                 {s.ad}
@@ -2340,7 +2353,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                   />
                 ))}
               {!bos && sekme === 'cizgi' &&
-                (grafikSutun < 0 ? (
+                (grafikSutun < 0 || !cizgiUygun ? (
                   <div className="flex h-full items-center justify-center p-6" data-cizgi-kullanilamaz>
                     <p className="max-w-md rounded-[calc(var(--radius)-4px)] border border-border bg-background p-4 text-center text-[13px] text-muted-foreground">
                       <strong className="block text-foreground">Çizgi grafiği çizilemiyor.</strong>
@@ -2402,6 +2415,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                     halka={kategorikDaire.halka}
                     aciklama={kategorikDaire.aciklama}
                     oransiz={!kurallar.yuzdeVeAci}
+                    acisiz={kurallar.sinif !== null || kademe === 'ortaokul' || ilkokul}
                   />
                 ) : (
                   <DaireGrafigi
@@ -2417,6 +2431,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                     aciklama="Her dilim, değerin toplam içindeki payını gösterir"
                     renkEslemi={renkEslemi}
                     oransiz={!kurallar.yuzdeVeAci}
+                    acisiz={kurallar.sinif !== null || kademe === 'ortaokul' || ilkokul}
                   />
                 ))}
               {!bos && sekme === 'sacilim' &&
@@ -2450,7 +2465,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                     renkEslemi={renkEslemi}
                     deneyVerisi={toplama.deneyVerisi}
                     tepeDeger={kurallar.olculer.merkezi}
-                    oranlar={kurallar.yuzdeVeAci}
+                    oranlar={!ilkokul && durum.arastirma?.yontem === 'deney' && (durum.arastirma?.hazirId === 'para' || durum.arastirma?.hazirId === 'zar')}
                     tekYonluIleBirlikte={kurallar.tekYonluTabloIleBirlikte}
                     cetele={kurallar.cetele}
                   />

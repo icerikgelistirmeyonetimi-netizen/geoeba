@@ -180,6 +180,12 @@ export function validateProjectObjects(input: unknown): MathObject[] {
       }
       if (Object.keys(kenarlar).length) o.edgeEqualityMarks = kenarlar; else delete o.edgeEqualityMarks;
     }
+    if (o.insaGosterimi !== undefined) {
+      const g = row(o.insaGosterimi);
+      if (!['midpoint', 'perp_bisector', 'perpendicular', 'angle_bisector'].includes(g.tur)) fail('inşa gösterimi geçersiz');
+      const adet = g.tur === 'midpoint' || g.tur === 'perp_bisector' ? 2 : 3;
+      ids(g, 'pointIds', adet, adet);
+    }
     if (o.construction !== undefined) {
       const c = row(o.construction);
       switch (c.kind) {

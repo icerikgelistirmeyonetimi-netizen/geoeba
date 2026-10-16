@@ -1,7 +1,7 @@
 /**
  * Algoritma Laboratuvarı — 4. sınıf (Mucit adası, blok görünümü): dört ünite.
  *
- *   1. Dönüş ve açı      çeyrek (90°), yarım (180°), tam dönüş (360°); üç sağa = bir sola
+ *   1. Dönüş ve açı      çeyrek, yarım, tam dönüş; üç sağa = bir sola
  *                         MAT.4.3.5 · 4.3.7
  *   2. Kodla şekil çiz   kare, dikdörtgen, kapanmayan şekil; çevre
  *                         MAT.4.3.10 · 4.3.2 · 4.3.3
@@ -10,7 +10,7 @@
  *   4. Simetri           boyalı karolarla doğruya göre simetri; öteleme ile karıştırma
  *                         MAT.4.3.8 · 4.3.9
  *
- * Çizim sahasında her sağa ya da sola dönüş çeyrek dönüştür (90°); başarı cümleleri dereceyi
+ * Çizim sahasında her sağa ya da sola dönüş çeyrek dönüştür; başarı cümleleri dönüşü
  * dönüş sayısından, çevreyi çizilen birim çizgi sayısından, küp sayısını izden hesaplar.
  * Karo dünyalarında `eksen.k` hücre koordinatındadır: 2.5, x = 2 ile x = 3 hücrelerinin arasıdır.
  */
@@ -36,8 +36,8 @@ const HAREKET: BlokSablonu[] = [ILERI, SAGA, SOLA];
 
 const ORTAK = { sinif: 4, kademe: 'Mucit adası', gorunum: 'blok' as const, sesliYonerge: false };
 
-/** Dönüş sayısından derece: "2 × 90° = 180°" */
-const derece = (donus: number) => `${donus} × 90° = ${donus * 90}°`;
+/** Dönme miktarını çeyrek dönüşlerle ifade eder. */
+const donusMetni = (donus: number) => `${donus} çeyrek dönüş`;
 
 // ---------------------------------------------------------------------------
 // 1. Dönüş ve açı
@@ -65,14 +65,14 @@ const ACI_GOREVLERI: Gorev[] = [
     aracKutusu: HAREKET,
     baslangic: 'bos',
     cozum: L_COZUMU,
-    ipuclari: ['Robot önce sağa doğru 2 birim çizsin. Köşede hangi yana dönmeli?', 'Bir kez sağa dönmek çeyrek dönüştür: 90°.'],
-    basari: (iz) => `Oldu! Robot köşede döndü: ${derece(izOzeti(iz).donus)}. Köşedeki açı bir dik açı.`,
+    ipuclari: ['Robot önce sağa doğru 2 birim çizsin. Köşede hangi yana dönmeli?', 'Bir kez sağa dönmek çeyrek dönüştür.'],
+    basari: (iz) => `Oldu! Robot köşede döndü: ${donusMetni(izOzeti(iz).donus)}. Köşedeki açı bir dik açı.`,
     soru: {
-      metin: 'Robot köşede kaç derece döndü?',
-      birim: 'derece',
-      cevap: (iz) => izOzeti(iz).donus * 90,
-      sonrasi: 'Çeyrek dönüş 90 derecedir. Köşede bir dik açı oluştu.',
-      yonlendirme: 'Bir tam tur 360 derece. Robot turun ne kadarını döndü?',
+      metin: 'Robot köşede kaç kez çeyrek dönüş yaptı?',
+      birim: 'çeyrek dönüş',
+      cevap: (iz) => izOzeti(iz).donus,
+      sonrasi: 'Bir sağa ya da sola dönüş, çeyrek dönüştür. Köşede bir dik açı oluştu.',
+      yonlendirme: 'Bir tam tur dört çeyrek dönüştür. Robot turun ne kadarını döndü?',
     },
     kazanimlar: ['MAT.4.3.5', 'MAT.4.3.7'],
   },
@@ -88,13 +88,13 @@ const ACI_GOREVLERI: Gorev[] = [
     baslangic: 'onceki',
     cozum: k(['sagaDon', 'sagaDon', 'ileri', 'ileri', 'ileri'], 's4a2-'),
     ipuclari: ['Robot şimdi hangi yöne bakıyor? Çizgi hangi yönde?', 'Arkaya dönmek için iki kez sağa (ya da iki kez sola) dön.'],
-    basari: (iz) => `Oldu! ${izOzeti(iz).donus} çeyrek dönüş: ${derece(izOzeti(iz).donus)}. Robot arkasına döndü.`,
+    basari: (iz) => `Oldu! ${donusMetni(izOzeti(iz).donus)} bir yarım dönüş oluşturdu. Robot arkasına döndü.`,
     soru: {
-      metin: 'Robot arkasına dönmek için kaç derece döndü?',
-      birim: 'derece',
-      cevap: (iz) => izOzeti(iz).donus * 90,
-      sonrasi: 'İki çeyrek dönüş bir yarım dönüştür: 90° + 90° = 180°.',
-      yonlendirme: 'Her dönüş 90°. Robot kaç kez döndü?',
+      metin: 'Robot arkasına dönmek için kaç kez çeyrek dönüş yaptı?',
+      birim: 'çeyrek dönüş',
+      cevap: (iz) => izOzeti(iz).donus,
+      sonrasi: 'İki çeyrek dönüş bir yarım dönüştür.',
+      yonlendirme: 'Her dönüş bir çeyrek dönüş. Robot kaç kez döndü?',
     },
     kazanimlar: ['MAT.4.3.5'],
   },
@@ -109,8 +109,8 @@ const ACI_GOREVLERI: Gorev[] = [
     aracKutusu: HAREKET,
     baslangic: k(['ileri', 'ileri', 'sagaDon', 'ileri', 'ileri', 'ileri', 'ileri'], 's4a3h-'),
     cozum: k(['ileri', 'ileri', 'sagaDon', 'sagaDon', 'ileri', 'ileri', 'ileri', 'ileri'], 's4a3-'),
-    ipuclari: ['Robot sağ uca varınca kaç derece dönmeli ki geri gelsin?', 'Bir kez sağa dönmek 90°: Robot aşağı bakar. Geri dönmek için 180° gerekir.'],
-    basari: (iz) => `Buldun! Geri dönmek yarım dönüştür: ${derece(izOzeti(iz).donus)}. Robot kendi çizgisinin üstünden geri geldi.`,
+    ipuclari: ['Robot sağ uca varınca kaç çeyrek dönüş yapmalı ki geri gelsin?', 'Bir kez sağa dönmek bir çeyrek dönüş: Robot aşağı bakar. Geri dönmek için yarım dönüş gerekir.'],
+    basari: (iz) => `Buldun! Geri dönmek yarım dönüştür: ${donusMetni(izOzeti(iz).donus)}. Robot kendi çizgisinin üstünden geri geldi.`,
     kazanimlar: ['MAT.4.3.5', 'MAT.4.3.7'],
   },
   {
@@ -126,13 +126,13 @@ const ACI_GOREVLERI: Gorev[] = [
     cozum: k(['ileri', 'ileri', 'solaDon', 'ileri', 'ileri'], 's4a4-'),
     enCokBlok: 5,
     ipuclari: ['Üç sağa dönüşten sonra robot hangi yöne bakıyor? Hangi tek dönüş onu aynı yöne çevirir?', '"sağa dön" bloklarını çıkar, yerine bir "sola dön" koy.'],
-    basari: () => `Oldu! Tek sola dönüş 90°. Üç sağa dönüş ${derece(3)} eder; robot ikisinde de aynı yöne bakar.`,
+    basari: () => `Oldu! Tek sola dönüş bir çeyrek dönüş. Üç sağa dönüş ${donusMetni(3)} eder; robot ikisinde de aynı yöne bakar.`,
     soru: {
-      metin: 'Üç kez sağa dönmek kaç derece eder?',
-      birim: 'derece',
-      cevap: () => 3 * 90,
-      sonrasi: '3 × 90° = 270°. 270° + 90° = 360°: Üç sağa dönüş, bir sola dönüşle aynı yöne çevirir.',
-      yonlendirme: 'Her sağa dönüş 90°. Üç tanesini topla.',
+      metin: 'Üç kez sağa dönmek kaç çeyrek dönüş eder?',
+      birim: 'çeyrek dönüş',
+      cevap: () => 3,
+      sonrasi: 'Üç sağa dönüş, bir sola dönüşle aynı yöne çevirir.',
+      yonlendirme: 'Her sağa dönüş bir çeyrek dönüş. Üç tanesini topla.',
     },
     kazanimlar: ['MAT.4.3.5'],
   },
@@ -140,22 +140,22 @@ const ACI_GOREVLERI: Gorev[] = [
     id: 's4-aci-5',
     tur: 'tahmin',
     baslik: 'Tam tur',
-    yonerge: 'Kodu oku ama henüz çalıştırma. Robot kareyi çizerken toplam kaç derece dönecek? Tahminini yaz, sonra çalıştır.',
+    yonerge: 'Kodu oku ama henüz çalıştırma. Robot kareyi çizerken toplam kaç kez çeyrek dönüş yapacak? Tahminini yaz, sonra çalıştır.',
     dunya: ACI_KARE,
     hedef: CIZ,
     bitkiAdi: 'bitki',
     aracKutusu: [...HAREKET, kez(4)],
     baslangic: KARE_DONUSU,
     cozum: KARE_DONUSU,
-    ipuclari: ['Her "sağa dön" çeyrek dönüştür: 90°.', 'Döngü 4 kez dönüyor: 90 + 90 + 90 + 90.'],
+    ipuclari: ['Her "sağa dön" bir çeyrek dönüştür.', 'Döngü 4 kez dönüyor: 1 + 1 + 1 + 1 = 4 çeyrek dönüş.'],
     tahmin: {
-      metin: 'Robot toplam kaç derece dönecek?',
-      birim: 'derece',
-      cevap: (iz) => izOzeti(iz).donus * 90,
-      sonrasi: '4 çeyrek dönüş: 4 × 90° = 360°, bir tam tur.',
-      yonlendirme: 'Döngü kaç kez dönüyor? Her turda robot kaç derece dönüyor?',
+      metin: 'Robot toplam kaç kez çeyrek dönüş yapacak?',
+      birim: 'çeyrek dönüş',
+      cevap: (iz) => izOzeti(iz).donus,
+      sonrasi: 'Dört çeyrek dönüş bir tam turdur.',
+      yonlendirme: 'Döngü kaç kez dönüyor? Her turda robot kaç kez çeyrek dönüş yapıyor?',
     },
-    basari: (iz) => `Doğru! ${derece(izOzeti(iz).donus)}: Robot bir tam tur döndü ve yine başladığı yöne bakıyor.`,
+    basari: (iz) => `Doğru! ${donusMetni(izOzeti(iz).donus)}: Robot bir tam tur döndü ve yine başladığı yöne bakıyor.`,
     kazanimlar: ['MAT.4.3.5', 'MAT.4.3.7'],
   },
   {
@@ -169,8 +169,8 @@ const ACI_GOREVLERI: Gorev[] = [
     aracKutusu: HAREKET,
     baslangic: k(['ileri', 'ileri', 'sagaDon', 'ileri', 'ileri', 'sagaDon', 'sagaDon', 'ileri', 'ileri'], 's4a6h-'),
     cozum: k(['ileri', 'ileri', 'sagaDon', 'ileri', 'ileri', 'sagaDon', 'ileri', 'ileri'], 's4a6-'),
-    ipuclari: ['İkinci köşede robot kaç derece dönüyor? Aşağı inmek için kaç derece gerek?', 'İki "sağa dön" 180° eder; robot geri döner. Birini çıkar: 90° yeter.'],
-    basari: (iz) => `Buldun! Her köşede çeyrek dönüş: ${derece(izOzeti(iz).donus)}. İki köşe, iki dik açı.`,
+    ipuclari: ['İkinci köşede robot kaç kez çeyrek dönüş yapıyor? Aşağı inmek için kaç çeyrek dönüş gerek?', 'İki "sağa dön" yarım dönüş eder; robot geri döner. Birini çıkar: bir çeyrek dönüş yeter.'],
+    basari: (iz) => `Buldun! Her köşede çeyrek dönüş: ${donusMetni(izOzeti(iz).donus)}. İki köşe, iki dik açı.`,
     kazanimlar: ['MAT.4.3.5', 'MAT.4.3.7'],
   },
 ];
@@ -578,7 +578,7 @@ export const SINIF4: readonly Unite[] = [
     no: 1,
     ad: 'Dönüş ve açı',
     tema: 'Spor sahası',
-    yeniKavram: 'Açı bir dönme miktarıdır: çeyrek dönüş 90°, yarım dönüş 180°, tam dönüş 360°',
+    yeniKavram: 'Açı bir dönme miktarıdır: iki çeyrek dönüş bir yarım dönüş, dört çeyrek dönüş bir tam dönüş oluşturur',
     oncedenBilinen: 'Adımlar, dönüşler ve "… kez tekrarla" (1–3. sınıf)',
     kalip: 'dondur',
     kazanimlar: ['MAT.4.3.5', 'MAT.4.3.7'],
@@ -587,38 +587,38 @@ export const SINIF4: readonly Unite[] = [
     gorevler: ACI_GOREVLERI,
     fissiz: {
       ad: 'Dönüş saati',
-      amac: 'Dönüşü bir açı olarak bedenle yaşamak; çeyrek, yarım ve tam dönüşü derecelerle saymak.',
+      amac: 'Dönüşü bir açı olarak bedenle yaşamak; çeyrek, yarım ve tam dönüşleri karşılaştırmak.',
       sure: '15 dakika',
-      roller: ['Bir öğrenci robot olur; yere çizilmiş büyük bir dairenin ortasında durur.', 'Sınıf programcıdır; kartları tahtaya dizer ve dereceleri hep birlikte sayar.'],
+      roller: ['Bir öğrenci robot olur; yere çizilmiş büyük bir dairenin ortasında durur.', 'Sınıf programcıdır; kartları tahtaya dizer ve çeyrek dönüşleri hep birlikte sayar.'],
       adimlar: [
-        'Yere tebeşirle bir daire çizin; robotun baktığı yöne 0°, sağına 90°, arkasına 180°, soluna 270° yazın.',
-        'Robot her SAĞA DÖN kartında çeyrek tur döner; sınıf "90, 180, 270, 360" diye sayar.',
+        'Yere tebeşirle bir daire çizin; robotun baktığı yöne başlangıç, sağına bir çeyrek, arkasına yarım, soluna üç çeyrek dönüş yazın.',
+        'Robot her SAĞA DÖN kartında çeyrek tur döner; sınıf "bir çeyrek, yarım, üç çeyrek, tam" diye sayar.',
         'Sınıfa sorulur: Robot arkasına bakmak için kaç kez dönmeli? Üç kez sağa dönen robot nereye bakar?',
-        'Robot İLERİ ve SAĞA DÖN kartlarıyla yerde bir kare yürür. Sınıf toplam dönüşü hesaplar: 4 × 90° = 360°.',
+        'Robot İLERİ ve SAĞA DÖN kartlarıyla yerde bir kare yürür. Sınıf toplam dönüşü hesaplar: dört çeyrek dönüş bir tam turdur.',
         'Sınıfta köşeleri dik açı olan nesneler bulunur; dik açıdan küçük (dar) ve büyük (geniş) açılar gösterilir.',
       ],
-      hazirlik: 'Dairenin üstüne 0°, 90°, 180° ve 270° yönlerini yazın. Kartları kesin; kâğıt köşesi dik açıyı denetlemek için kullanılabilir.',
+      hazirlik: 'Dairenin üstüne başlangıç, çeyrek, yarım ve üç çeyrek dönüş yönlerini yazın. Kartları kesin; kâğıt köşesi dik açıyı denetlemek için kullanılabilir.',
       kartlar: [
         { komut: 'İLERİ', aciklama: 'Bir adım ileri git.', adet: 4 },
-        { komut: 'SAĞA DÖN', aciklama: 'Yerinde sağına çeyrek tur dön: 90°.', adet: 4 },
-        { komut: 'SOLA DÖN', aciklama: 'Yerinde soluna çeyrek tur dön: 90°.', adet: 2 },
+        { komut: 'SAĞA DÖN', aciklama: 'Yerinde sağına çeyrek tur dön.', adet: 4 },
+        { komut: 'SOLA DÖN', aciklama: 'Yerinde soluna çeyrek tur dön.', adet: 2 },
       ],
     },
     ogretmenNotu: {
-      hedef: 'Öğrenci açıyı bir dönme miktarı olarak yorumlar: Çeyrek dönüşün 90° (dik açı), yarım dönüşün 180°, tam dönüşün 360° olduğunu robotun dönüşlerini sayarak bulur; üç sağa dönüşün bir sola dönüşle aynı yöne çevirdiğini fark eder.',
+      hedef: 'Öğrenci açıyı bir dönme miktarı olarak yorumlar: İki çeyrek dönüşün yarım, dört çeyrek dönüşün tam dönüş olduğunu robotun dönüşlerini sayarak bulur; üç sağa dönüşün bir sola dönüşle aynı yöne çevirdiğini fark eder.',
       dersler: [
-        { baslik: '1. ders', metin: 'Fişsiz "Dönüş saati" (15 dk), ardından 1–3. görevler: L harfi (90°), arkadaki çizgi (180°), yarım kalan dönüş (hatayı bul, ikişerli).' },
+        { baslik: '1. ders', metin: 'Fişsiz "Dönüş saati" (15 dk), ardından 1–3. görevler: L harfi (bir çeyrek dönüş), arkadaki çizgi (yarım dönüş), yarım kalan dönüş (hatayı bul, ikişerli).' },
         { baslik: '2. ders', metin: '4. görev (üç sağa, bir sola) bireysel, 5. görev (tam tur) sınıfça tahminle, 6. görev (fazladan dönüş) ikişerli. Ders dar ve geniş açı örnekleriyle kapanır.' },
       ],
       yanilgilar: [
-        { ad: 'Geri dönmek için bir dönüş yeter sanmak', metin: 'Arkaya dönmeyi çeyrek dönüş sanmak. 3. görevde robot 90° dönünce aşağı sapar; geri gelmek için 180° gerekir.' },
-        { ad: 'Köşede fazladan dönmek', metin: 'Köşede iki kez dönmek (180°): Robot kendi çizgisinin üstünden geri gelir ve şekil eksik kalır (6. görev).' },
-        { ad: 'Sola dönmenin tek yolu "sola dön" sanmak', metin: 'Üç sağa dönüşün (270°) bir sola dönüşle aynı yöne çevirdiğini görmemek. 4. görevde uzun kod blok sınırını aşar.' },
+        { ad: 'Geri dönmek için bir dönüş yeter sanmak', metin: 'Arkaya dönmeyi çeyrek dönüş sanmak. 3. görevde robot bir çeyrek dönüş yapınca aşağı sapar; geri gelmek için yarım dönüş gerekir.' },
+        { ad: 'Köşede fazladan dönmek', metin: 'Köşede iki kez dönmek (yarım dönüş): Robot kendi çizgisinin üstünden geri gelir ve şekil eksik kalır (6. görev).' },
+        { ad: 'Sola dönmenin tek yolu "sola dön" sanmak', metin: 'Üç sağa dönüşün (üç çeyrek dönüş) bir sola dönüşle aynı yöne çevirdiğini görmemek. 4. görevde uzun kod blok sınırını aşar.' },
       ],
       sorular: [
         'Robot kaç kez sağa dönerse ilk yönüne döner?',
-        'Çeyrek, yarım ve tam dönüş kaç derece?',
-        'Kare çizen robot toplam kaç derece döner?',
+        'Yarım ve tam dönüş kaç çeyrek dönüşten oluşur?',
+        'Kare çizen robot toplam kaç kez çeyrek dönüş yapar?',
         'Sınıfta dik açı gördüğünüz yerler neler? Dik açıdan küçük (dar) ve büyük (geniş) açılar bulabilir misiniz?',
       ],
       celdiriciler:
@@ -654,7 +654,7 @@ export const SINIF4: readonly Unite[] = [
       kartlar: [
         { komut: 'TEKRARLA', aciklama: 'İçteki kartları yazılan sayı kadar uygula.', adet: 1 },
         { komut: 'İLERİ', aciklama: 'Bir adım ileri git.', adet: 6 },
-        { komut: 'SAĞA DÖN', aciklama: 'Yerinde sağına dön: 90°.', adet: 2 },
+        { komut: 'SAĞA DÖN', aciklama: 'Yerinde sağına dön: bir çeyrek dönüş.', adet: 2 },
       ],
     },
     ogretmenNotu: {

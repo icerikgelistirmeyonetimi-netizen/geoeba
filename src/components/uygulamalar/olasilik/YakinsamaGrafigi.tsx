@@ -111,8 +111,7 @@ export function YakinsamaGrafigi({ seri, teorik, oznel, logOlcek, onLogOlcek }: 
         </span>
       </div>
       <aside className="mt-3 rounded-[calc(var(--radius)-4px)] bg-accent px-3 py-2 text-[13px] text-accent-foreground" aria-label="Büyük Sayılar Kanunu">
-        <strong>Büyük Sayılar Kanunu:</strong> Deneme sayısı arttıkça deneysel olasılık teorik olasılığa yaklaşır. Az denemede eğri dalgalanır; binlerce denemede teorik çizgiye
-        yapışır.
+        <strong>Büyük Sayılar Kanunu:</strong> Deneme sayısı arttıkça deneysel olasılık teorik olasılığa yaklaşma eğilimindedir. Az denemede büyük dalgalanmalar görülebilir; çok sayıda denemede deneysel oran genellikle teorik değerin yakınında seyreder.
       </aside>
     </section>
   );

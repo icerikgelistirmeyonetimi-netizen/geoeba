@@ -2,22 +2,24 @@
  * Sınıf ekranı akışı — saf durum makinesi ve zamanlamalar.
  *
  * Fazlar (SinifEkrani.tsx bu sırayla geçer):
- *   yukleniyor → yaklasma → devir → acilis → masaustu ⇄ uygulama
+ *   yukleniyor → yaklasma → devir → acilis → oturum → masaustu ⇄ uygulama
  * 3B yol kullanılamıyorsa (WebGL2 yok, model inmedi, motor hatası) yukleniyor → acilis.
- * "Atla" her fazdan doğrudan masaüstüne götürür. Açılış ekranı yaklaşmayla örtüşür:
- * ekran yaklaşma başında koyudur, ACILIS_LOGO_GECIKME sonra logo belirir.
+ * "Atla" açılış fazlarından oturum seçimine götürür: yürüyüş ya da devir sürerken ekranı ANINDA
+ * tam ekrana sıçratmaz (tahtadaki küçük ekran bir anda büyüyüp/küçülüyordu, 16 Ekim 2026); `atlandi`
+ * işaretlenir, kamera hızla varır, devir yine animasyonla biter ve açılış kısa (ACILIS_ATLANDI) sürer.
+ * Açılış ekranı yaklaşmayla örtüşür: ekran yaklaşma başında koyudur, ACILIS_LOGO_GECIKME sonra logo belirir.
  *
  * Masaüstünde birden çok uygulama penceresi açık olabilir (uygulamalar.tsx kayıt defteri).
  * `pencereler` z sırasına göre tutulur: son eleman öndedir. 'uygulama' fazı en az bir
  * pencere görünürken, 'masaustu' fazı hiçbir pencere görünmezken geçerlidir.
  */
 
-export type Faz = 'yukleniyor' | 'yaklasma' | 'devir' | 'acilis' | 'masaustu' | 'uygulama';
+export type Faz = 'yukleniyor' | 'yaklasma' | 'devir' | 'acilis' | 'oturum' | 'masaustu' | 'uygulama';
 
 export type PencereDurumu = 'kapali' | 'acik' | 'kucuk';
 
 /** Ekran katmanının gösterdiği içerik (3B tahtada ya da tam ekranda). */
-export type EkranIcerigi = 'karanlik' | 'acilis' | 'masaustu';
+export type EkranIcerigi = 'karanlik' | 'acilis' | 'oturum' | 'masaustu';
 
 export interface PencereKonumu {
   x: number;
@@ -49,6 +51,8 @@ export interface AkisDurumu {
   baslatMenusu: boolean;
   /** Masaüstü ilk belirdiğinde Çizim Stüdyosu bir kez kendiliğinden açılır */
   otomatikAcildi: boolean;
+  /** "Atla" yürüyüş/devir sürerken basıldı: akış kesilmez, kamera hızla varır, açılış kısa sürer */
+  atlandi: boolean;
 }
 
 export type AkisOlayi =
@@ -58,6 +62,8 @@ export type AkisOlayi =
   | { tur: 'KAMERA_VARDI' }
   | { tur: 'DEVIR_BITTI' }
   | { tur: 'ACILIS_BITTI' }
+  | { tur: 'OTURUM_ACILDI' }
+  | { tur: 'OTURUM_KAPANDI' }
   | { tur: 'ATLA' }
   /** Pencereyi açar; açıksa/küçükse öne getirir */
   | { tur: 'PENCERE_AC'; id: string }
@@ -87,10 +93,17 @@ export const SURELER = {
   ACILIS_LOGO_GECIKME: 600,
   /** Devir bittikten sonra açılışın sürmesi */
   ACILIS_DEVIR_SONRASI: 500,
+  /** "Atla" ile gelindiyse devirden sonra açılışın sürmesi (ekran yerine oturduktan sonra kısa bir nefes) */
+  ACILIS_ATLANDI: 180,
   /** 3B'siz yolda açılış ekranının toplam süresi */
   ACILIS_TAM_EKRAN: 2200,
   /** Masaüstü belirdikten sonra pencerenin kendiliğinden açılması */
   OTOMATIK_PENCERE: 500,
+  /**
+   * Hesap seçilince "Oturum açılıyor…" beklemesi (0,7 s; oturum.module.css gecikmeleri) + hesapların inip logonun
+   * açılıştaki yerine (masaüstü duvar logosunun yeri) dönmesi (0,4 s); sonra masaüstü belirir
+   */
+  OTURUM_KAPANIS: 1100,
   /** Pencerenin görev çubuğundaki yuvasından (uygulama düğmesi) huni gibi genişleyerek çıkması */
   PENCERE_ACILIS: 460,
   /** Pencerenin daralarak görev çubuğundaki yuvasına çekilmesi */
@@ -121,6 +134,7 @@ export const BASLANGIC_DURUMU: AkisDurumu = {
   acilisSayaci: 0,
   baslatMenusu: false,
   otomatikAcildi: false,
+  atlandi: false,
 };
 
 /** Masaüstünün göründüğü fazlar (görev çubuğu, kısayol, pencere). */
@@ -128,9 +142,9 @@ export function masaustunde(faz: Faz): boolean {
   return faz === 'masaustu' || faz === 'uygulama';
 }
 
-/** Atla düğmesinin göründüğü fazlar. */
-export function atlanabilir(faz: Faz): boolean {
-  return !masaustunde(faz);
+/** Atla düğmesinin göründüğü fazlar; bir kez basıldıysa (atlandi) düğme kalkar. */
+export function atlanabilir(faz: Faz, atlandi = false): boolean {
+  return !atlandi && faz !== 'oturum' && !masaustunde(faz);
 }
 
 /** Pencere kaydı (yoksa null). */
@@ -191,6 +205,12 @@ function masaustuneGec(d: AkisDurumu): AkisDurumu {
   return { ...d, faz: 'masaustu', ekran: 'masaustu', ucBoyut: false };
 }
 
+/** Oturum değişirken önceki kademenin pencereleri kapanır; sınıf sahnesi yeniden başlamaz. */
+function oturumaGec(d: AkisDurumu): AkisDurumu {
+  return { ...d, faz: 'oturum', ekran: 'oturum', ucBoyut: false, atlandi: false,
+    pencereler: [], acilisSayaci: 0, baslatMenusu: false, otomatikAcildi: false };
+}
+
 /** Pencere listesi değişince faz (uygulama/masaustu) yeniden türetilir. */
 function pencerelerle(d: AkisDurumu, pencereler: PencereKaydi[], ek: Partial<AkisDurumu> = {}): AkisDurumu {
   const gorunur = pencereler.some((p) => p.durum === 'acik');
@@ -229,11 +249,23 @@ export function akisIndirgeyici(d: AkisDurumu, olay: AkisOlayi): AkisDurumu {
 
     case 'ACILIS_BITTI':
       if (d.faz !== 'acilis') return d;
-      return masaustuneGec(d);
+      return oturumaGec(d);
 
     case 'ATLA':
-      if (masaustunde(d.faz)) return d;
+      if (!atlanabilir(d.faz, d.atlandi)) return d;
+      // Tahtadaki ekran görünürken (yürüyüş, devir) akış kesilmez: kamera hızla varır (SinifEkrani
+      // sahne.atla()), devir animasyonla biter, açılış kısa sürer. Ekran henüz yok (yukleniyor) ya da
+      // zaten tam ekran (acilis) ise oturuma doğrudan geçilir.
+      if (d.ucBoyut && (d.faz === 'yaklasma' || d.faz === 'devir')) return { ...d, atlandi: true };
+      return oturumaGec(d);
+
+    case 'OTURUM_ACILDI':
+      if (d.faz !== 'oturum') return d;
       return masaustuneGec(d);
+
+    case 'OTURUM_KAPANDI':
+      if (!masaustunde(d.faz)) return d;
+      return oturumaGec(d);
 
     case 'PENCERE_AC': {
       if (!masaustunde(d.faz)) return d;

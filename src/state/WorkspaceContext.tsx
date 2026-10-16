@@ -77,6 +77,9 @@ import { extractVariableNames,
   evaluateNumericInput,
 } from '@/math/parser';
 import { useCurriculum } from './CurriculumContext';
+import { useOturum } from './OturumContext';
+import { oturumKaydiniOku, oturumKaydiniYaz, oturumKayitAnahtari } from './oturumDeposu';
+import type { LevelId } from '@/types/curriculum';
 import { createId } from './ids';
 import { pointAngleAction, providesAngleArm } from '@/math/pointAngles';
 import { withLengthMeasurement } from '@/math/partialLengths';
@@ -294,8 +297,8 @@ export const VARSAYILAN_GORUNUM_AYARLARI = {
   showQuadrants: false,
   showCoordinates: false,
   showMeasurements: true,
-  snapToGrid: false,
-  pointSnapMode: 'off',
+  snapToGrid: true,
+  pointSnapMode: 'snapToGrid',
   gridStep: 1,
   gridStepAuto: true,
   gridStyle: 'kareli',
@@ -1254,10 +1257,10 @@ function oteleSekil(
 }
 
 /** LocalStorage'daki serbest çalışma kaydını doğrulayarak okur. */
-function loadSavedSandboxProject(): ProjectFile | null {
+function loadSavedSandboxProject(kademe: LevelId | null): ProjectFile | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    const raw = oturumKaydiniOku(WORKSPACE_STORAGE_KEY, kademe);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || parsed.version !== WORKSPACE_STORAGE_VERSION || !Array.isArray(parsed.objects)) throw new Error('Geçersiz yerel kayıt');
@@ -1432,6 +1435,9 @@ function docReducer(state: DocState, action: DocAction): DocState {
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const { selectedActivity } = useCurriculum();
+  const { kademe: oturumKademesi } = useOturum();
+  const depoAnahtari = oturumKayitAnahtari(WORKSPACE_STORAGE_KEY, oturumKademesi);
+  const [yuklenenDepoAnahtari, setYuklenenDepoAnahtari] = useState<string | null>(null);
 
   const [doc, dispatch] = useReducer(docReducer, initialDocState);
   const { objects, history, historyIndex } = doc;
@@ -1583,8 +1589,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }));
     } else {
       try {
-        const saved = loadSavedSandboxProject();
+        const saved = loadSavedSandboxProject(oturumKademesi);
         dispatch({ type: 'reset', objects: saved?.objects ?? [], description: saved ? 'Kayıtlı çalışma açıldı' : 'Boş çalışma alanı', persist: true });
+        setYuklenenDepoAnahtari(depoAnahtari);
         // Kayıtlı görünüm ayarları (ızgara, eksen, zemin) geri gelir; bakış (yakınlık, kaydırma) her açılışta orijin
         // merkezli varsayılandır: "Görünümü Sıfırla" ile aynı (alan uzmanı, 4. tur: grafik ilk bakışta görünmüyordu)
         if (saved?.viewport) setViewport(prev => ({ ...prev, ...saved.viewport, zoom: DEFAULT_ZOOM, panX: 0, panY: 0, width: prev.width, height: prev.height }));
@@ -1595,18 +1602,19 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setHintMessageState((error as Error).message);
       }
     }
-  }, [selectedActivity]);
+  }, [selectedActivity, oturumKademesi, depoAnahtari]);
 
   // Serbest çalışma masasında her değişikliği LocalStorage'a kaydet
   useEffect(() => {
-    if (!doc.persist || selectedActivity) return;
+    if (!doc.persist || selectedActivity || yuklenenDepoAnahtari !== depoAnahtari) return;
     try {
-      localStorage.setItem(
+      oturumKaydiniYaz(
         WORKSPACE_STORAGE_KEY,
+        oturumKademesi,
         JSON.stringify({ objects, viewport, styleSettings, layoutMode, version: WORKSPACE_STORAGE_VERSION })
       );
     } catch (e) { setHintMessageState('Çalışma tarayıcıya kaydedilemedi. Dosya → Kaydet ile bir kopya alın.'); }
-  }, [objects, viewport, styleSettings, layoutMode, doc.persist, selectedActivity]);
+  }, [objects, viewport, styleSettings, layoutMode, doc.persist, selectedActivity, oturumKademesi, depoAnahtari, yuklenenDepoAnahtari]);
 
   // Etkinlik doğrulaması (Deterministik Kural Motoru)
   useEffect(() => {
@@ -3474,10 +3482,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // AÇIÖLÇER: salt ölçüm yapar, tuvale kalıcı nesne eklemez
+      // AÇIÖLÇER: ölçülen açı tuvalde kalır ve kaynak noktalarla birlikte güncellenir.
       if (tool === 'measure_angle') {
         const nextPending = [...pending, pointId];
-        commitPendingOnly();
 
         // İlkokulda açıölçer yalnız tanıtılır, açı ölçülmez (TYMM: "Açı ölçer ile açı ölçme uygulamalarına girilmez")
         if (ilkokulKipindeMi()) {
@@ -3487,6 +3494,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (nextPending.length < 3) {
+          commitPendingOnly();
           setPendingPointIds(nextPending);
           setHintMessageState(
             nextPending.length === 1
@@ -3501,8 +3509,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const mVertex = pointOf(nextPending[1]);
         const mp3 = pointOf(nextPending[2]);
         if (!mp1 || !mVertex || !mp3 || new Set(nextPending).size < 3) {
+          commitPendingOnly();
           setHintMessageState('Farklı üç nokta seçin');
           return;
+        }
+
+        const varOlanAci = objs.find((o) => o.type === 'angle' && o.vertexPointId === mVertex.id &&
+          ((o.point1Id === mp1.id && o.point3Id === mp3.id) || (o.point1Id === mp3.id && o.point3Id === mp1.id)));
+        if (varOlanAci) {
+          commit((prev) => [...prev, ...newlyCreated].map((o) => o.id === varOlanAci.id ? { ...o, showValue: true, visible: true } as MathObject : o), 'Açı ölçüsü gösterildi');
+        } else {
+          const olculenAci: AngleObject = { id: createId('ang'), type: 'angle', label: `∠${mp1.label}${mVertex.label}${mp3.label}`,
+            showLabel: true, point1Id: mp1.id, vertexPointId: mVertex.id, point3Id: mp3.id,
+            showValue: true, visible: true, color: '#d97706', createdAt: Date.now(), olcumSekli: true };
+          commitWith([olculenAci], 'Açı ölçüsü tuvale eklendi');
         }
 
         setHintMessageState(
@@ -3597,7 +3617,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setPendingPointIds([]);
         const a = pointOf(nextPending[0]);
         const b = pointOf(nextPending[1]);
-        if (!a || !b || nextPending[0] === nextPending[1]) {
+        if (!a || !b || nextPending[0] === nextPending[1] || calculateDistance(a, b) < 1e-9) {
           setHintMessage('İki FARKLI nokta seçmelisiniz.');
           commitPendingOnly();
           return;
@@ -3608,10 +3628,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           const { nokta, yeni } = noktaYaDaYeni(m.x, m.y);
           if (!yeni) {
             // Orta noktada zaten bir nokta var (ör. orta dikmenin noktası): ikinci harf açılmaz
-            commitPendingOnly();
+            commit((prev) => [...prev, ...newlyCreated].map((o) => o.id === nokta.id ? { ...o, insaGosterimi: { tur: 'midpoint', pointIds: [a.id, b.id] } } as MathObject : o), 'Orta noktanın eş uzunlukları gösterildi');
             setHintMessage(nokta.label + ' zaten [' + a.label + b.label + '] parçasının orta noktası; yeni nokta eklenmedi.');
             return;
           }
+          nokta.construction = { kind: 'midpoint', pointIds: [a.id, b.id] };
+          nokta.isIndependent = false;
+          nokta.insaGosterimi = { tur: 'midpoint', pointIds: [a.id, b.id] };
           commitWith([nokta], nokta.label + ' orta noktası oluşturuldu');
           setHintMessage(nokta.label + ', [' + a.label + b.label + '] parçasının orta noktasıdır.');
           return;
@@ -3628,10 +3651,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           const orta = noktaYaDaYeni(pb[0].x, pb[0].y, '#0f766e');
           const n1 = orta.nokta;
           const n2 = yardimciNokta(pb[1].x, pb[1].y, '#0f766e');
+          if (orta.yeni) { n1.construction = { kind: 'midpoint', pointIds: [a.id, b.id] }; n1.isIndependent = false; }
+          n2.construction = { kind: 'direction', throughId: n1.id, linePointIds: [a.id, b.id], mode: 'perpendicular' };
+          n2.isIndependent = false;
+          n2.visible = false;
           const dogru: LineObject = {
             id: createId('line'),
             type: 'line',
             label: '[' + a.label + b.label + '] Orta Dikmesi',
+            insaGosterimi: { tur: 'perp_bisector', pointIds: [a.id, b.id] },
             showLabel: true,
             point1Id: n1.id,
             point2Id: n2.id,
@@ -3834,10 +3862,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             return;
           }
           const n2 = yardimciNokta(uc.x, uc.y, '#c2410c');
+          n2.construction = { kind: 'bisector', pointIds: [a.id, b.id, c.id] };
+          n2.isIndependent = false;
+          n2.visible = false;
           const isin: RayObject = {
             id: createId('ray'),
             type: 'ray',
             label: a.label + b.label + c.label + ' Açıortayı',
+            insaGosterimi: { tur: 'angle_bisector', pointIds: [a.id, b.id, c.id] },
             showLabel: true,
             startPointId: b.id,
             throughPointId: n2.id,
@@ -3859,6 +3891,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             return;
           }
           const n2 = yardimciNokta(ikinci.x, ikinci.y, '#1d4ed8');
+          n2.construction = { kind: 'direction', throughId: c.id, linePointIds: [a.id, b.id], mode: tool };
+          n2.isIndependent = false;
+          n2.visible = false;
           const dogru: LineObject = {
             id: createId('line'),
             type: 'line',
@@ -3868,6 +3903,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               ' / ' +
               a.label +
               b.label,
+            ...(tool === 'perpendicular' ? { insaGosterimi: { tur: 'perpendicular' as const, pointIds: [a.id, b.id, c.id] } } : {}),
             showLabel: true,
             point1Id: c.id,
             point2Id: n2.id,

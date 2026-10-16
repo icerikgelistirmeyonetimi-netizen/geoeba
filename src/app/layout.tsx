@@ -5,6 +5,7 @@ import { CurriculumProvider } from '@/state/CurriculumContext';
 import { WorkspaceProvider } from '@/state/WorkspaceContext';
 import { Header } from '@/components/layout/Header';
 import { yaziTipiKurallari } from './yaziTipleri';
+import { OturumProvider } from '@/state/OturumContext';
 
 export const metadata: Metadata = {
   title: 'GeoEBA - Etkileşimli Matematik ve Geometri Platformu',
@@ -33,6 +34,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-background text-foreground antialiased selection:bg-primary/20">
         <ThemeProvider>
+          <OturumProvider>
           <CurriculumProvider>
             <WorkspaceProvider>
               <div className="flex flex-col min-h-screen bg-background">
@@ -41,6 +43,7 @@ export default function RootLayout({
               </div>
             </WorkspaceProvider>
           </CurriculumProvider>
+          </OturumProvider>
         </ThemeProvider>
       </body>
     </html>

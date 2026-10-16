@@ -245,7 +245,7 @@ describe('project file validation', () => {
     const eski = { strokeScale: 2, fontScale: 1, pointRadius: 8, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideFills: false };
     // Eski dosyanın hideLabelBoxes: false değeri yalnızca eski varsayılandı: dosya kutusuz açılır.
     expect(parseProjectFile({ objects: [], styleSettings: { ...eski, hideLabelBoxes: false } }).styleSettings)
-      .toEqual({ ...eski, showLabelBoxes: false, olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayiOlcu: true, tamSayiOlcuOrtaokul: false, yaziAltSiniri: 0.7 });
+      .toEqual({ ...eski, showLabelBoxes: false, olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayiOlcu: true, tamSayiOlcuOrtaokul: false, yaziAltSiniri: 1 });
   });
   it('uzaklaşınca yazı alt sınırı 0–1 arası bir orandır; dışı reddedilir', () => {
     const stil = { strokeScale: 1, fontScale: 1, pointRadius: 6, pointLabelScale: 1, measurementScale: 1, axisScale: 1, hideFills: false };

@@ -16,11 +16,10 @@
  *
  * İlkokul (alan uzmanı incelemesi, 4. tur, satır 181; TYMM MAT.1.4.1, MAT.2.4.1, MAT.3.4.1, MAT.4.4.2): kategorik veri,
  * en çok iki veri grubu; merkezi eğilim ve yayılım ölçüsü, yüzde ve açı yok; daire, çizgi, kök-yaprak ve saçılım yok.
- * Programın temsilleri: çetele ve sıklık tablosu (İstatistik sekmesi "Sıklık tablosu" adını alır, tabloda çetele
- * sütunu) ve sınıfın grafiği — 1. sınıf nesne grafiği (her veri bir resim), 2. sınıf şekil grafiği (her veri bir kare),
+ * Programın temsilleri: çetele ve sıklık tablosu (İstatistik sekmesi "Çetele ve sıklık tablosu" adını alır, ayrı çizgili tablolar) ve sınıfın grafiği — 1. sınıf nesne grafiği (her veri bir resim), 2. sınıf şekil grafiği (her veri bir kare),
  * 3. sınıf nokta grafiği, 4. sınıf nokta grafiği ve ayrı sütun grafiği sekmesi.
  * Kademe menüsünde İlkokul seçiliyken 1–4. sınıf örneğine bağlı olmayan her tablo (kendi tablonuz, veri toplama, 5–8.
- * sınıf örneği) ilkokulun ortak kurallarıyla (ILKOKUL_KURALLARI: 4. sınıfın temsilleri) çalışır.
+ * sınıf örneği) ilkokulun ortak kurallarıyla (ILKOKUL_KURALLARI: şekil grafiği ve tablolar) çalışır.
  */
 import { ilkokulSinifi, type GrafikTuru, type SinifDuzeyi } from './veri';
 
@@ -62,6 +61,7 @@ export interface SinifKurallari {
 }
 
 const TUM_SEKMELER: readonly GrafikTuru[] = ['nokta', 'sutun', 'cizgi', 'daire', 'istatistik'];
+const ORTAOKUL_SEKMELER: readonly GrafikTuru[] = ['nokta', 'sutun', 'cizgi', 'daire', 'istatistik'];
 const HEPSI: OlcuKumesi = { merkezi: true, aciklik: true, oms: true, standartSapma: true };
 const OLCUSUZ: OlcuKumesi = { merkezi: false, aciklik: false, oms: false, standartSapma: false };
 /** 5–8. sınıf ve sınıfsız tablo: sekme adları, nokta biçimi ve sütun dönüşümü bugünkü gibi; çetele yok */
@@ -75,7 +75,7 @@ const ILKOKUL_ORTAK = {
   tekGrafikteKarsilastir: true,
   cetele: true,
 } as const;
-const SIKLIK_TABLOSU = 'Sıklık tablosu';
+const SIKLIK_TABLOSU = 'Çetele ve sıklık tablosu';
 
 const KURALLAR: Record<SinifDuzeyi, Omit<SinifKurallari, 'sinif'>> = {
   1: {
@@ -123,7 +123,7 @@ const KURALLAR: Record<SinifDuzeyi, Omit<SinifKurallari, 'sinif'>> = {
     ...ORTAOKUL_TEMSILLERI,
   },
   7: {
-    sekmeler: TUM_SEKMELER,
+    sekmeler: ORTAOKUL_SEKMELER,
     olculer: { merkezi: true, aciklik: true, oms: true, standartSapma: false },
     yuzdeVeAci: true,
     tekYonluTabloIleBirlikte: true,
@@ -131,7 +131,7 @@ const KURALLAR: Record<SinifDuzeyi, Omit<SinifKurallari, 'sinif'>> = {
     ...ORTAOKUL_TEMSILLERI,
   },
   8: {
-    sekmeler: TUM_SEKMELER,
+    sekmeler: ORTAOKUL_SEKMELER,
     olculer: { merkezi: true, aciklik: true, oms: true, standartSapma: false },
     yuzdeVeAci: true,
     tekYonluTabloIleBirlikte: true,
@@ -155,7 +155,10 @@ export const SERBEST_KURALLAR: SinifKurallari = {
  * İlkokul kademesinde 1–4. sınıf örneğine bağlı olmayan tablo (kendi tablonuz, veri toplama, 5–8. sınıf örneği):
  * ilkokulun en geniş temsilleri (4. sınıf) — nokta grafiği, sütun grafiği, çetele ve sıklık tablosu; ölçü, yüzde, açı yok
  */
-export const ILKOKUL_KURALLARI: SinifKurallari = { ...KURALLAR[4], sinif: null };
+export const ILKOKUL_KURALLARI: SinifKurallari = { ...KURALLAR[2], sinif: null };
+
+/** Sınıf belirtilmemiş ortaokul tablosunda program dışı saçılım ve standart sapma gösterilmez. */
+export const ORTAOKUL_KURALLARI: SinifKurallari = { ...KURALLAR[7], sinif: null };
 
 /**
  * Tablonun kuralları: bağlı örneğin sınıfı (1–8) varsa o sınıfın kuralları; yoksa sınıfsız davranış. `ilkokul`

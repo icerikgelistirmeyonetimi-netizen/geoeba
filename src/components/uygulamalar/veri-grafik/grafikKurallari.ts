@@ -211,6 +211,8 @@ export function siraEtiketiMi(etiket: string): boolean {
  * bir zaman ya da sıra bildirmiyorsa (öğrenci adları, kodlar, kategoriler). Adlar boşsa not çıkmaz (karar verilemez).
  */
 export function cizgiSiraNotuGerekli(tablo: VeriTablosu): boolean {
+  // Sayısal öğrenci numarası da bağımsız birimi tanımlar; bir zaman ekseni değildir.
+  if (/öğrenci|ogrenci|katılımcı|katilimci|kişi|kisi|aday/.test(tablo.sutunlar[0]?.ad.toLocaleLowerCase('tr') ?? '')) return true;
   const adlar = sutunMetinleri(tablo, 0).map((m) => m.deger);
   if (adlar.length < 2) return false;
   const sirali = adlar.filter(siraEtiketiMi).length;

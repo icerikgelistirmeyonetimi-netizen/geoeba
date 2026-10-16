@@ -533,7 +533,7 @@ describe('C-4 / C-5: "Veri topla" paneli (yerleşim, soru şeridi, tablo bandı,
     // §0: panel açıkken grafik sütununda soru şeridi, Keşif şeridi ya da not yok; soru panelin görev metninde
     expect(html).not.toContain('data-soru-seridi');
     expect(html).not.toContain('data-ornek-ipucu');
-    expect(html).toContain('Sınıfımızda en çok sevilen meyve hangisi?');
+    expect(html).toContain('Sınıfımızdaki öğrencilerin en sevdikleri meyvelerin dağılımı nasıldır?');
   });
 
   it('panel kapalı: tablo solda, grafik sütununda soru şeridi ("3 veri"), tablo başlığında soru şeridi düğmesi', () => {
@@ -544,7 +544,7 @@ describe('C-4 / C-5: "Veri topla" paneli (yerleşim, soru şeridi, tablo bandı,
     expect(html).toMatch(/aria-pressed="false"[^>]*data-veri-topla-dugmesi/);
     const serit = html.slice(html.indexOf('data-soru-seridi'));
     expect(serit).toContain('Araştırma sorusu:');
-    expect(serit).toContain('Sınıfımızda en çok sevilen meyve hangisi?');
+    expect(serit).toContain('Sınıfımızdaki öğrencilerin en sevdikleri meyvelerin dağılımı nasıldır?');
     expect(serit).toContain('3 veri');
     expect(serit).toContain('aria-label="Soru şeridini gizle"');
     expect(html).toContain('aria-label="Soru şeridi"');

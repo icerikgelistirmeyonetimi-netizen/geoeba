@@ -91,7 +91,7 @@ export const KADEME_DUZEYLERI: Readonly<Record<KademeId, KademeTanimi>> = {
       'measure_distance', // "Uzunluğu Ölç" — Ölçme Araçları (rapor); kenar uzunlukları (MAT.2.1.10-2.1.11, MAT.4.3.2)
       'unit_measure', // standart olmayan birimle uzunluk ve alan (MAT.1.1.8, MAT.2.1.10, MAT.3.3.4, MAT.4.3.4); rapor: uzunluk ondalıksız
       'measure_angle', // Açıölçer — yalnız TANITIM: ilkokulda derece okunmaz (TYMM: "Geometri setinden açı ölçer tanıtılır. Açı ölçer ile açı ölçme uygulamalarına girilmez.")
-      'angle', // açı oluşturma, derece yazısız (MAT.4.3.5: açı bir dönme miktarı)
+      // Açı üç noktayla oluşturulmaz; ilkokulda Şekli Döndür ile dönme miktarı incelenir.
       // "Alanı Bul": YOK — hesap gösterir; ilkokulda alan birim karelerle kaplanarak bulunur (alan uzmanı, 4. sınıf)
       'measure_perimeter', // çevre uzunluğu (MAT.3.3.4, MAT.4.3.3 — raporun gereksinim listesi)
       'area_model', // birim karelerle alan (MAT.4.3.4, M.4.3.3.1)
@@ -314,7 +314,7 @@ export function gorunenAracSayisi(gruplar: readonly { tools: readonly { id: stri
  * etkinleştiriyor, panelde seçili araç görünmüyor"). Yalnız ortaokulda: ilkokul ve lisenin kısayolları değişmez.
  * Komutla şekil KURMAK (ör. "merkezi A olan elips çiz") bu süzgece girmez; yalnız araç seçimi süzülür.
  */
-export const ARAC_SECIMI_SUZULEN_KADEMELER: readonly KademeId[] = ['ortaokul'];
+export const ARAC_SECIMI_SUZULEN_KADEMELER: readonly KademeId[] = ['ilkokul', 'ortaokul'];
 
 /** Panelde değil tuval şeridinde duran araçlar: süzgeçten bağımsız her zaman seçilebilir (El / kaydırma). */
 const PANEL_DISI_ARACLAR: ReadonlySet<string> = new Set(['pan']);
@@ -339,6 +339,7 @@ function bulunmaHali(sozcuk: string): string {
 /** Süzgeç dışı araç seçilmek istenince gösterilen bildirim: "Elips aracı ortaokulda kapalı. …" */
 export function kapaliAracBildirimi(duzey: KademeId, aracAdi: string): string {
   const yer = bulunmaHali(KADEME_DUZEYLERI[duzey].ad.toLocaleLowerCase('tr'));
+  if (duzey === 'ilkokul') return `${aracAdi} aracı ilkokulda kapalı. Bu kademenin araçlarından birini seçin.`;
   return `${aracAdi} aracı ${yer} kapalı. Bütün araçlar için Kademe menüsünden «Tüm araçlar»ı seçin.`;
 }
 

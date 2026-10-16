@@ -18,6 +18,9 @@ import { kalipBul } from './kaliplar';
 import { SIMGE } from './simgeler';
 import { AkisSemasi } from './AkisSemasi';
 import { SozdeKodGorunumu } from './SozdeKodGorunumu';
+import { DogalDilGorunumu, GosterimAnahtari } from './DogalDilGorunumu';
+import { AritmetikInceleme, temelDuzeyMetni } from './AritmetikInceleme';
+import { CozumKarti } from './CozumKarti';
 import { GOREV_TURU_ADI, type Gorev, type KodGorunumu, type Unite } from './gorev';
 import { UNITELER, sinifGruplari, uniteBul } from './mufredat';
 import { gorevGuncelle, gorevKaydi, gorevKodu, ilkEksikGorev, kaydiYaz, kaydiYukle, uniteGuncelle, uniteIlerlemesi, uniteKaydi, type LabKaydi } from './kayit';
@@ -34,6 +37,8 @@ import { SiniflarSayfasi, SinifSayfasi } from './Giris';
 import { AtolyeEkrani } from './AtolyeEkrani';
 import { IpucuKarti } from './IpucuKarti';
 import { atolyeBul } from './atolyeler';
+import { useOturum } from '@/state/OturumContext';
+import { oturumKaydi, oturumaUygunSinif } from './oturum';
 
 type Ekran = { tur: 'giris' } | { tur: 'sinif'; sinif: number } | { tur: 'gorev' } | { tur: 'atolye'; id: string };
 
@@ -41,9 +46,10 @@ type Ekran = { tur: 'giris' } | { tur: 'sinif'; sinif: number } | { tur: 'gorev'
  * Uygulamanın kabuğu: kayıt burada tutulur; açılışta sınıf kutuları, sonra sınıf sayfası, görev ya da atölye ekranı.
  */
 export default function AlgoritmaUygulamasi(_props: { pencereGenisligi?: number; pencereYuksekligi?: number }) {
+  const { kademe: oturumKademesi } = useOturum();
   const koyu = useKoyuTema();
   const azHareket = useAzHareket();
-  const [kayit, setKayit] = useState<LabKaydi>(kaydiYukle);
+  const [kayit, setKayit] = useState<LabKaydi>(() => oturumKaydi(kaydiYukle(), oturumKademesi));
   useEffect(() => kaydiYaz(kayit), [kayit]);
   const [ekran, setEkran] = useState<Ekran>({ tur: 'giris' });
 
@@ -52,10 +58,13 @@ export default function AlgoritmaUygulamasi(_props: { pencereGenisligi?: number;
   const uk = uniteKaydi(kayit, sonUnite.id);
   const devam = baslamis ? { baslik: `${sonUnite.sinif}. sınıf · ${sonUnite.ad}`, alt: `Görev ${Math.min(uk.aktif, sonUnite.gorevler.length - 1) + 1} / ${sonUnite.gorevler.length}` } : null;
   const uniteAc = (id: string) => {
+    if (!oturumaUygunSinif(uniteBul(id).sinif, oturumKademesi)) return;
     setKayit((k) => ({ ...k, unite: id }));
     setEkran({ tur: 'gorev' });
   };
   const atolye = ekran.tur === 'atolye' ? atolyeBul(ekran.id) : undefined;
+
+  if (oturumKademesi === 'lise') return <div className="flex h-full items-center justify-center p-6"><p className="max-w-lg rounded-2xl border bg-card p-6 text-center text-lg">Algoritma Laboratuvarı’nda şu anda 1–8. sınıf etkinlikleri bulunmaktadır. Bu oturum için lise etkinliği henüz bulunmuyor.</p></div>;
 
   return (
     <div className="relative h-full w-full bg-background text-foreground" data-uygulama="algoritma" data-ekran={ekran.tur}>
@@ -81,6 +90,7 @@ function GorevEkrani({
   azHareket: boolean;
   onSinifSayfasi: (sinif: number) => void;
 }) {
+  const { kademe: oturumKademesi } = useOturum();
   const [kokRef, boyut] = useBoyut<HTMLDivElement>();
   const dar = boyut.en > 0 && boyut.en < DAR_ESIK;
   const gizli = boyut.en === 0 || boyut.boy === 0;
@@ -91,7 +101,10 @@ function GorevEkrani({
   const gorev: Gorev = unite.gorevler[sira];
   const gk = gorevKaydi(kayit, gorev.id);
   const kart = unite.gorunum === 'kart';
-  const ifadeBirimi = unite.gorunum === 'ifade';
+  const ifadeBirimi = unite.gorunum === 'ifade' || unite.sinif === 5;
+  const [incelemeAcik, setIncelemeAcik] = useState(false);
+  const [cozumAcik, setCozumAcik] = useState(false);
+  const yorumOnayi = useRef(false);
   const tahminGorevi = gorev.tur === 'tahmin' && !!gorev.tahmin;
   const [gorunum, setGorunum] = useState<KodGorunumu>('bloklar');
   useEffect(() => setGorunum(gorev.ilkGorunum ?? 'bloklar'), [gorev.id, gorev.ilkGorunum]);
@@ -107,7 +120,7 @@ function GorevEkrani({
     (j: number) => setKayit((k) => uniteGuncelle(k, k.unite, (u) => ({ ...u, aktif: Math.max(0, Math.min(uniteBul(k.unite).gorevler.length - 1, j)) }))),
     []
   );
-  const uniteSec = useCallback((id: string) => setKayit((k) => ({ ...k, unite: id })), []);
+  const uniteSec = useCallback((id: string) => { if (oturumaUygunSinif(uniteBul(id).sinif, oturumKademesi)) setKayit((k) => ({ ...k, unite: id })); }, [oturumKademesi]);
 
   const iz = useMemo(() => calistir(program, gorev.dunya, gorev.hedef), [program, gorev]);
   const izRef = useRef(iz);
@@ -137,17 +150,27 @@ function GorevEkrani({
             setSonuc({ basarili: false, metin: `Sonuç ${sayiMetni(dogru)} ${gorev.tahmin.birim}; senin tahminin ${t === undefined ? 'yoktu' : `${sayiMetni(t)} idi`}. ${gorev.tahmin.yonlendirme ?? 'Kodu adım adım izle: nerede ayrıldın?'}` });
             return;
           }
+          if (unite.sinif === 5 && !yorumOnayi.current) {
+            setSonuc({ basarili: false, metin: 'Kodun doğru çalıştı. Görevi tamamlamak için işlemi hesapla ve nasıl çalıştığını açıkla.' });
+            setIncelemeAcik(true);
+            return;
+          }
           setSonuc({ basarili: true, metin: `Tahminin doğru: ${sayiMetni(dogru)} ${gorev.tahmin.birim}. ${gorev.basari(z).replace(/^(Doğru|Oldu)!\s*/, '')}` });
           setKayit((k) => gorevGuncelle(k, gorev.id, (g) => ({ ...g, tamam: true })));
+          return;
+        }
+        if (unite.sinif === 5 && !yorumOnayi.current) {
+          setSonuc({ basarili: false, metin: 'Kodun doğru çalıştı. Görevi tamamlamak için işlemi hesapla ve nasıl çalıştığını açıkla.' });
+          setIncelemeAcik(true);
           return;
         }
         setSonuc({ basarili: true, metin: gorev.basari(z) });
         setKayit((k) => gorevGuncelle(k, gorev.id, (g) => ({ ...g, tamam: true })));
       } else {
-        setSonuc({ basarili: false, metin: sonucIletisi(z.sonuc, gorev.dunya, gorev.bitkiAdi) });
+        setSonuc({ basarili: false, metin: unite.sinif === 5 ? temelDuzeyMetni(sonucIletisi(z.sonuc, gorev.dunya, gorev.bitkiAdi)) : sonucIletisi(z.sonuc, gorev.dunya, gorev.bitkiAdi) });
       }
     },
-    [gorev, unite.gorunum]
+    [gorev, unite.gorunum, unite.sinif]
   );
   const oynatici = useOynatici(sahneRef, 1, onBitti);
   // Kod çalışmaya başlayınca ipucu kartı kapanır: ileti şeridi (anlatım, sonuç) geri gelir
@@ -160,8 +183,11 @@ function GorevEkrani({
   useEffect(() => {
     oynatici.yukle(iz);
     setSonuc(null);
+    yorumOnayi.current = false;
+    setCozumAcik(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [iz]);
+  useEffect(() => setIncelemeAcik(false), [gorev.id]);
 
   // Ünitenin bütün zorunlu görevleri tamam → ünite sonu (bir kez)
   const ilerleme = uniteIlerlemesi(kayit, unite);
@@ -229,7 +255,7 @@ function GorevEkrani({
             {mesaj.basarili ? <SIMGE.onay className="h-4 w-4" /> : <SIMGE.soru className="h-4 w-4" />}
           </span>
         )}
-        <span>{mesaj ? mesaj.metin : suankiAdim ? adimAnlatimi(suankiAdim, onceki, program, gorev.dunya, gorev.bitkiAdi) : program.length ? 'Kodu çalıştırmak için Çalıştır düğmesine bas.' : baslangicAnlatimi(gorev.dunya, kart)}</span>
+        <span>{mesaj ? (unite.sinif === 5 ? temelDuzeyMetni(mesaj.metin) : mesaj.metin) : suankiAdim ? (unite.sinif === 5 ? temelDuzeyMetni(adimAnlatimi(suankiAdim, onceki, program, gorev.dunya, gorev.bitkiAdi)) : adimAnlatimi(suankiAdim, onceki, program, gorev.dunya, gorev.bitkiAdi)) : program.length ? 'Kodu çalıştırmak için Çalıştır düğmesine bas.' : baslangicAnlatimi(gorev.dunya, kart)}</span>
       </p>
     </div>
   );
@@ -371,6 +397,9 @@ function GorevEkrani({
         {gorev.soru && gk.tamam && <SoruSatiri gorev={gorev} iz={iz} cevap={gk.cevap} onCevap={(c) => setKayit((k) => gorevGuncelle(k, gorev.id, (g) => ({ ...g, cevap: c })))} />}
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {(sonuc?.basarili === false || acilanIpucu === gorev.ipuclari.length) && (
+          <button type="button" onClick={() => setCozumAcik(true)} className={`${DUGME} bg-muted text-foreground`} data-cozum-goster>Çözümü göster</button>
+        )}
         {!gk.tamam && gorev.ipuclari.length > 0 && (acilanIpucu < gorev.ipuclari.length || !ipucuAcik) && (
           <button type="button" onClick={ipucuDugmesi} className={`${DUGME} bg-ada-fener/15 text-foreground hover:bg-ada-fener/25`} data-ipucu>
             <SIMGE.ipucu className="h-5 w-5 text-ada-fener" /> İpucu
@@ -449,18 +478,19 @@ function GorevEkrani({
 
   const GORUNUMLER: [KodGorunumu, string, (p: { className?: string }) => React.ReactElement][] = [
     ['bloklar', 'Bloklar', SIMGE.bloklar],
+    ['dogal', 'Doğal dil', SIMGE.sozde],
     ['sozde', 'Sözde kod', SIMGE.sozde],
     ['akis', 'Akış şeması', SIMGE.akis],
   ];
   const gorunumSecici = ifadeBirimi && (
-    <div className="flex items-center gap-1 border-b border-border px-2 py-2" role="tablist" aria-label="Kod görünümü" data-kod-gorunumu>
+    <div className="flex flex-wrap items-center gap-1 border-b border-border px-2 py-2" role="tablist" aria-label="Kod görünümü" data-kod-gorunumu>
       {GORUNUMLER.map(([k, ad, S]) => (
         <button
           key={k}
           type="button"
           role="tab"
-          aria-selected={gorunum === k}
-          onClick={() => setGorunum(k)}
+          aria-selected={!incelemeAcik && gorunum === k}
+          onClick={() => { setGorunum(k); setIncelemeAcik(false); }}
           className={`inline-flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-full px-2 text-[13px] font-bold transition-colors ${gorunum === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
           data-gorunum={k}
         >
@@ -471,7 +501,19 @@ function GorevEkrani({
     </div>
   );
   const kodIcerigi =
-    gorunum === 'bloklar' || !ifadeBirimi ? (
+    incelemeAcik && unite.sinif === 5 ? (
+      <div className="min-h-0 flex-1 overflow-auto p-3">
+        <AritmetikInceleme key={gorev.id} gorev={gorev} program={program} iz={iz} konum={izKonumu} kodBasarili={bitti && iz.sonuc.basarili} onDogrula={(dogru) => {
+          yorumOnayi.current = dogru;
+          const tahminDogru = !gorev.tahmin || gk.tahmin === gorev.tahmin.cevap(iz);
+          const kisa = gorev.enCokBlok === undefined || blokSayisi(program) <= gorev.enCokBlok;
+          if (dogru && bitti && iz.sonuc.basarili && tahminDogru && kisa) {
+            setSonuc({ basarili: true, metin: `${gorev.basari(iz)} İşlemin ve açıklaman doğru.` });
+            setKayit((k) => gorevGuncelle(k, gorev.id, (g) => ({ ...g, tamam: true })));
+          }
+        }} />
+      </div>
+    ) : gorunum === 'bloklar' || !ifadeBirimi ? (
       <BlokDuzenleyici
         key={gorev.id}
         program={program}
@@ -486,21 +528,27 @@ function GorevEkrani({
         enFazlaBlok={gorev.enCokBlok}
         degiskenler={degiskenAdlari}
         olcumler={gorev.olcumler}
+        temel={unite.sinif === 5}
       />
     ) : (
       <div className="min-h-0 flex-1 overflow-auto px-3 pb-4 pt-3" data-kod-aynasi={gorunum}>
-        {gorunum === 'sozde' ? <SozdeKodGorunumu program={program} aktif={aktif} /> : <AkisSemasi program={program} aktif={aktif} />}
+        {gorunum === 'dogal' ? <DogalDilGorunumu program={program} /> : <>
+          <GosterimAnahtari akis={gorunum === 'akis'} />
+          {gorunum === 'sozde' ? <SozdeKodGorunumu program={program} aktif={aktif} temel={unite.sinif === 5} /> : <AkisSemasi program={program} aktif={aktif} />}
+        </>}
         {!tahminGorevi && <p className="mt-3 text-[12px] font-semibold text-muted-foreground">Kodu değiştirmek için Bloklar görünümüne geç.</p>}
       </div>
     );
   const kod = (
     <aside className={`${dar ? 'mx-3 mb-4 min-h-[460px] rounded-[calc(var(--radius)-2px)] border' : 'w-[clamp(340px,34%,460px)] shrink-0 border-l'} flex min-h-0 flex-col border-border bg-card`} aria-label="Kod" data-kod-paneli>
       {gorunumSecici}
+      {unite.sinif === 5 && <button type="button" className={`shrink-0 border-b px-3 py-2 text-[14px] font-bold ${incelemeAcik ? 'bg-primary text-primary-foreground' : 'bg-muted'}`} onClick={() => setIncelemeAcik(!incelemeAcik)}>İşlemleri incele ve açıkla</button>}
       {kodIcerigi}
     </aside>
   );
 
-  const siradaki = UNITELER[UNITELER.findIndex((u) => u.id === unite.id) + 1];
+  const aday = UNITELER[UNITELER.findIndex((u) => u.id === unite.id) + 1];
+  const siradaki = aday && oturumaUygunSinif(aday.sinif, oturumKademesi) ? aday : undefined;
 
   return (
     <div ref={kokRef} className="relative flex h-full w-full flex-col bg-background text-foreground" data-gorev-ekrani data-unite={unite.id} data-gorev={gorev.id}>
@@ -510,6 +558,7 @@ function GorevEkrani({
         {kod}
       </div>
       <OgretmenNotu acik={notAcik} onKapat={() => setNotAcik(false)} unite={unite} />
+      {cozumAcik && <CozumKarti program={gorev.cozum} onKapat={() => setCozumAcik(false)} />}
       {sonAcik && (
         <UniteSonu
           unite={unite}
@@ -531,6 +580,7 @@ function GorevEkrani({
 
 /** Ünite seçimi: yönergenin ilk satırında "3. sınıf · Bak ve karar ver ▾"; üstte sınıf çipleri, altta o sınıfın üniteleri */
 function UniteMenusu({ unite, kayit, onSec }: { unite: Unite; kayit: LabKaydi; onSec: (id: string) => void }) {
+  const { kademe: oturumKademesi } = useOturum();
   const [acik, setAcik] = useState(false);
   const [sinif, setSinif] = useState(unite.sinif);
   const ref = useRef<HTMLDivElement>(null);
@@ -552,7 +602,7 @@ function UniteMenusu({ unite, kayit, onSec }: { unite: Unite; kayit: LabKaydi; o
       window.removeEventListener('keydown', tus);
     };
   }, [acik]);
-  const gruplar = sinifGruplari();
+  const gruplar = sinifGruplari().filter((g) => oturumaUygunSinif(g.sinif, oturumKademesi));
   const grup = gruplar.find((g) => g.sinif === sinif) ?? gruplar[0];
   return (
     <div ref={ref} className="relative">

@@ -118,7 +118,7 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
   const olcek = dogrusalOlcek(0, eksen.max, taban, UST);
   const { yuzdeler } = yuzdeVeAcilar(f.map((x) => x.sayi));
   // Eksen adının yanında veri sayısı yazılmaz (uzman incelemesi, 4. tur: eskiden "Aday · sıklık (20 veri)")
-  const baslik = `${sutunAdi} · sıklık`;
+  const baslik = `Sıklık`;
   const yuzdeSigar = hucreG >= 44;
   const yuzdeli = yuzdeGoster && !anahtar;
 
@@ -160,6 +160,7 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
       <text x={SOL} y={16} fontSize={13} fontWeight={700} fill={RENK.metin}>
         {baslik}
       </text>
+      <text x={W - SAG} y={H - 6} textAnchor="end" fontSize={13} fontWeight={700} fill={RENK.metin} data-eksen-adi="yatay">{sutunAdi}</text>
       {anahtar && (
         <RenkLejanti
           eslem={anahtar}
@@ -321,13 +322,7 @@ const KART_BASLIGI = 'text-[13px] font-bold uppercase tracking-wide text-muted-f
 function goreliSiklikMetni(sayi: number, n: number, yuzde: number): string {
   const oran = n > 0 ? sayi / n : 0;
   const tam = Math.abs(oran * 100 - Math.round(oran * 100)) < 1e-9;
-  return `${sayi}/${n} ${tam ? '=' : '≈'} ${sayiMetni(oran, 2)} (%${sayiMetni(yuzde, 1)})`;
-}
-
-/** "105°"; tam derece değilse "≈ 51°" */
-function merkezAciMetni(sayi: number, n: number, aci: number): string {
-  const tam = n > 0 ? (sayi * 360) / n : 0;
-  return `${Math.abs(tam - Math.round(tam)) < 1e-9 ? '' : '≈ '}${aci}°`;
+  return `${sayi}/${n} ${tam ? '=' : 'yaklaşık'} ${sayiMetni(oran, 2)} (%${sayiMetni(yuzde, 1)})`;
 }
 
 export function KategorikIstatistik({
@@ -345,7 +340,7 @@ export function KategorikIstatistik({
   const metinler = useMemo(() => sutunMetinleri(tablo, sutun).map((m) => m.deger), [tablo, sutun]);
   const f = useMemo(() => frekanslar(metinler, sira), [metinler, sira]);
   const tepe = useMemo(() => mod(metinler, sira), [metinler, sira]);
-  const { yuzdeler, acilar } = useMemo(() => yuzdeVeAcilar(f.map((x) => x.sayi)), [f]);
+  const { yuzdeler } = useMemo(() => yuzdeVeAcilar(f.map((x) => x.sayi)), [f]);
   const n = metinler.length;
   const sutunAdi = tablo.sutunlar[sutun]?.ad ?? '—';
   const enCok = f.reduce((m, x) => Math.max(m, x.sayi), 0);
@@ -381,7 +376,20 @@ export function KategorikIstatistik({
               <div className="mt-1 text-2xl font-extrabold tabular-nums text-foreground">{n}</div>
             </div>
           </div>
-          {tekYonlu && (
+          {cetele && (
+            <div className="grid gap-4 xl:grid-cols-2" data-ilkokul-tablolari data-capraz-tablo={anahtar ? "" : undefined}>
+              {(['Çetele tablosu', 'Sıklık tablosu'] as const).map((baslik, tur) => (
+                <section key={baslik} className="overflow-x-auto rounded-lg border border-border bg-card p-4" data-cetele-tablosu={tur === 0 ? '' : undefined} data-siklik-tablosu={tur === 1 ? '' : undefined}>
+                  <h3 className="mb-2 text-base font-bold">{baslik}</h3>
+                  <table className="w-full border-collapse text-sm tabular-nums">
+                    <thead><tr><th className="border border-border px-3 py-2 text-left">{sutunAdi}</th>{(anahtar ? anahtar.kategoriler : ['Öğrenci']).map(k => <th key={k} className="border border-border px-3 py-2">{k}</th>)}</tr></thead>
+                    <tbody>{f.map((x, i) => <tr key={x.kategori}><th className="border border-border px-3 py-2 text-left">{x.kategori}</th>{(anahtar && capraz ? capraz.find(c => c.kategori === x.kategori)?.sayilar ?? [] : [x.sayi]).map((sayi, j) => <td key={j} className="border border-border px-3 py-2 text-center">{tur === 0 ? <span data-cetele-hucresi><Cetele sayi={sayi} renk={kategoriRengi(x.kategori, i)} yukseklik={CETELE_BOYU} /></span> : sayi}</td>)}</tr>)}</tbody>
+                  </table>
+                </section>
+              ))}
+            </div>
+          )}
+          {!cetele && tekYonlu && (
           <section className="rounded-[calc(var(--radius)-4px)] border border-border bg-card p-4" data-siklik-tablosu>
             <h3 className="mb-2 text-base font-bold text-foreground">{cetele ? 'Çetele ve sıklık tablosu' : 'Sıklık tablosu'}</h3>
             <div className="overflow-x-auto">
@@ -392,7 +400,7 @@ export function KategorikIstatistik({
                     {cetele && <th className="pr-4 font-bold">Çetele</th>}
                     <th className="pr-4 text-right font-bold">Sıklık</th>
                     {oranlar && <th className="pr-4 text-right font-bold">Göreli sıklık</th>}
-                    {oranlar && <th className="pr-4 text-right font-bold">Merkez açı</th>}
+
                     {!cetele && <th className="w-[28%] font-bold" aria-label={oranlar ? 'Yüzde çubuğu' : 'Sıklık çubuğu'} />}
                   </tr>
                 </thead>
@@ -414,7 +422,7 @@ export function KategorikIstatistik({
                       )}
                       <td className="pr-4 text-right">{x.sayi}</td>
                       {oranlar && <td className="whitespace-nowrap pr-4 text-right">{goreliSiklikMetni(x.sayi, n, yuzdeler[i] ?? 0)}</td>}
-                      {oranlar && <td className="whitespace-nowrap pr-4 text-right">{merkezAciMetni(x.sayi, n, acilar[i] ?? 0)}</td>}
+
                       {!cetele && (
                         <td>
                           <div className="h-3 rounded-full bg-muted">
@@ -429,7 +437,7 @@ export function KategorikIstatistik({
                     {cetele && <td />}
                     <td className="pr-4 text-right">{n}</td>
                     {oranlar && <td className="whitespace-nowrap pr-4 text-right">{`${n}/${n} = 1 (%100)`}</td>}
-                    {oranlar && <td className="pr-4 text-right">360°</td>}
+
                     {!cetele && <td />}
                   </tr>
                 </tbody>
@@ -437,13 +445,13 @@ export function KategorikIstatistik({
             </div>
             {oranlar && (
               <p className="mt-3 text-[13px] text-muted-foreground" data-siklik-notu>
-                Yüzde = sıklık ÷ toplam × 100. Tüm yüzdelerin toplamı %100.
+                Göreli sıklık, bir sonucun görülme sayısının toplam deneme sayısına oranıdır.
                 {deneyVerisi && ' Atış sayısı arttıkça göreli sıklıklar teorik olasılığa yaklaşır.'}
               </p>
             )}
           </section>
           )}
-          {anahtar && capraz && (
+          {!cetele && anahtar && capraz && (
             <section className={`${tekYonlu ? 'mt-4 ' : ''}rounded-[calc(var(--radius)-4px)] border border-border bg-card p-4`} data-capraz-tablo>
               <h3 className="mb-2 text-base font-bold text-foreground" title={`İki yönlü tablo: ${sutunAdi} × ${anahtar.ad}`}>
                 {yonelmeEkli(anahtar.ad)} göre sıklık tablosu

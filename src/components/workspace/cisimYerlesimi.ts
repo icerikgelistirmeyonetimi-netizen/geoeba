@@ -64,7 +64,17 @@ export const VARSAYILAN_CISIM_OLCULERI: Readonly<Record<Solid3DType, CisimOlcule
 };
 
 /** Zeminde Çiz: sürüklenen boy `boy` br; dikdörtgen prizma varsayılanın oranını (4 : 3 : 2) korur, küp olmaz. */
-export function cizimOlculeri(tur: Solid3DType, boy: number): CisimOlculeri {
+export function cizimOlculeri(tur: Solid3DType, boy: number, tamSayi = false): CisimOlculeri {
+  if (tamSayi) {
+    const d = cizimOlculeri(tur, Math.max(1, Math.round(boy)));
+    const dimensions = { width: Math.max(1, Math.round(d.width)), height: Math.max(1, Math.round(d.height)),
+      depth: Math.max(1, Math.round(d.depth)), radius: Math.max(1, Math.round(d.radius)) };
+    if (tur === 'sphere' || tur === 'cylinder' || tur === 'cone') {
+      dimensions.width = dimensions.depth = dimensions.radius * 2;
+      if (tur === 'sphere') dimensions.height = dimensions.radius * 2;
+    }
+    return dimensions;
+  }
   if (tur === 'prism') {
     const v = VARSAYILAN_CISIM_OLCULERI.prism;
     const k = boy / v.width;

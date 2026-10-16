@@ -11,6 +11,9 @@ import { aracAdi } from './toolDefinitions';
 import { eskiDuzeniCevir } from './gorunumDuzenleri';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { useCurriculum } from '@/state/CurriculumContext';
+import { useOturum } from '@/state/OturumContext';
+import { oturumKaydiniOku, oturumKaydiniYaz, oturumKayitAnahtari } from '@/state/oturumDeposu';
+import type { LevelId } from '@/types/curriculum';
 import { CommandAssistant } from './CommandAssistant';
 import { KesirAraciCubugu } from './KesirAraciCubugu';
 import { useIlkokulAtolyesi } from './useIlkokulAtolyesi';
@@ -198,10 +201,10 @@ function sceneReducer(state: SceneState, action: SceneAction): SceneState {
   }
 }
 
-function loadSavedScene(): Solid3DObject[] {
+function loadSavedScene(kademe: LevelId | null): Solid3DObject[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(SCENE_STORAGE_KEY);
+    const raw = oturumKaydiniOku(SCENE_STORAGE_KEY, kademe);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.solids)) throw new Error('Geçersiz 3B kaydı');
@@ -212,6 +215,8 @@ function loadSavedScene(): Solid3DObject[] {
 }
 
 export function WorkspaceView() {
+  const { kademe: oturumKademesi } = useOturum();
+  const depoAnahtari = oturumKayitAnahtari(SCENE_STORAGE_KEY, oturumKademesi);
   const {
     setSceneBridge,
     setHintMessage,
@@ -273,6 +278,14 @@ export function WorkspaceView() {
 
   // Kademe: ortaokulda kısayolla / komutla panel dışı araç seçilemez (kademeDuzeyleri.aracSecilebilirMi)
   const [kademeDuzeyi] = useKademeDuzeyi();
+  useEffect(() => {
+    if (kademeDuzeyi !== 'ilkokul') return;
+    if (!['2d_only', '3d_only', '2d_3d'].includes(layoutMode)) setLayoutMode('2d_only');
+    setIsFunctionDialogOpen(false);
+    setIsSliderDialogOpen(false);
+    setIsAddObjectDialogOpen(false);
+  }, [kademeDuzeyi, layoutMode, isFunctionDialogOpen, isSliderDialogOpen, isAddObjectDialogOpen,
+    setLayoutMode, setIsFunctionDialogOpen, setIsSliderDialogOpen, setIsAddObjectDialogOpen]);
 
   // Sol panelin seçili sekmesi: 2B ile 3B araç paneli arasında geçişte (ör. "3D + Cebir" seçilince) korunur
   const [solSekme, setSolSekme] = useState<SolSekme>('araclar');
@@ -311,22 +324,22 @@ export function WorkspaceView() {
     dragKey: null,
   }));
   const solids = scene.solids;
-  const [sceneLoaded, setSceneLoaded] = useState(false);
+  const [yuklenenDepoAnahtari, setYuklenenDepoAnahtari] = useState<string | null>(null);
 
   // Kayıtlı sahneyi geri yükle
   useEffect(() => {
     try {
-      const saved = loadSavedScene();
-      if (saved.length > 0) dispatch({ type: 'restore', solids: saved });
-      setSceneLoaded(true);
+      const saved = loadSavedScene(oturumKademesi);
+      dispatch({ type: 'restore', solids: saved });
+      setYuklenenDepoAnahtari(depoAnahtari);
     } catch (error) { setHintMessage((error as Error).message); }
-  }, [setHintMessage]);
+  }, [setHintMessage, oturumKademesi, depoAnahtari]);
 
   // Sahneyi kaydet
   useEffect(() => {
-    if (!sceneLoaded) return;
-    try { localStorage.setItem(SCENE_STORAGE_KEY, JSON.stringify({ version: 1, solids })); } catch { /* Dosya kaydı kullanılabilir. */ }
-  }, [solids, sceneLoaded]);
+    if (yuklenenDepoAnahtari !== depoAnahtari) return;
+    try { oturumKaydiniYaz(SCENE_STORAGE_KEY, oturumKademesi, JSON.stringify({ version: 1, solids })); } catch { /* Dosya kaydı kullanılabilir. */ }
+  }, [solids, oturumKademesi, depoAnahtari, yuklenenDepoAnahtari]);
 
   const dragKeyRef = useRef<string | null>(null);
 

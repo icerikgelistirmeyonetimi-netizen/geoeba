@@ -120,7 +120,7 @@ describe('[181] ilkokul kuralları (saf)', () => {
     expect(sekmeAdi('sutun', 'Sütun', sinifKurallari(4))).toBe('Sütun grafiği');
     for (const s of [1, 2, 3, 4] as const) {
       const k = sinifKurallari(s);
-      expect(sekmeAdi('istatistik', 'İstatistik', k), String(s)).toBe('Sıklık tablosu');
+      expect(sekmeAdi('istatistik', 'İstatistik', k), String(s)).toBe('Çetele ve sıklık tablosu');
       expect(k.olculer, String(s)).toEqual({ merkezi: false, aciklik: false, oms: false, standartSapma: false });
       expect(k.yuzdeVeAci, String(s)).toBe(false);
       expect(k.cetele, String(s)).toBe(true);
@@ -133,7 +133,7 @@ describe('[181] ilkokul kuralları (saf)', () => {
   it('İlkokul kademesinde 1–4. sınıf örneğine bağlı olmayan tablo ilkokulun ortak kurallarını alır; öteki kademelerde değişmez', () => {
     expect(sinifKurallari(null, true)).toBe(ILKOKUL_KURALLARI);
     for (const s of [5, 6, 7, 8] as const) expect(sinifKurallari(s, true), String(s)).toBe(ILKOKUL_KURALLARI);
-    expect(ILKOKUL_KURALLARI.sekmeler).toEqual(['nokta', 'sutun', 'istatistik']);
+    expect(ILKOKUL_KURALLARI.sekmeler).toEqual(['nokta', 'istatistik']);
     expect(ILKOKUL_KURALLARI.olculer.merkezi || ILKOKUL_KURALLARI.olculer.oms || ILKOKUL_KURALLARI.olculer.standartSapma).toBe(false);
     expect(sinifKurallari(2, true).sinif).toBe(2);
     // İlkokul dışında: 5–8. sınıf ve sınıfsız tablo bugünkü gibi; ortaokul temsilleri
@@ -156,7 +156,7 @@ describe('[181] ilkokul kuralları (saf)', () => {
   it('sekmeDuzelt (ilkokul): ilkokulda olmayan sekme Nokta olur; ilkokul dışında bugünkü gibi', () => {
     const boy = yukle('boy', { sekme: 'cizgi' });
     expect(sekmeDuzelt(boy, true).sekme).toBe('nokta');
-    expect(sekmeDuzelt(boy).sekme).toBe('cizgi');
+    expect(sekmeDuzelt(boy).sekme).toBe('sutun');
     expect(sekmeDuzelt(yukle('oyuncak', { sekme: 'sutun' }), true).sekme).toBe('nokta');
     expect(sekmeDuzelt(yukle('gezi', { sekme: 'sutun' }), true).sekme).toBe('sutun');
     expect(sekmeDuzelt(yukle('gezi', { sekme: 'daire' })).sekme).toBe('nokta');
@@ -183,7 +183,7 @@ describe('[181] ilkokul kuralları (saf)', () => {
     }
     expect(ORNEK_VERILER.filter((o) => ilkokulSinifi(o.sinif)).map((o) => o.id)).toEqual(['oyuncak', 'oyun', 'gelis', 'gezi']);
     // Galeri kademeye göre: ilkokulda 1–4, ortaokulda 16 örnek (bugünkü), Tüm araçlar'da hepsi
-    expect(kademeOrnekleri('ortaokul')).toHaveLength(16);
+    expect(kademeOrnekleri('ortaokul')).toHaveLength(14);
     expect(kademeOrnekleri('lise')).toHaveLength(16);
     expect(kademeOrnekleri('tum')).toHaveLength(20);
     expect(ornekKademede(ornekBul('boy')!, 'ilkokul')).toBe(false);
@@ -256,7 +256,7 @@ describe('[181] uygulama kökü: İlkokul kademesi', () => {
   it('kayıtsız ilk açılış: 1. sınıf nesne grafiği; sekmeler "Nesne grafiği", "Sıklık tablosu"; ölçü düğmesi yok; Veri topla yok', () => {
     const html = uygulamaCiz(null, 'ilkokul');
     expect(tabloAdi(html)).toBe("1-A'nın en sevdiği oyuncak");
-    expect(grafikSekmeleri(html)).toEqual(['Nesne grafiği', 'Sıklık tablosu']);
+    expect(grafikSekmeleri(html)).toEqual(['Nesne grafiği', 'Çetele ve sıklık tablosu']);
     expect(seritDugmeleri(html)).toEqual(['Sayılar']);
     expect(html).not.toContain('data-veri-topla-dugmesi');
     // Her veri bir resim (15 öğrenci); anahtar yazısı
@@ -283,7 +283,7 @@ describe('[181] uygulama kökü: İlkokul kademesi', () => {
     const degisik = { ...tabloDuzenle(boy, hucreYaz(boy.tablo, 0, 1, '150')), ipucu: 'kapali' as const };
     for (const sekme of ['nokta', 'istatistik', 'cizgi'] as const) {
       const html = uygulamaCiz({ ...degisik, sekme, secenekler: { ortalama: true, oms: true, etiketler: false, ortanca: true, standartSapma: true } }, 'ilkokul');
-      expect(grafikSekmeleri(html), sekme).toEqual(['Nokta grafiği', 'Sütun grafiği', 'Sıklık tablosu']);
+      expect(grafikSekmeleri(html), sekme).toEqual(['Şekil grafiği', 'Çetele ve sıklık tablosu']);
       expect(metin(html), sekme).not.toMatch(/Aritmetik ortalama|Ortanca|Ortalama mutlak sapma|Standart sapma/);
     }
     expect(seritDugmeleri(uygulamaCiz({ ...degisik, sekme: 'nokta' }, 'ilkokul'))).toEqual(['Etiketler']);
@@ -325,10 +325,10 @@ describe('[181] uygulama kökü: İlkokul kademesi', () => {
   it('2. sınıf: şekil grafiği (her veri bir kare), iki sınıf yan yana, anahtar; sıklık tablosunda çetele', () => {
     const d = yukle('oyun');
     const html = uygulamaCiz(d, 'ilkokul');
-    expect(grafikSekmeleri(html)).toEqual(['Şekil grafiği', 'Sıklık tablosu']);
+    expect(grafikSekmeleri(html)).toEqual(['Şekil grafiği', 'Çetele ve sıklık tablosu']);
     expect(html.match(/data-sekil="kare"/g)).toHaveLength(20);
     expect(html).toContain('data-yan-yana-karsilastirma');
-    expect(html).toContain('Her kare 1 öğrenciyi gösterir.');
+    expect(html).toContain('Her bir veri bir şekle karşılık gelmektedir.');
     expect(seritDugmeleri(html)).toEqual(['Sayılar']);
     const ist = uygulamaCiz({ ...d, sekme: 'istatistik' }, 'ilkokul');
     expect(ist).toContain('data-capraz-tablo');
@@ -340,11 +340,11 @@ describe('[181] uygulama kökü: İlkokul kademesi', () => {
 
   it('3. sınıf: nokta grafiği; 4. sınıf: sütun grafiği (yan yana, yüzdesiz); 1. sınıf sıklık tablosu çeteleli', () => {
     const gelis = uygulamaCiz(yukle('gelis'), 'ilkokul');
-    expect(grafikSekmeleri(gelis)).toEqual(['Nokta grafiği', 'Sıklık tablosu']);
+    expect(grafikSekmeleri(gelis)).toEqual(['Nokta grafiği', 'Çetele ve sıklık tablosu']);
     expect(gelis).not.toContain('data-sekil="kare"');
     expect(gelis).not.toContain('data-nesne=');
     const gezi = uygulamaCiz(yukle('gezi'), 'ilkokul');
-    expect(grafikSekmeleri(gezi)).toEqual(['Nokta grafiği', 'Sütun grafiği', 'Sıklık tablosu']);
+    expect(grafikSekmeleri(gezi)).toEqual(['Nokta grafiği', 'Sütun grafiği', 'Çetele ve sıklık tablosu']);
     expect(metin(gezi)).not.toMatch(ORTAOKUL_OLCULERI);
     expect(seritDugmeleri(uygulamaCiz(yukle('gezi', { sekme: 'nokta' }), 'ilkokul'))).toEqual(['Sayılar']);
     const ist = uygulamaCiz(yukle('oyuncak', { sekme: 'istatistik' }), 'ilkokul');
@@ -376,7 +376,7 @@ describe('[181] galeri ve başlangıç penceresi kademeye göre', () => {
     expect(metin(ilk)).not.toContain('7-C');
     for (const k of ['ortaokul', 'lise'] as const) {
       const html = galeri(k);
-      expect(html.match(/data-ornek="/g), k).toHaveLength(16);
+      expect(html.match(/data-ornek="/g), k).toHaveLength(k === 'ortaokul' ? 14 : 16);
       expect(html, k).not.toContain('data-ornek="oyuncak"');
     }
     expect(galeri('tum').match(/data-ornek="/g)).toHaveLength(20);
@@ -386,7 +386,7 @@ describe('[181] galeri ve başlangıç penceresi kademeye göre', () => {
     expect(baslangicSecenekleri('ilkokul').map((s) => s.id)).toEqual(['hazir', 'bos']);
     expect(baslangicSecenekleri('ilkokul')[0].not).toBe('4 hazır tablo');
     expect(baslangicSecenekleri('ortaokul').map((s) => [s.id, s.not])).toEqual([
-      ['hazir', '16 hazır tablo'],
+      ['hazir', '14 hazır tablo'],
       ['topla', '18 hazır soru · kendi sorunuz'],
       ['bos', 'Etiket · Değer'],
     ]);
@@ -465,7 +465,7 @@ describe('[181] nesne / şekil grafiği ve çetele (bileşen)', () => {
   it('çetele: tek yönlü tabloda çubuk yerine Çetele sütunu; iki yönlüde hücrelerde; kapalıyken bugünkü tablo', () => {
     const t = ornekBul('gelis')!.olustur();
     const acik = renderToStaticMarkup(<KategorikIstatistik tablo={t} sutun={1} tepeDeger={false} oranlar={false} cetele />);
-    expect(acik).toContain('Çetele ve sıklık tablosu');
+    expect(acik).toContain('Çetele tablosu');
     expect(acik.match(/data-cetele-hucresi/g)).toHaveLength(4);
     expect(acik).not.toContain('Sıklık çubuğu');
     const kapali = renderToStaticMarkup(<KategorikIstatistik tablo={t} sutun={1} tepeDeger={false} oranlar={false} />);
@@ -475,7 +475,7 @@ describe('[181] nesne / şekil grafiği ve çetele (bileşen)', () => {
     const eslem = renkEslemesi(gezi, 1)!;
     const iki = renderToStaticMarkup(<KategorikIstatistik tablo={gezi} sutun={2} renkEslemi={eslem} tepeDeger={false} oranlar={false} tekYonluIleBirlikte={false} cetele />);
     expect(iki).toContain('data-capraz-tablo');
-    expect(iki).not.toContain('data-siklik-tablosu');
+    expect(iki).toContain('data-siklik-tablosu');
     expect(iki.match(/data-cetele-hucresi/g)).toHaveLength(8);
   });
 });

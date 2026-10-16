@@ -54,8 +54,10 @@ import {
   type RenkEslemesi,
 } from './kategorik';
 import { RenkLejanti, renkLejantiGenisligi } from './RenkLejanti';
+import { NesneGrafigi } from './NesneGrafigi';
+import { EksenOklari } from './EksenOklari';
 import type { NoktaSekli, OlcuKumesi } from './sinifKurallari';
-import { KareIsareti, NesneIsareti, nesneBul } from './nesneSimgeleri';
+import { KareIsareti } from './nesneSimgeleri';
 
 /** Sınıfsız tabloda bütün ölçüler */
 const TUM_OLCULER: OlcuKumesi = { merkezi: true, aciklik: true, oms: true, standartSapma: true };
@@ -482,7 +484,7 @@ export function NoktaGrafigi({
   /** Veri işareti: şekil ve nesne yalnız kategorik değişkende (sayısal eksende hep nokta) */
   const isaret: NoktaSekli = kategorik ? sekil : 'nokta';
   /** Şekil / nesne grafiğinin anahtar yazısı (üst satır) */
-  const anahtarYazisi = isaret !== 'nokta' && sekilAnahtari ? sekilAnahtari : null;
+  const anahtarYazisi = isaret === 'sekil' ? 'Her bir veri bir şekle karşılık gelmektedir.' : isaret === 'nesne' ? sekilAnahtari ?? 'Her bir resim bir veriyi gösterir.' : null;
   const sutunAdi = atanmis ? tablo.sutunlar[sutun].ad : '';
   /** Renk anahtarı bu grafiğin değişkeninden farklıysa noktalar onun renklerini alır ve lejant çizilir */
   const anahtar = renkEslemi && atanmis && renkEslemi.sutun !== sutun && renkEslemi.sutun >= 0 && renkEslemi.sutun < tablo.sutunlar.length ? renkEslemi : null;
@@ -1233,6 +1235,7 @@ export function NoktaGrafigi({
   const bosVeri = atanmis && c.veriSayisi === 0;
   const kategorikKutulu = kategorik && c.kutular.length > 0;
 
+  if (isaret === 'nesne') return <NesneGrafigi tablo={tablo} sutun={sutun} sira={kategoriSirasi} genislik={W} yukseklik={H} seciliSatir={seciliSatir} onSatirSec={onSatirSec} />;
   return (
     <svg
       ref={svgRef}
@@ -1292,9 +1295,9 @@ export function NoktaGrafigi({
               )}
               {secenekler.oms && ortX !== null && g.oms !== null && (
                 <g data-oms-bandi>
-                  <rect x={olcek.ileri(g.ort! - g.oms)} y={UST - 6} width={Math.max(0, olcek.ileri(g.ort! + g.oms) - olcek.ileri(g.ort! - g.oms))} height={Math.max(0, taban - UST + 6)} fill={g.renk} fillOpacity={0.12} rx={3} />
-                  <line x1={olcek.ileri(g.ort! - g.oms)} x2={olcek.ileri(g.ort! - g.oms)} y1={UST - 6} y2={taban} stroke={g.renk} strokeWidth={1.5} strokeDasharray="4 4" />
-                  <line x1={olcek.ileri(g.ort! + g.oms)} x2={olcek.ileri(g.ort! + g.oms)} y1={UST - 6} y2={taban} stroke={g.renk} strokeWidth={1.5} strokeDasharray="4 4" />
+                  <rect x={olcek.ileri(g.ort! - g.oms)} y={UST - 6} width={Math.max(0, olcek.ileri(g.ort! + g.oms) - olcek.ileri(g.ort! - g.oms))} height={Math.max(0, taban - UST + 6)} fill={OMS_RENGI} fillOpacity={0.12} rx={3} />
+                  <line x1={olcek.ileri(g.ort! - g.oms)} x2={olcek.ileri(g.ort! - g.oms)} y1={UST - 6} y2={taban} stroke={OMS_RENGI} strokeWidth={1.5} strokeDasharray="4 4" />
+                  <line x1={olcek.ileri(g.ort! + g.oms)} x2={olcek.ileri(g.ort! + g.oms)} y1={UST - 6} y2={taban} stroke={OMS_RENGI} strokeWidth={1.5} strokeDasharray="4 4" />
                 </g>
               )}
               {secenekler.ortalama && ortX !== null && (
@@ -1448,7 +1451,7 @@ export function NoktaGrafigi({
                     width={yer ? yer.genislik : s.genislik}
                     height={1}
                     fill={p.renk}
-                    fillOpacity={0.92}
+                    fillOpacity={0.55}
                     stroke={kenarGerekir(p.renk) ? RENK.metin : undefined}
                     strokeWidth={kenarGerekir(p.renk) ? 1.5 : undefined}
                     vectorEffect={kenarGerekir(p.renk) ? 'non-scaling-stroke' : undefined}
@@ -1510,6 +1513,7 @@ export function NoktaGrafigi({
         </g>
       )}
 
+      {sutunlu && c.siklik && <EksenOklari x={SOL} ustY={taban - c.siklik.max * c.birimSutun} y={taban} sagX={W - SAG} />}
       {/* Eksen adı satırı: değişken adı + birim (panel başlığı varken yinelenmez), eksik satır notu */}
       {atanmis && c.adMetni && (eksen || kategorikKutulu) && (
         <text x={W - SAG} y={taban + c.adY + 14} fontSize={13} fontWeight={700} textAnchor="end" fill={RENK.metin} data-eksen-adi="yatay">
@@ -1586,12 +1590,9 @@ export function NoktaGrafigi({
               // İlkokul şekil grafiği (kare) ve nesne grafiği (kategorinin resmi; resmi yoksa kare)
               <g style={{ animation: hareketsiz ? undefined : `vg-nokta-gir 320ms ${GECIS}` }}>
                 {(() => {
-                  const nesne = isaret === 'nesne' ? nesneBul(k.kategori) : null;
                   const kenar = kenarGerekir(dolgu) ? RENK.metin : RENK.kart;
                   const kalinlik = kenarGerekir(dolgu) ? 1.5 : k.r < 3 ? 0 : 1;
-                  return nesne ? (
-                    <NesneIsareti nesne={nesne} r={k.r} dolgu={dolgu} kenar={kenar} kenarKalinligi={kalinlik} />
-                  ) : (
+                  return (
                     <KareIsareti r={k.r} dolgu={dolgu} kenar={kenar} kenarKalinligi={kalinlik} />
                   );
                 })()}

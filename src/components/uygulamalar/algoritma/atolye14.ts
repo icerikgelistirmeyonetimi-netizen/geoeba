@@ -426,7 +426,7 @@ export const ATOLYELER_1_4: readonly Atolye[] = [
     sinif: 3,
     ad: 'Ayna atölyesi',
     aciklama: 'Artı şeklinin her sahada başka bir yarısı çizili. Eksik yarıyı çizen kodu her sahada sen kur.',
-    yonerge: 'Şeklin bir yarısı çizili; öbür yarısı aynadaki görüntüsü. Robot simetri doğrusunun ucunda. Eksik yarıyı çizen kodu kur. Her sahada başka yarı eksik: Her sahanın kodunu ayrı kur.',
+    yonerge: 'Şeklin bir yarısı çizili. Ortadaki çizgiden katlandığında iki yarı üst üste gelmeli. Robot simetri doğrusunun ucunda. Eksik yarıyı çizen kodu kur. Her sahada başka yarı eksik: Her sahanın kodunu ayrı kur.',
     dunyalar: AYNALAR,
     sahne: SAHNE.saha,
     dunyaBasinaKod: true,
@@ -438,7 +438,7 @@ export const ATOLYELER_1_4: readonly Atolye[] = [
     cozumler: AYNA_COZUMLERI,
     kazanimlar: ['MAT.3.3.6', 'MAT.3.3.7', 'MAT.3.3.8'],
     kalip: 'ayna',
-    ipucu: 'Çizili yarıyı parmağınla izle. Eksik yarı onun aynadaki görüntüsü: Adımlar aynı, dönüşler ters. Bir çeyreği çizen parçayı bul, iki kez tekrarla.',
+    ipucu: 'Çizili yarıyı parmağınla izle. Şekli ortadaki çizgiden katladığını düşün: İki yarı üst üste gelmeli. Adımlar aynı, dönüşler ters. Bir çeyreği çizen parçayı bul, iki kez tekrarla.',
   },
 
   // --- 4. sınıf ------------------------------------------------------------------

@@ -215,7 +215,8 @@ describe('Toolbar3D çizimi (2B tasarım sistemi)', () => {
       expect(ilkokul, ad).toContain(`aria-label="${ad}"`);
     }
     expect(ilkokul).toContain('data-kademe-suzgeci="ilkokul"');
-    expect(ilkokul).toContain('Tüm araçlar');
+    expect(ilkokul).not.toContain('Tüm araçlar');
+    expect(ilkokul).toContain('Geometrik Cisimler');
 
     kademe.duzey = 'ortaokul';
     const ortaokul = ciz();

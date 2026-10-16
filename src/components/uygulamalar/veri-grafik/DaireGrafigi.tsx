@@ -57,6 +57,8 @@ export interface DaireGrafigiProps {
   halka?: { eslem: RenkEslemesi; sayilar: Map<number, number[]> } | null;
   /** Açı ve yüzde yazılmaz (5. sınıf): dilimlerde ad, lejantta ad ve değer; merkez açı yayı ve hesabı yok */
   oransiz?: boolean;
+  /** Ortaokulda merkez açı gösterimi ve hesabı yoktur. */
+  acisiz?: boolean;
   /**
    * Sürüklemede değerlerin oturacağı adım (Grafik ayarları → Sürüklerken yuvarla; verilmezse 1). Verinin
    * çözünürlüğünden büyükse çözünürlük kullanılır (2,5 saatlik veride 0,5); toplam ÷ adım 2000'i aşarsa
@@ -199,6 +201,7 @@ export function DaireGrafigi({
   halka = null,
   yuvarlamaAdimi,
   oransiz = false,
+  acisiz = false,
 }: DaireGrafigiProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   /** Sürükleme başındaki değerler ve adım: her hareket bunlardan hesaplanır (toplam ve gidiş-dönüş korunur) */
@@ -291,10 +294,10 @@ export function DaireGrafigi({
   const lejantSagda = W >= 520;
   const lejantMetni = (i: number) =>
     oransiz
-      ? `${satirEtiketi(tablo, dilimler[i].satir)}: ${sayi(dilimler[i].deger)}`
-      : `${satirEtiketi(tablo, dilimler[i].satir)}: ${sayi(dilimler[i].deger)} (${sayiMetni(oranlar.acilar[i], 1)}°, %${sayiMetni(oranlar.yuzdeler[i], 1)})`;
+      ? `${satirEtiketi(tablo, dilimler[i].satir)} — ${sayi(dilimler[i].deger)}`
+      : `${satirEtiketi(tablo, dilimler[i].satir)} — ${sayi(dilimler[i].deger)} (${acisiz ? "" : `${sayiMetni(oranlar.acilar[i], 1)}°, `}%${sayiMetni(oranlar.yuzdeler[i], 1)})`;
   /** Dilimin erişilebilir ve kısa metni: "Uyku: 9 (135°, %37,5)"; oransızda "Uyku: 9" */
-  const oranEki = (i: number) => (oransiz ? '' : ` (${sayiMetni(oranlar.acilar[i], 1)}°, %${sayiMetni(oranlar.yuzdeler[i], 1)})`);
+  const oranEki = (i: number) => (oransiz ? '' : ` (${acisiz ? '' : `${sayiMetni(oranlar.acilar[i], 1)}°, `}%${sayiMetni(oranlar.yuzdeler[i], 1)})`);
   // Sağdaki lejant en uzun satırı kadar geniş (en çok grafiğin %38'i ve 340 px); sığmayan satır kısalır
   const lejantEnUzun = dilimler.slice(0, 60).reduce((m, _, i) => Math.max(m, metinGenisligi(lejantMetni(i), fs, true)), 0);
   const lejantG = lejantSagda ? Math.min(Math.max(160, lejantEnUzun + 40), W * 0.38, 340) : 0;
@@ -338,7 +341,7 @@ export function DaireGrafigi({
   const etiketYerleri = (rr: number): EtiketYeri[] =>
     dilimler.map((d, i): EtiketYeri => {
       if (cok || d.aci <= 0 || toplam <= 0) return { tur: 'yok' };
-      const aciM = `${sayiMetni(oranlar.acilar[i], 1)}°`;
+      const aciM = acisiz ? "" : `${sayiMetni(oranlar.acilar[i], 1)}°`;
       const yuzdeM = `%${sayiMetni(oranlar.yuzdeler[i], 1)}`;
       const ad = satirEtiketi(tablo, d.satir);
       if (oransiz) {
@@ -358,7 +361,7 @@ export function DaireGrafigi({
         const adSigar = kiris(3) >= Math.max(w, metinGenisligi(ad, fs, true)) + 8 && rr - rho >= fs * 1.6;
         return { tur: 'ic', rho, aciM, yuzdeM, ad: adSigar ? ad : null };
       }
-      return { tur: 'dis', metin: `${ad}: ${aciM} · ${yuzdeM}` };
+      return { tur: 'dis', metin: `${ad} — ${acisiz ? "" : `${aciM}, `}${yuzdeM}` };
     });
   // Dış etiket varsa daire, etiketlerin bulunduğu yana sığacağı kadar küçülür (en çok %38) ve öteki yana kayar;
   // yine sığmayan etiket kısalır
@@ -504,7 +507,9 @@ export function DaireGrafigi({
       // Oransızda (5. sınıf) hesap yok: parça ve bütün ("Uyku: 9 · bütün 24")
       metin: oransiz
         ? `${satirEtiketi(tablo, d.satir)}: ${sayi(Math.max(0, d.deger))} · bütün ${sayi(toplam)}`
-        : `${satirEtiketi(tablo, d.satir)}: ${sayi(Math.max(0, d.deger))} ÷ ${sayi(toplam)} × 360° ${aciEsit ? '=' : '≈'} ${sayiMetni(aci, 1)}° · ${yuzdeEsit ? '' : '≈ '}%${sayiMetni(yuzde, 1)}`,
+        : acisiz
+          ? `${satirEtiketi(tablo, d.satir)} — ${sayi(Math.max(0, d.deger))}; bütün ${sayi(toplam)}; ${yuzdeEsit ? "" : "yaklaşık "}%${sayiMetni(yuzde, 1)}`
+          : `${satirEtiketi(tablo, d.satir)}: ${sayi(Math.max(0, d.deger))} ÷ ${sayi(toplam)} × 360° ${aciEsit ? '=' : '≈'} ${sayiMetni(aci, 1)}° · ${yuzdeEsit ? '' : '≈ '}%${sayiMetni(yuzde, 1)}`,
       renk: dilimRengi(d.satir, gosterilen),
     };
   }
@@ -630,7 +635,7 @@ export function DaireGrafigi({
         })}
 
       {/* Merkez açı yayı: gösterilen dilimin merkezdeki açısı */}
-      {!oransiz &&
+      {!oransiz && !acisiz &&
         gosterilen !== null &&
         gosterilen < dilimler.length &&
         toplam > 0 &&
@@ -663,7 +668,9 @@ export function DaireGrafigi({
         // Sığarsa önce ad (kalın), sonra merkez açı ve yüzde
         const satirlar: [string, number][] = oransiz
           ? [[e.ad ?? '', 800]]
-          : e.ad
+          : acisiz
+            ? e.ad ? [[e.ad, 800], [e.yuzdeM, 600]] : [[e.yuzdeM, 700]]
+            : e.ad
             ? [[e.ad, 800], [e.aciM, 700], [e.yuzdeM, 600]]
             : [[e.aciM, 800], [e.yuzdeM, 700]];
         const ilk = p.y - ((satirlar.length - 1) * (fs + 2)) / 2 + fs * 0.35;
@@ -719,7 +726,7 @@ export function DaireGrafigi({
               aria-valuenow={d.deger}
               aria-valuemin={0}
               aria-valuemax={toplam}
-              aria-valuetext={oransiz ? sayi(d.deger) : `${sayi(d.deger)}, ${aciM}°, %${yuzdeM}`}
+              aria-valuetext={oransiz ? sayi(d.deger) : `${sayi(d.deger)}, ${acisiz ? "" : `${aciM}°, `}%${yuzdeM}`}
               style={{ cursor: surukle === i ? 'grabbing' : 'grab', outline: 'none' }}
               onPointerDown={(e) => surukleBaslat(e, i)}
               onPointerMove={isaretciHareket}
@@ -806,7 +813,7 @@ export function DaireGrafigi({
         ) : (
           <text x={cx} y={seritBaz} fontSize={fs} textAnchor="middle" fill={RENK.solukMetin} data-yalniz-ekran data-daire-ipucu>
             {metniSigdir(
-              oransiz
+              (oransiz || acisiz)
                 ? surukleVar
                   ? 'Bir dilime dokunun: Değeri burada görünür; sınırını sürükleyin.'
                   : 'Bir dilime dokunun: Değeri burada görünür.'

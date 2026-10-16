@@ -432,9 +432,9 @@ describe('ölçme araçları: çentikler ve okumalar', () => {
     expect(cetvelOkumasi(12)).toBe('12 br');
     expect(donusOkumasi(-35)).toBe('35°');
     expect(donusOkumasi(330)).toBe('30°');
-    expect(iletkiOkumasi(60)).toBe('60° · Dar Açı');
+    expect(iletkiOkumasi(60)).toBe('60°');
     expect(tabanOkumasi(23)).toBe('Taban 23°');
-    expect(alanOkumasi(4, 3)).toBe('4 × 3 = 12 br²');
+    expect(alanOkumasi(4, 3)).toBe('4 × 3 = 12 birimkare');
     expect(cevreOkumasi(4, 3)).toBe('Çevre = 2 × (4 + 3) = 14 br');
     expect([0, 89, 90, 91, 180].map(aciTuru)).toEqual(['Sıfır Açı', 'Dar Açı', 'Dik Açı', 'Geniş Açı', 'Doğru Açı']);
   });

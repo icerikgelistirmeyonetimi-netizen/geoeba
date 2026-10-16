@@ -457,7 +457,7 @@ describe('D1: nokta, sütun ve kategorik grafikler (kabul ölçütleri)', () => 
     );
     expect(katHtml).toContain('İlk cevapla sütunlar burada belirir.');
     // Eksen adının yanında veri sayısı yazılmaz (uzman incelemesi, 4. tur)
-    expect(yazilar(katHtml)).toContain('Meyve · sıklık');
+    expect(yazilar(katHtml)).toContain('Sıklık');
     expect(katHtml).not.toMatch(/\(\d+ veri\)/);
     expect(yazilar(katHtml)).toContain('10');
   });
@@ -654,12 +654,12 @@ describe('D1: nokta, sütun ve kategorik grafikler (kabul ölçütleri)', () => 
     const html = renderToStaticMarkup(<KategorikIstatistik tablo={t} sutun={1} sira={['Elma', 'Muz', 'Çilek', 'Kivi', 'Nar']} />);
     expect(html).toContain('Tepe değer');
     expect(html).toContain('Veri sayısı: 24');
-    expect(html).toContain('7/24 ≈ 0,29 (%29,2)');
-    expect(html).toContain('105°');
+    expect(html).toContain('7/24 yaklaşık 0,29 (%29,2)');
+    expect(html).not.toContain('105°');
     expect(html).toContain('Sıklık tablosu');
     expect(html).toContain('Göreli sıklık');
-    expect(html).toContain('Merkez açı');
-    expect(html).toContain('Yüzde = sıklık ÷ toplam × 100. Tüm yüzdelerin toplamı %100.');
+    expect(html).not.toContain('Merkez açı');
+    expect(html).toContain('Göreli sıklık, bir sonucun görülme sayısının toplam deneme sayısına oranıdır.');
     expect(html).not.toContain('teorik');
     expect(html).not.toMatch(/Frekans|frekans|Mod\b|kuramsal/);
     expect(html.match(/data-tepe-satiri/g)).toHaveLength(1);
@@ -676,10 +676,10 @@ describe('D1: nokta, sütun ve kategorik grafikler (kabul ölçütleri)', () => 
     expect(yuzdeVeAcilar([7, 6, 5, 4, 2]).acilar).toEqual([105, 90, 75, 60, 30]);
   });
 
-  it('kategorik sütun grafiği: başlık "Meyve · sıklık" (veri sayısı yok), sıklık ve yüzde etiketi; eksenlerin ucunda ok; yuzdeGoster kapalıyken yalnız sıklık', () => {
+  it('kategorik sütun grafiği: başlık "Sıklık" (veri sayısı yok), sıklık ve yüzde etiketi; eksenlerin ucunda ok; yuzdeGoster kapalıyken yalnız sıklık', () => {
     const t = kategorikTablo({ Elma: 7, Muz: 6, Çilek: 5, Kivi: 4, Nar: 2 });
     const html = renderToStaticMarkup(<KategorikSutunGrafigi tablo={t} sutun={1} genislik={800} yukseklik={420} azaltilmisHareket />);
-    expect(html).toMatch(/>Meyve · sıklık<\/text>/);
+    expect(html).toMatch(/>Sıklık<\/text>/);
     expect(html).not.toMatch(/\(\d+ veri\)/);
     expect(html).toContain('%29,2');
     expect(html).not.toMatch(/frekans|n = /);

@@ -40,6 +40,7 @@ import {
   bosGrafikIpucu,
   bosTabloIletisi,
   hazirSoruBul,
+  olcumGirisHatasi,
   planGrubu,
   planSorunu,
   planSorusu,
@@ -65,7 +66,7 @@ import {
   sonrakiDeneyNo,
   sonucSayisalMi,
 } from './deney';
-import { kimlikUret, type Satir, type Sutun, type VeriTablosu } from './veri';
+import { sayiOku, kimlikUret, type Satir, type Sutun, type VeriTablosu } from './veri';
 
 // ── Plan uygulama ─────────────────────────────────────────────────────────────
 
@@ -338,7 +339,11 @@ function veriSatirlariEkle(tablo: VeriTablosu, a: Arastirma, satirlar: readonly 
   });
   const yer = Math.max(0, EN_COK_TABLO_SATIRI - tablo.satirlar.length);
   if (yer === 0) return tablo;
-  const yeniler: Satir[] = satirlar.slice(0, yer).map((r) => ({
+  const yeniler: Satir[] = satirlar.filter((r) => {
+    if (a.yontem !== 'olcum') return true;
+    const x = sayiOku(r.hucreler[roller.indexOf('deger')]);
+    return x !== null && olcumGirisHatasi(a, x) === null;
+  }).slice(0, yer).map((r) => ({
     id: r.kimlik || kimlikUret('r'),
     hucreler: konum.map((m) => (m >= 0 ? r.hucreler[m] ?? '' : '')),
   }));

@@ -443,14 +443,15 @@ describe('app: style settings', () => {
     ['çizgileri incelt', { strokeScale: 0.7 }],
     ['çizgi kalınlığını 2 yap', { strokeScale: 2 }],
     ['çizgileri 2 kat kalınlaştır', { strokeScale: 2 }],
-    ['nokta adlarını büyüt', { pointLabelScale: 1.25 }],
-    // Uzaklaşınca yazı alt sınırı (varsayılan 0,7): "uzak" / "en az" sözleri genel yazı ölçeğine karışmaz
+    ['nokta adlarını büyüt', { pointLabelScale: 1.55 }],
+    // Okunabilirlik varsayılanları: etiket 1,25; ölçüm/eksen 1,2; uzaklaşma alt sınırı 1.
+    // Uzaklaşınca yazı alt sınırı (varsayılan 1): "uzak" / "en az" sözleri genel yazı ölçeğine karışmaz
     ['uzaklaşınca yazılar en az 0,8 olsun', { yaziAltSiniri: 0.8 }],
-    ['uzaktaki yazıları büyüt', { yaziAltSiniri: 0.8 }],
-    ['uzaktaki yazıları çok küçült', { yaziAltSiniri: 0.5 }],
+    ['uzaktaki yazıları büyüt', { yaziAltSiniri: 1 }],
+    ['uzaktaki yazıları çok küçült', { yaziAltSiniri: 0.8 }],
     ['yazıların alt sınırını 0 yap', { yaziAltSiniri: 0 }],
-    ['ölçüm yazılarını küçült', { measurementScale: 0.8 }],
-    ['eksen sayılarını büyüt', { axisScale: 1.25 }],
+    ['ölçüm yazılarını küçült', { measurementScale: 0.95 }],
+    ['eksen sayılarını büyüt', { axisScale: 1.5 }],
     ['dolguları kaldır', { hideFills: true }],
     ['tüm şekillerin dolgularını gizle', { hideFills: true }],
     ['dolguları geri getir', { hideFills: false }],
@@ -465,6 +466,13 @@ describe('app: style settings', () => {
     expect(stylePatch('uzaktaki yazıları 2 kat büyüt', withStyle({ yaziAltSiniri: 0 }))).toEqual({ yaziAltSiniri: 1 });
     expect(stylePatch('uzaktaki yazıları 0,3 büyüt', withStyle({ yaziAltSiniri: 0.5 }))).toEqual({ yaziAltSiniri: 0.8 });
     expect(stylePatch('uzaktaki yazıları küçült', withStyle({ yaziAltSiniri: 0.05 }))).toEqual({ yaziAltSiniri: 0 });
+  });
+  it('keeps saved text scales when defaults grow for readability', () => {
+    const saved = withStyle({ pointLabelScale: 1, measurementScale: 1, axisScale: 1, yaziAltSiniri: 0.7 });
+    expect(stylePatch('nokta adlarını büyüt', saved)).toEqual({ pointLabelScale: 1.25 });
+    expect(stylePatch('ölçüm yazılarını küçült', saved)).toEqual({ measurementScale: 0.8 });
+    expect(stylePatch('eksen sayılarını büyüt', saved)).toEqual({ axisScale: 1.25 });
+    expect(stylePatch('uzaktaki yazıları büyüt', saved)).toEqual({ yaziAltSiniri: 0.8 });
   });
   it('builds on the current style when the panel passes it', () => {
     expect(stylePatch('yazıları büyüt', withStyle({ fontScale: 1.2 }))).toEqual({ fontScale: 1.5 });

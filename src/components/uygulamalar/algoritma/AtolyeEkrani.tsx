@@ -15,6 +15,9 @@ import { IpucuKarti } from './IpucuKarti';
 import { BlokDuzenleyici } from './BlokDuzenleyici';
 import { AkisSemasi } from './AkisSemasi';
 import { SozdeKodGorunumu } from './SozdeKodGorunumu';
+import { DogalDilGorunumu, GosterimAnahtari } from './DogalDilGorunumu';
+import { CozumKarti } from './CozumKarti';
+import { temelDuzeyMetni } from './AritmetikInceleme';
 import { SIMGE } from './simgeler';
 import { kalipBul } from './kaliplar';
 import { DAR_ESIK, DUGME, GOSTERGE, sayimlarKadar, useBoyut } from './ortak';
@@ -52,7 +55,9 @@ export function AtolyeEkrani({
   const dar = boyut.en > 0 && boyut.en < DAR_ESIK;
   const gizli = boyut.en === 0 || boyut.boy === 0;
   const kart = atolye.gorunum === 'kart';
-  const ifadeBirimi = atolye.gorunum === 'ifade';
+  const ifadeBirimi = atolye.gorunum === 'ifade' || atolye.sinif === 5;
+  const [cozumAcik, setCozumAcik] = useState(false);
+  useEffect(() => setCozumAcik(false), [atolye.id]);
 
   const ak = atolyeKaydi(kayit, atolye.id);
   /** Her sahanın kendi kodu var mı (Ayna atölyesi): öbür sahanın kodu bu sahada kendiliğinden çalışmaz */
@@ -100,7 +105,7 @@ export function AtolyeEkrani({
     (z: Iz) => {
       if (z !== izRef.current) return;
       if (z.sonuc.basarili) setSonuc({ basarili: true, metin: calismaBasariMetni(atolye) });
-      else setSonuc({ basarili: false, metin: sonucIletisi(z.sonuc, dunya, atolye.bitkiAdi) });
+      else setSonuc({ basarili: false, metin: atolye.sinif === 5 ? temelDuzeyMetni(sonucIletisi(z.sonuc, dunya, atolye.bitkiAdi)) : sonucIletisi(z.sonuc, dunya, atolye.bitkiAdi) });
     },
     [atolye, dunya]
   );
@@ -209,7 +214,7 @@ export function AtolyeEkrani({
             {mesaj.basarili ? <SIMGE.onay className="h-4 w-4" /> : <SIMGE.soru className="h-4 w-4" />}
           </span>
         )}
-        <span>{mesaj ? mesaj.metin : suankiAdim ? adimAnlatimi(suankiAdim, onceki, program, dunya, atolye.bitkiAdi) : program.length ? 'Kodu çalıştırmak için Çalıştır düğmesine bas.' : baslangicAnlatimi(dunya, kart)}</span>
+        <span>{mesaj ? (atolye.sinif === 5 ? temelDuzeyMetni(mesaj.metin) : mesaj.metin) : suankiAdim ? (atolye.sinif === 5 ? temelDuzeyMetni(adimAnlatimi(suankiAdim, onceki, program, dunya, atolye.bitkiAdi)) : adimAnlatimi(suankiAdim, onceki, program, dunya, atolye.bitkiAdi)) : program.length ? 'Kodu çalıştırmak için Çalıştır düğmesine bas.' : baslangicAnlatimi(dunya, kart)}</span>
       </p>
     </div>
   );
@@ -256,6 +261,7 @@ export function AtolyeEkrani({
           <SIMGE.ipucu className="h-5 w-5 text-ada-fener" /> İpucu
         </button>
       )}
+      {(sonuc?.basarili === false || sinamaIletisi?.basarili === false || ipucuAcik) && <button type="button" onClick={() => setCozumAcik(true)} className={`${DUGME} bg-muted text-foreground`}>Çözümü göster</button>}
     </header>
   );
 
@@ -301,13 +307,14 @@ export function AtolyeEkrani({
 
   const GORUNUMLER: [KodGorunumu, string, (p: { className?: string }) => React.ReactElement][] = [
     ['bloklar', 'Bloklar', SIMGE.bloklar],
+    ['dogal', 'Doğal dil', SIMGE.sozde],
     ['sozde', 'Sözde kod', SIMGE.sozde],
     ['akis', 'Akış şeması', SIMGE.akis],
   ];
   const kod = (
     <aside className={`${dar ? 'mx-3 mb-4 min-h-[460px] rounded-[calc(var(--radius)-2px)] border' : 'w-[clamp(340px,34%,460px)] shrink-0 border-l'} flex min-h-0 flex-col border-border bg-card`} aria-label="Kod">
       {ifadeBirimi && (
-        <div className="flex items-center gap-1 border-b border-border px-2 py-2" role="tablist" aria-label="Kod görünümü">
+        <div className="flex flex-wrap items-center gap-1 border-b border-border px-2 py-2" role="tablist" aria-label="Kod görünümü">
           {GORUNUMLER.map(([k, ad, S]) => (
             <button
               key={k}
@@ -337,9 +344,10 @@ export function AtolyeEkrani({
           enFazlaBlok={atolye.enCokBlok}
           degiskenler={degiskenAdlari}
           olcumler={atolye.olcumler}
+          temel={atolye.sinif === 5}
         />
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto px-3 pb-4 pt-3">{gorunum === 'sozde' ? <SozdeKodGorunumu program={program} aktif={aktif} /> : <AkisSemasi program={program} aktif={aktif} />}</div>
+        <div className="min-h-0 flex-1 overflow-auto px-3 pb-4 pt-3">{gorunum === 'dogal' ? <DogalDilGorunumu program={program} /> : <><GosterimAnahtari akis={gorunum === 'akis'} />{gorunum === 'sozde' ? <SozdeKodGorunumu program={program} aktif={aktif} temel={atolye.sinif === 5} /> : <AkisSemasi program={program} aktif={aktif} />}</>}</div>
       )}
     </aside>
   );
@@ -351,6 +359,7 @@ export function AtolyeEkrani({
         {tuval}
         {kod}
       </div>
+      {cozumAcik && <CozumKarti program={atolye.cozumler?.[dunyaSira] ?? atolye.cozum} onKapat={() => setCozumAcik(false)} />}
     </div>
   );
 }

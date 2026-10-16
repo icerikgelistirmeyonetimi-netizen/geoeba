@@ -107,7 +107,7 @@ describe('toplama durumu: plan uygulama (planiUygula)', () => {
     expect(r.durum).toBe(d0);
     expect(r.tost).toBe('Neyi ölçtüğünüzü yazın (ör. Boy).');
     // Yazılmış soru değişmez
-    expect(planiUygula(d0, hazir('nabiz')).durum.arastirma!.soru).toBe('Bir dakikada nabzımız kaç kez atıyor?');
+    expect(planiUygula(d0, hazir('nabiz')).durum.arastirma!.soru).toBe('Sınıfımızdaki öğrencilerin dinlenirken bir dakikada ölçülen nabız sayılarının dağılımı nasıldır?');
   });
 
   it('Saçılım seçiliyken plan uygulanınca grafik Nokta olur (VT §16-3)', () => {
@@ -564,7 +564,7 @@ describe('toplama durumu: grafik ve tablo bilgileri (toplamaGorunumBilgisi)', ()
     expect(b.bosIpucu).toBe('İlk cevapla noktalar burada belirir.');
     expect(b.bosIleti).toBe('Henüz cevap yok. Soldaki kutucuklara dokunun; her cevap buraya bir satır olarak yazılır.');
     expect(b.kategoriSiralari.get(d.arastirma!.sutunlar!.cevap!)).toEqual(['Elma', 'Muz', 'Çilek', 'Portakal', 'Karpuz']);
-    expect(b.soruSeridi).toEqual({ soru: 'Sınıfımızda en çok sevilen meyve hangisi?', altBilgi: '6-A sınıfı · henüz veri yok' });
+    expect(b.soruSeridi).toEqual({ soru: 'Sınıfımızdaki öğrencilerin en sevdikleri meyvelerin dağılımı nasıldır?', altBilgi: '6-A sınıfı · henüz veri yok' });
     expect(b.deneyVerisi).toBe(false);
     expect(b.eksenAlani).toBeNull();
     expect(toplamaGorunumBilgisi({ ...d, toplamaAcik: false }).yEnAz).toBeUndefined();

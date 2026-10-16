@@ -1,10 +1,8 @@
 import type { KademeDuzeyi } from './kademeDuzeyleri';
 
 /**
- * FONKSİYON PENCERESİNİN HIZLI ŞABLONLARI ve kademe süzgeci (alan uzmanı, atölye 4. tur, satır 158: "Ortaokul
- * kademesinde Sinüs, Kosinüs, derece ve parametreli şablonlar sunuluyor; kademe açıklaması ise ortaokul için
- * 'doğrusal fonksiyon ve eğim' diyor" → "ortaokul için doğrusal, parabol, mutlak değer, karekök; trigonometrik
- * şablonları lise kademesine taşı").
+ * FONKSİYON PENCERESİNİN HIZLI ŞABLONLARI: TEGM ortaokul raporu doğrultusunda ortaokulda yalnız doğrusal
+ * fonksiyon örneği sunulur. Diğer fonksiyon aileleri lise ve serbest araçlar görünümündedir.
  *
  * Süzgeç YALNIZ ortaokulda uygulanır; lise, ilkokul ve "Tüm araçlar" bütün şablonları görür (kademe kuralı).
  * Elle yazılan ifade süzülmez: ortaokulda da sin(x) yazılabilir, yalnız hazır düğmesi sunulmaz.
@@ -27,7 +25,7 @@ export const FONKSIYON_SABLONLARI: readonly FonksiyonSablonu[] = [
 ];
 
 /** Ortaokulda sunulan şablonlar (uzmanın listesi). */
-export const ORTAOKUL_SABLONLARI: readonly FonksiyonSablonu['kimlik'][] = ['dogrusal', 'parabol', 'mutlak', 'karekok'];
+export const ORTAOKUL_SABLONLARI: readonly FonksiyonSablonu['kimlik'][] = ['dogrusal'];
 
 export function fonksiyonSablonlari(duzey: KademeDuzeyi): readonly FonksiyonSablonu[] {
   if (duzey !== 'ortaokul') return FONKSIYON_SABLONLARI;

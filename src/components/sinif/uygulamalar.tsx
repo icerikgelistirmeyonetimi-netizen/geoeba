@@ -15,10 +15,11 @@
  * (WorkspaceView + başlık çubuğunda WorkspaceMenuBar).
  */
 import React, { Suspense, lazy, useState, type ComponentType } from 'react';
-import dynamic from 'next/dynamic';
+import { WorkspaceMenuBar } from '@/components/workspace/WorkspaceMenuBar';
 import { manifest as veriGrafikManifesti } from '@/components/uygulamalar/veri-grafik/manifest';
 import { ilkokulManifesti as olasilikIlkokulManifesti, manifest as olasilikManifesti } from '@/components/uygulamalar/olasilik/manifest';
 import { manifest as algoritmaManifesti } from '@/components/uygulamalar/algoritma/manifest';
+import { useIlkokulKipi } from '@/hooks/useKademeDuzeyi';
 import { onbellekliYukleyici } from './tembelYukleme';
 import s from './sinif.module.css';
 
@@ -82,9 +83,11 @@ export function UygulamaHazirlaniyor({ ad }: { ad?: string }) {
  * her bağlanış (pencere açılışı, hata sınırının «Yeniden dene»si) kendi lazy örneğini kurar ve parçayı yeniden ister.
  * Parça yine gelmezse hata pencerenin hata sınırına (PencereHataSiniri) gider: «Yeniden dene» / «Sayfayı yenile».
  */
-function tembel<P extends object>(yukle: () => Promise<{ default: ComponentType<P> }>, ad: string): ComponentType<P> {
+function tembel<P extends object>(yukle: () => Promise<{ default: ComponentType<P> }>, ad: string, kimlik?: string): ComponentType<P> {
   const yukleyici = onbellekliYukleyici(yukle);
   function TembelUygulama(props: P) {
+    const ilkokul = useIlkokulKipi();
+    const yuklemeAdi = ilkokul && kimlik ? ILKOKUL_UYARLAMALARI[kimlik]?.kisaAd ?? ad : ad;
     // Bağlanışta bir kez seçilir: ağaç yapısı bağlı kaldıkça değişmemeli (değişirse uygulama sökülüp yeniden kurulur)
     const [hazir] = useState<ComponentType<P> | null>(() => yukleyici.hazir()?.default ?? null);
     const [Gecikmeli] = useState(() => (hazir ? null : lazy(yukleyici.yukle)));
@@ -92,11 +95,11 @@ function tembel<P extends object>(yukle: () => Promise<{ default: ComponentType<
       const Hazir = hazir;
       return <Hazir {...props} />;
     }
-    if (!Gecikmeli || typeof window === 'undefined') return <UygulamaHazirlaniyor ad={ad} />;
+    if (!Gecikmeli || typeof window === 'undefined') return <UygulamaHazirlaniyor ad={yuklemeAdi} />;
     // lazy() türü ref özelliklerini de taşır; gövdeler ref almaz
     const Govde = Gecikmeli as unknown as ComponentType<P>;
     return (
-      <Suspense fallback={<UygulamaHazirlaniyor ad={ad} />}>
+      <Suspense fallback={<UygulamaHazirlaniyor ad={yuklemeAdi} />}>
         <Govde {...props} />
       </Suspense>
     );
@@ -109,17 +112,11 @@ const CizimStudyosu = tembel<UygulamaProps>(
   () => import('@/components/workspace/WorkspaceView').then((m) => ({ default: m.WorkspaceView })),
   'Çizim Stüdyosu'
 );
-const CizimMenuCubugu: ComponentType = dynamic(
-  () => import('@/components/workspace/WorkspaceMenuBar').then((m) => ({ default: () => <m.WorkspaceMenuBar /> })),
-  {
-    ssr: false,
-    // Menü çubuğu yüklenirken başlık çubuğunda boşluk kalır (küçük bir yükleyici gereksiz)
-    loading: () => null,
-  }
-);
+// Dosya–Yardım menüleri pencere kabuğunun parçasıdır; uygulama gövdesi yüklenirken de görünür.
+const CizimMenuCubugu: ComponentType = WorkspaceMenuBar;
 const VeriGrafik = tembel<UygulamaProps>(() => import('@/components/uygulamalar/veri-grafik'), veriGrafikManifesti.kisaAd);
 const Olasilik = tembel<UygulamaProps>(() => import('@/components/uygulamalar/olasilik'), olasilikManifesti.kisaAd);
-const Algoritma = tembel<UygulamaProps>(() => import('@/components/uygulamalar/algoritma'), algoritmaManifesti.kisaAd);
+const Algoritma = tembel<UygulamaProps>(() => import('@/components/uygulamalar/algoritma'), algoritmaManifesti.kisaAd, algoritmaManifesti.id);
 
 /** Kayıt defteri: görev çubuğu, kısayollar ve Başlat menüsü bu sırayı kullanır. */
 export const UYGULAMALAR: readonly UygulamaTanimi[] = [
@@ -155,8 +152,11 @@ export function uygulamaBul(id: string): UygulamaTanimi | undefined {
 export const ILKOKULDA_GIZLI_UYGULAMALAR: readonly string[] = [];
 
 /** İlkokulda kısayol / Başlat menüsü / pencere başlığında açıklaması ve simgesi değişen uygulamalar */
-const ILKOKUL_UYARLAMALARI: Readonly<Record<string, Partial<Pick<UygulamaManifesti, 'aciklama' | 'simge'>>>> = {
+const ILKOKUL_UYARLAMALARI: Readonly<Record<string, Partial<Pick<UygulamaManifesti, 'ad' | 'kisaAd' | 'aciklama' | 'simge'>>>> = {
+  [CIZIM_KIMLIGI]: { aciklama: 'Şekilleri çiz, ölç ve geometrik cisimleri keşfet.' },
+  [veriGrafikManifesti.id]: { aciklama: 'Nesne ve şekil grafikleri oluştur; çetele ve sıklık tablolarını incele.' },
   olasilik: olasilikIlkokulManifesti,
+  algoritma: { ad: 'Adım Adım Matematik', kisaAd: 'Adım Adım Matematik', aciklama: 'Adımları sırala, örüntüleri keşfet ve robotu hedefine ulaştır.' },
 };
 
 /** Masaüstü, görev çubuğu ve Başlat menüsünün kademeye göre listesi (sıra korunur) */

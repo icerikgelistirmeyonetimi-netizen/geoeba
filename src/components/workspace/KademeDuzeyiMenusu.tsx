@@ -4,6 +4,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Backpack, BookOpen, Check, GraduationCap, Shapes } from 'lucide-react';
 import { useWorkspace } from '@/state/WorkspaceContext';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
+import { useOturum, OTURUM_ADLARI } from '@/state/OturumContext';
 import { TREE_TOOL_GROUPS } from './treeToolDefinitions';
 import { ARAC_KATEGORI_RENKLERI } from './toolDefinitions';
 import {
@@ -49,6 +50,7 @@ interface KademeDuzeyiMenusuProps {
  */
 export function KademeDuzeyiMenusu({ acik, onBaslikTikla, onBaslikUzerine, onKapat }: KademeDuzeyiMenusuProps) {
   const [duzey, setDuzey] = useKademeDuzeyi();
+  const oturum = useOturum();
   const { activeTool, setActiveTool } = useWorkspace();
   const kokRef = useRef<HTMLDivElement>(null);
   const baslikRef = useRef<HTMLButtonElement>(null);
@@ -124,6 +126,12 @@ export function KademeDuzeyiMenusu({ acik, onBaslikTikla, onBaslikUzerine, onKap
   const ozet = gosterilen === 'tum' ? 'Panel süzülmez; bütün araçlar görünür.' : KADEME_DUZEYLERI[gosterilen].konular;
   const etiket = kademeEtiketi(duzey);
 
+  if (oturum.kademe) return <button type="button" onClick={oturum.oturumuKapat}
+    className="min-h-[44px] px-3 py-1 rounded-md inline-flex items-center gap-2 text-foreground/80 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+    data-kademe-duzeyi={duzey} aria-label={`${OTURUM_ADLARI[oturum.kademe]} oturumu. Oturumu değiştir`} title="Oturumu değiştir">
+    <span>{OTURUM_ADLARI[oturum.kademe]} oturumu</span>
+  </button>;
+
   return (
     <div ref={kokRef} className="relative">
       <button
@@ -164,11 +172,11 @@ export function KademeDuzeyiMenusu({ acik, onBaslikTikla, onBaslikUzerine, onKap
           <div className="px-3 pt-1 pb-1.5" role="presentation">
             <div className="text-[13px] font-semibold text-foreground">Kademe</div>
             <p className="text-[11px] leading-snug text-muted-foreground">
-              Araç paneli seçilen kademenin programındaki araçları gösterir. Yazılı ve sesli komutlar bütün araçlarla çalışır.
+              Araç paneli seçilen kademenin programındaki araçları gösterir.
             </p>
           </div>
 
-          <button
+          {duzey !== 'ilkokul' && <button
             type="button"
             role="menuitemradio"
             aria-checked={duzey === 'tum'}
@@ -182,7 +190,7 @@ export function KademeDuzeyiMenusu({ acik, onBaslikTikla, onBaslikUzerine, onKap
               <span>Tüm araçlar</span>
             </div>
             {duzey === 'tum' && <Check className="w-3.5 h-3.5 text-primary" />}
-          </button>
+          </button>}
 
           <div role="separator" className="my-1 border-t border-border/60" />
 

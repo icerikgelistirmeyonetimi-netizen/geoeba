@@ -216,7 +216,7 @@ describe('rehber: eylem yaması', () => {
     expect(eylemYamasi(baskan.rehber[2].eylem!, baskan.olustur(), kapali)).toMatchObject({ sekme: 'nokta', sutunModu: true });
     expect(eylemYamasi(baskan.rehber[1].eylem!, baskan.olustur(), kapali).secenekler).toMatchObject({ etiketler: true, ortalama: false });
     expect(eylemYamasi(baskan.rehber[3].eylem!, baskan.olustur(), kapali)).toEqual({ sekme: 'daire' });
-    expect(eylemYamasi({ tur: 'surukle', etiket: 'Uyku sınırını sürükle' }, baskan.olustur(), kapali)).toEqual({});
+    expect(eylemYamasi({ tur: 'surukle', etiket: 'Uyku: 11, Diğer: 0 yaz' }, baskan.olustur(), kapali)).toEqual({});
     expect(eylemYamasi({ tur: 'yok', etiket: 'Noktalara dokun' }, baskan.olustur(), kapali)).toEqual({});
   });
 
@@ -256,7 +256,7 @@ describe('rehber: eylem yaması', () => {
   });
 
   it('satirVurgula doğru satır indeksini verir; bulunamazsa null ve bildirim', () => {
-    for (const [id, etiket] of [['ulasim', 'Feyza'], ['calisma', '8B-03'], ['cikolata', '5 Ocak'], ['gun', 'Uyku'], ['harcama', 'Kira']] as const) {
+    for (const [id, etiket] of [['ulasim', 'Feyza'], ['cikolata', '5 Ocak'], ['gun', 'Uyku'], ['harcama', 'Kira']] as const) {
       const o = ornek(id);
       const t = o.olustur();
       const e = o.rehber.map((a) => a.eylem).find((x) => x?.tur === 'satirVurgula')!;
@@ -279,9 +279,9 @@ describe('rehber: eylem yaması', () => {
     expect(gYeni).toEqual([11, 1, 6, 1, 2, 2, 1]);
     expect(gYeni.reduce((a, b) => a + b, 0)).toBe(24);
     const gCevap = gun.rehber[3].cevap;
-    expect(gCevap).toContain("Okul 7'den 6 saate, diğer 2'den 1 saate");
+    expect(gCevap).toContain("Uyku 11 saat, Diğer 0 saat");
     expect(gCevap).not.toMatch(/bütün dilimler|ondalıklı|6,1/);
-    expect(gun.ogretmenNotu).toContain('okul 6, diğer 1 saat');
+    expect(gun.ogretmenNotu).toContain('Uyku değerini 11, Diğer değerini 0');
     // harcama: birikim 10 000 → 20 000 TL (1 000 TL'lik adım); okul ve kırtasiye yerinde kalır
     const harcama = ornek('harcama');
     const h = gecerliDegerler(harcama.olustur(), 1).map((x) => x.deger);

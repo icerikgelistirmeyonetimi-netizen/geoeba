@@ -234,9 +234,9 @@ describe('grafik düzeni: daire lejantı sığar, çizgi lejantı ada göre, tab
     const t = tabloOlustur(['Ay', 'Aylık ortalama sıcaklık (derece)', 'Nem'], [['Ocak', 4, 70], ['Şubat', 6, 65]]);
     const ortak = { tablo: t, seciliSatir: null, onSatirSec: bos, onDegerDegis: bos, yuvarlamaAdimi: 1, genislik: 700, yukseklik: 320, azaltilmisHareket: true };
     const tek = renderToStaticMarkup(<CizgiGrafigi {...ortak} sutunlar={[1]} />);
-    expect(tek).toContain('↑ Aylık ortalama sıcaklık (derece)');
+    expect(tek).toContain('Aylık ortalama sıcaklık (derece)');
     expect(tek).not.toContain('data-seri-ornegi');
-    expect(tek).toContain('Ay →');
+    expect(tek).toContain('Ay');
     const iki = renderToStaticMarkup(<CizgiGrafigi {...ortak} sutunlar={[1, 2]} />);
     expect(iki).toContain('>Aylık ortalama sıcaklık (derece)<');
     expect(iki).toContain('>Nem<');
@@ -626,8 +626,8 @@ describe('daire sürüklemesi: anlık görüntüden, adıma oturan değerler, to
     const html = renderToStaticMarkup(
       <DaireGrafigi tablo={tabloOlustur(['A', 'B'], [['a', 1], ['b', 1], ['c', 1]])} sutun={1} seciliSatir={null} onSatirSec={bos} onDegerlerDegis={bos} genislik={800} yukseklik={420} azaltilmisHareket />,
     );
-    expect(html).toContain('a: 1 (120°, %33,4)');
-    expect(html).toContain('b: 1 (120°, %33,3)');
+    expect(html).toContain('a — 1 (120°, %33,4)');
+    expect(html).toContain('b — 1 (120°, %33,3)');
   });
 });
 
@@ -654,8 +654,8 @@ describe('daire: renkler, etiketler, tutamaçlar, merkez açı ve hesap şeridi 
     const gun = tabloOlustur(['Etkinlik', 'Süre (saat)'], [['Uyku', 9], ['Yol', 1], ['Okul', 7], ['Yemek', 1], ['Ödev', 2], ['Oyun ve spor', 2], ['Diğer', 2]]);
     const html = renderToStaticMarkup(<DaireGrafigi {...ortak} tablo={gun} sutun={1} />);
     const metin = gorunen(html);
-    expect(metin).toContain('Yol: 15° · %4,2');
-    expect(metin).toContain('Yemek: 15° · %4,2');
+    expect(metin).toContain('Yol — 15°, %4,2');
+    expect(metin).toContain('Yemek — 15°, %4,2');
     expect(html.match(/data-dilim-etiketi="dis"/g)).toHaveLength(2);
     expect(html.match(/<polyline /g)).toHaveLength(2);
     expect(metin).toMatch(/Uyku 135° %37,5/);
@@ -732,8 +732,8 @@ describe('çizgi: değişim etiketi, eksen adları, balonlar, değerler, kesikli
   it('fide gibi tek seri: "↑ Boy (cm)" ve "Hafta →"; seçili 2. haftada "3 cm artış (%150)" ve "4 cm artış (%80)"; sıcaklıkta yüzde yok', () => {
     const html = renderToStaticMarkup(<CizgiGrafigi {...ortak} tablo={fide} sutunlar={[1]} seciliSatir={1} />);
     const m = gorunen(html).replace(/ /g, ' ');
-    expect(m).toContain('↑ Boy (cm)');
-    expect(m).toContain('Hafta →');
+    expect(m).toContain('Boy (cm)');
+    expect(m).toContain('Hafta');
     expect(html).not.toContain('data-seri-ornegi');
     expect(m).toContain('3 cm artış (%150)');
     expect(m).toContain('4 cm artış (%80)');
@@ -857,7 +857,7 @@ describe('saçılım balonu, yazı boyu, gösterim ondalığı ve koyu tema renk
     expect(cizgi).toContain('Kütle (g), B: 0,004');
     expect(gorunen(cizgi).replace(/ /g, ' ')).toContain('0,003 g artış (%300)');
     const daire = renderToStaticMarkup(<DaireGrafigi tablo={kucuk} sutun={1} seciliSatir={null} onSatirSec={bos} onDegerlerDegis={bos} genislik={846} yukseklik={420} azaltilmisHareket />);
-    expect(daire).toContain('A: 0,001 (');
+    expect(daire).toContain('A — 0,001 (');
     expect(daire).toContain('toplam 0,012');
   });
 

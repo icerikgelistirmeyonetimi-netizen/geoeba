@@ -652,7 +652,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     daire: 'siklik',
     acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false }, sutunModu: false },
     hikaye: {
-      arastirmaSorusu: 'Sınıf başkanlığı seçiminde oylar adaylara nasıl dağıldı?',
+      arastirmaSorusu: '5-A sınıfındaki sınıf başkanı adaylarının Ekim 2025 seçiminde aldıkları oyların dağılımı nasıldır?',
       kim: '5-A sınıfındaki 20 öğrenci; 4 aday',
       neZaman: 'Ekim 2025, seçim günü',
       nasil: 'Gizli oy; pusulalar tek tek okunurken tahtaya çetele tutuldu. Her satır bir oy pusulası.',
@@ -678,7 +678,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       {
         tur: 'olc',
         baslik: 'Aç ve ölç',
-        soru: '"Sütunlara dönüştür" düğmesine bas. Noktalar nereye gitti? Sütunun boyu neyi gösteriyor?',
+        soru: '"Sütunlara dönüştür" düğmesine bas. Her sütunun yüksekliği, ilgili adayın nokta sayısıyla nasıl ilişkilidir?',
         cevap: 'Her adayın noktaları üst üste bir sütun oldu. Sütunun boyu o adayın oy sayısıdır (sıklık).',
         eylem: { tur: 'secenek', ac: ['sutunModu'], etiket: 'Sütunlara dönüştür' },
       },
@@ -723,7 +723,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     daire: 'siklik',
     acilis: { sekme: 'sutun' },
     hikaye: {
-      arastirmaSorusu: 'Evlerimizden en çok hangi tür atık çıkıyor; iki sınıfın cevapları farklı mı?',
+      arastirmaSorusu: '5-A ve 5-B öğrencilerinin Kasım 2025’te evlerinde en çok gözlemledikleri atık türlerinin dağılımı nasıldır?',
       kim: "5-A ve 5-B'den 12'şer öğrenci (24 kişi)",
       neZaman: 'Kasım 2025',
       nasil: 'Öğrenciler bir hafta boyunca evdeki çöpü gözledi, sonra "En çok hangi atık çıkıyor?" anketinde tek seçenek işaretledi.',
@@ -795,7 +795,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     daire: 'satir',
     acilis: { sekme: 'daire' },
     hikaye: {
-      arastirmaSorusu: 'Bir okul gününün 24 saati nelere ayrılıyor?',
+      arastirmaSorusu: 'Beril’in Ekim 2025’te gözlemlediği okul gününde etkinliklere ayırdığı sürelerin dağılımı nasıldır?',
       kim: '5. sınıf öğrencisi Beril',
       neZaman: 'Ekim 2025, bir salı günü',
       nasil: 'Beril gün boyunca yarım saatlik bir çizelgeye ne yaptığını yazdı; süreler tam saate yuvarlandı.',
@@ -828,9 +828,9 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       {
         tur: 'yorumla',
         baslik: 'Yorumla',
-        soru: 'Beril bir hafta içi günü 11 saat uyusaydı? Uyku diliminin sınırını sürükleyip yaklaşık 11 saate getir. Hangi dilimler küçüldü, toplam kaç saat?',
-        cevap: "Toplam yine 24 saat: Uykuya eklenen 2 saat öteki dilimlerden, büyüklükleriyle orantılı alındı ve tam saate yuvarlandı. Okul 7'den 6 saate, diğer 2'den 1 saate indi. Gerçekte okul süresi değişmez; Beril oyundan ya da diğer işlerden kısar. Bir işe daha çok zaman ayırınca ötekilerden eksilir.",
-        eylem: { tur: 'surukle', etiket: 'Uyku sınırını sürükle' },
+        soru: 'Beril uyku süresini 9 saatten 11 saate çıkarıp “Diğer” etkinliklere ayırdığı 2 saati uykuya ayırsın. Diğer süreler aynı kalsın. Tabloda iki değeri değiştir: Uyku dilimi nasıl değişir ve toplam süre kaç saat olur?',
+        cevap: "Uyku 11 saat, Diğer 0 saat olur; kalan süreler değişmez. Uyku dilimi büyür ve toplam 24 saat olarak kalır.",
+        eylem: { tur: 'yok', etiket: 'Uyku: 11, Diğer: 0 yaz' },
       },
     ],
     sekmeIpucu: {
@@ -839,7 +839,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       cizgi: '',
       istatistik: 'Sürelerin toplamı hep 24 saat: bütün, günün kendisi.',
     },
-    ogretmenNotu: "5. sınıfta açı ve yüzde hesaplanmaz: \"yarım daire, çeyrek daire\" gibi parça-bütün diliyle ve renklerle konuşun (6 saat çeyrek daire, 12 saat yarım daire). Yanılgı: \"Daire grafiğinde bütün veriye göre değişir\"; burada bütün hep 24 saattir. Sınır sürüklenince toplam 24 saatte kalır ve süreler Grafik ayarları → Sürüklerken yuvarla adımına (ilk ayar 1 saat) yuvarlanır. Uyku 11 saate getirilince öteki dilimler kalan 13 saati büyüklükleriyle orantılı paylaşır (tam oranla okul 6,07 saat olurdu); tam saate yuvarlanınca okul 6, diğer 1 saat olur, öteki dilimler değişmez. \"Neden yalnız iki dilim küçüldü?\" sorusu yuvarlamayı konuşmak için iyi bir fırsat.",
+    ogretmenNotu: '5. sınıfta açı ve yüzde hesaplanmaz. Yarım daire ve çeyrek daire gibi parça-bütün diliyle ve renklerle konuşun: 6 saat çeyrek, 12 saat yarım dairedir. Yorumla adımında öğrenciler tabloda Uyku değerini 11, Diğer değerini 0 yapar; kalan etkinliklerin süreleri değişmez ve toplam 24 saat olur. Sınır sürükleme ayrı bir keşiftir: toplamı sabit tutarken öteki süreleri orantılı değiştirir; bu işlem yorumla adımının yönergesiyle aynı değildir.',
     olustur: () =>
       tabloOlustur(
         ['Etkinlik', 'Süre (saat)'],
@@ -860,7 +860,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     daire: 'satir',
     acilis: { sekme: 'daire' },
     hikaye: {
-      arastirmaSorusu: 'Ailenin aylık geliri hangi kalemlere ayrılıyor, ne kadarı birikime kalıyor?',
+      arastirmaSorusu: 'Örnekteki dört kişilik ailenin Mart 2026 gelirinin harcama ve birikim kalemlerine dağılımı nasıldır?',
       kim: 'Dört kişilik bir aile',
       neZaman: 'Mart 2026',
       nasil: "100 000 TL aylık gelirin harcandığı yerler ve birikim kalem kalem yazıldı; tutarlar bin TL'ye yuvarlandı.",
@@ -931,7 +931,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     daire: 'siklik',
     acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false } },
     hikaye: {
-      arastirmaSorusu: 'Sınıfımızda bir öğrenci bir ayda genellikle kaç kitap okuyor?',
+      arastirmaSorusu: '6-B sınıfındaki öğrencilerin Kasım 2025’te okudukları kitap sayılarının dağılımı nasıldır?',
       kim: "6-B'deki 20 öğrenci",
       neZaman: 'Kasım 2025',
       nasil: 'Öğrenciler ay boyunca okuma günlüğü tuttu; ay sonunda bitirdikleri kitapları saydı.',
@@ -1009,7 +1009,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     daire: 'siklik',
     acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false } },
     hikaye: {
-      arastirmaSorusu: 'Sınıfımızdaki öğrencilerin çoğunun kaç kardeşi var?',
+      arastirmaSorusu: '6-A sınıfındaki öğrencilerin Eylül 2025’te kardeş sayılarının dağılımı nasıldır?',
       kim: "6-A'daki 20 öğrenci",
       neZaman: 'Eylül 2025, tanışma etkinliği',
       nasil: 'Her öğrenci kendisi hariç kaç kardeşi olduğunu söyledi; tahtada çetele tutuldu.',
@@ -1087,7 +1087,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     daire: 'uygunDegil',
     acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false } },
     hikaye: {
-      arastirmaSorusu: 'Sınıfımızda okula gelmek genellikle kaç dakika sürüyor?',
+      arastirmaSorusu: '6-C sınıfındaki öğrencilerin Ekim 2025’te ölçüm yapılan sabah okula ulaşım sürelerinin dağılımı nasıldır?',
       kim: "6-C'deki 15 öğrenci",
       neZaman: 'Ekim 2025, bir sabah',
       nasil: 'Öğrenciler evden çıkış ve okula varış saatlerini yazıp aradaki süreyi dakika olarak hesapladı.',
@@ -1113,8 +1113,8 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       {
         tur: 'olc',
         baslik: 'Aç ve ölç',
-        soru: 'Aritmetik ortalama ve Ortanca düğmelerini aç. Hangisi nokta yığınının içinde kaldı?',
-        cevap: "Ortanca 12 dakika, yığının içinde. Aritmetik ortalama 16 dakika: 15 öğrenciden 11'inin süresi bundan kısa.",
+        soru: 'Aritmetik ortalama ve Ortanca düğmelerini aç. Bu değerlerden hangisi nokta grafiğinde daha fazla veri noktasının bulunduğu bölgede yer almaktadır?',
+        cevap: "Ortanca 12 dakika, verilerin daha yoğun bulunduğu bölgededir. Aritmetik ortalama 16 dakika: 15 öğrenciden 11'inin süresi bundan kısa.",
         eylem: { tur: 'secenek', ac: ['ortalama', 'ortanca'], etiket: 'Aritmetik ortalama ve ortancayı aç', gerektirir: 'ortanca' },
       },
       {
@@ -1132,7 +1132,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       kokYaprak: "Kökler onlar basamağı: 0, 1, 2 … 6. Feyza'nın 60 dakikası 6 kökünde tek başına; 3, 4 ve 5 kökleri boş.",
       daire: 'Süreler toplanıp paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
     },
-    ogretmenNotu: 'Ötekilerden çok uzak değer (programdaki adıyla uç nokta, s.99; "uç değer" terimi programda geçmez) bir hata değildir: Feyza gerçekten uzakta oturuyor, veriden atılmaz. Program satırı silip farkı hesaplatmayı değil, değeri yazılımda değiştirip çizgilerin kayışını izlemeyi önerir (7. sınıf notu, s.154). 60 yerine 20: Ortalama 200 ÷ 15 ≈ 13,3; ortanca 12 aynı kalır. Veri türü: Süre ölçülen (sürekli) bir büyüklüktür, sürekli veri programda 7. sınıfta başlar (s.19); burada süreler tam dakikaya yuvarlandığı için 6. sınıfın nicel (kesikli) veri çerçevesinde sayılabilir tam değerler gibi ele alınır. İsterseniz öğrencilere "süre neden tam dakika yazıldı?" diye sorun.',
+    ogretmenNotu: 'Ötekilerden çok uzak değer (programdaki adıyla uç nokta, s.99; "uç değer" terimi programda geçmez) bir hata değildir: Feyza gerçekten uzakta oturuyor, veriden atılmaz. Program satırı silip farkı hesaplatmayı değil, değeri yazılımda değiştirip çizgilerin kayışını izlemeyi önerir (7. sınıf notu, s.154). 60 yerine 20: Ortalama 200 ÷ 15 yaklaşık 13,3; ortanca 12 aynı kalır. Veri türü: Süre ölçülen (sürekli) bir büyüklüktür, sürekli veri programda 7. sınıfta başlar (s.19); burada süreler tam dakikaya yuvarlandığı için 6. sınıfın nicel (kesikli) veri çerçevesinde sayılabilir tam değerler gibi ele alınır. İsterseniz öğrencilere "süre neden tam dakika yazıldı?" diye sorun.',
     olustur: () =>
       tabloOlustur(
         ['Öğrenci', 'Süre (dakika)'],
@@ -1155,7 +1155,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     daire: 'uygunDegil',
     acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false } },
     hikaye: {
-      arastirmaSorusu: 'İki oyuncudan hangisi maçtan maça daha istikrarlı sayı atıyor?',
+      arastirmaSorusu: 'Selma ve Yasemin’in 2025–2026 okul liginin son beş maçında attıkları sayıların dağılımları nasıldır?',
       kim: 'Okul basketbol takımından iki oyuncu: Selma ve Yasemin',
       neZaman: '2025-2026 okul liginin son 5 maçı',
       nasil: 'Sayılar maç kâğıtlarından alındı.',
@@ -1230,7 +1230,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     hassas: true,
     acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false } },
     hikaye: {
-      arastirmaSorusu: 'Ortalamaları aynı olan iki sınıfın başarısı da aynı mı?',
+      arastirmaSorusu: '7-A ve 7-B sınıflarındaki öğrencilerin Kasım 2025 ortak matematik sınavı puanlarının dağılımları nasıldır?',
       kim: "7-A ve 7-B'den 15'er öğrenci (30 kişi)",
       neZaman: 'Kasım 2025, ortak yazılı sınav',
       nasil: 'Aynı 20 soruluk sınav; her soru 5 puan. Adlar yerine sınıf-sıra kodu kullanıldı.',
@@ -1304,7 +1304,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     varsayilanAcilis: true,
     acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false } },
     hikaye: {
-      arastirmaSorusu: 'Sınıfımızdaki öğrencilerin boyları hangi aralıkta toplanıyor, ne kadar farklılık gösteriyor?',
+      arastirmaSorusu: '7-C sınıfındaki öğrencilerin Eylül 2025’te ölçülen boy uzunluklarının dağılımı nasıldır?',
       kim: "7-C'deki 24 öğrenci",
       neZaman: 'Eylül 2025, beden eğitimi dersi',
       nasil: 'Duvar boy ölçerle, ayakkabısız ölçüldü; en yakın santimetreye yuvarlandı. Adlar yerine kod kullanıldı.',
@@ -1381,10 +1381,10 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     yuzdeDegisim: { 'Boy (cm)': true },
     acilis: { sekme: 'cizgi' },
     hikaye: {
-      arastirmaSorusu: 'Fasulye fidesi her hafta aynı miktarda mı uzuyor?',
+      arastirmaSorusu: '7-B sınıfında yetiştirilen fasulye fidesinin 15 Eylül–3 Kasım 2025 arasında haftalık boy uzunlukları nasıl değişmiştir?',
       kim: "7-B'nin fen bilimleri dersindeki fasulye saksısı",
       neZaman: 'Eylül-Kasım 2025, 8 hafta',
-      nasil: 'Filiz çıktıktan sonra 8 hafta boyunca her pazartesi (15 Eylül – 3 Kasım 2025) cetvelle ölçüldü.',
+      nasil: 'Filiz çıktıktan sonra 8 hafta boyunca her pazartesi (15 Eylül – 3 Kasım 2025) cetvelle 0,1 cm duyarlıkla ölçüldü.',
       n: 8,
       cumle: "7-B fen bilimleri dersinde Eylül 2025'te ekilen fasulyenin boyu, filiz çıktıktan sonra 8 hafta her pazartesi cetvelle ölçüldü.",
     },
@@ -1401,7 +1401,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
         tur: 'bak',
         baslik: 'Grafikte bul',
         soru: 'Çizginin en dik olduğu iki hafta hangisi?',
-        cevap: "3. hafta ile 4. hafta arası: 9 cm'den 14 cm'ye, 5 cm artış.",
+        cevap: "3. hafta ile 4. hafta arası: 9,5 cm’den 14,5 cm’ye, 5 cm artış.",
         eylem: null,
       },
       {
@@ -1415,7 +1415,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
         tur: 'yorumla',
         baslik: 'Yorumla',
         soru: '9. haftada fidenin boyu kaç cm olabilir? Neden?',
-        cevap: 'Yaklaşık 24–25 cm: Artışlar her hafta azalıyor, son hafta yalnız 1 cm uzadı.',
+        cevap: 'Yaklaşık 25–26 cm: Artışlar her hafta azalıyor, son hafta yalnız 1 cm uzadı.',
         eylem: null,
       },
     ],
@@ -1430,8 +1430,8 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       tabloOlustur(
         ['Hafta', 'Boy (cm)'],
         [
-          ['1. hafta', 2], ['2. hafta', 5], ['3. hafta', 9], ['4. hafta', 14], ['5. hafta', 18], ['6. hafta', 21],
-          ['7. hafta', 23], ['8. hafta', 24],
+          ['1. hafta', 2.5], ['2. hafta', 5.5], ['3. hafta', 9.5], ['4. hafta', 14.5], ['5. hafta', 18.5], ['6. hafta', 21.5],
+          ['7. hafta', 23.5], ['8. hafta', 24.5],
         ],
       ),
   },
@@ -1448,7 +1448,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     yuzdeDegisim: { 'Sıcaklık (°C)': false },
     acilis: { sekme: 'cizgi' },
     hikaye: {
-      arastirmaSorusu: "Ankara'da sıcaklık yıl boyunca nasıl değişiyor; en hızlı ısınma ve soğuma hangi aylarda?",
+      arastirmaSorusu: "MGM’nin 1927–2025 ölçümlerine göre Ankara’da aylık ortalama sıcaklıklar yıl boyunca nasıl değişmektedir?",
       kim: 'Meteoroloji Genel Müdürlüğü (MGM) Ankara istasyonu',
       neZaman: '1927–2025 ölçüm periyodu',
       nasil: 'Her ayın uzun yıllar ortalama sıcaklığı (°C).',
@@ -1466,28 +1466,28 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       {
         tur: 'tahmin',
         baslik: 'Tahmin et',
-        soru: "Ankara'nın en sıcak ayı sence hangisi?",
+        soru: "Ankara’da yılın en sıcak ayı hangisi olabilir?",
         cevap: 'Çoğu kişi temmuz der. Uzun yıllar ortalamasında ağustos (23,6 °C), temmuzu (23,5 °C) çok az geçiyor.',
         eylem: null,
       },
       {
         tur: 'bak',
         baslik: 'Grafikte bul',
-        soru: 'Çizgi hangi iki ay arasında en dik yükseliyor?',
+        soru: 'Çizgi grafiğinde hangi iki ay arasındaki sıcaklık artışı en fazladır?',
         cevap: "Marttan nisana: 5,8 °C'den 11,3 °C'ye, 5,5 °C artış.",
         eylem: null,
       },
       {
         tur: 'olc',
         baslik: 'Aç ve ölç',
-        soru: 'Ekim noktasına dokun: Eylül → Ekim ve Ekim → Kasım arasında kaç derece azalış var?',
+        soru: 'Ekim ayı sıcaklık değerine dokun: Eylül–Ekim ve Ekim–Kasım ayları arasında sıcaklık kaç derece azalmıştır?',
         cevap: 'İkisinde de 5,8 °C azalış: Sonbaharda sıcaklık, ilkbaharda yükseldiğinden biraz daha hızlı düşüyor.',
         eylem: { tur: 'yok', etiket: 'Ekim noktasına dokun', gerektirir: 'yuzdeDegisim' },
       },
       {
         tur: 'yorumla',
         baslik: 'Yorumla',
-        soru: 'Ocakta 0,4 °C, temmuzda 23,5 °C. "Temmuz, ocaktan yaklaşık 59 kat sıcak" demek doğru mu?',
+        soru: '"Temmuz ayı ocak ayından yaklaşık 59 kat sıcaktır." ifadesi doğru mudur?',
         cevap: 'Hayır. 0 °C "hiç sıcaklık yok" demek değildir; sıcaklıklar kat ya da yüzdeyle karşılaştırılmaz. Doğrusu: Temmuz, ocaktan 23,1 °C daha sıcak.',
         eylem: null,
       },
@@ -1523,7 +1523,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     yuzdeDegisim: { 'Erzurum (°C)': false, 'İzmir (°C)': false },
     acilis: { sekme: 'sutun' },
     hikaye: {
-      arastirmaSorusu: "Doğu Anadolu'daki Erzurum ile Ege kıyısındaki İzmir'in sıcaklıkları yıl boyunca nasıl farklılaşıyor?",
+      arastirmaSorusu: "MGM’nin Erzurum (1929–2025) ve İzmir (1938–2025) ölçümlerine göre iki şehrin aylık ortalama sıcaklıkları nasıl farklılaşmaktadır?",
       kim: 'MGM Erzurum ve İzmir istasyonları',
       neZaman: 'Erzurum 1929–2025, İzmir 1938–2025 ölçüm periyotları',
       nasil: 'Her ayın uzun yıllar ortalama sıcaklığı (°C).',
@@ -1602,7 +1602,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     hassas: true,
     acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false }, aralik: 5 },
     hikaye: {
-      arastirmaSorusu: 'Okulumuzdaki 8. sınıf öğrencileri hafta içi okul dışında günde ne kadar süre ekran başında geçiriyor?',
+      arastirmaSorusu: 'Okulumuzdaki 8. sınıf öğrencilerinin Mart 2026’da ölçüm yapılan hafta içi gününde okul dışındaki ekran sürelerinin dağılımı nasıldır?',
       kim: 'Evren: okuldaki 112 sekizinci sınıf öğrencisi. Örneklem: her şubeden kurayla 10 öğrenci (40 kişi)',
       neZaman: 'Mart 2026, bir hafta içi günü',
       nasil: 'Anonim anket; telefon, tablet, bilgisayar ve televizyon başında geçen süre dakika olarak yazıldı.',
@@ -1668,7 +1668,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     id: 'calisma',
     ad: 'Haftalık çalışma süresi ve matematik puanı',
     konu: 'zenginlestirme',
-    sinif: 8,
+    sinif: null,
     kazanim: [],
     aciklama: 'Zenginleştirme: Noktalar nasıl diziliyor? Ötekilerden ayrılan noktayı bulun; birlikte değişmek neden-sonuç mu?',
     onerilenGrafik: 'sacilim',
@@ -1678,7 +1678,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     hassas: true,
     acilis: { sekme: 'sacilim' },
     hikaye: {
-      arastirmaSorusu: 'Daha çok çalışan öğrencilerin puanı genellikle daha mı yüksek?',
+      arastirmaSorusu: 'Örneklemdeki öğrencilerin Şubat 2026 sınavından önceki haftada çalışma süreleri ile sınav puanları nasıl ilişkilidir?',
       kim: "8-A ve 8-B'den 10'ar öğrenci (20 kişi)",
       neZaman: 'Şubat 2026, deneme sınavından önceki hafta',
       nasil: 'Öğrenciler evde kaç saat matematik çalıştığını anonim olarak yazdı; puanlar aynı deneme sınavından. Adlar yerine kod var.',
@@ -1704,9 +1704,9 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       {
         tur: 'olc',
         baslik: 'Aç ve ölç',
-        soru: 'Ötekilerden ayrılan bir nokta bul. Kimin, değerleri ne?',
-        cevap: '8B-03: Haftada 3 saat çalışmış ama 88 almış.',
-        eylem: { tur: 'satirVurgula', satir: '8B-03', etiket: 'İstisnayı göster' },
+        soru: 'İki sınıfın haftalık çalışma sürelerini karşılaştır. Hangi sınıfta değerler daha geniş bir aralığa yayılmıştır?',
+        cevap: '8-A sınıfında çalışma süreleri 1 ile 10 saat arasındadır; açıklık 9 saattir. 8-B sınıfında 2 ile 10 saat arasındadır; açıklık 8 saattir. 8-A sınıfındaki değerler daha geniş bir aralığa yayılır.',
+        eylem: { tur: 'yok', etiket: 'En küçük ve en büyük süreleri karşılaştır' },
       },
       {
         tur: 'yorumla',
@@ -1741,7 +1741,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     id: 'cikolata',
     ad: 'Hava sıcaklığı ve kantinde sıcak çikolata satışı',
     konu: 'zenginlestirme',
-    sinif: 8,
+    sinif: null,
     kazanim: [],
     aciklama: 'Zenginleştirme: Sıcaklık artınca satış ne oluyor? Noktaların yönüne bakın; tarih sırası için Çizgi grafiğine geçin.',
     onerilenGrafik: 'sacilim',
@@ -1750,7 +1750,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     yuzdeDegisim: { 'Sıcaklık (°C)': false, 'Satış (bardak)': true },
     acilis: { sekme: 'sacilim' },
     hikaye: {
-      arastirmaSorusu: 'Hava ısındıkça kantinde sıcak çikolata satışı nasıl değişiyor?',
+      arastirmaSorusu: 'Örnekteki okul kantininde ocak ayındaki günlük hava sıcaklığı ile satılan sıcak çikolata sayısı nasıl ilişkilidir?',
       kim: 'Bir ortaokulun kantini',
       neZaman: 'Kasım 2025 – Mayıs 2026 arasında 12 pazartesi',
       nasil: 'Kantin görevlisi satılan sıcak çikolata bardağını ve öğle saatindeki hava sıcaklığını not etti.',
@@ -1823,7 +1823,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false }, sutunModu: false },
     sekilAnahtari: 'Her resim 1 öğrenciyi gösterir.',
     hikaye: {
-      arastirmaSorusu: 'Sınıfımızda en çok hangi oyuncak seviliyor?',
+      arastirmaSorusu: '1-A sınıfındaki öğrencilerin en sevdikleri oyuncakların dağılımı nasıldır?',
       kim: '1-A sınıfındaki 15 öğrenci',
       neZaman: 'Ekim 2025, oyun saati',
       nasil: 'Her öğrenci en sevdiği oyuncağın kartını panoya astı; kartlar sayılırken tahtaya çetele tutuldu. Her satır bir öğrenci.',
@@ -1892,7 +1892,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false }, sutunModu: false },
     sekilAnahtari: 'Her kare 1 öğrenciyi gösterir.',
     hikaye: {
-      arastirmaSorusu: 'İki sınıfın en sevdiği teneffüs oyunu aynı mı?',
+      arastirmaSorusu: '2-A ve 2-B öğrencilerinin en sevdikleri teneffüs oyunlarının dağılımı nasıldır?',
       kim: "2-A ve 2-B'den 10'ar öğrenci (20 kişi)",
       neZaman: 'Kasım 2025, teneffüs',
       nasil: 'Her öğrenci en sevdiği oyunu söyledi; sınıf başkanları tahtaya çetele tuttu. Her satır bir öğrenci.',
@@ -1960,7 +1960,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     daire: 'siklik',
     acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false }, sutunModu: false },
     hikaye: {
-      arastirmaSorusu: 'Sınıfımızdaki öğrenciler okula nasıl geliyor?',
+      arastirmaSorusu: '3-A sınıfındaki öğrencilerin okula geliş biçimlerinin dağılımı nasıldır?',
       kim: '3-B sınıfındaki 18 öğrenci',
       neZaman: 'Şubat 2026, bir sabah',
       nasil: 'Sabah yoklamasında her öğrenci okula nasıl geldiğini söyledi; nöbetçi öğrenci çetele tuttu. Her satır bir öğrenci.',
@@ -2029,7 +2029,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     daire: 'siklik',
     acilis: { sekme: 'sutun' },
     hikaye: {
-      arastirmaSorusu: 'Sınıf gezisi için hangi yer seçilmeli?',
+      arastirmaSorusu: '4-A ve 4-B öğrencilerinin sınıf gezisi için tercih ettikleri yerlerin dağılımı nasıldır?',
       kim: "4-A ve 4-B'den 12'şer öğrenci (24 kişi)",
       neZaman: 'Mart 2026',
       nasil: 'Her öğrenci dört gezi yerinden birini oy pusulasına yazdı; pusulalar sayılırken çetele tutuldu. Her satır bir öğrenci.',
@@ -2042,7 +2042,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
         tur: 'tahmin',
         baslik: 'Tahmin et',
         soru: 'İki sınıf birlikte geziye gidecek. Sence en çok hangi yer seçilmiştir? Tahmin et.',
-        cevap: 'Hayvanat bahçesi ya da bilim merkezi çok seçilmiş olabilir; iki sınıfın seçimleri de farklı olabilir. Bunu sütun grafiğinde iki sınıfın sütunlarını yan yana koyarak göreceğiz.',
+        cevap: 'Hayvanat bahçesi ya da bilim merkezi çok seçilmiş olabilir; iki sınıfın seçimleri de farklı olabilir. Bunu sütun grafiğinde iki sınıfın sütunlarını yan yana göreceğiz.',
         eylem: null,
       },
       {
@@ -2096,6 +2096,7 @@ export type OrnekKonusu = (typeof ORNEK_KONULARI)[number]['id'];
  */
 function konuKademede(k: (typeof ORNEK_KONULARI)[number], kademe: KademeDuzeyi): boolean {
   if (kademe === 'tum') return true;
+  if (kademe === 'ortaokul' && k.id === 'zenginlestirme') return false;
   return kademe === 'ilkokul' ? k.kademe === 'ilkokul' : k.kademe !== 'ilkokul';
 }
 
@@ -2117,6 +2118,7 @@ export function kademeOrnekleri(kademe: KademeDuzeyi): OrnekVeri[] {
 /** Örnek bu kademenin galerisinde mi (ilkokul örneği ortaokulda / lisede, 5–8. sınıf örneği ilkokulda yok) */
 export function ornekKademede(ornek: OrnekVeri, kademe: KademeDuzeyi): boolean {
   if (kademe === 'tum') return true;
+  if (kademe === 'ortaokul' && ornek.konu === 'zenginlestirme') return false;
   return kademe === 'ilkokul' ? ilkokulSinifi(ornek.sinif) : !ilkokulSinifi(ornek.sinif);
 }
 

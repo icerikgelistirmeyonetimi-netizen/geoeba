@@ -183,7 +183,7 @@ const DEPO_13: DunyaTanimi = { id: 's7-depo-13', ad: '13 litrelik depo', sinar: 
 const DEPO_NEMLI: DunyaTanimi = { id: 's7-depo-nemli', ad: 'Nemli saksılar', sinar: '9 kuru saksıdan 7’sine su yeter', bitkiler: saksiSirasi('K N K K N K K N K K K K'), depo: 14 };
 const DEPO_21: DunyaTanimi = { id: 's7-depo-21', ad: '21 litre, 5 litre yedek', sinar: '2x + 5 = 21', bitkiler: onIkiKuru, depo: 21 };
 
-const sulananHedefi = (sulanan: number): Hedef => ({ cikistaBitir: false, degiskenler: { sulanan } });
+const sulananHedefi = (sulanan: number): Hedef => ({ cikistaBitir: false, sulamaSayisi: sulanan, degiskenler: { sulanan } });
 const depoKodu = (kosul: [string, '<' | '≤', number], onek: string) =>
   k([['ata', 'sulanan', 0], ['kadar', kosul, ['ileri', 'sula', ['ata', 'sulanan', ['sulanan', '+', 1]]]]], onek);
 

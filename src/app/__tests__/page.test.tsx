@@ -133,7 +133,11 @@ describe('yalnız güncel ekranlarla sayfa yönlendirmesi', () => {
     expect(mocks.classroom).toHaveBeenCalledTimes(1);
     expect(mocks.ada).not.toHaveBeenCalled();
     expect(mocks.workspace).not.toHaveBeenCalled();
-    expect(mocks.classroom.mock.calls[0][0].onAnaSayfa).toBe(mocks.curriculum.mock.results.at(-1)!.value.goHome);
+    // "Adalara dön" önce atölye oturumunu kapatır, sonra ana sayfaya döner (sarmalayıcı: siniftanCik)
+    const goHome = mocks.curriculum.mock.results.at(-1)!.value.goHome;
+    expect(goHome).not.toHaveBeenCalled();
+    (mocks.classroom.mock.calls[0][0].onAnaSayfa as () => void)();
+    expect(goHome).toHaveBeenCalledTimes(1);
   });
 
   it('Ada navigasyon eylemlerini korur; eski sayfalara geçen hata callbacki sunmaz', () => {

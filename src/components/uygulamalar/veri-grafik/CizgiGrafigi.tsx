@@ -13,6 +13,7 @@
  *   `ikinciKesikli` bunu renk anahtarı olmadan da yapar (ör. teorik olasılık çizgisi).
  * - 40'tan çok satırda noktalar, değer etiketleri ve tutamaçlar gizlenir; satırlar arasında ok tuşlarıyla gezilir.
  */
+import { EksenOklari } from './EksenOklari';
 import React, { useMemo, useRef, useState } from 'react';
 import { adimOndalik, dogrusalOlcek, gosterimOndaligi, seriRengi, surukleDegeri, tamSayiliMi, yaziBoyu, type Eksen } from './grafik';
 import { satirEtiketi, sayiOku, sayisalSutunlar, type VeriTablosu } from './veri';
@@ -237,7 +238,7 @@ export function CizgiGrafigi({
   const eksenIcin = (taban: number) =>
     ortakEksen ?? (tumDegerler.length === 0
       ? payliEksen(0, 10, 5, true)
-      : payliEksen(Math.min(...tumDegerler), Math.max(...tumDegerler), Math.max(3, Math.floor((taban - UST) / 44)), tamSayili));
+      : payliEksen(Math.min(0, ...tumDegerler), Math.max(0, ...tumDegerler), Math.max(3, Math.floor((taban - UST) / 44)), tamSayili));
   const eksenOndaligi = (e: Eksen) => gosterimOndaligi(e.isaretler, 0, 4);
   const onEksen = eksenIcin(H - 64);
   const SOL = Math.max(48, Math.ceil(Math.max(...onEksen.isaretler.map((v) => metinGenisligi(sayiMetni(v, eksenOndaligi(onEksen)), fs))) + 16));
@@ -438,7 +439,7 @@ export function CizgiGrafigi({
       {/* Tek seride dikey eksenin adı (lejant yerine) */}
       {yEksenAdi && (
         <text x={Math.max(8, SOL - 10)} y={UST - 14} fontSize={fs} fontWeight={700} fill={RENK.metin} data-eksen="y">
-          {metniSigdir(`↑ ${yEksenAdi}`, fs, W - SAG - 16, true)}
+          {metniSigdir(yEksenAdi, fs, W - SAG - 16, true)}
         </text>
       )}
 
@@ -453,6 +454,7 @@ export function CizgiGrafigi({
       ))}
       <line x1={SOL} x2={SOL} y1={UST} y2={taban} stroke={RENK.metin} strokeWidth={1.5} />
       <line x1={SOL} x2={W - SAG} y1={taban} y2={taban} stroke={RENK.metin} strokeWidth={1.5} />
+      <EksenOklari x={SOL} ustY={UST} y={taban} sagX={W - SAG} />
 
       {/* X etiketleri (satır sırası): tek satır, iki satır ya da eğik */}
       {tablo.satirlar.map((r, i) => {
@@ -488,7 +490,7 @@ export function CizgiGrafigi({
       })}
       {/* Yatay eksenin adı: ilk sütunun adı (Ay, Hafta) */}
       <text x={W - SAG} y={taban + etiketBlogu + fs + 6} fontSize={fs} fontWeight={700} textAnchor="end" fill={RENK.metin} data-eksen="x">
-        {metniSigdir(`${xAdi} →`, fs, alanG, true)}
+        {metniSigdir(xAdi, fs, alanG, true)}
       </text>
 
       {seciliSatir !== null && seciliSatir < tablo.satirlar.length && (

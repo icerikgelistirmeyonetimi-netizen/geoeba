@@ -30,12 +30,12 @@ const KOK = path.resolve(__dirname, '..');
 const oku = (ad: string) => readFileSync(path.join(KOK, ad), 'utf8');
 
 describe('[166] ortaokulda kısayolla ve komutla araç seçimi kademe süzgecinden geçer', () => {
-  it('yalnız ortaokul süzülür; ilkokul, lise ve "Tüm araçlar" değişmez', () => {
-    expect(ARAC_SECIMI_SUZULEN_KADEMELER).toEqual(['ortaokul']);
+  it('ilkokul ve ortaokul araç seçimi süzülür; lise ve "Tüm araçlar" değişmez', () => {
+    expect(ARAC_SECIMI_SUZULEN_KADEMELER).toEqual(['ilkokul', 'ortaokul']);
     for (const arac of ['ellipse', 'pen', 'divide_ratio', 'rotate', 'symmetry', 'checkbox', 'button', 'input_box', 'image']) {
       expect(aracSecilebilirMi('ortaokul', arac), arac).toBe(false);
     }
-    for (const duzey of ['tum', 'ilkokul', 'lise'] as const) {
+    for (const duzey of ['tum', 'lise'] as const) {
       for (const arac of Object.keys(TOOL_SHORTCUTS)) expect(aracSecilebilirMi(duzey, arac), `${duzey} ${arac}`).toBe(true);
     }
   });
@@ -107,7 +107,7 @@ describe('[145] [171] [163] tek yerleşim listesi', () => {
 
   it('menü, 2B ve 3B paneli aynı listeyi kullanır; eski adlar kalmadı', () => {
     const menu = oku('WorkspaceMenuBar.tsx');
-    expect(menu).toContain('{GORUNUM_DUZENLERI.map(({ mode, ad, Simge, renk }) => (');
+    expect(menu).toContain('{kademeyeUygunGorunumler(ilkokul).map(({ mode, ad, Simge, renk }) => (');
     expect(menu).not.toMatch(/Hesap \/ 3 Sütun|Cebir Paneli \+ 2D|2D \+ 3D Çift Görünüm/);
     for (const ad of ['Toolbar.tsx', 'Toolbar3D.tsx']) {
       const kaynak = oku(ad);

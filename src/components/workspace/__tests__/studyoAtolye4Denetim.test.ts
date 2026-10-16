@@ -52,8 +52,8 @@ describe('[166] ortaokulda komut kutusu kapalı aracı seçen öneriyi gösterme
     expect(kapaliAraciOnerir('Merkezi (0;0) olan elips çiz', ortaokul)).toBe(false);
   });
 
-  it('ilkokul, lise ve "Tüm araçlar"da hiçbir öneri süzülmez', () => {
-    for (const duzey of ['tum', 'ilkokul', 'lise'] as const) {
+  it('lise ve "Tüm araçlar"da hiçbir öneri süzülmez', () => {
+    for (const duzey of ['tum', 'lise'] as const) {
       const kaliplar = kapaliAracKaliplari((arac) => aracSecilebilirMi(duzey, arac));
       expect(kaliplar, duzey).toEqual([]);
       expect(kapaliAraciOnerir('Elips aracını seç', kaliplar)).toBe(false);

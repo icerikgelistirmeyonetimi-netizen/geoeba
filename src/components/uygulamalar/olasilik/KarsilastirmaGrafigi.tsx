@@ -27,9 +27,9 @@ export function KarsilastirmaGrafigi({ oznel, deneysel, teorik, deneme }: Karsil
   const sag = 12;
   const icY = H - ust - alt;
   const sutunlar = [
-    { ad: 'Öznel Tahmin', deger: oznel, renk: KARSILASTIRMA_RENKLERI.oznel },
-    { ad: 'Deneysel Sonuç', deger: deneysel, renk: KARSILASTIRMA_RENKLERI.deneysel, yok: deneme === 0 },
-    { ad: 'Teorik Beklenti', deger: teorik, renk: KARSILASTIRMA_RENKLERI.teorik },
+    { ad: 'Öznel Olasılık', deger: oznel, renk: KARSILASTIRMA_RENKLERI.oznel },
+    { ad: 'Deneysel Olasılık', deger: deneysel, renk: KARSILASTIRMA_RENKLERI.deneysel, yok: deneme === 0 },
+    { ad: 'Teorik Olasılık', deger: teorik, renk: KARSILASTIRMA_RENKLERI.teorik },
   ];
   const aralik = (W - sol - sag) / sutunlar.length;
   const sutunGen = Math.min(88, aralik * 0.62);

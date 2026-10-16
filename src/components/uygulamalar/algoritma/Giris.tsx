@@ -16,6 +16,8 @@ import { sinifAtolyeleri } from './atolyeler';
 import { sahneAdi } from './sahneAdi';
 import { atolyeKaydi, ilkEksikGorev, uniteIlerlemesi, uniteKaydi, type LabKaydi } from './kayit';
 import type { Unite } from './gorev';
+import { useOturum } from '@/state/OturumContext';
+import { oturumaUygunSinif } from './oturum';
 
 /** GitHub Pages proje sitesinde public/ dosyaları '/repo-adi' altındadır; basePath onlara kendiliğinden eklenmez */
 const VARLIK_ONEKI = process.env.NEXT_PUBLIC_ASSET_PREFIX ?? '';
@@ -93,14 +95,15 @@ function sinifIlerlemesi(kayit: LabKaydi, uniteler: Unite[], sinif: number) {
 }
 
 export function SiniflarSayfasi({ kayit, koyu, onSinif, devam, onDevam }: { kayit: LabKaydi; koyu: boolean; onSinif: (s: number) => void; devam: { baslik: string; alt: string } | null; onDevam: () => void }) {
-  const gruplar = sinifGruplari();
+  const { kademe: oturumKademesi } = useOturum();
+  const gruplar = sinifGruplari().filter((g) => oturumaUygunSinif(g.sinif, oturumKademesi));
   return (
     <div className="h-full overflow-auto bg-background" data-giris>
       <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-5 py-5">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="font-baslik text-[30px] font-semibold leading-tight text-foreground">Algoritma Laboratuvarı</h1>
-            <p className="mt-1 text-[15px] font-semibold text-muted-foreground">Sınıfını seç: robotla, dronla ve çizgi robotuyla adım adım algoritma.</p>
+            <h1 className="font-baslik text-[30px] font-semibold leading-tight text-foreground">{oturumKademesi === 'ilkokul' ? 'Adım Adım Matematik' : 'Algoritma Laboratuvarı'}</h1>
+            <p className="mt-1 text-[15px] font-semibold text-muted-foreground">Robotla, dronla ve çizgi robotuyla matematiği adım adım keşfet.</p>
           </div>
           {devam && (
             <button type="button" onClick={onDevam} className="flex min-h-[56px] items-center gap-3 rounded-full bg-primary py-2 pl-5 pr-3 text-left text-primary-foreground shadow-sm hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" data-devam>
@@ -133,7 +136,7 @@ export function SiniflarSayfasi({ kayit, koyu, onSinif, devam, onDevam }: { kayi
                       {k.ad}
                     </span>
                   </div>
-                  <p className="text-[14px] font-semibold leading-snug text-foreground">{k.aciklama}</p>
+                  <p className="text-[14px] font-semibold leading-snug text-foreground">{g.sinif === 5 ? 'İşlemleri adım adım izle, tabloya dönüştür ve açıkla.' : k.aciklama}</p>
                   <p className="line-clamp-2 text-[13px] font-medium leading-snug text-muted-foreground">{g.uniteler.map((u) => u.ad).join(' · ')}</p>
                   <div className="mt-auto flex items-center gap-3 pt-1.5">
                     <div className="min-w-0 flex-1">
@@ -157,10 +160,11 @@ export function SiniflarSayfasi({ kayit, koyu, onSinif, devam, onDevam }: { kayi
 }
 
 export function SinifSayfasi({ sinif, kayit, koyu, onUnite, onAtolye, onGeri }: { sinif: number; kayit: LabKaydi; koyu: boolean; onUnite: (id: string) => void; onAtolye: (id: string) => void; onGeri: () => void }) {
+  const { kademe: oturumKademesi } = useOturum();
   const grup = sinifGruplari().find((g) => g.sinif === sinif);
   const k = kademe(sinif);
   const atolyeler = sinifAtolyeleri(sinif);
-  if (!grup) return null;
+  if (!grup || !oturumaUygunSinif(sinif, oturumKademesi)) return null;
   return (
     <div className="h-full overflow-auto bg-background" data-sinif-sayfasi={sinif}>
       <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-5 py-5">
@@ -175,7 +179,7 @@ export function SinifSayfasi({ sinif, kayit, koyu, onUnite, onAtolye, onGeri }: 
             <h1 className="font-baslik text-[26px] font-semibold leading-tight text-foreground">
               {sinif}. sınıf · {k.ad}
             </h1>
-            <p className="text-[14px] font-semibold text-muted-foreground">{k.aciklama}</p>
+            <p className="text-[14px] font-semibold text-muted-foreground">{sinif === 5 ? 'İşlemleri adım adım izle, tabloya dönüştür ve açıkla.' : k.aciklama}</p>
           </div>
         </header>
 

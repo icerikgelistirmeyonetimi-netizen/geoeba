@@ -93,7 +93,7 @@ describe('kademe → araç eşlemesi', () => {
 
   it('ilkokul: raporun gereksinim listesi (kare, dikdörtgen, çevre, simetri, birim kare) 1-4. sınıf kazanımlarından tamamlanır', () => {
     const ilkokul = gorunenKimlikler('ilkokul');
-    for (const arac of ['square', 'rectangle', 'measure_perimeter', 'symmetry', 'area_model', 'unit_measure', 'angle']) {
+    for (const arac of ['square', 'rectangle', 'measure_perimeter', 'symmetry', 'area_model', 'unit_measure']) {
       expect(ilkokul, arac).toContain(arac);
     }
   });
@@ -177,7 +177,7 @@ describe('gruplariSuz: araç paneli süzgeci', () => {
     const gruplar = gruplariSuz(TREE_TOOL_GROUPS, 'ilkokul');
     expect(gruplar.map((g) => g.id)).toEqual(['temel_cizim', 'duzenleme', 'olcme', 'cokgen', 'donusum', 'kesir_medya']);
     const sayac = Object.fromEntries(gruplar.map((g) => [g.id, g.tools.length]));
-    expect(sayac).toEqual({ temel_cizim: 3, duzenleme: 2, olcme: 8, cokgen: 4, donusum: 3, kesir_medya: 3 });
+    expect(sayac).toEqual({ temel_cizim: 3, duzenleme: 2, olcme: 7, cokgen: 4, donusum: 3, kesir_medya: 3 });
   });
 
   it('araçların panel sırası korunur', () => {

@@ -575,7 +575,7 @@ describe('Sahneler', () => {
 
   it('bütün bileşenlerde sabit yazı boyu ≥ 12 px', () => {
     const hepsi = [
-      html(<HazirSoruKarti id="meyve" ad="En sevilen meyve" soru="Sınıfımızda en çok sevilen meyve hangisi?" rozet="5. sınıf · MAT.5.5.1" simge="elma" onSec={bos} />),
+      html(<HazirSoruKarti id="meyve" ad="En sevilen meyve" soru="Sınıfımızdaki öğrencilerin en sevdikleri meyvelerin dağılımı nasıldır?" rozet="5. sınıf · MAT.5.5.1" simge="elma" onSec={bos} />),
       html(<SecenekKutucuklari kutucuklar={[{ etiket: 'Elma', sayi: 3, renk: '#2f8394' }]} onSec={bos} onSecenekEkle={bos} />),
       html(<CanliSayac sonuclar={[{ etiket: 'Yazı', sayi: 1, renk: '#2f8394', teorik: 0.5 }]} />),
       html(<DeneyOzeti satirlar={[{ etiket: '1. deney (20)', n: 20, sayi: 9 }]} sayilanAd="Tura" renk="#c8684a" teorik={0.5} />),
@@ -727,7 +727,7 @@ describe('Panel yardımcıları', () => {
     expect(Y.kayitliTaslak(a, true)).toBeNull();
     expect(Y.taslakDevamMi({ ...a, adim: 'plan' }, a, true)).toBe(true);
     expect(Y.taslakDevamMi({ ...a, yontem: 'olcum' }, a, true)).toBe(false);
-    expect(Y.gorevMetni(a)).toBe('Sınıfımızda en çok sevilen meyve hangisi?');
+    expect(Y.gorevMetni(a)).toBe('Sınıfımızdaki öğrencilerin en sevdikleri meyvelerin dağılımı nasıldır?');
     // Soru yazılmamışsa plandan kurulan soru ("Anket: Meyve" gibi bir etiket değil)
     expect(Y.gorevMetni({ ...a, soru: ' ' })).toBe('En çok hangi meyve seçiliyor?');
   });
@@ -1078,7 +1078,7 @@ describe('Veri topla paneli (SSR)', () => {
     expect(m).toContain('data-gorunum="topla"');
     expect(m).toContain('data-yontem="anket"');
     expect(m).toContain('data-gorev-metni=""');
-    expect(m).toContain('Sınıfımızda en çok sevilen meyve hangisi?');
+    expect(m).toContain('Sınıfımızdaki öğrencilerin en sevdikleri meyvelerin dağılımı nasıldır?');
     expect(m).toContain('aria-label="Başlangıca dön: Ne araştıralım?"');
     expect(m).toContain('aria-label="Öğretmen kartı"');
     expect(m).toContain('aria-expanded="false"');

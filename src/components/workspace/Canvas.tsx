@@ -45,6 +45,9 @@ import {
 } from '@/math/coordinates';
 import { MeasurementInstruments } from './MeasurementInstruments';
 import { CanvasLayers } from './CanvasLayers';
+import { InsaGosterimleri } from './InsaGosterimleri';
+import { INSA_ADIMLARI } from '@/math/insaGosterimi';
+import { parcalardanKapaliBolge } from '@/math/kapaliBolge';
 import { ToolCursor } from './ToolCursor';
 import { TextNoteDialog } from './TextNoteDialog';
 import { ContextMenu, ContextMenuItem } from './ContextMenu';
@@ -1688,8 +1691,8 @@ export function Canvas({
   // Ortaokulda varsayılan 2 ondalık (alan uzmanı, 4. tur): tamSayi kademenin kendi ayarından (olcuYuvarlama.ts)
   // İlkokulda yuvarlanan değer tuvalde de "yaklaşık" der (uzman 4. tur [176]; matematikYazimi.yaklasikSozcukle)
   const yazim = useMemo(
-    () => ({ ...yazimAyari(styleSettings), tamSayi: tamSayiOlcu, ...(ilkokul ? { yaklasikSozcukle: true } : {}) }),
-    [styleSettings, tamSayiOlcu, ilkokul],
+    () => ({ ...yazimAyari(styleSettings), tamSayi: tamSayiOlcu, alanBirimiAcik: kademe === 'ortaokul', ...(ilkokul ? { yaklasikSozcukle: true } : {}) }),
+    [styleSettings, tamSayiOlcu, ilkokul, kademe],
   );
   /** Nokta arayıcı: yazım kuralları nesnenin .label'ını değil, GÖRÜNEN nokta adlarını kullanır. */
   const noktaBul = useMemo(() => noktaBulucu(pointsById), [pointsById]);
@@ -2523,6 +2526,25 @@ export function Canvas({
       pendingImageWorldPosRef.current = snapIfEnabled(world);
       imageInputRef.current?.click();
       return;
+    }
+
+    if (isBackground && (activeTool === 'measure_area' || activeTool === 'measure_perimeter')) {
+      const pointIds = parcalardanKapaliBolge(objects, world);
+      if (pointIds) {
+        const mevcut = objects.find((o) => o.type === 'polygon' && o.pointIds.length === pointIds.length && pointIds.every((id) => o.pointIds.includes(id)));
+        if (mevcut) {
+          if (activeTool === 'measure_area') measureArea(mevcut.id); else measurePerimeter(mevcut.id);
+        } else {
+          const alanOlc = activeTool === 'measure_area';
+          addObject({ id: createId('poly'), type: 'polygon', label: 'Kapalı bölge', showLabel: false,
+            pointIds, color: '#0d9488', fillColor: '#14b8a6', fillOpacity: 0.08, visible: true,
+            showArea: alanOlc, showPerimeter: !alanOlc, olcumSekli: true, createdAt: Date.now() } as PolygonObject,
+            alanOlc ? 'Doğru parçaları arasındaki alan ölçüldü' : 'Doğru parçalarının çevresi ölçüldü');
+        }
+        cancelPendingAction();
+        setHintMessage('Kapalı bölgenin ölçüsü tuvale yazıldı; köşeler taşındığında ölçü güncellenir.');
+        return;
+      }
     }
 
     if (['square', 'rectangle', 'circle', 'ellipse', 'segment'].includes(activeTool)) {
@@ -5201,6 +5223,12 @@ export function Canvas({
                   fill="#737373"
                 />
                 {/* X Eksen Etiketi: yalnız eksen ekrandayken, düğmelere ve alt bilgiye girmeyen yerde */}
+                {eksenYerlesimi?.rozetler.eksiX.gorunur && (
+                <g data-canvas-label="" transform={`translate(${eksenYerlesimi.rozetler.eksiX.x}, ${eksenYerlesimi.rozetler.eksiX.y})`}>
+                  <rect width="36" height="20" rx="6" fill="#737373" className="shadow-sm" />
+                  <text x="18" y="14" textAnchor="middle" fill="#ffffff" fontSize={fs(12, 'axis')} className="font-black font-sans">-x</text>
+                </g>
+                )}
                 {eksenYerlesimi?.rozetler.artiX.gorunur && (
                 <g data-canvas-label="" transform={`translate(${eksenYerlesimi.rozetler.artiX.x}, ${eksenYerlesimi.rozetler.artiX.y})`}>
                   <rect width="36" height="20" rx="6" fill="#737373" className="shadow-sm" />
@@ -8096,7 +8124,6 @@ export function Canvas({
                 stroke={isCm ? '#0284c7' : '#059669'}
                 strokeWidth={2.5}
                 strokeDasharray="3,3"
-                className="animate-spin"
               />
               {/* Canlı Ölçüm Çizgisi */}
               <line
@@ -8157,6 +8184,7 @@ export function Canvas({
             {etiketKilavuzlari.yKilavuzu && <line y1={etiketKilavuzlari.yKilavuzu.y} y2={etiketKilavuzlari.yKilavuzu.y} x1={etiketKilavuzlari.yKilavuzu.x1 - 8} x2={etiketKilavuzlari.yKilavuzu.x2 + 8} />}
           </g>
         )}
+        <InsaGosterimleri objects={objects} viewport={viewport} />
         </CanvasLayers>
 
         {/* 14. İNTERAKTİF ÖLÇME ARAÇLARI KATMANI (Açıölçer / İletki, Cetvel, Gönye, Alan Modeli) */}
@@ -8197,7 +8225,7 @@ export function Canvas({
 
             addObjects(
               [...pts, poly],
-              `Alan modeli oluşturuldu (${formatTurkishNumber(cols)} x ${formatTurkishNumber(rows)} = ${formatTurkishNumber(cols * rows)} br²)`
+              `Alan modeli oluşturuldu (${formatTurkishNumber(cols)} x ${formatTurkishNumber(rows)} = ${formatTurkishNumber(cols * rows)} birimkare)`
             );
           }}
         />
@@ -8276,7 +8304,7 @@ export function Canvas({
         if (!yonerge) return null;
         return (
           <KayanCubuk konum="alt" data-yonerge-cubugu>
-            <CubukMetni simge={<Info className="w-4 h-4" />} baslik={yonerge.baslik} aciklama={yonerge.aciklama} />
+            <CubukMetni simge={<Info className="w-4 h-4" />} baslik={yonerge.baslik} aciklama={activeTool in INSA_ADIMLARI ? `${yonerge.aciklama} ${INSA_ADIMLARI[activeTool as keyof typeof INSA_ADIMLARI].map((s,i) => `${i+1}) ${s}`).join(' ')}` : yonerge.aciklama} />
             {pendingPointIds.length > 0 && (
               <>
                 <CubukAyirici />

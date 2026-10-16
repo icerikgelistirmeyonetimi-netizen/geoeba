@@ -1,15 +1,8 @@
 /**
- * Algoritma Laboratuvarı — 5. sınıf (Mühendis adası): dört ünite, blok görünümü ve değişkenler.
- *
- * Bu sınıfta değişken gelir: adı olan, "←" ile değer alan, değeri tuvalin üstünde görünen bir kutu.
- * Hedef yalnız robotun işini değil, program bitince değişkenin değerini de denetler (sayaç = 4 gibi).
- * Araç kutusundaki atama şablonları ifadenin biçimini verir; öğrenci işlenenleri (sayı, değişken,
- * ölçüm) ve işlemi değiştirebilir, işlem ekleyip çıkaramaz. Kazanımlar TYMM matematik listesindendir.
- *
- *   1. Sayaç             olgun domatesleri say; sıfırlanan sayaç, yanlış yerde artırma     MAT.5.2.4
- *   2. Toplayıcı         toplam kütle; atama ile birikim karışması; gram → kilogram       MAT.5.2.4 · 5.1.2
- *   3. Tarlayı ek        sıra sıra ekim (yılan deseni); alan = en × boy; çevre             MAT.5.4.2 · 5.4.3 · 5.4.4
- *   4. Örüntünün kuralı  artan / azalan kuleler; değişkenle tekrar sayısı                  MAT.5.2.3 · 5.2.4
+ * 5. sınıf: mevcut sera, tarla ve kule bağlamlarında aritmetik adımları inceleme.
+ * Sayısal göstergeler yürütme motorunda saklanır; öğrenciye değişken türleri öğretilmez.
+ * Doğal dil, sözde kod, akış şeması ve gerçek işlem tablosu aynı programı gösterir.
+ * Tamamlanma için çalışan kodun yanında işlem sonucu ve matematiksel açıklama aranır.
  */
 import { ifadeKur, programKur, type BlokSablonu, type KisaBlok } from './program';
 import { bahce, domatesSirasi, insaatAlani, type DunyaTanimi, type Hedef } from './dunya';
@@ -65,7 +58,6 @@ function tarla(iz: Iz): { en: number; boy: number; alan: number } {
 
 const SAYAC_KUTUSU: BlokSablonu[] = [
   ILERI,
-  TOPLA,
   CIKISA_KADAR,
   EGER_KIRMIZI,
   { tur: 'ata', degisken: 'sayaç', ifade: ifadeKur(0) },
@@ -88,7 +80,7 @@ const SAYAC_GOREVLERI: Gorev[] = [
     id: 's5-sayac-1',
     tur: 'yaz',
     baslik: 'Olgunları say',
-    yonerge: 'Robot domates sırasında yürüyor. Olgun (kırmızı) domatesleri sayaç değişkeniyle saysın. Program bitince sayaç, olgun domates sayısı olmalı.',
+    yonerge: 'Ekrandaki sayaç olgun (kırmızı) domateslerin sayısını göstermeli. Eksik kodu bul ve tamamla: Her olgun domateste sayaca 1 ekle. Bu görevde domatesleri sayıyoruz; toplama adımı gerekmiyor.',
     dunya: SAYAC_SIRA,
     hedef: sayacHedefi(4),
     bitkiAdi: 'bitki',
@@ -138,7 +130,7 @@ const SAYAC_GOREVLERI: Gorev[] = [
     aracKutusu: SAYAC_KUTUSU,
     baslangic: k(['ileri', ['kadar', 'cikistayim', [['ata', 'sayaç', 0], ['eger', 'domatesKirmizi', [['ata', 'sayaç', ['sayaç', '+', 1]]]], 'ileri']]], 's5s3h-'),
     cozum: sayacCozumu('s5s3c-'),
-    ipuclari: ['Değişken sayaç ne zaman yeniden 0 oluyor?', '"sayaç ← 0" bloğu tekrarın içinde: Her turda sayaç sıfırlanıyor. Onu tekrarın dışına, en başa taşı.'],
+    ipuclari: ['Sayaç ne zaman yeniden 0 oluyor?', '"sayaç ← 0" bloğu tekrarın içinde: Her turda sayaç sıfırlanıyor. Onu tekrarın dışına, en başa taşı.'],
     basari: (iz) => `Buldun! "sayaç ← 0" yalnız bir kez, en başta çalışmalı. Şimdi sayaç = ${deger(iz, 'sayaç')}.`,
     kazanimlar: ['MAT.5.2.4'],
     degiskenler: ['sayaç'],
@@ -167,7 +159,7 @@ const SAYAC_GOREVLERI: Gorev[] = [
     dunya: SAYAC_SEPET,
     hedef: { kirmizilariTopla: true, cikistaBitir: true, degiskenler: { sayaç: 6 } },
     bitkiAdi: 'bitki',
-    aracKutusu: SAYAC_KUTUSU,
+    aracKutusu: [...SAYAC_KUTUSU, TOPLA],
     baslangic: SEPETLI_SAYAC,
     cozum: SEPETLI_SAYAC,
     ipuclari: ['Önce sayacın başlangıç değerine bak: 0 değil.', 'Kırmızı domatesleri say ve başlangıç değerine ekle.'],
@@ -176,7 +168,7 @@ const SAYAC_GOREVLERI: Gorev[] = [
       metin: 'Program bitince sayaç kaç olur?',
       birim: 'domates',
       cevap: (iz) => deger(iz, 'sayaç'),
-      sonrasi: 'Değişken sayaç 0’dan değil 2’den başladı: 2 + 4 = 6.',
+      sonrasi: 'Sayaç 0’dan değil 2’den başladı: 2 + 4 = 6.',
       yonlendirme: 'Kod "sayaç ← 2" ile başlıyor; sonra her olgun domateste 1 artıyor.',
     },
     kazanimlar: ['MAT.5.2.4'],
@@ -215,7 +207,7 @@ const TOPLAM_GOREVLERI: Gorev[] = [
     id: 's5-toplam-1',
     tur: 'yaz',
     baslik: 'Sepetin kütlesi',
-    yonerge: 'Robot olgun domatesleri topluyor. Sepetteki domateslerin kütlesini toplam değişkeniyle bulsun. Robotun yanındaki domatesin kaç gram olduğunu kütle söyler.',
+    yonerge: 'Robot olgun domatesleri topluyor. Sepetteki domateslerin kütlelerini adım adım toplayarak bulsun. Robotun yanındaki domatesin kaç gram olduğunu kütle söyler.',
     dunya: TOPLAM_SIRA,
     hedef: toplamHedefi(500),
     bitkiAdi: 'bitki',
@@ -504,7 +496,7 @@ const KURAL_GOREVLERI: Gorev[] = [
     tur: 'yaz',
     baslik: 'Büyüyen kuleler',
     // Uzman (4. tur, satır 116): noktadan sonra küçük harfle ("kat değişkeni") başlıyordu
-    yonerge: 'Dron 1, 2, 3 ve 4 küplük kuleler kuracak. Bir kulede kaç küp olacağını kat değişkeni tutsun; her kuleden sonra kat 1 artsın.',
+    yonerge: 'Dron 1, 2, 3 ve 4 küplük kuleler kuracak. İlk kule 1 küp olsun; her yeni kulede önceki küp sayısına 1 ekle.',
     dunya: KULE_1234,
     hedef: KULE_HEDEFI,
     bitkiAdi: 'bitki',
@@ -596,7 +588,7 @@ const KURAL_GOREVLERI: Gorev[] = [
       birim: 'küp',
       cevap: (iz) => izOzeti(iz).kup,
       sonrasi: '3 + 4 + 5 + 6 = 18 küp.',
-      yonlendirme: 'Değişken kat 3’ten başlıyor ve her kuleden sonra 1 artıyor. Dört kule var: 3 + 4 + 5 + 6.',
+      yonlendirme: 'Kat sayısı 3’ten başlıyor ve her kuleden sonra 1 artıyor. Dört kule var: 3 + 4 + 5 + 6.',
     },
     soru: {
       metin: 'Program bitince kat kaç olur?',
@@ -623,7 +615,7 @@ export const SINIF5: readonly Unite[] = [
     no: 1,
     ad: 'Sayaç',
     tema: 'Sera',
-    yeniKavram: 'Değişken ve sayaç: Başta 0, her bulduğunda 1 artır',
+    yeniKavram: 'Saymayı toplamayla açıkla: Başta 0, her bulduğunda 1 ekle',
     oncedenBilinen: '"Çıkışa varana kadar tekrarla" ve "eğer … ise" (3. sınıf)',
     kalip: 'sayac',
     kazanimlar: ['MAT.5.2.4'],
@@ -656,7 +648,7 @@ export const SINIF5: readonly Unite[] = [
       ],
     },
     ogretmenNotu: {
-      hedef: 'Öğrenci bir sayma algoritmasında değişkeni başlangıç değeriyle kurar, yalnız koşul doğruyken artırır ve program bitince değişkenin değerini yorumlar.',
+      hedef: 'Öğrenci sayma adımlarını doğal dil, sözde kod ve akış şemasıyla izler; ardışık toplama ve çıkarma işlemlerini tabloyla ve sözlü olarak açıklar.',
       dersler: [
         { baslik: '1 ders', metin: 'Fişsiz "Sayaç tahtası" (15 dk), ardından 1–2. görevler bireysel; 3–4. görevler (hatayı bul) ikişerli, sayaç göstergesi adım adım izlenerek. 5. görevde önce herkes tahminini yazar.' },
       ],
@@ -680,7 +672,7 @@ export const SINIF5: readonly Unite[] = [
     no: 2,
     ad: 'Toplayıcı',
     tema: 'Sera',
-    yeniKavram: 'Biriktiren değişken: toplam ← toplam + kütle',
+    yeniKavram: 'Ardışık toplama: önceki toplama yeni kütleyi ekle',
     oncedenBilinen: 'Sayaç (1. ünite)',
     kalip: 'toplayici',
     kazanimlar: ['MAT.5.2.4', 'MAT.5.1.2'],
@@ -714,7 +706,7 @@ export const SINIF5: readonly Unite[] = [
       ],
     },
     ogretmenNotu: {
-      hedef: 'Öğrenci bir toplama algoritmasında değişkeni 0’la başlatır, her yeni değeri eskisinin üstüne ekler; sonucu gram ve kilogramla yorumlar.',
+      hedef: 'Öğrenci toplama adımlarını inceler, ara toplamları tabloya yazar; gramdan kilograma geçişte bölme işlemini açıklar.',
       dersler: [
         { baslik: '1 ders', metin: 'Fişsiz "Terazili sepet" (15 dk), ardından 1–2. görevler; 2. görevin sorusu gramı kilograma çevirir. 3–4. görevler ikişerli. 5. görev (tahmin) sınıfça, hesap tahtada yapılarak.' },
       ],
@@ -791,7 +783,7 @@ export const SINIF5: readonly Unite[] = [
     no: 4,
     ad: 'Örüntünün kuralı',
     tema: 'İnşaat alanı',
-    yeniKavram: 'Değişkenle büyüyen tekrar: "kat kez tekrarla"',
+    yeniKavram: 'Örüntüyü işlemlerle izle: önceki küp sayısına ekle veya çıkar',
     oncedenBilinen: 'Sayaç (1. ünite), küp kule (2. sınıf)',
     kalip: 'kural',
     kazanimlar: ['MAT.5.2.3', 'MAT.5.2.4'],
@@ -799,7 +791,7 @@ export const SINIF5: readonly Unite[] = [
     gorevler: KURAL_GOREVLERI,
     fissiz: {
       ad: 'Kule örüntüsü',
-      amac: 'Bir örüntünün kuralını bir değişkenle yazmak ve değişkenin her turda nasıl değiştiğini görmek.',
+      amac: 'Bir örüntünün kuralını toplama ve çıkarma işlemleriyle açıklamak; her adımın sonucunu tabloya yazmak.',
       sure: '15 dakika',
       roller: ['Bir öğrenci dron olur; masalara küp (ya da kitap) dizer.', 'Bir öğrenci kat olur; tahtadaki "kat" kutusunu günceller.', 'Sınıf programcıdır.'],
       adimlar: [
@@ -819,14 +811,14 @@ export const SINIF5: readonly Unite[] = [
       ],
     },
     ogretmenNotu: {
-      hedef: 'Öğrenci artan ve azalan örüntülerin kuralını bulur; kuralı başlangıç değeri ve her turdaki değişimle bir değişkene bağlar, tekrar sayısını değişkenle verir.',
+      hedef: 'Öğrenci artan ve azalan örüntüleri işlem adımlarıyla inceler; başlangıç sayısı ile her adımda eklenen ya da çıkarılan miktarı açıklar.',
       dersler: [
         { baslik: '1 ders', metin: 'Fişsiz "Kule örüntüsü" (15 dk), ardından 1–3. görevler (artan, ikişer artan, azalan); 4. görev ikişerli; 5. görevde önce tahmin.' },
       ],
       yanilgilar: [
-        { ad: 'Önce artırmak', metin: 'Değişkeni kullanmadan önce artırmak; örüntü bir adım kayar. 4. görevde ilk kule 2 küp olur ve dron durur.' },
+        { ad: 'Önce artırmak', metin: 'Küp sayısını kullanmadan önce artırmak; örüntü bir adım kayar. 4. görevde ilk kule 2 küp olur ve dron durur.' },
         { ad: 'Yalnız farka bakmak', metin: 'Kuralı yalnız "2 fazla" diye düşünüp başlangıç değerini ve kule sayısını unutmak. 2. görevde eski kod 1’den başlar ve 4 kule kurmaya çalışır; dron alanın kenarına çıkar.' },
-        { ad: 'Son artışı unutmak', metin: 'Program bitince değişkenin son kulenin değerinde kaldığını sanmak; son turda da artar (5. görev sorusu: 7).' },
+        { ad: 'Son artışı unutmak', metin: 'Program bitince küp sayısının son kulenin değerinde kaldığını sanmak; son turda da artar (5. görev sorusu: 7).' },
       ],
       sorular: [
         'Kuleler 2, 4, 6 ise 10. kule kaç küp olur? Nasıl buldunuz?',

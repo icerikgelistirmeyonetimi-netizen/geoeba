@@ -62,7 +62,7 @@ export function FunctionDialog({ isOpen, onClose, duzenlenecekId = null }: Funct
   const { addFunction, updateFunction, objects } = useWorkspace();
   const [expression, setExpression] = useState(DEFAULT_EXPRESSION);
   const [label, setLabel] = useState('f(x)');
-  // Hızlı şablonlar kademeye göre: ortaokulda doğrusal, parabol, mutlak değer, karekök (fonksiyonSablonlari.ts)
+  // Hızlı şablonlar kademeye göre: ortaokulda yalnız doğrusal fonksiyon (fonksiyonSablonlari.ts).
   const [kademe] = useKademeDuzeyi();
   const sablonlar = fonksiyonSablonlari(kademe);
   const duzenlenen = duzenlenecekId

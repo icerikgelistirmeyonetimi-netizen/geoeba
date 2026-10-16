@@ -59,7 +59,7 @@ const GRUP_ORNEKLERI: Record<string, readonly (readonly [string, string])[]> = {
 
 /** Yazarak Oluştur (komut kutusu) örnekleri: hepsi komut motorunda çalışır (kullanimKilavuzu.test.ts denetler). */
 export const YAZARAK_OLUSTUR_ORNEKLERI: readonly string[] = [
-  'A (2; 3) noktası oluştur',
+  'A(2, 3) noktası oluştur',
   'AB doğru parçası çiz',
   'Yarıçapı 2 olan çember çiz',
   'Kenar uzunluğu 4 olan kare çiz',

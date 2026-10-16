@@ -48,6 +48,8 @@ export interface VeriTablosuBilgisi {
 }
 
 export interface VeriTablosuProps {
+  /** Ortaokul kategorik araştırmasında bağımsız sayısal sütun eklenmez. */
+  sutunEklenebilir?: boolean;
   tablo: VeriTablosuModeli;
   seciliSatir: number | null;
   onSatirSec: (satir: number | null) => void;
@@ -620,6 +622,7 @@ function KilitSimgesi() {
 }
 
 export function VeriTablosu({
+  sutunEklenebilir = true,
   tablo,
   seciliSatir,
   onSatirSec,
@@ -1475,7 +1478,7 @@ export function VeriTablosu({
           </p>
         ) : (
           <>
-            <button
+            {sutunEklenebilir && <button
               type="button"
               className={DUGME}
               data-sutun-ekle
@@ -1484,7 +1487,7 @@ export function VeriTablosu({
               onClick={sutunEkleVeAdlandir}
             >
               <span aria-hidden="true">+</span> Sütun
-            </button>
+            </button>}
             {onTemizle &&
               (temizleOnayi ? (
                 <span

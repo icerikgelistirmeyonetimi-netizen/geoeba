@@ -240,6 +240,11 @@ export function bitisUzakligi(
   const dikeyTan = Math.tan(THREE.MathUtils.degToRad(dikeyFov(lens, sensor, enBoy)) / 2);
   const yatayTan = dikeyTan * enBoy;
   const ekranEnBoy = ekran.width / ekran.height;
+  // Tahta görüntü alanını ÖRTER (cover): kamera tahta tüm görünümü kaplayana dek yaklaşır, devirde 3B
+  // katman solarken görünür hiçbir şey değişmez. (16 Ekim 2026'da bir ara "sığdırma" denendi: kamera
+  // tahtayı görünümün ortasında bırakıyor, sonra ekran sıçrayarak büyüyordu — kullanıcı eski odaklanmayı
+  // istedi. 16:9 dışındaki kapta eskiden görülen küçülme kadrajdan değil, tam ekranın ölçü biriminden
+  // geliyordu; acilisBirimi.ts bunu örtme kutusuna kilitler.)
   return enBoy >= ekranEnBoy ? ekran.width / 2 / yatayTan : ekran.height / 2 / dikeyTan;
 }
 

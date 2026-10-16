@@ -30,7 +30,7 @@ const vp = (zoom: number) => ({ zoom } as ViewportTransform);
 
 describe('etiketStandardi: yazı boyu (Stil > Yazı Boyutları)', () => {
   it('2B fs(…) ile aynı formül: temel × Tüm yazılar × grup çarpanı, 2 basamak', () => {
-    const s = { ...DEFAULT_STYLE_SETTINGS };
+    const s = { ...DEFAULT_STYLE_SETTINGS, pointLabelScale: 1, measurementScale: 1, axisScale: 1 };
     expect(etiketYaziBoyu(12, 'label', s)).toBe(12);
     expect(etiketYaziBoyu(12, 'label', { ...s, fontScale: 1.5, pointLabelScale: 2 })).toBe(36);
     expect(etiketYaziBoyu(11, 'measure', { ...s, measurementScale: 0.6 })).toBe(6.6);
@@ -71,7 +71,7 @@ describe('etiketStandardi: yazı boyu (Stil > Yazı Boyutları)', () => {
 
   it('hale kalınlıkları: ölçü px · 0,32 (MatematikEtiketi), eksen sayısı fs(3) 2,5–6 px', () => {
     expect(olcuHaleKalinligi(11)).toBeCloseTo(3.52, 5);
-    expect(eksenSayisiHaleKalinligi(DEFAULT_STYLE_SETTINGS)).toBe(3);
+    expect(eksenSayisiHaleKalinligi(DEFAULT_STYLE_SETTINGS)).toBe(3.6);
     expect(eksenSayisiHaleKalinligi({ ...DEFAULT_STYLE_SETTINGS, fontScale: 0.6 })).toBe(2.5);
     expect(eksenSayisiHaleKalinligi({ ...DEFAULT_STYLE_SETTINGS, fontScale: 2, axisScale: 2 })).toBe(6);
     const me = readFileSync(path.join(KOK, 'MatematikEtiketi.tsx'), 'utf8');
@@ -79,7 +79,7 @@ describe('etiketStandardi: yazı boyu (Stil > Yazı Boyutları)', () => {
   });
 
   it('turYaziBoyu ayara göre büyür; eksen türleri yakınlıkla ölçeklenmez', () => {
-    const s = { ...DEFAULT_STYLE_SETTINGS, fontScale: 1.5 };
+    const s = { ...DEFAULT_STYLE_SETTINGS, fontScale: 1.5, pointLabelScale: 1, measurementScale: 1, axisScale: 1 };
     expect(turYaziBoyu('noktaAdi', s)).toBe(18);
     expect(turYaziBoyu('olcu', s)).toBe(16.5);
     expect(turYaziBoyu('eksenSayisi', s)).toBe(16.5);

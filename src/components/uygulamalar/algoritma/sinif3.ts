@@ -205,7 +205,7 @@ const AYNA_KUPA = saha(
   { yon: 3, eksen: DIKEY_AYNA, hedefGizli: true }
 );
 /** Dikdörtgen, yatay ayna: üst yarısı çizili, robot aynanın sol ucunda sağa bakar */
-const AYNA_YATAY = saha('s3-simetri-5', 'Yatay ayna', ['.=.=.=.=.', '!       !', 'B . . . .', '|       |', '.-.-.-.-.'], { yon: 0, eksen: { yon: 'yatay', k: 1 }, hedefGizli: true });
+const AYNA_YATAY = saha('s3-simetri-5', 'Katlayınca üst üste', ['.=.=.=.=.', '!       !', 'B . . . .', '|       |', '.-.-.-.-.'], { yon: 0, eksen: { yon: 'yatay', k: 1 }, hedefGizli: true });
 
 const SIMETRI_GOREVLERI: Gorev[] = [
   {
@@ -220,7 +220,7 @@ const SIMETRI_GOREVLERI: Gorev[] = [
     baslangic: k(['solaDon', 'ileri', 'sagaDon', 'ileri', 'ileri'], 's3s1h-'),
     cozum: k(['sagaDon', 'ileri', 'solaDon', 'ileri', 'ileri'], 's3s1-'),
     ipuclari: ['Kodu çalıştır ve izle: Robot ilk önce hangi yana döndü?', 'Aynada adımlar aynı kalır, dönüşler yer değiştirir: "sola dön" yerine "sağa dön", "sağa dön" yerine "sola dön".'],
-    basari: (iz) => `Oldu! Aynı ${izOzeti(iz).ileri} adım, ters dönüşler: Sağ yarı, sol yarının aynadaki görüntüsü.`,
+    basari: (iz) => `Oldu! Aynı ${izOzeti(iz).ileri} adım, ters dönüşler: Şekli ortadaki çizgiden katladığında iki yarı üst üste gelir.`,
     kazanimlar: ['MAT.3.3.8', 'MAT.3.3.7'],
   },
   {
@@ -278,8 +278,8 @@ const SIMETRI_GOREVLERI: Gorev[] = [
   {
     id: 's3-simetri-5',
     tur: 'yaz',
-    baslik: 'Yatay ayna',
-    yonerge: 'Bu kez ayna yatay: Dikdörtgenin üst yarısı çizili. Robot aynanın sol ucunda, sağa bakıyor. Alt yarıyı çiz.',
+    baslik: 'Katlayınca üst üste',
+    yonerge: 'Dikdörtgenin üst yarısı çizili. Robot ortadaki çizginin sol ucunda, sağa bakıyor. Çizgiden katladığında iki yarı üst üste gelecek şekilde alt yarıyı tamamla.',
     dunya: AYNA_YATAY,
     hedef: CIZ,
     bitkiAdi: 'bitki',

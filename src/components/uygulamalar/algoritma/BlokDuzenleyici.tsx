@@ -130,6 +130,8 @@ export interface BlokDuzenleyiciProps {
   degiskenler?: string[];
   /** İfadelerde seçilebilecek ölçümler */
   olcumler?: OlcumTuru[];
+  /** 5. sınıfta işlem göstergeleri; değişken terminolojisi ve kalan işlemi öğretilmez. */
+  temel?: boolean;
 }
 
 type Kaynak = { tur: 'yeni'; sablon: BlokSablonu; iskeletSira?: number } | { tur: 'tasi'; blokId: string };
@@ -146,6 +148,7 @@ interface Surukleme {
 interface Sozluk {
   degiskenler: string[];
   olcumler: OlcumTuru[];
+  temel?: boolean;
 }
 
 const SURUKLEME_ESIGI = 6;
@@ -315,7 +318,7 @@ function IslenenCipi({ i, onSec, sozluk, duzenlenebilir }: { i: Ifade; onSec: (y
           </div>
           {sozluk.degiskenler.length > 0 && (
             <>
-              <p className="px-2.5 pb-1 pt-1.5 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">Değişken</p>
+              <p className="px-2.5 pb-1 pt-1.5 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">{sozluk.temel ? 'İşlem göstergesi' : 'Değişken'}</p>
               {sozluk.degiskenler.map((d) => (
                 <button
                   key={d}
@@ -335,7 +338,7 @@ function IslenenCipi({ i, onSec, sozluk, duzenlenebilir }: { i: Ifade; onSec: (y
           )}
           <p className="px-2.5 pb-1 pt-1.5 text-[11px] font-extrabold uppercase tracking-[0.08em] text-muted-foreground">İşlem ekle</p>
           <div className="flex flex-wrap gap-1 px-1.5 pb-1">
-            {(['+', '-', '×', '÷', 'mod'] as IslemOp[]).map((op) => (
+            {(['+', '-', '×', '÷', ...(sozluk.temel ? [] : ['mod'])] as IslemOp[]).map((op) => (
               <button
                 key={op}
                 type="button"
@@ -495,6 +498,7 @@ export function BlokDuzenleyici({
   kart = false,
   degiskenler = [],
   olcumler = [],
+  temel = false,
 }: BlokDuzenleyiciProps) {
   const duzenlenebilir = !!onDegis;
   const kokRef = useRef<HTMLDivElement>(null);
@@ -534,8 +538,8 @@ export function BlokDuzenleyici({
     const d = new Set(degiskenler);
     for (const s of aracKutusu) if (s.tur === 'ata') d.add(s.degisken);
     for (const b of bloklar(program)) if (b.tur === 'ata') d.add(b.degisken);
-    return { degiskenler: [...d], olcumler };
-  }, [degiskenler, olcumler, aracKutusu, program]);
+    return { degiskenler: [...d], olcumler, temel };
+  }, [degiskenler, olcumler, aracKutusu, program, temel]);
 
   const degis = useCallback((p: Program) => onDegisRef.current?.(p), []);
 
@@ -788,7 +792,7 @@ export function BlokDuzenleyici({
                 <label className="relative inline-flex items-center rounded-full py-0.5 pl-1.5 pr-5 text-[#8a2f55] hover:bg-black/5">
                   {b.degisken}
                   <SIMGE.ok className="pointer-events-none absolute right-0.5 h-3 w-3 rotate-90" />
-                  <select className="absolute inset-0 cursor-pointer opacity-0" value={b.degisken} onChange={(e) => gunc(b.id, { degisken: e.target.value })} aria-label="Değişkeni seç">
+                  <select className="absolute inset-0 cursor-pointer opacity-0" value={b.degisken} onChange={(e) => gunc(b.id, { degisken: e.target.value })} aria-label={temel ? 'İşlem göstergesini seç' : 'Değişkeni seç'}>
                     {sozluk.degiskenler.map((d) => (
                       <option key={d} value={d}>
                         {d}
@@ -964,7 +968,7 @@ export function BlokDuzenleyici({
   return (
     <div ref={kokRef} className="flex h-full min-h-0 flex-col" data-blok-duzenleyici>
       {duzenlenebilir && kutu.length > 0 && (
-        <div ref={kutuRef} className={`border-b border-border px-3 ${kompakt ? 'py-2' : 'py-3'} ${surukleme?.sil ? 'bg-ada-mercan/10' : ''}`} data-arac-kutusu>
+        <div ref={kutuRef} className={`max-h-[32%] shrink-0 overflow-y-auto border-b border-border px-3 ${kompakt ? 'py-2' : 'py-3'} ${surukleme?.sil ? 'bg-ada-mercan/10' : ''}`} data-arac-kutusu>
           <div className="mb-2 flex items-center justify-between gap-2">
             <h3 className="text-[13px] font-extrabold uppercase tracking-[0.06em] text-muted-foreground">{iskeletModu ? 'Gereken bloklar' : kutuBasligi}</h3>
             <span className="text-[12px] font-semibold text-muted-foreground">{surukleme?.sil ? 'Silmek için buraya bırak' : 'Sürükle ya da dokun'}</span>

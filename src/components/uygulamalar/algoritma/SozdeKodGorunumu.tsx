@@ -9,8 +9,8 @@ import React from 'react';
 import { sozdeSatirlar, type Program } from './program';
 import type { AktifDurum } from './BlokDuzenleyici';
 
-export function SozdeKodGorunumu({ program, aktif = null }: { program: Program; aktif?: AktifDurum | null }) {
-  const satirlar = sozdeSatirlar(program);
+export function SozdeKodGorunumu({ program, aktif = null, temel = false }: { program: Program; aktif?: AktifDurum | null; temel?: boolean }) {
+  const satirlar = sozdeSatirlar(program).map((s) => temel && s.metin.includes('←') ? { ...s, metin: `HESAPLA ${s.metin}` } : s);
   const son = aktif?.yigin[aktif.yigin.length - 1] ?? null;
   return (
     <ol className="m-0 list-none p-0 font-mono text-[14.5px] leading-[1.9]" aria-label="Sözde kod" data-sozde-kod>

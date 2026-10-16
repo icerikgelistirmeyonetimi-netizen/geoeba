@@ -11,6 +11,7 @@ import { baglamKaybiniIzle } from '@/components/sinif/baglamKaybi';
 import { KART_TURU_SEMBOLU, galtonKosuluSaglar, galtonKutuSayimlari, kartRengi, sonucEtiketi, type Sablon, type Sonuc } from './olasilik';
 import { MadeniParaSvg } from './MadeniPara2B';
 import { SvgSayiKupu, svgZarlari } from './SayiKupu2B';
+import { torbaGorunenAdetleri } from './torbaGorunumu';
 
 export interface DeneyAlaniTutamaci {
   oynat: (sonuc: Sonuc, hizli?: boolean) => void;
@@ -33,6 +34,8 @@ export interface DeneyAlaniProps {
   toplu?: boolean;
   /** Sonuç sayaçları (Galton kutularındaki birikim için) */
   sayimlar?: Record<string, number>;
+  /** İadesiz çekilişte modelin kalan adetleri; tek çekilişin sonunda güncellenir. */
+  torbaKalan?: readonly number[];
 }
 
 /** Şablon nesnelerini yeniden kurmayı gerektiren alanlar (istenen durum değişimi kurmaz). */
@@ -54,7 +57,7 @@ function kurulumAnahtari(s: Sablon): string {
 }
 
 export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(function DeneyAlani(
-  { sablon, koyu, azHareket, gizli = false, onBitti, sonSonuc, animasyonda, toplu = false, sayimlar = BOS_SAYIM },
+  { sablon, koyu, azHareket, gizli = false, onBitti, sonSonuc, animasyonda, toplu = false, sayimlar = BOS_SAYIM, torbaKalan },
   ref
 ) {
   const kapRef = useRef<HTMLDivElement>(null);
@@ -77,6 +80,10 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
   const birikimAnahtari = birikim ? birikim.join(',') : '';
   const birikimRef = useRef(birikim);
   birikimRef.current = birikim;
+  const torbaAdetleri = sablon.tur === 'torba' ? torbaGorunenAdetleri(sablon, torbaKalan) : null;
+  const torbaAnahtari = torbaAdetleri?.join(',') ?? '';
+  const torbaAdetleriRef = useRef(torbaAdetleri);
+  torbaAdetleriRef.current = torbaAdetleri;
   const [teorikEgri, setTeorikEgri] = useState(true);
   const teorikEgriRef = useRef(teorikEgri);
   teorikEgriRef.current = teorikEgri;
@@ -162,6 +169,11 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
     if (b) sahneRef.current?.birikimGoster(b);
   }, [birikimAnahtari, webgl, koyu, azHareket, nesil]);
 
+  // Kalan sayısı yalnız modelden gelir: boş torba sonraki çekilişte modelce yenilenir.
+  useEffect(() => {
+    if (torbaAdetleriRef.current) sahneRef.current?.torbaKalanGoster(torbaAdetleriRef.current);
+  }, [torbaAnahtari, anahtar, webgl, koyu, azHareket, nesil]);
+
   useEffect(() => {
     sahneRef.current?.teorikEgri(teorikEgri);
   }, [teorikEgri]);
@@ -239,7 +251,7 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
     <div
       className="relative w-full overflow-hidden rounded-[var(--radius)] border border-border bg-card shadow-[0_18px_40px_-18px_rgba(6,40,45,.55)]"
       // Galton dik bir tahta: kart biraz daha uzun, tahta ve çiviler büyük görünür
-      style={{ height: sablon.tur === 'galton' ? 'min(540px, 54vh)' : 'min(420px, 42vh)', minHeight: 240 }}
+      style={{ height: sablon.tur === 'galton' ? 'min(420px, 44vh)' : 'min(300px, 34vh)', minHeight: 220 }}
       onClick={() => sahneRef.current?.hizlandir()}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -260,7 +272,7 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
       data-deney-alani
     >
       {webgl === false ? (
-        <SvgDeney sablon={sablon} sonuc={gosterilen} azHareket={azHareket} birikim={birikim} />
+        <SvgDeney sablon={sablon} sonuc={gosterilen} azHareket={azHareket} birikim={birikim} torbaKalan={torbaKalan} />
       ) : (
         <div ref={kapRef} className="absolute inset-0" />
       )}
@@ -335,10 +347,11 @@ export function gosterilenSonuc(webgl: boolean | null, sablon: Sablon, sonSonuc:
 // ---------------------------------------------------------------------------
 // WebGL yoksa: sade SVG sürümü
 // ---------------------------------------------------------------------------
-function SvgDeney({ sablon, sonuc, azHareket, birikim }: { sablon: Sablon; sonuc: Sonuc | null; azHareket: boolean; birikim: number[] | null }) {
+export function SvgDeney({ sablon, sonuc, azHareket, birikim, torbaKalan }: { sablon: Sablon; sonuc: Sonuc | null; azHareket: boolean; birikim: number[] | null; torbaKalan?: readonly number[] }) {
   const sure = azHareket ? '0.25s' : '0.7s';
   const anim = { transition: `transform ${sure} cubic-bezier(0.2,0.8,0.2,1)` };
   const anahtar = sonuc ? JSON.stringify(sonuc) : 'yok';
+  const torbaAdetleri = sablon.tur === 'torba' ? torbaGorunenAdetleri(sablon, torbaKalan) : [];
   return (
     <svg viewBox="0 0 400 240" className="h-full w-full" aria-hidden="true">
       {/* Zemin görünüm kutusunun dışına da taşar: Galton'un uzun kartında üstte/altta boş bant kalmasın */}
@@ -376,8 +389,13 @@ function SvgDeney({ sablon, sonuc, azHareket, birikim }: { sablon: Sablon; sonuc
         )}
         {sablon.tur === 'torba' && (
           <g transform="translate(200 120)">
-            <path d="M-50 60 Q-70 -10 -20 -40 L20 -40 Q70 -10 50 60 Z" fill="#b89467" />
-            <ellipse cx="0" cy="-40" rx="22" ry="8" fill="#8a5a2a" />
+            <path d="M-50 60 Q-70 -10 -20 -40 L20 -40 Q70 -10 50 60 Z" fill="#d5eef2" fillOpacity="0.22" stroke="#729da6" strokeWidth="2" />
+            {sablon.bilyeler.flatMap((b, i) => Array.from({ length: torbaAdetleri[i] }, () => b)).map((b, i, tum) => {
+              const sutun = Math.ceil(Math.sqrt(tum.length));
+              const aralik = Math.min(20, 78 / Math.max(1, sutun));
+              return <circle key={i} data-torba-bilyesi={b.ad} cx={(i % sutun - (sutun - 1) / 2) * aralik} cy={48 - Math.floor(i / sutun) * aralik} r={aralik * .4} fill={b.renk} stroke="#ffffff" strokeWidth="1" />;
+            })}
+            <ellipse cx="0" cy="-40" rx="22" ry="8" fill="none" stroke="#729da6" strokeWidth="3" />
             {sonuc?.tur === 'torba' && (
               <circle cx="90" cy="60" r="18" fill={sablon.bilyeler.find((b) => b.ad === sonuc.renk)?.renk ?? '#c9463d'} stroke="#fbf7ee" strokeWidth="3" />
             )}

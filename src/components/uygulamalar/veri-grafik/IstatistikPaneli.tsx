@@ -716,7 +716,7 @@ function HesaplamaAdimlariBolumu({ tablo, sutun, noktalar, adimlar: a, ondalik, 
                 ? `Ortalamanın altındaki verilerin uzaklıkları toplamı ${sayiMetni(a.solUzaklikToplami, 4)}, üstündekilerinki ${sayiMetni(a.sagUzaklikToplami, 4)}: İki yan dengede (farkların toplamı 0).`
                 : `Ortalamanın altındaki verilerin uzaklıkları toplamı ${sayiMetni(a.solUzaklikToplami, 4)}, üstündekilerinki ${sayiMetni(a.sagUzaklikToplami, 4)}: Ortalama yuvarlandığı için tam eşit çıkmadı.`
               : a.farkToplami === 0
-                ? 'Farkların toplamı 0: Ortalamanın üstündeki ve altındaki farklar birbirini götürür.'
+                ? 'Farkların toplamı 0: Ortalamadan pozitif sapmaların toplamı, negatif sapmaların mutlak değerleri toplamına eşittir.'
                 : `Farkların toplamı ${sayiMetni(a.farkToplami, 4)}: Ortalama yuvarlandığı için tam 0 çıkmadı.`}
           </p>
           <Esitlik ad="Uzaklıkların toplamı" ifade={toplamIfadesi(uzaklikTerimleri, a.siklikBicimi ? 'değer' : 'veri')} sonuc={sayiMetni(a.uzaklikToplami, 4)} />

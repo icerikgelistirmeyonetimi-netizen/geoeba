@@ -12,7 +12,10 @@
  * lise ve "Tüm araçlar"da laboratuvar değişmeden açılır.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useIlkokulKipi } from '@/hooks/useKademeDuzeyi';
+import { useIlkokulKipi, useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
+import { useOturum } from '@/state/OturumContext';
+import { oturumKaydiniOku, oturumKaydiniYaz } from '@/state/oturumDeposu';
+import type { LevelId } from '@/types/curriculum';
 import { DeneyAlani, type DeneyAlaniTutamaci } from './DeneyAlani';
 import { OlayKartlariGorunumu } from './OlayKartlariGorunumu';
 import { useAzHareket, useKoyuTema } from './kancalar';
@@ -50,10 +53,10 @@ const TOPLU_SAYILAR = [10, 100, 1000, 10000] as const;
 /** Bir karede işlenen deneme sayısı (10 000 → ~20 kare; arayüz donmaz) */
 const PARCA_BOYU = 500;
 
-function ilkDurum(): LabDurumu {
+function ilkDurum(kademe: LevelId | null): LabDurumu {
   if (typeof window === 'undefined') return ornekDurum();
   try {
-    return durumuCoz(window.localStorage.getItem(DEPO_ANAHTARI)) ?? ornekDurum();
+    return durumuCoz(oturumKaydiniOku(DEPO_ANAHTARI, kademe)) ?? ornekDurum();
   } catch {
     return ornekDurum();
   }
@@ -68,11 +71,14 @@ interface Is {
 /** Kademe menüsü İlkokul ise «olay kartları», değilse laboratuvar (ortaokul, lise, Tüm araçlar). */
 export default function OlasilikUygulamasi(props: { pencereGenisligi?: number; pencereYuksekligi?: number }) {
   const ilkokul = useIlkokulKipi();
-  return ilkokul ? <OlayKartlariGorunumu {...props} /> : <OlasilikLaboratuvari {...props} />;
+  const { kademe } = useOturum();
+  return ilkokul ? <OlayKartlariGorunumu key={kademe ?? 'oturumsuz'} {...props} /> : <OlasilikLaboratuvari key={kademe ?? 'oturumsuz'} {...props} />;
 }
 
 function OlasilikLaboratuvari(_props: { pencereGenisligi?: number; pencereYuksekligi?: number }) {
-  const [durum, setDurum] = useState<LabDurumu>(ilkDurum);
+  const [kademe] = useKademeDuzeyi();
+  const { kademe: oturumKademesi } = useOturum();
+  const [durum, setDurum] = useState<LabDurumu>(() => ilkDurum(oturumKademesi));
   const [animasyonda, setAnimasyonda] = useState(false);
   /** Toplu deneme sürüyor (sayım akar; tıklama ile atlanacak bir animasyon yok) */
   const [toplu, setToplu] = useState(false);
@@ -97,11 +103,11 @@ function OlasilikLaboratuvari(_props: { pencereGenisligi?: number; pencereYuksek
   // Kalıcılık
   useEffect(() => {
     try {
-      window.localStorage.setItem(DEPO_ANAHTARI, durumuSerilestir(durum));
+      oturumKaydiniYaz(DEPO_ANAHTARI, oturumKademesi, durumuSerilestir(durum));
     } catch {
       /* depolama kapalı olabilir */
     }
-  }, [durum]);
+  }, [durum, oturumKademesi]);
 
   // Pencere/kap görünürlüğü (küçültülünce kap 0 boyutlu ya da display:none olur)
   useEffect(() => {
@@ -214,7 +220,7 @@ function OlasilikLaboratuvari(_props: { pencereGenisligi?: number; pencereYuksek
   const grafikler = (
     <>
       <KarsilastirmaGrafigi oznel={durum.oznel / 100} deneysel={deneyselOran(durum)} teorik={teorik.deger} deneme={durum.deneme} />
-      <YakinsamaGrafigi seri={seri} teorik={teorik.deger} oznel={durum.oznel / 100} logOlcek={durum.logOlcek} onLogOlcek={() => setDurum((d) => logOlcekDegistir(d))} />
+      {kademe !== 'ortaokul' && <YakinsamaGrafigi seri={seri} teorik={teorik.deger} oznel={durum.oznel / 100} logOlcek={durum.logOlcek} onLogOlcek={() => setDurum((d) => logOlcekDegistir(d))} />}
     </>
   );
   const dugmeSinifi =
@@ -273,7 +279,7 @@ function OlasilikLaboratuvari(_props: { pencereGenisligi?: number; pencereYuksek
         <div
           className="grid gap-3"
           style={{
-            gridTemplateColumns: genis ? 'minmax(280px, 320px) minmax(0, 1fr) minmax(300px, 360px)' : orta ? 'minmax(280px, 320px) minmax(0, 1fr)' : 'minmax(0, 1fr)',
+            gridTemplateColumns: genis ? 'minmax(320px, 1.1fr) minmax(260px, .85fr) minmax(340px, 1.15fr)' : orta ? 'minmax(300px, 1fr) minmax(0, 1fr)' : 'minmax(0, 1fr)',
           }}
         >
           <div className="min-w-0" style={{ order: orta ? 0 : 1 }}>
@@ -290,7 +296,7 @@ function OlasilikLaboratuvari(_props: { pencereGenisligi?: number; pencereYuksek
             />
           </div>
           <div className="flex min-w-0 flex-col gap-3" style={{ order: orta ? 1 : 0 }}>
-            <DeneyAlani ref={deneyAlani} sablon={sablon} koyu={koyu} azHareket={azHareket} gizli={gizli} onBitti={animasyonBitti} sonSonuc={sonSonuc} animasyonda={animasyonda} toplu={toplu} sayimlar={durum.sayimlar} />
+            <DeneyAlani ref={deneyAlani} sablon={sablon} koyu={koyu} azHareket={azHareket} gizli={gizli} onBitti={animasyonBitti} sonSonuc={sonSonuc} animasyonda={animasyonda} toplu={toplu} sayimlar={durum.sayimlar} torbaKalan={durum.deneyDurumu.torbaKalan} />
             {orta && <SonucTablosu sablon={sablon} son={durum.son} sayimlar={durum.sayimlar} deneme={durum.deneme} />}
             {orta && !genis && grafikler}
           </div>

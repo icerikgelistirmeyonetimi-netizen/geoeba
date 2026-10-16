@@ -16,9 +16,10 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import type { PencereDurumu } from './akis';
-import { saatMetni, sonrakiDakikayaKalan, tarihMetni } from './saat';
+import { useSaat } from './useSaat';
 import type { UygulamaManifesti } from './uygulamalar';
 import { useTheme } from '@/state/ThemeContext';
+import { useOturum, OTURUM_ADLARI } from '@/state/OturumContext';
 import { DUVAR_HALKALARI, DUVAR_LOGOSU, sonrakiKaynakSirasi } from './duvarVarliklari';
 import s from './sinif.module.css';
 
@@ -84,23 +85,6 @@ export function simgeStili(renk: string): React.CSSProperties {
   return { '--simge-renk': renk } as React.CSSProperties;
 }
 
-/** Dakika sınırına hizalı canlı saat. */
-function useSaat(): { saat: string; tarih: string } {
-  const [simdi, setSimdi] = useState<Date | null>(null);
-  useEffect(() => {
-    let zamanlayici = 0;
-    const guncelle = () => {
-      const t = new Date();
-      setSimdi(t);
-      zamanlayici = window.setTimeout(guncelle, sonrakiDakikayaKalan(t) + 20);
-    };
-    guncelle();
-    return () => window.clearTimeout(zamanlayici);
-  }, []);
-  // Sunucu/ilk çizimde boş: saat yalnız tarayıcıda yazılır (hidrasyon uyuşmazlığı olmasın)
-  return simdi ? { saat: saatMetni(simdi), tarih: tarihMetni(simdi) } : { saat: '', tarih: '' };
-}
-
 export interface OdakIstegi {
   /** 'gorev': görev çubuğundaki uygulama düğmesi (küçültme sonrası); 'kisayol': masaüstü kısayolu (kapatma sonrası) */
   hedef: 'gorev' | 'kisayol';
@@ -143,6 +127,7 @@ export function Masaustu({
   odakIstegi,
   children,
 }: MasaustuProps) {
+  const oturum = useOturum();
   const { saat, tarih } = useSaat();
   const { theme, setTheme } = useTheme();
   const [duvarYok, setDuvarYok] = useState(false);
@@ -282,7 +267,7 @@ export function Masaustu({
                 <span className={s['kullanici-rozet']} aria-hidden="true">
                   Ö
                 </span>
-                Öğretmen
+                {oturum.kademe ? `${OTURUM_ADLARI[oturum.kademe]} oturumu` : 'Öğretmen'}
               </span>
             </div>
             <p className={s['baslat-menu-baslik']}>Uygulamalar</p>
@@ -315,6 +300,9 @@ export function Masaustu({
                 {ikon.geri}
                 <span>Adalara dön</span>
               </button>
+              {oturum.kademe && <button type="button" className={s['adalara-don']} onClick={oturum.oturumuKapat}>
+                <span>Oturumu değiştir</span>
+              </button>}
             </div>
           </div>
         </>

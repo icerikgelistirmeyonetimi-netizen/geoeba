@@ -702,7 +702,7 @@ export function Toolbar3D({
                         ) : (
                           <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground transition-transform" aria-hidden="true" />
                         )}
-                        <span className="text-[13px] font-bold text-foreground/90 group-hover:text-foreground">{group.name}</span>
+                        <span className="text-[13px] font-bold text-foreground/90 group-hover:text-foreground">{ilkokul && group.id === 'kati_cisimler' ? 'Geometrik Cisimler' : group.name}</span>
                       </div>
                       <span className="text-[11px] font-semibold text-muted-foreground/70 px-1.5 py-0.5 rounded-md bg-muted/80">{group.tools.length}</span>
                     </button>
@@ -1074,7 +1074,7 @@ export function Toolbar3D({
                       </div>
                       <div className="p-2 rounded-xl bg-card border border-border/80 text-center">
                         <span className="text-[11px] font-semibold text-muted-foreground block">Yüzey Alanı</span>
-                        <span className="font-mono font-bold text-ada-deniz-koyu dark:text-ada-lavanta text-[13px]">A = {formatTurkishNumber(olcumler.alan, 2)} br²</span>
+                        <span className="font-mono font-bold text-ada-deniz-koyu dark:text-ada-lavanta text-[13px]">A = {formatTurkishNumber(olcumler.alan, 2)} {kademeDuzeyi === 'ortaokul' ? 'birimkare' : 'br²'}</span>
                       </div>
                     </div>
                     {olcumler.sayilar.eulerValid && (

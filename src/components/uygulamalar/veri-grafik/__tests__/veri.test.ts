@@ -476,8 +476,8 @@ describe('örnek veriler: 20 örnek, sınıf düzeyi, hikâye, kaynak ve rehber'
     expect(ornekKonulari().map((k) => k.ornekler.length)).toEqual([1, 1, 1, 1, 4, 4, 4, 2, 2]);
     // Ortaokul ve lise kademesinde galeri bugünkü gibi: 5 konu, 16 örnek; ilkokulda yalnız 1–4. sınıf
     for (const kademe of ['ortaokul', 'lise'] as const) {
-      expect(ornekKonulari(kademe).map((k) => k.id), kademe).toEqual(['sinif5', 'sinif6', 'sinif7', 'sinif8', 'zenginlestirme']);
-      expect(ornekKonulari(kademe).map((k) => k.ornekler.length), kademe).toEqual([4, 4, 4, 2, 2]);
+      expect(ornekKonulari(kademe).map((k) => k.id), kademe).toEqual(kademe === 'ortaokul' ? ['sinif5', 'sinif6', 'sinif7', 'sinif8'] : ['sinif5', 'sinif6', 'sinif7', 'sinif8', 'zenginlestirme']);
+      expect(ornekKonulari(kademe).map((k) => k.ornekler.length), kademe).toEqual(kademe === 'ortaokul' ? [4, 4, 4, 2] : [4, 4, 4, 2, 2]);
     }
     expect(ornekKonulari('ilkokul').map((k) => k.id)).toEqual(['sinif1', 'sinif2', 'sinif3', 'sinif4']);
     expect(ornekKonulari('ilkokul').flatMap((k) => k.ornekler.map((o) => o.sinif))).toEqual([1, 2, 3, 4]);

@@ -21,7 +21,7 @@ export const GOREV_TURU_ADI: Record<GorevTuru, string> = {
 };
 
 /** Kod panelinin görünümleri (7–8. sınıfta seçilebilir) */
-export type KodGorunumu = 'bloklar' | 'sozde' | 'akis';
+export type KodGorunumu = 'bloklar' | 'dogal' | 'sozde' | 'akis';
 
 export interface Kazanim {
   kod: string;

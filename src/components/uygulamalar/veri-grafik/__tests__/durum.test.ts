@@ -198,8 +198,8 @@ describe('sekmeDuzelt: seçili sekme hep çizilebilir (M29)', () => {
     const d = baslangicDurumu();
     expect(sekmeDuzelt({ ...d, tablo: boy, sekme: 'sacilim' }).sekme).toBe('nokta');
     expect(sekmeDuzelt({ ...d, tablo: renk, sekme: 'cizgi' }).sekme).toBe('nokta');
-    expect(sekmeDuzelt({ ...d, tablo: boy, sekme: 'cizgi' }).sekme).toBe('cizgi');
-    const iki: Durum = { ...d, tablo: mac, sekme: 'sacilim' };
+    expect(sekmeDuzelt({ ...d, tablo: boy, sekme: 'cizgi' }).sekme).toBe('sutun');
+    const iki: Durum = { ...d, ornekId: null, tablo: mac, sekme: 'sacilim' };
     expect(sekmeDuzelt(iki).sekme).toBe('nokta');
     const cizgi: Durum = { ...iki, sekme: 'cizgi' };
     expect(sekmeDuzelt(cizgi)).toBe(cizgi);

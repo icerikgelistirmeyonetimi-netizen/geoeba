@@ -7,7 +7,8 @@
  * akıllı tahtanın karşısına yürür, tahtadaki ekran DOM olarak çizilip her karede homografiyle
  * 3B dörtgene oturtulur ('yaklasma'); kamera varınca ekran izdüşüm dikdörtgeninden tüm görünüm
  * alanına büyür, 3B katman solar ve sahne söker ('devir'); "EBA yükleniyor" açılışı biter
- * ('acilis'); masaüstü belirir ('masaustu') ve Çizim Stüdyosu bir pencerede kendiliğinden
+ * ('acilis'); ekran oturum seçimini gösterir ('oturum'). Kademe seçilince masaüstü belirir
+ * ('masaustu') ve Çizim Stüdyosu bir pencerede kendiliğinden
  * açılır ('uygulama'). Masaüstünde kayıt defterindeki (uygulamalar.tsx) uygulamalar birden çok
  * pencerede yan yana çalışır; pencere durumu/z sırası akis.ts'te, gövdeler tembel yüklenir.
  *
@@ -39,7 +40,11 @@ import {
 } from "./akis";
 import { CIZIM_KIMLIGI, kademeninUygulamalari, uygulamaBul } from "./uygulamalar";
 import { useIlkokulKipi } from "@/hooks/useKademeDuzeyi";
+import { useOturum } from "@/state/OturumContext";
+import type { LevelId } from "@/types/curriculum";
+import { OturumEkrani } from "@/components/oturum/OturumEkrani";
 import { homografi, type Kose } from "./homografi";
+import { acilisBirimi } from "./acilisBirimi";
 import s from "./sinif.module.css";
 
 const VARLIK_ONEKI = process.env.NEXT_PUBLIC_ASSET_PREFIX ?? "";
@@ -161,6 +166,10 @@ export interface SinifEkraniProps {
 
 export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
   const [d, gonder] = useReducer(akisIndirgeyici, BASLANGIC_DURUMU);
+  const { kademe, oturumAc } = useOturum();
+  /** Bu ekranda tıklanan kart (depodan gelen oturum değil): kapanış animasyonu oynarken kartlar ekranda kalır */
+  const [secilenOturum, setSecilenOturum] = useState<LevelId | null>(null);
+  const oturumKapaniyor = d.faz === "oturum" && !!kademe && secilenOturum !== null;
   // Kademeye göre masaüstü listesi (ilkokulda Olasılık «olay kartları» açıklaması ve simgesiyle; uygulamalar.tsx)
   const ilkokul = useIlkokulKipi();
   const gorunenUygulamalar = useMemo(() => kademeninUygulamalari(ilkokul), [ilkokul]);
@@ -209,6 +218,38 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
       bagli.current = false;
     };
   }, []);
+
+  // Oturum değişirken sınıf kabuğu bağlı kalır; yalnız masaüstü yeniden hazırlanır. Kart bu ekranda seçildiyse
+  // kartlar iner, logo açılıştaki yerine (masaüstü duvar logosunun yeri) geri süzülür, OTURUM_KAPANIS sonra
+  // masaüstü belirir. Depodan gelen oturumda (sayfa yenilendi) ya da hareket azaltmada masaüstü hemen gelir.
+  useEffect(() => {
+    if (d.faz === "oturum") {
+      if (!kademe) {
+        setCanli("EBA hazır. İlkokul, ortaokul veya lise oturumunu seç.");
+        return;
+      }
+      if (secilenOturum === null || azHareket.current) {
+        setSecilenOturum(null);
+        gonder({ tur: "OTURUM_ACILDI" });
+        return;
+      }
+      const t = window.setTimeout(() => {
+        setSecilenOturum(null);
+        gonder({ tur: "OTURUM_ACILDI" });
+      }, SURELER.OTURUM_KAPANIS);
+      return () => window.clearTimeout(t);
+    }
+    if (!kademe && masaustunde(d.faz)) gonder({ tur: "OTURUM_KAPANDI" });
+  }, [kademe, d.faz, secilenOturum]);
+
+  // Kart tıklaması: seçim ve oturum aynı çizimde işlenir (kartlar bir kare bile kaybolmaz)
+  const oturumSec = useCallback(
+    (k: LevelId) => {
+      setSecilenOturum(k);
+      oturumAc(k);
+    },
+    [oturumAc],
+  );
 
   // Sınıf ekranı tam ekrandır; uygulama başlığı bu sürede gizlenir (globals.css)
   useTarayiciLayoutEffect(() => {
@@ -395,13 +436,15 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
         w: kok.clientWidth,
         h: kok.clientHeight,
       };
-      // Açılış içeriğinin ölçeği izdüşüm genişliğinden (r.w/100) varıştaki birime — tam ekranın
-      // min(1cqw, 2cqh)'si, masaüstü duvar logosunun birimi — ekranın büyüme animasyonunun GERÇEK
+      // Açılış içeriğinin ölçeği izdüşüm kutusunun biriminden varıştaki birime — tam ekranın birimi,
+      // masaüstü duvar logosunun birimi (acilisBirimi.ts) — ekranın büyüme animasyonunun GERÇEK
       // ilerlemesiyle taşınır, animasyon bitince kaldırılır: logo ne devirde sıçrar ne de açılıştan
-      // masaüstüne geçişte (sinif.module.css --acilis-birim). Döngü fazdan bağımsızdır (devir biter,
-      // animasyon ağır karelerde gecikebilir); kendini animasyon bitince sonlandırır.
-      const baslangicBirimi = r.w / 100;
-      const varisBirimi = Math.min(kok.clientWidth, 2 * kok.clientHeight) / 100;
+      // masaüstüne geçişte (sinif.module.css --acilis-birim). İki birim örtme kadrajında her kapta eşittir
+      // (izdüşüm kutusu kabı örten 16:9 kutudur); 2:1'den basık kapta varış birimi daha küçüktür ve geçiş
+      // yumuşak olur. Döngü fazdan bağımsızdır (devir biter, animasyon ağır karelerde gecikebilir); kendini
+      // animasyon bitince sonlandırır.
+      const baslangicBirimi = acilisBirimi(r.w, r.h);
+      const varisBirimi = acilisBirimi(kok.clientWidth, kok.clientHeight);
       cancelAnimationFrame(birimKaresi.current);
       ekran.style.transform = "";
       ekran.style.visibility = "visible";
@@ -448,15 +491,17 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
     return () => window.clearTimeout(t);
   }, [d.faz]);
 
-  // Açılış: devirden geldiyse ~0,5 s daha sürer; 3B'siz yolda tam süre. Sonunda masaüstü
+  // Açılış: devirden geldiyse ~0,5 s daha sürer; 3B'siz yolda tam süre. Sonunda oturum seçimi
   useEffect(() => {
     if (d.faz !== "acilis") return;
     const tam = !devirdenGeldi.current;
     const sure = azHareket.current
       ? 200
-      : tam
-        ? SURELER.ACILIS_TAM_EKRAN
-        : SURELER.ACILIS_DEVIR_SONRASI;
+      : d.atlandi
+        ? SURELER.ACILIS_ATLANDI
+        : tam
+          ? SURELER.ACILIS_TAM_EKRAN
+          : SURELER.ACILIS_DEVIR_SONRASI;
     setAcilisIlerleme({ hedef: 1, sure });
     const metin = window.setTimeout(
       () => {
@@ -477,29 +522,31 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
 
   // Masaüstü belirdikten ~0,5 s sonra yalnız Çizim Stüdyosu kendiliğinden açılır (bir kez)
   useEffect(() => {
-    if (d.faz !== "masaustu" || d.otomatikAcildi) return;
+    if (!kademe || d.faz !== "masaustu" || d.otomatikAcildi) return;
     setCanli("Masaüstü hazır.");
     const t = window.setTimeout(
       () => gonder({ tur: "PENCERE_AC", id: CIZIM_KIMLIGI }),
       azHareket.current ? 0 : SURELER.OTOMATIK_PENCERE,
     );
     return () => window.clearTimeout(t);
-  }, [d.faz, d.otomatikAcildi]);
+  }, [kademe, d.faz, d.otomatikAcildi]);
 
   // Öndeki pencere değişince ekran okuyucuya duyurulur
   const ondeki = ondekiPencere(d);
   const ondekiId = ondeki?.id ?? null;
   useEffect(() => {
     if (!ondekiId) return;
-    const u = uygulamaBul(ondekiId);
+    const u = gorunenUygulamalar.find((x) => x.id === ondekiId) ?? uygulamaBul(ondekiId);
     if (u) setCanli(`${u.ad} önde.`);
-  }, [ondekiId]);
+  }, [ondekiId, gorunenUygulamalar]);
 
   // ---------------------------------------------------------------------------
   // Eylemler
   // ---------------------------------------------------------------------------
   const atla = useCallback(() => {
-    setCanli("Giriş atlandı. Masaüstü hazır.");
+    setCanli("Sınıf geçişi atlandı. Oturumunu seç.");
+    // Yürüyüş sürüyorsa kamera kalan yolu ≤ 0,4 s'de alır; devir ve kısa açılış animasyonla gelir
+    sahneRef.current?.atla();
     gonder({ tur: "ATLA" });
   }, []);
 
@@ -507,7 +554,7 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
     sahneRef.current?.atla();
   }, []);
 
-  const kisaAd = (id: string) => uygulamaBul(id)?.kisaAd ?? id;
+  const kisaAd = useCallback((id: string) => (gorunenUygulamalar.find((u) => u.id === id) ?? uygulamaBul(id))?.kisaAd ?? id, [gorunenUygulamalar]);
   const uygulamaAc = useCallback((id: string) => {
     gonder({ tur: "PENCERE_AC", id });
     // Pencere zaten açıksa da odak pencereye döner (Başlat menüsünden seçildiğinde menü sökülür)
@@ -521,7 +568,7 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
     gonder({ tur: "PENCERE_KUCULT", id });
     setOdakIstegi((o) => ({ hedef: "gorev", id, sayac: (o?.sayac ?? 0) + 1 }));
     setCanli(`${kisaAd(id)} küçültüldü.`);
-  }, []);
+  }, [kisaAd]);
   const pencereKapat = useCallback((id: string) => {
     gonder({ tur: "PENCERE_KAPAT", id });
     setOdakIstegi((o) => ({
@@ -530,7 +577,7 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
       sayac: (o?.sayac ?? 0) + 1,
     }));
     setCanli(`${kisaAd(id)} kapatıldı.`);
-  }, []);
+  }, [kisaAd]);
   const pencereBuyut = useCallback(
     (id: string) => gonder({ tur: "PENCERE_BUYUT", id }),
     [],
@@ -592,14 +639,20 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
       <div ref={ekranRef} className={ekranSiniflari} data-ekran-katmani>
         {d.ekran !== "masaustu" && (
           <AcilisEkrani
-            logoGorunur={d.ekran === "acilis"}
-            ilerleme={acilisIlerleme.hedef}
-            sure={acilisIlerleme.sure}
+            logoGorunur={d.ekran !== "karanlik"}
+            ilerleme={d.ekran === "oturum" ? 1 : acilisIlerleme.hedef}
+            sure={d.ekran === "oturum" ? 0 : acilisIlerleme.sure}
             durum={acilisDurum}
-          />
+            oturumKapaniyor={oturumKapaniyor}
+          >
+            {d.ekran === "oturum" && (!kademe || oturumKapaniyor) && (
+              <OturumEkrani onOturumAc={oturumSec} onAdalaraDon={adalaraDon} kapaniyor={oturumKapaniyor} secilen={secilenOturum} />
+            )}
+          </AcilisEkrani>
         )}
-        {masaustunde(d.faz) && (
+        {masaustunde(d.faz) && kademe && (
           <Masaustu
+            key={kademe}
             uygulamalar={gorunenUygulamalar}
             pencereler={d.pencereler}
             ondeki={ondekiId}
@@ -637,13 +690,7 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
                     onBuyutDegistir={() => pencereBuyut(p.id)}
                     onKapat={() => pencereKapat(p.id)}
                     onTasi={(konum) => pencereTasi(p.id, konum)}
-                    menuCubugu={
-                      MenuCubugu ? (
-                        <SonrakiKarede>
-                          <MenuCubugu />
-                        </SonrakiKarede>
-                      ) : undefined
-                    }
+                    menuCubugu={MenuCubugu ? <MenuCubugu /> : undefined}
                   >
                     <SonrakiKarede>
                       <Bilesen />
@@ -655,7 +702,7 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
         )}
       </div>
 
-      {atlanabilir(d.faz) && (
+      {atlanabilir(d.faz, d.atlandi) && (
         <button type="button" className={`${s.atla} ${s.kabuk}`} onClick={atla}>
           <span>Atla</span>
           {ikon.atla}

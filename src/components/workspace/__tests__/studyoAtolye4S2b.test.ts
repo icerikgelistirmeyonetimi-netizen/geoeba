@@ -193,8 +193,8 @@ describe('[157] fonksiyonun okunur yazımı: 2x ve x², * ve ^ değil', () => {
 // ------------------------------------------------------------------------------------------------ [158]
 
 describe('[158] fonksiyon şablonları kademeye göre', () => {
-  it('ortaokul: doğrusal, parabol, mutlak değer, karekök; trigonometri ve parametreli yok', () => {
-    expect(fonksiyonSablonlari('ortaokul').map((s) => s.kimlik)).toEqual(['dogrusal', 'parabol', 'mutlak', 'karekok']);
+  it('ortaokul: TEGM raporuna göre yalnız doğrusal fonksiyon', () => {
+    expect(fonksiyonSablonlari('ortaokul').map((s) => s.kimlik)).toEqual(['dogrusal']);
     expect(trigonometriIpucuGosterilir('ortaokul')).toBe(false);
   });
 

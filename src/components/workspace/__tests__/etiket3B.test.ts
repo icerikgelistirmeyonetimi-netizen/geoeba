@@ -40,7 +40,8 @@ import type { KademeDuzeyi } from '../kademeDuzeyleri';
  * 3B etiketleri 2B standardında (kullanıcı, 14.10.2026: "atölye serbest çizimde 3b etiket yazı özellikleri 2b ile aynı
  * değil aynı standartlar orada da olmalı").
  */
-const S: StyleSettings = DEFAULT_STYLE_SETTINGS;
+// Ölçek matematiği birim çarpanlarla sınanır; ürünün okunaklı açılış ölçekleri farklı olabilir.
+const S: StyleSettings = { ...DEFAULT_STYLE_SETTINGS, pointLabelScale: 1, measurementScale: 1, axisScale: 1 };
 const RENKLER = { x: '#ef4444', y: '#10b981', z: '#3b82f6' } as const;
 const UZUNLUKLAR = { x: { arti: 16, eksi: 16 }, y: { arti: 16, eksi: 16 }, z: { arti: 14, eksi: 6 } } as const;
 const ayar = (kademe: KademeDuzeyi, s: StyleSettings = S) => ({ ...yazimAyari(s), tamSayi: tamSayiOlcuEtkin(s, kademe) });

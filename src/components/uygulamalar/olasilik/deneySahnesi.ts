@@ -26,6 +26,7 @@ import {
 import { paraKenariniCiz } from './madeniPara';
 import { TURA_GORSELI } from './turaGorseli';
 import { YAZI_GORSELI } from './yaziGorseli';
+import { torbaBilyeleriniGuncelle, torbaBilyeleriniKur } from './torbaGorunumu';
 
 // ---------------------------------------------------------------------------
 // Saf yardımcılar
@@ -775,6 +776,7 @@ export class DeneySahnesi extends EventTarget {
   private carkAcisi = 0;
   private bilye: THREE.Mesh | null = null;
   private kese: THREE.Mesh | null = null;
+  private torbaBilyeleri: THREE.Group | null = null;
   private kart: THREE.Mesh | null = null;
   private kartMalzemeleri: THREE.MeshStandardMaterial[] = [];
   private golge: THREE.Mesh | null = null;
@@ -1079,6 +1081,7 @@ export class DeneySahnesi extends EventTarget {
     this.cark = null;
     this.bilye = null;
     this.kese = null;
+    this.torbaBilyeleri = null;
     this.kart = null;
     this.kartMalzemeleri = [];
     this.golge = null;
@@ -1239,12 +1242,17 @@ export class DeneySahnesi extends EventTarget {
     for (const [x, y] of nokta) profil.push(new THREE.Vector2(x, y));
     const geo = new THREE.LatheGeometry(profil, 64);
     keseKirisiklari(geo);
-    const kese = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: kumasDokusu(), color: '#e0c39a', roughness: 1, metalness: 0, side: THREE.DoubleSide }));
-    kese.castShadow = true;
+    const kese = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({ color: '#c9e9ef', transparent: true, opacity: 0.16, roughness: 0.12, metalness: 0, side: THREE.DoubleSide, depthWrite: false, clearcoat: 1 }));
+    kese.castShadow = false;
     kese.receiveShadow = true;
     kese.position.set(0, 0, -0.2);
     this.nesneler.add(kese);
     this.kese = kese;
+    // Şeffaf torbanın içindeki renkler ve adetler doğrudan görülebilir.
+    if (this.sablon?.tur === 'torba') {
+      this.torbaBilyeleri = torbaBilyeleriniKur(this.sablon);
+      kese.add(this.torbaBilyeleri);
+    }
     // Büzgü ipi
     const ip = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.03, 10, 40), new THREE.MeshStandardMaterial({ color: '#8a5a2a', roughness: 0.8 }));
     ip.rotation.x = Math.PI / 2;
@@ -1449,6 +1457,13 @@ export class DeneySahnesi extends EventTarget {
         bitti();
       }
     );
+  }
+
+  /** Deney modeli güncellendiğinde kalan bilyeleri sahneyi yeniden kurmadan gösterir. */
+  torbaKalanGoster(adetler: readonly number[]): void {
+    if (!this.torbaBilyeleri || this.kapatildi) return;
+    torbaBilyeleriniGuncelle(this.torbaBilyeleri, adetler);
+    this.ciz();
   }
 
   private torbaOynat(renkAdi: string, hizli: boolean, bitti: () => void): void {

@@ -12,6 +12,7 @@
 import React, { useState } from 'react';
 import { Box, Calculator, Check, Columns2, Columns3, LayoutGrid, PanelLeft, PanelRight, Square, type LucideIcon } from 'lucide-react';
 import type { LayoutMode } from '@/types/workspace';
+import { useIlkokulKipi } from '@/hooks/useKademeDuzeyi';
 
 export interface GorunumDuzeni {
   mode: LayoutMode;
@@ -34,6 +35,8 @@ export const GORUNUM_DUZENLERI: readonly GorunumDuzeni[] = [
   { mode: 'three_col', ad: '2D + 3D + Cebir', aciklama: 'Cebir listesi, 2D geometri ve 3D uzay üç sütun hâlinde', Simge: Columns3, renk: 'text-ada-murekkep-2 dark:text-ada-kum' },
 ];
 
+export const kademeyeUygunGorunumler = (ilkokul: boolean) => GORUNUM_DUZENLERI.filter((d) => !ilkokul || ['2d_only', '3d_only', '2d_3d'].includes(d.mode));
+
 /** Eski kayıtlardaki üç bölmeli 'default' düzeni bugünkü üç bölmeli düzene ("2D + 3D + Cebir") çevrilir. */
 export function eskiDuzeniCevir(mode: LayoutMode): LayoutMode {
   return mode === 'default' ? 'three_col' : mode;
@@ -52,6 +55,7 @@ export function GorunumDuzeniPaneli({
 }) {
   const [ipucu, setIpucu] = useState<{ text: string; x: number; y: number } | null>(null);
   const etkin = eskiDuzeniCevir(layoutMode);
+  const ilkokul = useIlkokulKipi();
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-card" data-gorunum-paneli>
@@ -67,7 +71,7 @@ export function GorunumDuzeniPaneli({
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-2.5 scrollbar-thin">
-        {GORUNUM_DUZENLERI.map((duzen) => {
+        {kademeyeUygunGorunumler(ilkokul).map((duzen) => {
           const secili = etkin === duzen.mode;
           const { Simge } = duzen;
           return (

@@ -551,7 +551,7 @@ describe('araştırma: plan tablosu ve satırlar', () => {
     const d = (duyarlik: 1 | 0.5 | 0.1) => ({ ...a, olcum: { ...a.olcum, duyarlik } });
     expect(olcumSatirlari(d(1), [149.6])).toEqual([['150']]);
     expect(olcumSatirlari(d(0.5), [7.3, 7.25, 7.2])).toEqual([['7,5'], ['7,5'], ['7']]);
-    expect(olcumSatirlari(d(0.1), [36.66, 0.15])).toEqual([['36,7'], ['0,2']]);
+    expect(olcumSatirlari(d(0.1), [36.66, 0.15])).toEqual([['36,7']]);
     expect(olcumSatirlari(d(1), [NaN, 84])).toEqual([['84']]);
     expect(olcumDegeri(-7.25, 0.5)).toBe(-7.5);
     expect(olcumDegeri(-0.2, 1)).toBe(0);
@@ -586,7 +586,7 @@ describe('araştırma: plan tablosu ve satırlar', () => {
     // Yuvarlama sessiz değil: yuvarlanan ilk değer söylenir; virgülden sonra iki ve daha çok basamak iki değer de olabilir
     expect(listeOnizlemeMetni(hizliListeAyristir('84,4'), hazirSoruUygula('nabiz')!)).toBe('1 değer eklenecek: 84. “84,4” 84 olarak eklenecek (ölçme duyarlığı 1).');
     expect(listeOnizlemeMetni(hizliListeAyristir('152,148 150'), hazirSoruUygula('boy')!)).toBe(
-      '2 değer eklenecek: 152 · 150. “152,148” 152 olarak eklenecek (ölçme duyarlığı 1). İki ayrı değerse araya boşluk koyun.',
+      '2 değer eklenecek: 152,1 · 150. “152,148” 152,1 olarak eklenecek (ölçme duyarlığı 0,1). İki ayrı değerse araya boşluk koyun.',
     );
     expect(listeOnizlemeMetni(hizliListeAyristir('7,5 8'), hazirSoruUygula('uyku')!)).toBe('2 değer eklenecek: 7,5 · 8');
     expect(yuvarlamaNotu(7.3, 0.5)).toBe('7,3 yuvarlandı: 7,5 (ölçme duyarlığı 0,5)');
@@ -926,7 +926,7 @@ describe('araştırma: grafik görünümü (kategori sırası, eksen alanı, yEn
   it('soruSeridiBilgisi: soru ve "6-A sınıfı · 24 veri"; deneyde atış; bağ ya da soru yoksa null', () => {
     const a = uygulanmis({ ...hazirSoruUygula('meyve')!, kimden: '6-A sınıfı' });
     const t = planVerisi(a, tekrarla([['Elma', 24]]));
-    expect(soruSeridiBilgisi(t, a)).toEqual({ soru: 'Sınıfımızda en çok sevilen meyve hangisi?', altBilgi: '6-A sınıfı · 24 veri' });
+    expect(soruSeridiBilgisi(t, a)).toEqual({ soru: 'Sınıfımızdaki öğrencilerin en sevdikleri meyvelerin dağılımı nasıldır?', altBilgi: '6-A sınıfı · 24 veri' });
     expect(soruSeridiBilgisi(planTablosu(a), { ...a, kimden: '' })).toEqual({ soru: a.soru, altBilgi: 'Henüz veri yok' });
     expect(soruSeridiBilgisi(t, { ...a, soru: '  ' })).toBeNull();
     expect(soruSeridiBilgisi({ sutunlar: [], satirlar: [] }, a)).toBeNull();
@@ -1113,7 +1113,7 @@ describe('araştırma: yorum cümleleri (yorumCumleleri)', () => {
     expect(yorumCumleleri(t, a)).toEqual([
       '10 ölçüm yaptık. En küçük 145 cm, en büyük 159 cm; açıklık 14 cm.',
       'Aritmetik ortalama 152,2 cm; ortanca 152 cm.',
-      'Ortalama mutlak sapma 3 cm: Değerler ortalamadan ortalama 3 cm uzakta.',
+      'Ortalama mutlak sapma 3,04 cm: Değerler ortalamadan ortalama 3,04 cm uzakta.',
       'Tahminimiz 150 cm idi; ortalamadan 2,2 cm uzak.',
     ]);
     const uzak = planVerisi(a, [...BOYLAR.map((b) => [String(b)]), ['124']]);
@@ -1222,7 +1222,7 @@ describe('araştırma: yorum cümleleri (yorumCumleleri)', () => {
 
 describe('araştırma: CSV adı', () => {
   it('sorudan, en çok 48 karakter, sözcük ortasından kesilmez', () => {
-    expect(csvAdi(hazirSoruUygula('meyve')!)).toBe('veri-grafik-sinifimizda-en-cok-sevilen-meyve.csv');
+    expect(csvAdi(hazirSoruUygula('meyve')!)).toBe('veri-grafik-sinifimizdaki-ogrencilerin-en.csv');
     expect(csvAdi({ ...hazirSoruUygula('meyve')!, soru: '' })).toBe('veri-grafik-meyve.csv');
     expect(csvAdi({ ...varsayilanArastirma(), soru: '???' })).toBe('veri-grafik-tablom.csv');
     const uzun = csvAdi({ ...varsayilanArastirma(), soru: 'a'.repeat(80) });

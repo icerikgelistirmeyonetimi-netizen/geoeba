@@ -29,7 +29,10 @@ import { SIRA_SUTUNLARI, degiskenSutunlari } from './kategorik';
 import { arastirmaBagli, arastirmaDogrula, arastirmaTurleriniOnar, type Arastirma } from './arastirma';
 import { OZET_SUTUNU, fiil, fiilCogul, ozetTablosu } from './deney';
 import { acilisYamasi, eylemYamasi, type EylemYamasi } from './rehber';
-import { sinifKurallari, sinifSekmesi, type SinifKurallari } from './sinifKurallari';
+import { cizgiSiraNotuGerekli } from './grafikKurallari';
+import { veriGirisHatasi } from './veriSinirlari';
+import { sayiOku } from './veri';
+import { ORTAOKUL_KURALLARI, sinifKurallari, sinifSekmesi, type SinifKurallari } from './sinifKurallari';
 
 export type Sekme = GrafikTuru;
 
@@ -620,9 +623,10 @@ export function sayisalDegiskenSayisi(tablo: VeriTablosu): number {
  * kalmadı) Nokta'ya döner. `setDurum` hattında `eksenDuzelt`'ten sonra her değişimde çalışır: panel, örnek veri,
  * sütun silme ve tür değiştirme yollarının hepsinde grafik çizilebilir kalır. Değişiklik yoksa aynı nesne döner.
  */
-export function sekmeDuzelt(d: Durum, ilkokul = false): Durum {
-  const sinifta = sinifSekmesi(d.sekme, durumKurallari(d, ilkokul));
+export function sekmeDuzelt(d: Durum, ilkokul = false, ortaokul = false): Durum {
+  const sinifta = sinifSekmesi(d.sekme, durumKurallari(d, ilkokul, ortaokul));
   if (sinifta !== d.sekme) return { ...d, sekme: sinifta };
+  if (d.sekme === 'cizgi' && d.etkinKume === 'tablom' && !['sinav', 'ekran'].includes(d.ornekId ?? '') && sayisalDegiskenSayisi(etkinTablo(d)) > 0 && cizgiSiraNotuGerekli(etkinTablo(d))) return { ...d, sekme: 'sutun' };
   return sekmeKullanilabilir(d.sekme, sayisalDegiskenSayisi(etkinTablo(d))) ? d : { ...d, sekme: 'nokta' };
 }
 
@@ -631,7 +635,8 @@ export function sekmeDuzelt(d: Durum, ilkokul = false): Durum {
  * (kendi tablonuz, araştırma, Deney özeti) sınıfsız bütün davranış. Sekmeler, ölçüler ve karşılaştırma buna göre süzülür.
  * `ilkokul` (Kademe menüsünde İlkokul): 1–4. sınıf örneğine bağlı olmayan her tablo ilkokulun ortak kurallarını alır.
  */
-export function durumKurallari(d: Pick<Durum, 'ornekId' | 'etkinKume'>, ilkokul = false): SinifKurallari {
+export function durumKurallari(d: Pick<Durum, 'ornekId' | 'etkinKume'>, ilkokul = false, ortaokul = false): SinifKurallari {
+  if (ortaokul && (d.etkinKume !== 'tablom' || !bagliOrnek(d)?.sinif)) return ORTAOKUL_KURALLARI;
   return sinifKurallari(d.etkinKume === 'tablom' ? bagliOrnek(d)?.sinif ?? null : null, ilkokul);
 }
 
@@ -786,10 +791,21 @@ export function anlikGoruntuyeDon(d: Durum, o: OncekiTablo): Durum {
  * yapıştırma tabloyu yeniden kurdu) örnekle bağ kopar (`ornekBaginiKopar`); hücre ve satır düzenlemesi bağı korur.
  */
 export function tabloDuzenle(d: Durum, tablo: VeriTablosu): Durum {
+  if (tabloGirisHatasi(tablo)) return d;
   const y = etkinTabloYaz(d, tablo);
   if (d.etkinKume !== 'tablom' || tablo === d.tablo) return y;
   const degisti = d.ornekTemiz ? { ...y, ornekTemiz: false } : y;
   return yapiDegisti(d.tablo, tablo) ? ornekBaginiKopar(degisti) : degisti;
+}
+
+/** Yapıştırma ve sürükleme de aynı bağlam sınırından geçer. */
+export function tabloGirisHatasi(tablo: VeriTablosu): string | null {
+  for (const satir of tablo.satirlar) for (let j = 0; j < tablo.sutunlar.length; j++) {
+    if (tablo.sutunlar[j].tur !== 'sayi') continue;
+    const v = sayiOku(satir.hucreler[j]);
+    if (v !== null) { const hata = veriGirisHatasi(tablo.sutunlar[j].ad, v); if (hata) return hata; }
+  }
+  return null;
 }
 
 // ── Örnek bağı: yükleme, rehber eylemleri, bağın kopması ──

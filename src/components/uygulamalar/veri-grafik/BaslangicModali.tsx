@@ -333,7 +333,7 @@ export function BaslangicModali({
           {kapatDugmesi}
         </header>
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
-          <p className="mb-3 text-[13.5px] leading-5 text-muted-foreground">Veriyi nereden alacağız? Tablo ve grafik seçtiğiniz yola göre kurulur.</p>
+          <p className="mb-3 text-[13.5px] leading-5 text-muted-foreground">Veriyi nereden alacağız? Seçtiğiniz veri kaynağına göre tablo ve grafik hazırlanır.</p>
           <div
             role="group"
             aria-label="Başlangıç yolu"

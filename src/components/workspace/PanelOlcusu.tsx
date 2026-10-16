@@ -4,6 +4,8 @@ import React from 'react';
 import { type YazimAyari, aciklama, olcuDugumleri, sesli } from '@/math/matematikYazimi';
 import type { PanelSatiri } from '@/math/panelYazimlari';
 import { MatematikMetni } from './MatematikMetni';
+import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
+import { VARSAYILAN_YAZIM } from '@/math/matematikYazimi';
 
 /**
  * Panel satırı (Cebir listesi, Özellikler paneli, araç kutusu nesne listesi).
@@ -29,13 +31,15 @@ export function PanelOlcusu({
   /** Fare ipucu (<title>) yazılsın mı? */
   ipucu?: boolean;
 }) {
+  const [kademe] = useKademeDuzeyi();
+  const gosterimAyari = { ...VARSAYILAN_YAZIM, ...ayar, alanBirimiAcik: kademe === 'ortaokul' };
   if (satir.tur === 'metin') {
     const Kap = as ?? 'span';
     return <Kap className={`${className} ${metinSinifi ?? ''}`.trim()}>{satir.metin}</Kap>;
   }
   return (
     <MatematikMetni
-      dugumler={olcuDugumleri(satir.olcu, ayar)}
+      dugumler={olcuDugumleri(satir.olcu, gosterimAyari)}
       sesli={sesli(satir.olcu)}
       title={ipucu ? aciklama(satir.olcu) : undefined}
       ayar={ayar}

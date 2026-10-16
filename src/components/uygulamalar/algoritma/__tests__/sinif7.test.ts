@@ -56,7 +56,7 @@ describe('7. sınıf', () => {
   });
 
   it('yeni kurgular önceki çözümü nerede bozuyor', () => {
-    expect(oncekiIleti('s7-denklem-1', gorev('s7-denklem-2'))).toBe('sulanan 6 olmalıydı; program bitince 7 oldu.');
+    expect(oncekiIleti('s7-denklem-1', gorev('s7-denklem-2'))).toBe('6 saksı sulanmalıydı; robot 7 saksı suladı. Sayaca sayı yazmak sulama yapmaz; "sula" adımını kontrol et. sulanan 6 olmalıydı; program bitince 7 oldu.');
     expect(oncekiIleti('s7-denklem-3', gorev('s7-denklem-4'))).toBe('2. saksının toprağı zaten nemliydi; su taştı.');
     expect(oncekiIleti('s7-prizma-1', gorev('s7-prizma-2'))).toBe('Yapıda 12 küp eksik (8 kulede).');
     expect(oncekiIleti('s7-prizma-3', gorev('s7-prizma-4'))).toBe('Bu kule 2 küp olmalı; fazladan küp kondu.');

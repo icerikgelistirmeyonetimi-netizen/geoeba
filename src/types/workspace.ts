@@ -149,16 +149,16 @@ export const DEFAULT_STYLE_SETTINGS: StyleSettings = {
   strokeScale: 1,
   fontScale: 1,
   pointRadius: 6,
-  pointLabelScale: 1,
-  measurementScale: 1,
-  axisScale: 1,
+  pointLabelScale: 1.25,
+  measurementScale: 1.2,
+  axisScale: 1.2,
   showLabelBoxes: false,
   hideFills: false,
   olcuYazimi: 'tam',
   aciYazimi: 'sapka',
   tamSayiOlcu: true,
   tamSayiOlcuOrtaokul: false,
-  yaziAltSiniri: 0.7,
+  yaziAltSiniri: 1,
 };
 
 /** Metin (seçenek) alanlarının kabul edilen değerleri; kayıttan okurken ve proje dosyasında denetlenir. */

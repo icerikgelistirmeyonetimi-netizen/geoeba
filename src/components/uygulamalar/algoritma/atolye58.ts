@@ -159,7 +159,7 @@ const A5_GOKDELEN: Atolye = {
   degiskenler: ['kat'],
   kazanimlar: ['MAT.5.2.3', 'MAT.5.2.4'],
   kalip: 'kural',
-  ipucu: 'Kat sayısını bir değişkende tut; her binadan sonra onu büyüt.',
+  ipucu: 'Kat sayısına her binadan sonra 1 ekle.',
   gorunum: 'blok',
 };
 
@@ -203,7 +203,7 @@ const A5_MERDIVEN: Atolye = {
   kalip: 'yilan',
   ipucu: 'Bütün tarlayı birden düşünme, önce tek bir sırayı ek. Her sırada robot aynı işleri yapar; yalnız sıranın uzunluğu değişir.',
   ipuclari: [
-    'Sıranın uzunluğunu kat değişkeninde tut. İlk sıra 1 kare: başta "kat ← 1". Bir sırayı ekmek için "kat kez tekrarla" içine "tohum ek" ve "ileri git" koy.',
+    'Her sıranın kare sayısını adım adım hesapla. İlk sıra 1 kare: başta "kat ← 1". Bir sırayı ekmek için "kat kez tekrarla" içine "tohum ek" ve "ileri git" koy.',
     'Sıra bitince robotu sıranın başına götür: İki kez sağa dön, "kat kez tekrarla" ile kat kadar ileri git. Sonra sola dön, ileri git, sola dön. Robot alt sıranın başında.',
     'Alt sıra 2 kare uzun: Sıranın sonunda "kat ← kat + 2" koy. Bu parçanın hepsini "çıkışa varana kadar tekrarla" içine al; robot sarı çıkışa varınca durur.',
   ],

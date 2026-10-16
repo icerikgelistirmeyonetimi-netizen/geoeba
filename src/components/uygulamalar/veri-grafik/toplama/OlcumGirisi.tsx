@@ -21,6 +21,7 @@ import {
   hizliListeAyristir,
   listeOnizlemeMetni,
   olcumDegeri,
+  olcumGirisHatasi,
   olcumHucresi,
   olcumMetni,
   toplananSayisi,
@@ -91,6 +92,8 @@ export function OlcumGirisi({ arastirma: a, tablo, onEkle, onGrupSec, alanYuksek
       setHata(`Sayı okunamadı: “${m}”`);
       return;
     }
+    const sinirHatasi = olcumGirisHatasi(a, x);
+    if (sinirHatasi) { setHata(sinirHatasi); return; }
     const v = olcumDegeri(x, o.duyarlik);
     onEkle([x], ad);
     const notlar = [yuvarlamaNotu(x, o.duyarlik), beklenenUyarisi(a, v)].filter((m): m is string => m !== null);
@@ -128,7 +131,8 @@ export function OlcumGirisi({ arastirma: a, tablo, onEkle, onGrupSec, alanYuksek
   }, [listeAcik]);
 
   const ayrisim = hizliListeAyristir(liste);
-  const onizleme = listeOnizlemeMetni(ayrisim, a);
+  const listeHatasi = ayrisim.degerler.map(x => olcumGirisHatasi(a, x)).find(Boolean) ?? null;
+  const onizleme = listeHatasi ?? listeOnizlemeMetni(ayrisim, a);
 
   // Son eklenenler (büyük ekran): tablonun son 8 değeri
   const j = arastirmaSutunu(tablo, a, 'deger');
@@ -231,8 +235,9 @@ export function OlcumGirisi({ arastirma: a, tablo, onEkle, onGrupSec, alanYuksek
           </p>
           <button
             type="button"
-            disabled={kilitli || ayrisim.degerler.length === 0}
+            disabled={kilitli || ayrisim.degerler.length === 0 || listeHatasi !== null}
             onClick={() => {
+              if (listeHatasi) return;
               onEkle(ayrisim.degerler, '');
               const son = ayrisim.degerler[ayrisim.degerler.length - 1];
               setEklendi(`Eklendi: ${ayrisim.degerler.length} değer (son: ${olcumHucresi(son, o.duyarlik)}${birim ? ` ${birim}` : ''})`);

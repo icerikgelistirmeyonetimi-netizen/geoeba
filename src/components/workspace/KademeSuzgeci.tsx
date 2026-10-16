@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useOturum } from '@/state/OturumContext';
 import { kademeEtiketi, type KademeDuzeyi } from './kademeDuzeyleri';
 
 /**
@@ -9,6 +10,7 @@ import { kademeEtiketi, type KademeDuzeyi } from './kademeDuzeyleri';
  * Düğme 44 px dokunma hedefi taşır; şeridin kendi dikey dolgusu yoktur.
  */
 export function KademeSuzgeciSeridi({ duzey, onTumAraclar }: { duzey: KademeDuzeyi; onTumAraclar: () => void }) {
+  const { kademe } = useOturum();
   if (duzey === 'tum') return null;
   return (
     <div
@@ -18,14 +20,14 @@ export function KademeSuzgeciSeridi({ duzey, onTumAraclar }: { duzey: KademeDuze
       <span className="min-w-0 truncate text-[12px] text-muted-foreground">
         <span className="font-semibold text-foreground">{kademeEtiketi(duzey)}</span> araçları
       </span>
-      <button
+      {!kademe && duzey !== 'ilkokul' && <button
         type="button"
         onClick={onTumAraclar}
         title="Kademe süzgecini kaldır, bütün araçları göster"
         className="shrink-0 min-h-[44px] px-2 rounded-lg text-[12px] font-semibold text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer"
       >
         Tüm araçlar
-      </button>
+      </button>}
     </div>
   );
 }
@@ -47,6 +49,7 @@ export function KademeAramaBosNotu({
   suzgecGizledi: boolean;
   onTumAraclar: () => void;
 }) {
+  const { kademe } = useOturum();
   return (
     <div role="status" className="px-2.5 py-3 text-[12px] leading-snug text-muted-foreground">
       {suzgecGizledi && duzey !== 'tum' ? (
@@ -54,13 +57,13 @@ export function KademeAramaBosNotu({
           <p className="m-0">
             {kademeEtiketi(duzey)} araçları arasında “{arama}” yok.
           </p>
-          <button
+          {!kademe && duzey !== 'ilkokul' && <button
             type="button"
             onClick={onTumAraclar}
             className="mt-1 inline-flex min-h-[44px] items-center rounded-lg px-2 -ml-2 font-semibold text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer"
           >
             Tüm araçları göster
-          </button>
+          </button>}
         </>
       ) : (
         <>“{arama}” ile eşleşen araç yok.</>

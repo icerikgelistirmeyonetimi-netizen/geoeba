@@ -319,7 +319,7 @@ describe('app phrases sweep 2: style and help', () => {
     ['yazılar çok küçük büyüt', { fontScale: 1.25 }],
     ['çizgi kalınlığını artır', { strokeScale: 1.5 }],
     ['çizgi kalınlığını azalt', { strokeScale: 0.7 }],
-    ['etiketleri büyüt', { pointLabelScale: 1.25 }],
+    ['etiketleri büyüt', { pointLabelScale: 1.55 }],
     ['yazıları çok büyüt', { fontScale: 1.5 }],
   ])('%s', (text, patch) => {
     const r = ok(text, { scene: tri() });

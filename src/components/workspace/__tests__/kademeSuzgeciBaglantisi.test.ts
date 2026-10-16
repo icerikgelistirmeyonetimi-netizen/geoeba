@@ -94,8 +94,8 @@ describe('komutlar ve kısayollar: yalnız ortaokulda araç SEÇİMİ süzülür
     }
   });
 
-  it('süzgeç yalnız ortaokulda: kademeDuzeyleri.ARAC_SECIMI_SUZULEN_KADEMELER', () => {
+  it('süzgeç ilkokul ve ortaokulda: kademeDuzeyleri.ARAC_SECIMI_SUZULEN_KADEMELER', () => {
     const kaynak = oku(path.join(KOK, 'kademeDuzeyleri.ts'));
-    expect(kaynak).toMatch(/export const ARAC_SECIMI_SUZULEN_KADEMELER: readonly KademeId\[\] = \['ortaokul'\];/);
+    expect(kaynak).toMatch(/export const ARAC_SECIMI_SUZULEN_KADEMELER: readonly KademeId\[\] = \['ilkokul', 'ortaokul'\];/);
   });
 });

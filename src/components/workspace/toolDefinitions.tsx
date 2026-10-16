@@ -85,7 +85,7 @@ export const TOOL_GROUPS: ToolGroup[] = [
       { id: 'segment', name: 'Doğru Parçası', description: 'İki nokta arasına doğru parçası çizin.', icon: <GeometryToolIcon kind="segment" />, iconBg: Z.temel, iconColor: R.temel },
       { id: 'line', name: 'Doğru', description: 'İki noktadan geçen sonsuz doğru çizin.', icon: <GeometryToolIcon kind="line" />, iconBg: Z.temel, iconColor: R.temel },
       { id: 'ray', name: 'Işın', description: 'Başlangıç noktası ve üzerinden geçen ikinci nokta ile ışın çizin.', icon: <GeometryToolIcon kind="ray" />, iconBg: Z.temel, iconColor: R.temel },
-      { id: 'segment_length', name: 'Ölçülü Parça', description: 'Bir başlangıç noktasına tıklayın, uzunluğu sayı olarak girin.', icon: <Ruler className="w-4 h-4" />, iconBg: Z.temel, iconColor: R.temel },
+      { id: 'segment_length', name: 'Ölçülü Doğru Parçası', description: 'Bir başlangıç noktasına tıklayın, uzunluğu sayı olarak girin.', icon: <Ruler className="w-4 h-4" />, iconBg: Z.temel, iconColor: R.temel },
       { id: 'circle', name: 'Çember', description: 'Merkez ve yarıçap noktasıyla çember çizin.', icon: <CircleIcon className="w-4 h-4" />, iconBg: Z.cember, iconColor: R.cember },
       { id: 'pen', name: 'Kalem', description: 'Serbest çizim kalemi.', icon: <PenTool className="w-4 h-4" />, iconBg: Z.temel, iconColor: R.temel },
     ],

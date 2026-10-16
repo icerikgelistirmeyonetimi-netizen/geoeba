@@ -12,7 +12,7 @@ import { formatTurkishNumber, visibleGridStep } from '@/math/coordinates';
 import { workspaceOwnsKeyboard, TOOL_SHORTCUTS } from './toolShortcuts';
 import { TOOL_GROUPS } from './toolDefinitions';
 import { TREE_TOOL_GROUPS } from './treeToolDefinitions';
-import { GORUNUM_DUZENLERI, eskiDuzeniCevir } from './gorunumDuzenleri';
+import { kademeyeUygunGorunumler, eskiDuzeniCevir } from './gorunumDuzenleri';
 import { YeniCalismaModal, calismaImzasi, yeniIcinSorulmaliMi } from './YeniCalismaModal';
 import { kilavuzBolumleri } from './kullanimKilavuzu';
 import { basligaGelince, basligaTiklayinca } from './menuGecisi';
@@ -702,7 +702,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                 </div>
 
                 {/* Yerleşimler araç panelinin Görünümler sekmesiyle aynı listeden gelir: ad, sıra ve sayı aynı */}
-                {GORUNUM_DUZENLERI.map(({ mode, ad, Simge, renk }) => (
+                {kademeyeUygunGorunumler(ilkokul).map(({ mode, ad, Simge, renk }) => (
                   <button
                     key={mode}
                     onClick={() => {
@@ -863,6 +863,12 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   </button>
                 )}
 
+                {aracMenudeGorunur('regular_polygon') && <button
+                  onClick={() => { closeMenu(); onOpenRegularPolygonDialog(); }}
+                  className="w-full min-h-[44px] px-3 py-1.5 flex items-center gap-2 text-left text-[13px] text-foreground hover:bg-muted/70 cursor-pointer">
+                  <Shapes className="w-3.5 h-3.5 text-ada-vurgu" /><span>Düzgün Çokgen</span>
+                </button>}
+
                 {/* Gruplu satırlar alt menüdür: içindeki her araç paneldeki adı ve kısayoluyla, kademe süzgecinden geçmiş
                     listeden (gruplariSuz) gelir. Dokunmatik tahtada da çalışsın diye alt menü tıklamayla açılır, yerinde genişler. */}
                 {araclarAltGruplari.length > 0 && <div className="my-1 border-t border-border/60" />}
@@ -967,7 +973,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   </button>
                 )}
 
-                <button
+                {!ilkokul && <button
                   onClick={() => {
                     closeMenu();
                     onOpenFunctionDialog();
@@ -980,9 +986,9 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   </div>
                   {/* Fonksiyon aracının kısayolu da bu pencereyi açar (activateTool('function')) */}
                   <AracKisayolu arac="function" />
-                </button>
+                </button>}
 
-                <button
+                {!ilkokul && <button
                   onClick={() => {
                     closeMenu();
                     onOpenSliderDialog();
@@ -993,9 +999,9 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     <SlidersHorizontal className="w-3.5 h-3.5 text-ada-deniz-koyu dark:text-ada-vurgu" />
                     <span>Etkileşimli Sürgü</span>
                   </div>
-                </button>
+                </button>}
 
-                <button
+                {!ilkokul && <button
                   onClick={() => {
                     closeMenu();
                     onOpenAddObjectDialog();
@@ -1006,7 +1012,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                     <PlusSquare className="w-3.5 h-3.5 text-ada-lavanta" />
                     <span>Nesne Ekle (Koordinatla)</span>
                   </div>
-                </button>
+                </button>}
 
                 {onOpenRegularPolygonDialog && (
                   <button

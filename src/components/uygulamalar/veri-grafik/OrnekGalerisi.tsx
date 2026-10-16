@@ -12,6 +12,7 @@
  * - Her öğe (≥ 56 px): örneğin kendi verisinden çizilmiş küçük grafik (önerilen grafik türünde), ad (ilk `span`),
  *   kısa açıklama, sınıf rozeti; yüklü örnekte onay işareti ve `aria-current`.
  */
+import { NesneIsareti } from './nesneSimgeleri';
 import React from 'react';
 import { degiskenSutunlari, kategoriler, kategoriRengi } from './kategorik';
 import { seriRengi } from './grafik';
@@ -103,6 +104,10 @@ function miniSekiller(ornek: OrnekVeri): React.ReactNode[] {
       .map((d) => d.deger);
   };
 
+  if (ornek.sinif === 1 || ornek.sinif === 2) {
+    return [3, 4, 2].flatMap((adet, i) => Array.from({length: adet}, (_, j) =>
+      ornek.sinif === 1 ? <g key={i + '-' + j} transform={`translate(${9+j*7}, ${10+i*10})`}><NesneIsareti nesne={i === 0 ? 'top' : i === 1 ? 'araba' : 'ayicik'} r={3} dolgu={kategoriRengi('',i)} kenar="none" kenarKalinligi={0}/></g> : <rect key={i + '-' + j} x={8+j*7} y={7+i*10} width={5} height={5} fill={kategoriRengi('',i)} />));
+  }
   if (tur === 'daire') {
     const degerler = gecerliDegerler(tablo, ana).filter((d) => d.deger > 0);
     const toplam = degerler.reduce((t, d) => t + d.deger, 0);

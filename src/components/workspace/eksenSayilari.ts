@@ -125,7 +125,7 @@ export interface EksenSayilariSonucu {
     sayiYonu: 'sol' | 'sag';
     ogeler: EksenOgesi[];
   };
-  rozetler: { artiX: RozetYerlesimi; artiY: RozetYerlesimi; eksiY: RozetYerlesimi };
+  rozetler: { artiX: RozetYerlesimi; eksiX: RozetYerlesimi; artiY: RozetYerlesimi; eksiY: RozetYerlesimi };
   /** Canvas'ın çizdiği "(0; 0)" rozetinin kutusu (görünürse) */
   orijinRozeti: Dikdortgen | null;
 }
@@ -309,7 +309,7 @@ export function eksenSayilariniYerlestir(g: EksenSayilariGirdisi): EksenSayilari
   const bos: EksenSayilariSonucu = {
     x: { durum: xDurum, cizgiY: 0, sayiYonu: 'alt', ogeler: [] },
     y: { durum: yDurum, cizgiX: 0, sayiYonu: 'sol', ogeler: [] },
-    rozetler: { artiX: { ...GIZLI_ROZET }, artiY: { ...GIZLI_ROZET }, eksiY: { ...GIZLI_ROZET } },
+    rozetler: { artiX: { ...GIZLI_ROZET }, eksiX: { ...GIZLI_ROZET }, artiY: { ...GIZLI_ROZET }, eksiY: { ...GIZLI_ROZET } },
     orijinRozeti,
   };
   if (!(W > 0 && H > 0 && fs > 0) || !Number.isFinite(ox) || !Number.isFinite(oy)) return bos;
@@ -369,12 +369,16 @@ export function eksenSayilariniYerlestir(g: EksenSayilariGirdisi): EksenSayilari
   };
 
   let artiX: RozetYerlesimi = { ...GIZLI_ROZET };
+  let eksiX: RozetYerlesimi = { ...GIZLI_ROZET };
   if (xDurum === 'ekranda') {
     // Eksenin sağ ucunda, sayıların OLMADIĞI yanda; düğmeler engelse sola kayar
     const satirlar = xYonu === 'alt' ? [oy - 24, oy + 4] : [oy + 4, oy - 24];
     const adaylar: Array<{ x: number; y: number }> = [];
     for (const y of satirlar) for (let k = 0; k <= 60; k++) adaylar.push({ x: W - 46 - k * 4, y });
     artiX = rozetYerlestir(adaylar, (r) => r.x >= ox + ROZET_TARAF_PAYI);
+    const solAdaylar: Array<{ x: number; y: number }> = [];
+    for (const y of satirlar) for (let k = 0; k <= 60; k++) solAdaylar.push({ x: solPay + k * 4, y });
+    eksiX = rozetYerlestir(solAdaylar, (r) => r.x + r.w <= ox - ROZET_TARAF_PAYI);
   }
   let artiY: RozetYerlesimi = { ...GIZLI_ROZET };
   let eksiY: RozetYerlesimi = { ...GIZLI_ROZET };
@@ -391,7 +395,7 @@ export function eksenSayilariniYerlestir(g: EksenSayilariGirdisi): EksenSayilari
     artiY = rozetYerlestir(ustAdaylar, (r) => r.y + r.h <= oy - ROZET_TARAF_PAYI);
     eksiY = rozetYerlestir(altAdaylar, (r) => r.y >= oy + ROZET_TARAF_PAYI);
   }
-  const gorunenRozetler = [artiX, artiY, eksiY].filter((r) => r.gorunur);
+  const gorunenRozetler = [artiX, eksiX, artiY, eksiY].filter((r) => r.gorunur);
 
   // ---- sayılar
   const sayiEngelleri: Dikdortgen[] = rozetEngelleri;
@@ -495,7 +499,7 @@ export function eksenSayilariniYerlestir(g: EksenSayilariGirdisi): EksenSayilari
   return {
     x: { durum: xDurum, cizgiY, sayiYonu: xYonu, ogeler: xOgeleri },
     y: { durum: yDurum, cizgiX, sayiYonu: yYonu, ogeler: yOgeleri },
-    rozetler: { artiX, artiY, eksiY },
+    rozetler: { artiX, eksiX, artiY, eksiY },
     orijinRozeti,
   };
 }

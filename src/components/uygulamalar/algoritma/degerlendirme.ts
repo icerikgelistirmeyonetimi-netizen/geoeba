@@ -153,6 +153,8 @@ export function eksikIletisi(e: Eksik, bitkiAdi: string, dunya?: DunyaTanimi): s
 
 function eksikIletisiHam(e: Eksik, bitkiAdi: string, dunya?: DunyaTanimi): string {
   switch (e.tur) {
+    case 'sulamaSayisi':
+      return `${e.beklenen} saksı sulanmalıydı; robot ${e.olan} saksı suladı. Sayaca sayı yazmak sulama yapmaz; "sula" adımını kontrol et.`;
     case 'cikis': {
       if (e.uzaklik !== undefined) {
         const ad = dunya ? hedefAdi(dunya) : { yalin: 'çıkış', yonelme: 'çıkışa', belirtme: 'çıkışı' };

@@ -120,6 +120,8 @@ export interface BaseMathObject {
    * (alan uzmanı, 4. tur: "yansıma ve öteleme görüntülerinin ikisi de A', B', C'").
    */
   donusum?: 'yansima' | 'oteleme';
+  /** İnşa sonucu ile birlikte çizilen cetvel/pergel adımları ve eşlik ilişkileri. */
+  insaGosterimi?: { tur: 'midpoint' | 'perp_bisector' | 'perpendicular' | 'angle_bisector'; pointIds: string[] };
 }
 
 export interface PointObject extends BaseMathObject {

@@ -569,6 +569,8 @@ export function eylemUygula(d0: DunyaDurumu, e: EylemTuru, blokId: string | null
 // ---------------------------------------------------------------------------
 
 export interface Hedef {
+  /** Sayaçtan bağımsız, gerçekten sulanması gereken saksı sayısı. */
+  sulamaSayisi?: number;
   kurulariSula?: boolean;
   sarilariGubrele?: boolean;
   kirmizilariTopla?: boolean;
@@ -588,6 +590,7 @@ export interface Hedef {
 }
 
 export type Eksik =
+  | { tur: 'sulamaSayisi'; beklenen: number; olan: number }
   | { tur: 'cikis'; bakilmayan: number[]; uzaklik?: number; gecti?: boolean }
   | { tur: 'susuz'; bitkiler: number[] }
   | { tur: 'gubresiz'; bitkiler: number[] }
@@ -631,6 +634,10 @@ export function enKisaYolUzunlugu(g: Izgara): number {
 
 export function hedefEksikleri(d: DunyaDurumu, h: Hedef): Eksik[] {
   const eksik: Eksik[] = [];
+  if (h.sulamaSayisi !== undefined) {
+    const olan = d.bitkiler.filter((b) => b.sulama > 0).length;
+    if (olan !== h.sulamaSayisi) eksik.push({ tur: 'sulamaSayisi', beklenen: h.sulamaSayisi, olan });
+  }
   const g = d.izgara;
   // Sırada robotun hiç uğramadığı bitkiler "çıkışa varamadı" iletisinde ayrıca sayılır; burada tekrarlanmaz
   const sira = (f: (b: BitkiDurumu) => boolean) => d.bitkiler.map((b, i) => (f(b) && (g.bahce || i + 1 <= d.enUzak) ? i + 1 : 0)).filter(Boolean);

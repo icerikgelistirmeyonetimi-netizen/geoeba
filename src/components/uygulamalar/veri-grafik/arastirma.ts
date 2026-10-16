@@ -12,6 +12,7 @@
  * İçe aktarma yönü: `deney.ts` bu modülden yalnız tür alır; bu modül `deney.ts`'in sabitlerini ve
  * varsayılan deney planını kullanır. `durum.ts` içe aktarılmaz (durum.ts bu modülü kullanır).
  */
+import { veriGirisHatasi } from './veriSinirlari';
 import { kimlikUret, sayiOku, sayiYaz, type GrafikTuru, type Sutun, type SutunTuru, type VeriTablosu } from './veri';
 import { ARASTIRMA_ROLLERI, arastirmaSutunRolu, type ArastirmaSutunRolu } from './kategorik';
 import { EN_COK_TOP, type CarkDilimi, type KaristiriciOgesi } from './ornekleyici';
@@ -569,7 +570,7 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
     id: 'meyve',
     yontem: 'anket',
     ad: 'En sevilen meyve',
-    soru: 'Sınıfımızda en çok sevilen meyve hangisi?',
+    soru: 'Sınıfımızdaki öğrencilerin en sevdikleri meyvelerin dağılımı nasıldır?',
     rozet: '5. sınıf · MAT.5.5.1',
     simge: 'elma',
     acilis: 'topla',
@@ -579,7 +580,7 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
     id: 'ulasim',
     yontem: 'anket',
     ad: 'Okula geliş',
-    soru: 'Okula nasıl geliyoruz?',
+    soru: 'Sınıfımızdaki öğrencilerin okula geliş biçimlerinin dağılımı nasıldır?',
     rozet: '5. sınıf · MAT.5.5.1',
     simge: 'otobus',
     acilis: 'topla',
@@ -589,7 +590,7 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
     id: 'mevsim',
     yontem: 'anket',
     ad: 'En sevilen mevsim',
-    soru: 'En sevdiğimiz mevsim hangisi?',
+    soru: 'Sınıfımızdaki öğrencilerin en sevdikleri mevsimlerin dağılımı nasıldır?',
     rozet: '5. sınıf · MAT.5.5.1',
     simge: 'gunes',
     acilis: 'topla',
@@ -599,7 +600,7 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
     id: 'oylama',
     yontem: 'anket',
     ad: 'Sınıf başkanlığı',
-    soru: 'Sınıf başkanlığı seçiminde kim önde?',
+    soru: 'Sınıfımızdaki sınıf başkanı adaylarının bu seçimde aldıkları oyların dağılımı nasıldır?',
     rozet: '5. sınıf · MAT.5.5.1',
     simge: 'oy-sandigi',
     acilis: 'plan',
@@ -609,7 +610,7 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
     id: 'dogum-ayi',
     yontem: 'anket',
     ad: 'Doğum ayı',
-    soru: 'Sınıfımızda en çok hangi ayda doğan var?',
+    soru: 'Sınıfımızdaki öğrencilerin doğum aylarının dağılımı nasıldır?',
     rozet: '5. sınıf · MAT.5.5.1',
     simge: 'takvim',
     acilis: 'topla',
@@ -619,7 +620,7 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
     id: 'kardes',
     yontem: 'anket',
     ad: 'Kardeş sayısı',
-    soru: 'Kaç kardeşimiz var?',
+    soru: 'Sınıfımızdaki öğrencilerin kardeş sayılarının dağılımı nasıldır?',
     rozet: '6. sınıf · MAT.6.5.1',
     simge: 'iki-kisi',
     acilis: 'topla',
@@ -629,7 +630,7 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
     id: 'kitap',
     yontem: 'anket',
     ad: 'Okunan kitap',
-    soru: 'Bu dönem kaç kitap okuduk?',
+    soru: 'Sınıfımızdaki öğrencilerin bu dönem okudukları kitap sayılarının dağılımı nasıldır?',
     rozet: '6. sınıf · MAT.6.5.1',
     simge: 'kitap',
     acilis: 'topla',
@@ -639,17 +640,17 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
     id: 'boy',
     yontem: 'olcum',
     ad: 'Boyumuz',
-    soru: 'Sınıfımızdaki öğrencilerin boyları kaç cm?',
+    soru: 'Sınıfımızdaki öğrencilerin bugün ölçülen boy uzunluklarının dağılımı nasıldır?',
     rozet: '7. sınıf · MAT.7.6.1',
     simge: 'boy-olcer',
     acilis: 'topla',
-    olcum: { degiskenAdi: 'Boy', birim: 'cm', duyarlik: 1, beklenen: [130, 175] },
+    olcum: { degiskenAdi: 'Boy', birim: 'cm', duyarlik: 0.1, beklenen: [130, 175] },
   },
   {
     id: 'nabiz',
     yontem: 'olcum',
     ad: 'Nabzımız',
-    soru: 'Bir dakikada nabzımız kaç kez atıyor?',
+    soru: 'Sınıfımızdaki öğrencilerin dinlenirken bir dakikada ölçülen nabız sayılarının dağılımı nasıldır?',
     rozet: '7. sınıf · MAT.7.6.1',
     simge: 'kalp',
     acilis: 'topla',
@@ -659,7 +660,7 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
     id: 'uyku',
     yontem: 'olcum',
     ad: 'Uyku süremiz',
-    soru: 'Dün gece kaç saat uyuduk?',
+    soru: 'Sınıfımızdaki öğrencilerin dün geceki uyku sürelerinin dağılımı nasıldır?',
     rozet: '7. sınıf · MAT.7.6.1',
     simge: 'ay',
     acilis: 'topla',
@@ -1162,7 +1163,7 @@ export function olcumSatirlari(a: Arastirma, degerler: readonly number[], ad = '
   const g = a.olcum.grup;
   const grup = g ? (g.secenekler[g.etkin] ?? '').trim() : '';
   return degerler
-    .filter((x) => Number.isFinite(x))
+    .filter((x) => Number.isFinite(x) && olcumGirisHatasi(a, x) === null)
     .map((x) => veriRolleri({ ...a, yontem: 'olcum' }).map((rol) => (rol === 'ad' ? ad.trim() : rol === 'grup' ? grup : olcumHucresi(x, a.olcum.duyarlik))));
 }
 
@@ -1176,6 +1177,10 @@ export function olcumMetni(a: Arastirma, x: number, ondalik = 2): string {
  * Beklenen aralığın çok dışındaki değer (aralığın onda biri kadar pay bırakılır) yine eklenir, ama uyarı çıkar:
  * "Bu değer beklenen aralığın dışında (60–120): doğru mu?". Aralık yoksa ya da değer içindeyse null.
  */
+export function olcumGirisHatasi(a: Arastirma, x: number): string | null {
+  return veriGirisHatasi(a.olcum.degiskenAdi, x) ?? veriGirisHatasi(a.olcum.degiskenAdi, olcumDegeri(x, a.olcum.duyarlik));
+}
+
 export function beklenenUyarisi(a: Arastirma, x: number): string | null {
   const b = a.olcum.beklenen;
   if (!b || !Number.isFinite(x)) return null;

@@ -20,7 +20,7 @@ export const TOOLS: ToolInfo[] = [
   { id: 'segment', name: 'Doğru Parçası', description: 'İki nokta arasına doğru parçası çizin.', aliases: [/\bdogru parca(?:si)?\b/, /\bparca\b/] },
   { id: 'line', name: 'Doğru', description: 'İki noktadan geçen sonsuz doğru çizin.', aliases: [/\bdogru\b/] },
   { id: 'ray', name: 'Işın', description: 'Başlangıç noktası ve üzerinden geçen ikinci nokta ile ışın çizin.', aliases: [/\bisin\b/] },
-  { id: 'segment_length', name: 'Ölçülü Parça', description: 'Bir başlangıç noktasına tıklayın, uzunluğu sayı olarak girin.', aliases: [/\bolculu (?:dogru )?parca(?:si)?\b/, /\buzunlugu verilen parca\b/] },
+  { id: 'segment_length', name: 'Ölçülü Doğru Parçası', description: 'Bir başlangıç noktasına tıklayın, uzunluğu sayı olarak girin.', aliases: [/\bolculu (?:dogru )?parca(?:si)?\b/, /\buzunlugu verilen parca\b/] },
   { id: 'circle', name: 'Çember', description: 'Merkez ve yarıçap noktasıyla çember çizin.', aliases: [/\bcember\b/, /\bdaire\b/] },
   { id: 'pen', name: 'Kalem', description: 'Serbest çizim kalemi.', aliases: [/\bkalem\b/, /\bserbest cizim\b/], bare: /\bkalem(?:i|e|le|im)?\b|\bserbest cizim(?:e|i)?\b/ },
   { id: 'select', name: 'Seç ve Taşı', description: 'Noktaları veya nesneleri seçip sürükleyin.', aliases: [/\bsec ve tasi\b/, /\bsecme\b/, /\bsecim\b/, /\btasi(?:ma)?\b/, /\bimlec\b/, /\bfare\b/, /\bok\b/], bare: /\bimlec(?:i|e)?\b|\bsecim moduna\b/ },

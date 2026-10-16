@@ -21,6 +21,7 @@ import {
 
 /** Okunmuş ya da seçilmiş son değer; null: henüz okunmadı. */
 let secili: KademeDuzeyi | null = null;
+let oturumKademesi: Exclude<KademeDuzeyi, 'tum'> | null = null;
 const dinleyiciler = new Set<() => void>();
 
 function depodanOku(): KademeDuzeyi {
@@ -47,6 +48,7 @@ function depodanOku(): KademeDuzeyi {
 
 /** Şu anki kademe (React dışı okuma; bileşenler useKademeDuzeyi kullanır). */
 export function kademeDuzeyiniOku(): KademeDuzeyi {
+  if (oturumKademesi) return oturumKademesi;
   if (secili === null) secili = depodanOku();
   return secili;
 }
@@ -59,6 +61,7 @@ function sunucuDegeri(): KademeDuzeyi {
 export function kademeDuzeyineAbone(dinleyici: () => void): () => void {
   dinleyiciler.add(dinleyici);
   const baskaSekme = (olay: StorageEvent) => {
+    if (oturumKademesi) return;
     // key null: başka sekmede localStorage.clear() — varsayılana döner
     if (olay.key !== null && olay.key !== KADEME_DUZEYI_ANAHTARI) return;
     secili = kademeDuzeyiniCoz(olay.newValue);
@@ -73,6 +76,7 @@ export function kademeDuzeyineAbone(dinleyici: () => void): () => void {
 
 /** Seçimi uygular ve saklar. Depolama kapalıysa seçim yalnızca bu oturumda geçerli olur. */
 export function kademeDuzeyiniAyarla(yeni: KademeDuzeyi): void {
+  if (oturumKademesi && yeni !== oturumKademesi) return;
   secili = yeni;
   try {
     window.localStorage.setItem(KADEME_DUZEYI_ANAHTARI, yeni);
@@ -80,6 +84,13 @@ export function kademeDuzeyiniAyarla(yeni: KademeDuzeyi): void {
     /* depolama kapalı ya da dolu: seçim bellekte kalır */
   }
   dinleyiciler.forEach((dinleyici) => dinleyici());
+}
+
+/** Bir oturum boyunca bütün uygulamalar aynı kademeyi kullanır. */
+export function oturumKademesiniAyarla(kademe: Exclude<KademeDuzeyi, 'tum'> | null): void {
+  oturumKademesi = kademe;
+  if (kademe) kademeDuzeyiniAyarla(kademe);
+  else dinleyiciler.forEach((dinleyici) => dinleyici());
 }
 
 /** [seçili kademe, kademeyi değiştir] */

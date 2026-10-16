@@ -40,6 +40,8 @@ export interface YazimAyari {
    * Yalnız tamSayi ile birlikte etkilidir; ortaokul / lise yazımı değişmez.
    */
   yaklasikSozcukle?: boolean;
+  /** Ortaokulda alan biriminin kısaltması yerine açık adı yazılır. */
+  alanBirimiAcik?: boolean;
 }
 /** Motorun ve ayarsız çağrıların varsayılanı: tam sayı KAPALI (komut yanıtları kesin değer verir). */
 export const VARSAYILAN_YAZIM: YazimAyari = { olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: false };
@@ -343,7 +345,7 @@ export function olcuDugumleri(o: Olcu, ayar: YazimAyari = VARSAYILAN_YAZIM, sec:
   const d = olcuDugumleriHam(tamSayiUygula(o, ayar), ayar);
   const ilk = d[0];
   if (sec.cumleIci && ilk?.t === 'kelime') d[0] = { ...ilk, s: ilk.s.charAt(0).toLocaleLowerCase('tr') + ilk.s.slice(1) };
-  return d;
+  return ayar.alanBirimiAcik ? d.map((n) => n.t === 'birim' && n.s === 'br²' ? kelime(' birimkare') : n) : d;
 }
 
 /** Çember / elips kartı satırının formülü — ad başlıkta olduğu için sözcükle yazılır. */

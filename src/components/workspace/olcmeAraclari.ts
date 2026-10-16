@@ -605,9 +605,9 @@ export function tutamactanUzaklastir(nokta: Point2D, kacinilan: Point2D, uzaklik
 
 export const cetvelOkumasi = (boy: number) => `${formatTurkishNumber(boy)} br`;
 export const donusOkumasi = (donusSvg: number) => `${normalizeDeg(-donusSvg)}°`;
-export const iletkiOkumasi = (aci: number) => `${aci}° · ${aciTuru(aci)}`;
+export const iletkiOkumasi = (aci: number) => `${aci}°`;
 export const tabanOkumasi = (taban: number) => `Taban ${normalizeDeg(taban)}°`;
-export const alanOkumasi = (sutun: number, satir: number) => `${sutun} × ${satir} = ${sutun * satir} br²`;
+export const alanOkumasi = (sutun: number, satir: number) => `${sutun} × ${satir} = ${sutun * satir} birimkare`;
 export const cevreOkumasi = (sutun: number, satir: number) => `Çevre = 2 × (${sutun} + ${satir}) = ${2 * (sutun + satir)} br`;
 
 // ─── Sağ tık menüsü (veri) ───────────────────────────────────────────────────

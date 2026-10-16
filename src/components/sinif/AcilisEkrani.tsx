@@ -5,10 +5,10 @@
  * tam ekranda gösterilir. Koyu turkuaz-mürekkep zemin, ortada animasyonlu EBA göz karakteri,
  * altında EBA yazı markası, ince ilerleme çubuğu ve durum yazısı.
  *
- * Boyutlar kap genişliğine (cqw; devirde --acilis-birim ile varıştaki genişliğe kilitlenir) bağlıdır.
- * Ekran okuyucu için tek duyuru kaynağı SinifEkrani'nin canlı bölgesidir; bu katman aria-hidden'dır
- * (aynı metin üç kez duyurulmasın). Ölçü birimi min(1cqw, 2cqh): masaüstü duvar logosuyla (sinif.module.css
- * .duvar --l) her en-boy oranında aynı ölçü ve konum.
+ * Boyutlar açılış birimine (acilisBirimi.ts: kabı örten 16:9 kutunun 1cqw'si; devirde --acilis-birim ile
+ * izdüşüm kutusunun birimine kilitlenir) bağlıdır. Ekran okuyucu için tek duyuru kaynağı SinifEkrani'nin
+ * canlı bölgesidir; yükleme içeriği aria-hidden'dır (aynı metin üç kez duyurulmasın). Birim masaüstü duvar
+ * logosuyla (sinif.module.css .duvar --l) her en-boy oranında aynı ölçü ve konumu verir.
  */
 import React, { useEffect } from 'react';
 import { duvarVarliklariniOnYukle } from './duvarVarliklari';
@@ -24,19 +24,29 @@ export interface AcilisEkraniProps {
   /** Geçiş süresi (ms) */
   sure: number;
   durum: string;
+  /** Yükleme tamamlanınca aynı ekranın üzerinde açılan oturum kutuları; gelirken logo yukarı kayar. */
+  children?: React.ReactNode;
+  /** Oturum kartı seçildi: kartlar iner, logo açılıştaki yerine (masaüstü duvar logosunun yeri) geri iner. */
+  oturumKapaniyor?: boolean;
 }
 
-export function AcilisEkrani({ logoGorunur, ilerleme, sure, durum }: AcilisEkraniProps) {
+export function AcilisEkrani({ logoGorunur, ilerleme, sure, durum, children, oturumKapaniyor }: AcilisEkraniProps) {
   // Masaüstü duvar kâğıdının logosu/halkaları açılış sürerken indirilip çözülür: geçişte logo sönmez
   useEffect(() => {
     duvarVarliklariniOnYukle();
   }, []);
   return (
     <div
-      className={[s.acilis, s.kabuk, logoGorunur ? s['acilis--logo'] : s['acilis--karanlik']].join(' ')}
-      aria-hidden="true"
+      className={[
+        s.acilis,
+        s.kabuk,
+        logoGorunur ? s['acilis--logo'] : s['acilis--karanlik'],
+        children ? s['acilis--oturum'] : '',
+        oturumKapaniyor ? s['acilis--oturum-kapaniyor'] : '',
+      ].join(' ')}
+      data-acilis-ekrani
     >
-      <div className={s['acilis-ic']}>
+      <div className={s['acilis-ic']} aria-hidden="true">
         <span className={s['acilis-karakter']} aria-hidden="true">
           <img
             src={`${VARLIK_ONEKI}/images/eba/eba-karakter-animasyon-koyu-zemin.svg`}
@@ -57,6 +67,7 @@ export function AcilisEkrani({ logoGorunur, ilerleme, sure, durum }: AcilisEkran
         </div>
         <p className={s['acilis-durum']}>{durum}</p>
       </div>
+      {children}
     </div>
   );
 }

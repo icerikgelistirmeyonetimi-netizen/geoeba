@@ -1,7 +1,7 @@
 // @vitest-environment node
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CIZIM_KIMLIGI, ILKOKULDA_GIZLI_UYGULAMALAR, UYGULAMALAR, UygulamaHazirlaniyor, kademeninUygulamalari, uygulamaBul } from '../uygulamalar';
 import { manifest as veriGrafikManifesti } from '@/components/uygulamalar/veri-grafik/manifest';
 import { ilkokulManifesti as olasilikIlkokulManifesti, manifest as olasilikManifesti } from '@/components/uygulamalar/olasilik/manifest';
@@ -9,6 +9,12 @@ import { manifest as veriGrafikIndex } from '@/components/uygulamalar/veri-grafi
 import { manifest as olasilikIndex } from '@/components/uygulamalar/olasilik';
 import { manifest as algoritmaManifesti } from '@/components/uygulamalar/algoritma/manifest';
 import { manifest as algoritmaIndex } from '@/components/uygulamalar/algoritma';
+import { useIlkokulKipi } from '@/hooks/useKademeDuzeyi';
+
+vi.mock('@/hooks/useKademeDuzeyi', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/hooks/useKademeDuzeyi')>(),
+  useIlkokulKipi: vi.fn(() => false),
+}));
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -84,8 +90,27 @@ describe('ilkokul kademesi (alan uzmanları, 2. ve 4. tur)', () => {
     expect(o?.ad).toBe(genel?.ad);
     expect(o?.renk).toBe(genel?.renk);
     expect(o?.Bilesen).toBe(genel?.Bilesen);
-    // Öbür uygulamalar ilkokulda da aynı kayıt
-    for (const u of kademeninUygulamalari(true)) if (u.id !== 'olasilik') expect(u).toBe(uygulamaBul(u.id));
+    // Açıklamalar uyarlanırken gövde bileşenleri korunur.
+    for (const u of kademeninUygulamalari(true)) expect(u.Bilesen).toBe(uygulamaBul(u.id)?.Bilesen);
+    expect(kademeninUygulamalari(true).find((u) => u.id === 'algoritma')?.ad).toBe('Adım Adım Matematik');
+  });
+
+  it('ilkokul açıklamaları çizim ve veri araçlarının bu oturumdaki kapsamını anlatır', () => {
+    const liste = kademeninUygulamalari(true);
+    expect(liste.find((u) => u.id === CIZIM_KIMLIGI)?.aciklama).toBe('Şekilleri çiz, ölç ve geometrik cisimleri keşfet.');
+    expect(liste.find((u) => u.id === veriGrafikManifesti.id)?.aciklama).toBe('Nesne ve şekil grafikleri oluştur; çetele ve sıklık tablolarını incele.');
+  });
+
+  it('algoritma yükleyicisi etkin oturumun adını kullanır', () => {
+    const Bilesen = uygulamaBul('algoritma')!.Bilesen;
+    try {
+      vi.mocked(useIlkokulKipi).mockReturnValue(true);
+      expect(renderToStaticMarkup(<Bilesen />)).toContain('Adım Adım Matematik hazırlanıyor…');
+      vi.mocked(useIlkokulKipi).mockReturnValue(false);
+      expect(renderToStaticMarkup(<Bilesen />)).toContain('Algoritma hazırlanıyor…');
+    } finally {
+      vi.mocked(useIlkokulKipi).mockReturnValue(false);
+    }
   });
 
   it('ortaokul, lise ve "Tüm araçlar"da liste değişmez', () => {
