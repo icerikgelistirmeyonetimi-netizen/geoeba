@@ -911,7 +911,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 03:53
+  montaj: 2026-10-17 19:55
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 03:10
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-17 03:07
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 03:11
@@ -2604,7 +2604,7 @@ window.SAYFA_INIT[3] = function (kok) {
 <div class="sayfa-duzen" style="--sutun-sol:8fr;--sutun-sag:4fr">
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 03:10 -->
 <!-- SAYFA_BASLIK: Araç Seçimi -->
-<!-- YONERGE: Kâğıttaki çember yayını tamamlamak için uygun aracı seçip hedefe sürükleyin. -->
+<!-- YONERGE: Uygun aracı hedefe sürükle, sonra pergeli çevirerek çember yayını tamamla. -->
 <!-- ETIKET: UYGULAMA -->
 <!-- SUTUN_ORAN: 8fr 4fr -->
 <section class="bolum sahne s4-sahne-zemini">
@@ -2613,7 +2613,7 @@ window.SAYFA_INIT[3] = function (kok) {
 <section class="bolum etkilesim">
 <div class="panel-basi">
 <div class="baslik-satiri"><h2>Araç Seçimi</h2><span class="etiket">UYGULAMA</span></div>
-<p class="yonerge">Kâğıttaki çember yayını tamamlamak için uygun aracı seçip hedefe sürükleyin.</p>
+<p class="yonerge">Uygun aracı hedefe sürükle, sonra pergeli çevirerek çember yayını tamamla.</p>
 </div>
 
   <div class="kontrol-govde">
@@ -3190,7 +3190,12 @@ window.SAYFA_INIT[4] = function (kok) {
   kalemGolge.position.set(-2.0, 0.214, 0.2);
   pergelGrup.add(kalemGolge);
 
-  scene.add(pergelGrup);
+  // İğne ucu (x 0, z 0.2) çevresinde dönen eksen: pivot.rotation.y = β → kalem halka açısı φ = π + β
+  var pergelPivot = new THREE.Group();
+  pergelPivot.position.set(0, 0, 0.2);
+  pergelGrup.position.set(0, 0, -0.2);
+  pergelPivot.add(pergelGrup);
+  scene.add(pergelPivot);
 
   // Uzman notu: sahnedeki (soldaki) saydam pergel görseli doğru aracı ele
   // veriyordu — hayalet pergel KURULMAZ; gerçek pergel yalnız doğru seçimden
@@ -3253,7 +3258,7 @@ window.SAYFA_INIT[4] = function (kok) {
       if (gosterim) {
         EGITSEL.dontVer(kok, "bilgi", "Doğru cevap: Pergel. Çember yayı pergelle çizilir.");
       } else {
-        EGITSEL.dontVer(kok, "dogru", "Yay pergel ile çizilir.");
+        EGITSEL.dontVer(kok, "dogru", "Pergel doğru araç; şimdi pergeli çevirerek yayı tamamla.");
       }
 
       var pergelKart = kok.querySelector('[data-arac="pergel"]');
@@ -3265,23 +3270,12 @@ window.SAYFA_INIT[4] = function (kok) {
 
       pergelGrup.visible = true;
       if (hayaletPergel) hayaletPergel.visible = false;
-      hedefBolge.visible = false;
-      eksikYayMesh.visible = true;
-
-      var parlamaBaslangic = performance.now();
-      if (parlamaAnimId) cancelAnimationFrame(parlamaAnimId);
-      function parlatmaDongusu(zaman) {
-        var gecen = (zaman - parlamaBaslangic) / 1000;
-        if (gecen < 1.2) {
-          var siddet = 0.7 + 0.9 * Math.sin(gecen * Math.PI / 1.2);
-          eksikYayMat.emissiveIntensity = siddet;
-          parlamaAnimId = requestAnimationFrame(parlatmaDongusu);
-        } else {
-          eksikYayMat.emissiveIntensity = 0.6;
-          parlamaAnimId = null;
-        }
-      }
-      parlamaAnimId = requestAnimationFrame(parlatmaDongusu);
+      // Hedef bant kılavuz olarak soluk kalır; yay tamamlanınca kaybolur
+      if (uyariZamanlayici) { clearTimeout(uyariZamanlayici); uyariZamanlayici = null; }
+      hedefBolgeMat.color.setHex(0x7fd2cf);
+      hedefBolgeMat.opacity = 0.18;
+      cizimBaslat();
+      if (gosterim) otomatikCiz();
 
       seciliAlet = null;
       seciliKart = null;
@@ -3298,6 +3292,129 @@ window.SAYFA_INIT[4] = function (kok) {
       EGITSEL.dontVer(kok, "yanlis", "Gönye dik açı içindir.");
     }
   }
+
+  // ── Pergeli çevirerek yayı tamamlama ──────────────────────────────────────
+  // Öğrenci pergeli (ya da yayın çevresini) tutup çevirir; kalem eksik yarım
+  // çemberde (halka açısı π → 2π) geçtiği kadar yay çizer. Dönüş, işaretçinin
+  // açı değişimiyle ilerler (tutulan yer neresi olursa olsun sıçrama olmaz).
+  var cizimDurumu = "yok";          // "yok" | "ciziliyor" | "bitti"
+  var kalemAcisi = 0;               // β: 0 (yayın başı, sol) … π (yayın sonu, sağ)
+  var taramaMin = 0, taramaMax = 0;
+  var cevirme = false, sonIsaretciAcisi = 0;
+  var ilerlemeMat = new THREE.MeshBasicMaterial({ color: 0x2455a8, side: THREE.DoubleSide });
+  var ilerlemeYay = new THREE.Mesh(new THREE.BufferGeometry(), ilerlemeMat);
+  ilerlemeYay.rotation.x = -Math.PI / 2;
+  ilerlemeYay.position.set(0, 0.2155, 0.2);
+  scene.add(ilerlemeYay);
+  var kagitDuzlemi = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.215);
+  var cizimIsini = new THREE.Raycaster();
+  var cizimNoktasi = new THREE.Vector3();
+
+  function isaretciKonumu(e) {     // kâğıt düzleminde merkeze göre halka açısı φ ve uzaklık
+    var r = renderer.domElement.getBoundingClientRect();
+    var m = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    cizimIsini.setFromCamera(m, camera);
+    if (!cizimIsini.ray.intersectPlane(kagitDuzlemi, cizimNoktasi)) return null;
+    var dx = cizimNoktasi.x, dz = cizimNoktasi.z - 0.2;
+    return { aci: Math.atan2(-dz, dx), uzaklik: Math.sqrt(dx * dx + dz * dz) };
+  }
+  function ilerlemeGuncelle() {
+    ilerlemeYay.geometry.dispose();
+    var boy = taramaMax - taramaMin;
+    ilerlemeYay.geometry = boy > 0.01
+      ? new THREE.RingGeometry(YAY_YARICAP - 0.03, YAY_YARICAP + 0.03, 64, 1, Math.PI + taramaMin, boy)
+      : new THREE.BufferGeometry();
+  }
+  function cizimBaslat() {
+    cizimDurumu = "ciziliyor";
+    kalemAcisi = 0;
+    taramaMin = 0;
+    taramaMax = 0;
+    pergelPivot.rotation.y = 0;
+    ilerlemeGuncelle();
+  }
+  function yayTamamla(gosterim) {
+    cizimDurumu = "bitti";
+    cevirme = false;
+    controls.enabled = true;
+    kutu.style.cursor = "default";
+    ilerlemeYay.geometry.dispose();
+    ilerlemeYay.geometry = new THREE.BufferGeometry();
+    hedefBolge.visible = false;
+    eksikYayMesh.visible = true;
+    if (!gosterim) EGITSEL.dontVer(kok, "dogru", "Yay tamamlandı.");
+
+    var parlamaBaslangic = performance.now();
+    if (parlamaAnimId) cancelAnimationFrame(parlamaAnimId);
+    function parlatmaDongusu(zaman) {
+      var gecen = (zaman - parlamaBaslangic) / 1000;
+      if (gecen < 1.2) {
+        eksikYayMat.emissiveIntensity = 0.7 + 0.9 * Math.sin(gecen * Math.PI / 1.2);
+        parlamaAnimId = requestAnimationFrame(parlatmaDongusu);
+      } else {
+        eksikYayMat.emissiveIntensity = 0.6;
+        parlamaAnimId = null;
+      }
+    }
+    parlamaAnimId = requestAnimationFrame(parlatmaDongusu);
+  }
+  function otomatikCiz() {          // gösterim: pergel yayı kendiliğinden çizer
+    var baslangic = performance.now();
+    function adim(t) {
+      if (cizimDurumu !== "ciziliyor") return;
+      var p = Math.min(1, (t - baslangic) / 1600);
+      kalemAcisi = taramaMax = Math.PI * p;
+      pergelPivot.rotation.y = kalemAcisi;
+      ilerlemeGuncelle();
+      if (p < 1) requestAnimationFrame(adim); else yayTamamla(true);
+    }
+    requestAnimationFrame(adim);
+  }
+
+  renderer.domElement.addEventListener("pointerdown", function (e) {
+    if (cizimDurumu !== "ciziliyor") return;
+    var k = isaretciKonumu(e);
+    if (!k || k.uzaklik < 0.25) return;
+    var pergelde = cizimIsini.intersectObject(pergelGrup, true).length > 0;
+    if (!pergelde && Math.abs(k.uzaklik - YAY_YARICAP) > 0.7) return;   // yayın çevresi de tutulabilir
+    cevirme = true;
+    sonIsaretciAcisi = k.aci;
+    controls.enabled = false;
+    kutu.style.cursor = "grabbing";
+    try { renderer.domElement.setPointerCapture(e.pointerId); } catch (hata) {}
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true);
+  renderer.domElement.addEventListener("pointermove", function (e) {
+    if (cizimDurumu !== "ciziliyor") return;
+    if (!cevirme) {
+      var kk = isaretciKonumu(e);
+      var ustunde = kk && (cizimIsini.intersectObject(pergelGrup, true).length > 0 || Math.abs(kk.uzaklik - YAY_YARICAP) < 0.7);
+      kutu.style.cursor = ustunde ? "grab" : "default";
+      return;
+    }
+    var k = isaretciKonumu(e);
+    if (!k) return;
+    var d = k.aci - sonIsaretciAcisi;
+    if (d > Math.PI) d -= Math.PI * 2;
+    if (d < -Math.PI) d += Math.PI * 2;
+    sonIsaretciAcisi = k.aci;
+    kalemAcisi = Math.max(0, Math.min(Math.PI, kalemAcisi + d));
+    pergelPivot.rotation.y = kalemAcisi;
+    taramaMin = Math.min(taramaMin, kalemAcisi);
+    taramaMax = Math.max(taramaMax, kalemAcisi);
+    ilerlemeGuncelle();
+    if (taramaMin <= 0.05 && taramaMax >= Math.PI - 0.05) yayTamamla(false);
+  });
+  function cevirmeBitti(e) {
+    if (!cevirme) return;
+    cevirme = false;
+    controls.enabled = true;
+    kutu.style.cursor = "grab";
+    try { renderer.domElement.releasePointerCapture(e.pointerId); } catch (hata) {}
+  }
+  renderer.domElement.addEventListener("pointerup", cevirmeBitti);
+  renderer.domElement.addEventListener("pointercancel", cevirmeBitti);
 
   var yuva3bInst = EGITSEL.yuva3B({
     tuval: renderer.domElement,
@@ -3371,6 +3488,14 @@ window.SAYFA_INIT[4] = function (kok) {
       hedefBolgeMat.color.setHex(0x7fd2cf);
       hedefBolgeMat.opacity = 0.32;
       eksikYayMesh.visible = false;
+      cizimDurumu = "yok";
+      cevirme = false;
+      controls.enabled = true;
+      kalemAcisi = 0;
+      taramaMin = 0;
+      taramaMax = 0;
+      pergelPivot.rotation.y = 0;
+      ilerlemeGuncelle();
 
       yanlisSayisi = 0;
       kartlar.forEach(function (k) {
@@ -3439,7 +3564,7 @@ window.SAYFA_INIT[4] = function (kok) {
 <div class="sayfa-duzen" style="--sutun-sol:8fr;--sutun-sag:4fr">
 <!-- URETIM: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-17 03:08 -->
 <!-- SAYFA_BASLIK: Cetvelle Doğru Parçası -->
-<!-- YONERGE: Cetveli noktalar arasına hizalayarak doğru parçasını oluştur. -->
+<!-- YONERGE: Cetveli noktalara hizala, kalemle kenarı boyunca çiz. -->
 <!-- ETIKET: KEŞİF -->
 <!-- SUTUN_ORAN: 8fr 4fr -->
 <section class="bolum sahne s5-sahne-zemini">
@@ -3448,7 +3573,7 @@ window.SAYFA_INIT[4] = function (kok) {
 <section class="bolum etkilesim">
 <div class="panel-basi">
 <div class="baslik-satiri"><h2>Cetvelle Doğru Parçası</h2><span class="etiket">KEŞİF</span></div>
-<p class="yonerge">Cetveli noktalar arasına hizalayarak doğru parçasını oluştur.</p>
+<p class="yonerge">Cetveli noktalara hizala, kalemle kenarı boyunca çiz.</p>
 </div>
 
   <div class="kontrol-govde">
@@ -3922,6 +4047,68 @@ window.SAYFA_INIT[5] = function (kok) {
   cizgiGrup.add(cizgiMesh);
   scene.add(cizgiGrup);
 
+  // ── Kalem: cetvel hizalanınca A'da belirir, kenar boyunca B'ye sürüklenir ──
+  var noktaA = new THREE.Vector3(-2.0, 0.02, -0.8);
+  var kalemNormal = new THREE.Vector3(1.5, 0, -3.8).normalize();     // cetvelin dışına bakan yan
+  var kalemEkseni = new THREE.Vector3(0, 1, 0).addScaledVector(kalemNormal, 0.42).addScaledVector(dirAB, 0.22).normalize();
+  var kalemGrup = new THREE.Group();
+  var kalemGovde = new THREE.Group();
+  kalemGovde.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), kalemEkseni);
+  kalemGrup.add(kalemGovde);
+  var grafitMat = new THREE.MeshStandardMaterial({ color: 0x2c2f3a, roughness: 0.45, metalness: 0.2 });
+  var ahsapUcMat = new THREE.MeshStandardMaterial({ color: 0xe2c59a, roughness: 0.75 });
+  var kalemBoyaMat = new THREE.MeshPhysicalMaterial({ color: 0xe8b53a, roughness: 0.35, clearcoat: 0.6, clearcoatRoughness: 0.2 });
+  var halkaMetalMat = new THREE.MeshStandardMaterial({ color: 0xb8b2a6, roughness: 0.3, metalness: 0.9 });
+  var silgiUcMat = new THREE.MeshStandardMaterial({ color: 0xd98c8c, roughness: 0.8 });
+  var grafit = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.07, 16), grafitMat);
+  grafit.rotation.x = Math.PI;
+  grafit.position.y = 0.035;
+  var ahsapUc = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.02, 0.18, 6), ahsapUcMat);
+  ahsapUc.position.y = 0.16;
+  var kalemGovdeMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 1.2, 6), kalemBoyaMat);
+  kalemGovdeMesh.position.y = 0.85;
+  kalemGovdeMesh.castShadow = true;
+  var kalemHalka = new THREE.Mesh(new THREE.CylinderGeometry(0.069, 0.069, 0.1, 24), halkaMetalMat);
+  kalemHalka.position.y = 1.5;
+  var kalemSilgi = new THREE.Mesh(new THREE.CylinderGeometry(0.063, 0.063, 0.12, 24), silgiUcMat);
+  kalemSilgi.position.y = 1.61;
+  [grafit, ahsapUc, kalemGovdeMesh, kalemHalka, kalemSilgi].forEach(function (p) { kalemGovde.add(p); });
+  kalemGrup.visible = false;
+  scene.add(kalemGrup);
+
+  var kalemModu = false;          // kalem görünür, çizim bekleniyor
+  var kalemIlerleme = 0;          // çizilen en uzak oran (0 = A, 1 = B)
+  var birlestirIstendi = false;   // «Noktaları Birleştir» → kendiliğinden çiz
+
+  function kalemKonumla(t) {
+    kalemGrup.position.set(noktaA.x + vAB.x * t, noktaA.y, noktaA.z + vAB.z * t);
+  }
+  function kalemHazirla() {
+    kalemModu = true;
+    kalemIlerleme = 0;
+    isLineDrawing = false;
+    lineProgress = 0;
+    cizgiMesh.scale.y = 0.0001;
+    capA.visible = false;
+    capB.visible = false;
+    kalemKonumla(0);
+    kalemGrup.visible = true;
+    if (window.SABLON_TOAST) window.SABLON_TOAST("Kalemi cetvelin kenarı boyunca diğer noktaya sürükle.");
+  }
+  function cizimTamamla(gosterim) {
+    kalemModu = false;
+    isLineDrawing = false;
+    lineProgress = 1;
+    cizgiMesh.scale.y = 1;
+    capA.visible = true;
+    capB.visible = true;
+    matKureA.emissive.setHex(0x214d8f);
+    matKureA.emissiveIntensity = 0.6;
+    matKureB.emissive.setHex(0xc4572c);
+    matKureB.emissiveIntensity = 0.6;
+    if (!gosterim) EGITSEL.dontVer(kok, 'dogru', 'Doğru parçası oluşturuldu.');
+  }
+
   var capGeom = new THREE.SphereGeometry(0.06, 32, 24);
   var capMat = new THREE.MeshStandardMaterial({ color: 0x1b8a5a, emissive: 0x25b372, emissiveIntensity: 0.8 });
   var capA = new THREE.Mesh(capGeom, capMat);
@@ -4049,12 +4236,43 @@ window.SAYFA_INIT[5] = function (kok) {
     amberHalo.material.opacity = 0.0;
     cetvelGrup.position.copy(BASLANGIC_POS);
     cetvelGrup.rotation.y = BASLANGIC_ROT;
+    kalemModu = false;
+    kalemIlerleme = 0;
+    birlestirIstendi = false;
+    kalemGrup.visible = false;
+    mode = null;
+    controls.enabled = true;
   }
 
   renderer.domElement.addEventListener('pointermove', function (e) {
     pointer.x = ((e.clientX - canvasRect.left) / canvasRect.width) * 2 - 1;
     pointer.y = -((e.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
+
+    if (mode === 'kalem') {
+      if (raycaster.ray.intersectPlane(tablePlane, hitPoint)) {
+        var t = ((hitPoint.x - noktaA.x) * dirAB.x + (hitPoint.z - noktaA.z) * dirAB.z) / mesafeAB;
+        t = Math.max(0, Math.min(1, t));
+        kalemKonumla(t);                                   // kalem cetvelin kenarından ayrılmaz
+        if (t > kalemIlerleme) {
+          kalemIlerleme = t;
+          cizgiMesh.scale.y = Math.max(0.0001, kalemIlerleme);
+          capA.visible = true;
+        }
+        if (kalemIlerleme >= 0.98) {
+          mode = null;
+          controls.enabled = true;
+          renderer.domElement.style.cursor = 'default';
+          kalemKonumla(1);
+          cizimTamamla(false);
+        }
+      }
+      return;
+    }
+    if (kalemModu) {                                       // kalem beklerken cetvel kilitli; imleç ipucu
+      renderer.domElement.style.cursor = raycaster.intersectObject(kalemGrup, true).length ? 'grab' : 'default';
+      return;
+    }
 
     if (mode === 'drag') {
       if (raycaster.ray.intersectPlane(tablePlane, hitPoint)) {
@@ -4096,6 +4314,20 @@ window.SAYFA_INIT[5] = function (kok) {
     pointer.y = -((e.clientY - canvasRect.top) / canvasRect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
 
+    if (kalemModu) {
+      var kalemde = raycaster.intersectObject(kalemGrup, true).length > 0;
+      if (!kalemde && raycaster.ray.intersectPlane(tablePlane, hitPoint)) {
+        kalemde = hitPoint.distanceTo(kalemGrup.position) < 0.45;   // dokunmatikte kalem ucu için pay
+      }
+      if (kalemde) {
+        e.preventDefault();
+        mode = 'kalem';
+        controls.enabled = false;
+        renderer.domElement.style.cursor = 'grabbing';
+      }
+      return;
+    }
+
     var hits = cozumKilidi ? [] : raycaster.intersectObjects([halkaSol, halkaSag, cetvelMesh], false);
     if (hits.length > 0) {
       e.preventDefault();
@@ -4120,6 +4352,12 @@ window.SAYFA_INIT[5] = function (kok) {
   });
 
   function bitirEtkilesim() {
+    if (mode === 'kalem') {
+      mode = null;
+      controls.enabled = true;
+      renderer.domElement.style.cursor = 'default';
+      return;
+    }
     if (mode !== null) {
       mode = null;
       controls.enabled = true;
@@ -4137,9 +4375,12 @@ window.SAYFA_INIT[5] = function (kok) {
   });
 
   kok.querySelector('#s5-btn-birlestir').addEventListener('click', function () {
+    birlestirIstendi = true;                             // yedek yol: kalemsiz, kendiliğinden çiz
     if (!isSnapped) {
       startSnapAnimation(-0.2469, 0.3221, -0.3758);
     } else {
+      kalemModu = false;
+      kalemKonumla(1);
       cizgiAnimasyonuBaslat();
     }
   });
@@ -4177,7 +4418,7 @@ window.SAYFA_INIT[5] = function (kok) {
         cetvelGrup.rotation.y = snapTargetRot;
         setCetvelEmissive(0.0);
         amberHalo.material.opacity = 0.0;
-        cizgiAnimasyonuBaslat();
+        if (gosterimModu || birlestirIstendi) cizgiAnimasyonuBaslat(); else kalemHazirla();
       } else {
         var ease = 1 - Math.pow(1 - snapT, 3);
         cetvelGrup.position.x = snapStartPos.x + (snapTargetPos.x - snapStartPos.x) * ease;
@@ -4189,15 +4430,7 @@ window.SAYFA_INIT[5] = function (kok) {
     if (isLineDrawing) {
       lineProgress += 0.025;
       if (lineProgress >= 1) {
-        lineProgress = 1;
-        isLineDrawing = false;
-        capA.visible = true;
-        capB.visible = true;
-        matKureA.emissive.setHex(0x214d8f);
-        matKureA.emissiveIntensity = 0.6;
-        matKureB.emissive.setHex(0xc4572c);
-        matKureB.emissiveIntensity = 0.6;
-        if (!gosterimModu) EGITSEL.dontVer(kok, 'dogru', 'Doğru parçası oluşturuldu.');
+        cizimTamamla(gosterimModu);
       }
       cizgiMesh.scale.y = Math.max(0.0001, lineProgress);
     }
@@ -7126,7 +7359,7 @@ window.SAYFA_INIT[12] = function (kok) {
 
 </div>
 
-<script src="ortak/01b848bfdfd26391.js"></script>
+<script src="ortak/8a827639773020e0.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>
