@@ -679,6 +679,288 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 } )();
 
 </script>
+<script>/* Reflector.js — yerel gömme */
+/* three.js r155 örnek portu — Reflector (examples/jsm/objects/Reflector.js)
+ * Lisans: MIT (three.js yazarları). Global yapı (THREE.*) için IIFE olarak
+ * uyarlandı; ES modül/importmap yok. Düz AYNA / parlak zemin / durgun su için
+ * gerçek sahne yansıması: sahne her karede aynalanmış kamerayla bir dokuya
+ * çizilir (CubeCamera düz yüzeyde yanlış paralaks verir, bu doğru olanıdır).
+ * Kullanım:
+ *   var ayna = new THREE.Reflector(new THREE.PlaneGeometry(2, 1.2), {
+ *     clipBias: 0.003, textureWidth: 1024, textureHeight: 1024, color: 0x8a8a8a });
+ *   ayna.position.set(x, y, z); ayna.rotation.y = a;   // düzlemin +Z normali bakış tarafıdır
+ *   scene.add(ayna);
+ * Bedel: kare başına bir tam sahne çizimi daha (yansıma dokusu). Yüzey sayısı
+ * 1-2 ile sınırlı tutulur; hareket yoksa yine her kare çizer.
+ * Montaj bu dosyayı yalnız sayfada «Reflector» geçince gömer
+ * (uretici/sablon.py kutuphane_dosyalari). 2026-09-05. */
+( function () {
+
+	class Reflector extends THREE.Mesh {
+
+		constructor( geometry, options = {} ) {
+
+			super( geometry );
+
+			this.isReflector = true;
+			this.type = 'Reflector';
+			this.camera = new THREE.PerspectiveCamera();
+			// PORT EKİ: yardımcı kamera damgası — şablon köprüsü (sablon.html) bu
+			// kamerayla yapılan çizimi kayda/3B yuva izdüşümüne almaz (aksi hâlde
+			// yuva vuruş alanları her karede ayna kamerasına göre kayardı).
+			this.camera.userData.yardimci = true;
+
+			const scope = this;
+
+			const color = ( options.color !== undefined ) ? new THREE.Color( options.color ) : new THREE.Color( 0x7F7F7F );
+			const textureWidth = options.textureWidth || 512;
+			const textureHeight = options.textureHeight || 512;
+			const clipBias = options.clipBias || 0;
+			const shader = options.shader || Reflector.ReflectorShader;
+			const multisample = ( options.multisample !== undefined ) ? options.multisample : 4;
+
+			//
+
+			const reflectorPlane = new THREE.Plane();
+			const normal = new THREE.Vector3();
+			const reflectorWorldPosition = new THREE.Vector3();
+			const cameraWorldPosition = new THREE.Vector3();
+			const rotationMatrix = new THREE.Matrix4();
+			const lookAtPosition = new THREE.Vector3( 0, 0, - 1 );
+			const clipPlane = new THREE.Vector4();
+
+			const view = new THREE.Vector3();
+			const target = new THREE.Vector3();
+			const q = new THREE.Vector4();
+
+			const textureMatrix = new THREE.Matrix4();
+			const virtualCamera = this.camera;
+
+			const renderTarget = new THREE.WebGLRenderTarget( textureWidth, textureHeight, { samples: multisample, type: THREE.HalfFloatType } );
+
+			const material = new THREE.ShaderMaterial( {
+				uniforms: THREE.UniformsUtils.clone( shader.uniforms ),
+				fragmentShader: shader.fragmentShader,
+				vertexShader: shader.vertexShader
+			} );
+
+			material.uniforms[ 'tDiffuse' ].value = renderTarget.texture;
+			material.uniforms[ 'color' ].value = color;
+			material.uniforms[ 'textureMatrix' ].value = textureMatrix;
+
+			this.material = material;
+
+			this.onBeforeRender = function ( renderer, scene, camera ) {
+
+				// PORT EKİ (2026-09-05): kırılma (transmission) geçişi opak nesneleri
+				// mipmap'li yarı-float bir hedefe çizerken bu kancayı da tetikler;
+				// içeride yeniden sahne çizmek o paylaşılan hedefi ezer ve camın
+				// arkası ayna görüntüsüyle bozulur. Böyle bir hedef etkinken yansıma
+				// dokusu TAZELENMEZ (son kare kullanılır). EffectComposer hedefleri
+				// mipmap'siz olduğundan bloom zincirinde ayna yine her kare çizilir.
+				const etkinHedef = renderer.getRenderTarget();
+				if ( etkinHedef && etkinHedef.texture && etkinHedef.texture.generateMipmaps === true ) return;
+
+				reflectorWorldPosition.setFromMatrixPosition( scope.matrixWorld );
+				cameraWorldPosition.setFromMatrixPosition( camera.matrixWorld );
+
+				rotationMatrix.extractRotation( scope.matrixWorld );
+
+				normal.set( 0, 0, 1 );
+				normal.applyMatrix4( rotationMatrix );
+
+				view.subVectors( reflectorWorldPosition, cameraWorldPosition );
+
+				// Avoid rendering when reflector is facing away
+
+				if ( view.dot( normal ) > 0 ) return;
+
+				view.reflect( normal ).negate();
+				view.add( reflectorWorldPosition );
+
+				rotationMatrix.extractRotation( camera.matrixWorld );
+
+				lookAtPosition.set( 0, 0, - 1 );
+				lookAtPosition.applyMatrix4( rotationMatrix );
+				lookAtPosition.add( cameraWorldPosition );
+
+				target.subVectors( reflectorWorldPosition, lookAtPosition );
+				target.reflect( normal ).negate();
+				target.add( reflectorWorldPosition );
+
+				virtualCamera.position.copy( view );
+				virtualCamera.up.set( 0, 1, 0 );
+				virtualCamera.up.applyMatrix4( rotationMatrix );
+				virtualCamera.up.reflect( normal );
+				virtualCamera.lookAt( target );
+
+				virtualCamera.far = camera.far; // Used in WebGLBackground
+
+				virtualCamera.updateMatrixWorld();
+				virtualCamera.projectionMatrix.copy( camera.projectionMatrix );
+
+				// Update the texture matrix
+				textureMatrix.set(
+					0.5, 0.0, 0.0, 0.5,
+					0.0, 0.5, 0.0, 0.5,
+					0.0, 0.0, 0.5, 0.5,
+					0.0, 0.0, 0.0, 1.0
+				);
+				textureMatrix.multiply( virtualCamera.projectionMatrix );
+				textureMatrix.multiply( virtualCamera.matrixWorldInverse );
+				textureMatrix.multiply( scope.matrixWorld );
+
+				// Now update projection matrix with new clip plane, implementing code from: http://www.terathon.com/code/oblique.html
+				// Paper explaining this technique: http://www.terathon.com/lengyel/Lengyel-Oblique.pdf
+				reflectorPlane.setFromNormalAndCoplanarPoint( normal, reflectorWorldPosition );
+				reflectorPlane.applyMatrix4( virtualCamera.matrixWorldInverse );
+
+				clipPlane.set( reflectorPlane.normal.x, reflectorPlane.normal.y, reflectorPlane.normal.z, reflectorPlane.constant );
+
+				const projectionMatrix = virtualCamera.projectionMatrix;
+
+				q.x = ( Math.sign( clipPlane.x ) + projectionMatrix.elements[ 8 ] ) / projectionMatrix.elements[ 0 ];
+				q.y = ( Math.sign( clipPlane.y ) + projectionMatrix.elements[ 9 ] ) / projectionMatrix.elements[ 5 ];
+				q.z = - 1.0;
+				q.w = ( 1.0 + projectionMatrix.elements[ 10 ] ) / projectionMatrix.elements[ 14 ];
+
+				// Calculate the scaled plane vector
+				clipPlane.multiplyScalar( 2.0 / clipPlane.dot( q ) );
+
+				// Replacing the third row of the projection matrix
+				projectionMatrix.elements[ 2 ] = clipPlane.x;
+				projectionMatrix.elements[ 6 ] = clipPlane.y;
+				projectionMatrix.elements[ 10 ] = clipPlane.z + 1.0 - clipBias;
+				projectionMatrix.elements[ 14 ] = clipPlane.w;
+
+				// Render
+
+				scope.visible = false;
+
+				const currentRenderTarget = renderer.getRenderTarget();
+
+				const currentXrEnabled = renderer.xr.enabled;
+				const currentShadowAutoUpdate = renderer.shadowMap.autoUpdate;
+
+				renderer.xr.enabled = false; // Avoid camera modification
+				renderer.shadowMap.autoUpdate = false; // Avoid re-computing shadows
+
+				renderer.setRenderTarget( renderTarget );
+
+				renderer.state.buffers.depth.setMask( true ); // make sure the depth buffer is writable so it can be properly cleared, see #18897
+
+				if ( renderer.autoClear === false ) renderer.clear();
+				renderer.render( scene, virtualCamera );
+
+				renderer.xr.enabled = currentXrEnabled;
+				renderer.shadowMap.autoUpdate = currentShadowAutoUpdate;
+
+				renderer.setRenderTarget( currentRenderTarget );
+
+				// Restore viewport
+
+				const viewport = camera.viewport;
+
+				if ( viewport !== undefined ) {
+
+					renderer.state.viewport( viewport );
+
+				}
+
+				scope.visible = true;
+
+			};
+
+			this.getRenderTarget = function () {
+
+				return renderTarget;
+
+			};
+
+			this.dispose = function () {
+
+				renderTarget.dispose();
+				scope.material.dispose();
+
+			};
+
+		}
+
+	}
+
+	Reflector.ReflectorShader = {
+
+		uniforms: {
+
+			'color': {
+				value: null
+			},
+
+			'tDiffuse': {
+				value: null
+			},
+
+			'textureMatrix': {
+				value: null
+			}
+
+		},
+
+		vertexShader: /* glsl */`
+			uniform mat4 textureMatrix;
+			varying vec4 vUv;
+
+			#include <common>
+			#include <logdepthbuf_pars_vertex>
+
+			void main() {
+
+				vUv = textureMatrix * vec4( position, 1.0 );
+
+				gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+				#include <logdepthbuf_vertex>
+
+			}`,
+
+		fragmentShader: /* glsl */`
+			uniform vec3 color;
+			uniform sampler2D tDiffuse;
+			varying vec4 vUv;
+
+			#include <logdepthbuf_pars_fragment>
+
+			float blendOverlay( float base, float blend ) {
+
+				return( base < 0.5 ? ( 2.0 * base * blend ) : ( 1.0 - 2.0 * ( 1.0 - base ) * ( 1.0 - blend ) ) );
+
+			}
+
+			vec3 blendOverlay( vec3 base, vec3 blend ) {
+
+				return vec3( blendOverlay( base.r, blend.r ), blendOverlay( base.g, blend.g ), blendOverlay( base.b, blend.b ) );
+
+			}
+
+			void main() {
+
+				#include <logdepthbuf_fragment>
+
+				vec4 base = texture2DProj( tDiffuse, vUv );
+
+				gl_FragColor = vec4( blendOverlay( base.rgb, color ), 1.0 );
+
+				#include <tonemapping_fragment>
+				#include <colorspace_fragment>
+
+			}`
+	};
+
+	THREE.Reflector = Reflector;
+
+} )();
+
+</script>
 <script src="ortak/c94ff30389b6f9ad.js"></script>
 <script>/* pdnd-svg.js — yerel gömme */
 /* pdnd-svg.js — Pragmatic DnD'yi SVG düğümlerine açan köprü.
@@ -991,6 +1273,18 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
                      ? [] : hedefleriBul(ev.clientX, ev.clientY, vardi.kaynak);
       var yuk = konum(ev, hedefler);
       aktif = null;
+      // Bırakmanın düşmediği hedeflerden AYRIL (2026-10-17, vurgu sızıntısı
+      // taraması): pointercancel'da (dokunmatikte tarayıcı hareketi sürüklemeyi
+      // keser) ya da hedef dışında bırakınca üzerinde durulan yuvalar ne
+      // onDragLeave ne onDrop alıyordu; onDragEnter vurgusu açık kalıyordu.
+      // pdnd'de hedef listesi boşalınca hedefler onDragLeave alır. Sayfa
+      // işleyicisi hata atsa da bırakma akışı sürer.
+      var dusenEl = hedefler.map(function (h) { return h.element; });
+      vardi.oncekiler.forEach(function (h) {
+        if (dusenEl.indexOf(h.element) !== -1) { return; }
+        try { cagir(h.__yap, "onDragLeave", Object.assign({ self: h }, yuk)); }
+        catch (e) { console.warn("pdnd-svg: onDragLeave hatası", e); }
+      });
       hedefler.forEach(function (h) {
         cagir(h.__yap, "onDrop", Object.assign({ self: h }, yuk));
       });
@@ -1060,9 +1354,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
      yanındaki <ad>-ses/ klasöründe, göreli yolla. Ayar kapalıysa yuva BOŞ kalır
      ve gövde sonundaki anlatım motoru hiç kurulmaz. -->
 
-<link rel="stylesheet" href="ortak/e69c53cf44e7d3b8.css">
+<link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-16 21:19
+  montaj: 2026-10-17 03:54
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-19 15:35
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-19 15:34
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-19 15:36
@@ -1653,18 +1947,18 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
 
         <!-- Cadde Başlangıç İsim Etiketleri -->
         <g id="s1-etiket-yatay-cadde">
-          <rect x="70" y="254" width="116" height="20" rx="4" fill="#fbf8f1" stroke="#383129" stroke-width="1.5"/>
-          <text class="svg-not" x="128" y="268" text-anchor="middle" fill="#383129">Yatay Cadde</text>
+          <rect x="50" y="244" width="156" height="34" rx="10" fill="#fbf8f1" stroke="#383129" stroke-width="1.5"/>
+          <text class="svg-not" x="128" y="268" text-anchor="middle" fill="#383129" font-weight="700">Yatay Cadde</text>
         </g>
 
         <g id="s1-etiket-dikey-cadde">
-          <rect x="428" y="48" width="116" height="20" rx="4" fill="#fbf8f1" stroke="#383129" stroke-width="1.5"/>
-          <text class="svg-not" x="486" y="62" text-anchor="middle" fill="#383129">Dikey Cadde</text>
+          <rect x="426" y="40" width="156" height="34" rx="10" fill="#fbf8f1" stroke="#383129" stroke-width="1.5"/>
+          <text class="svg-not" x="504" y="64" text-anchor="middle" fill="#383129" font-weight="700">Dikey Cadde</text>
         </g>
 
         <g id="s1-etiket-merkez-kavsak">
-          <rect x="342" y="352" width="116" height="20" rx="4" fill="#fbf8f1" stroke="#383129" stroke-width="1.5"/>
-          <text class="svg-not" x="400" y="366" text-anchor="middle" fill="#383129">Merkez Kavşak</text>
+          <rect x="316" y="348" width="168" height="34" rx="10" fill="#fbf8f1" stroke="#383129" stroke-width="1.5"/>
+          <text class="svg-not" x="400" y="372" text-anchor="middle" fill="#383129" font-weight="700">Merkez Kavşak</text>
         </g>
 
         <!-- 3 HEDEF BIRAKMA YUVASI (Ayrık ve Geniş) -->
@@ -1677,17 +1971,17 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
 
         <!-- 2. Dikey Cadde Yuvası -->
         <g id="s1-hedef-dikey" class="s1-yuva-hedef" role="button" tabindex="0" aria-label="Dikey Cadde Yuvası">
-          <rect class="s1-yuva-cizgi" x="382" y="380" width="36" height="150" rx="6" fill="#fbf8f1" stroke="#6e685e" stroke-width="2" stroke-dasharray="6 4"/>
-          <text class="svg-not" x="400" y="455" text-anchor="middle" fill="#6e685e" transform="rotate(-90 400 455)">Dikey Cadde Yuvası</text>
-          <rect x="376" y="374" width="48" height="162" fill="#383129" fill-opacity="0.001" pointer-events="all"/>
+          <rect class="s1-yuva-cizgi" x="381" y="388" width="38" height="180" rx="8" fill="#fbf8f1" stroke="#6e685e" stroke-width="2" stroke-dasharray="6 4"/>
+          <text class="svg-not" x="400" y="485" text-anchor="middle" fill="#6e685e" transform="rotate(-90 400 478)">Dikey Cadde Yuvası</text>
+          <rect x="376" y="384" width="48" height="188" fill="#383129" fill-opacity="0.001" pointer-events="all"/>
         </g>
 
         <!-- 3. Merkez Kavşak Yuvası -->
         <g id="s1-hedef-orijin" class="s1-yuva-hedef" role="button" tabindex="0" aria-label="Merkez Kavşak Yuvası">
           <circle class="s1-yuva-cizgi" cx="400" cy="300" r="45" fill="#fbf8f1" stroke="#6e685e" stroke-width="2" stroke-dasharray="6 4"/>
           <text class="svg-not" x="400" y="295" text-anchor="middle" fill="#6e685e">
-            <tspan x="400" dy="0">Kavşak</tspan>
-            <tspan x="400" dy="14">Yuvası</tspan>
+            <tspan x="400" dy="-6">Kavşak</tspan>
+            <tspan x="400" dy="24">Yuvası</tspan>
           </text>
           <circle cx="400" cy="300" r="48" fill="#383129" fill-opacity="0.001" pointer-events="all"/>
         </g>
@@ -2273,7 +2567,9 @@ window.SAYFA_INIT[2] = function (kok) {
   var kap = tuval.parentElement;
 
   var scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xf3efe8);
+  // Gök ve sis aynı renk: deniz ufukta gökle dikişsiz birleşir (kamera far 60 → sis 58'de biter)
+  scene.background = new THREE.Color(0xd3e3ee);
+  scene.fog = new THREE.Fog(0xd3e3ee, 32, 58);
 
   var kamera = new THREE.PerspectiveCamera(40, kap.clientWidth / kap.clientHeight, 0.5, 60);
   kamera.position.set(-9, 13, 15);
@@ -2425,17 +2721,37 @@ window.SAYFA_INIT[2] = function (kok) {
     scene.add(babaGrup);
   }
 
-  var suGeo = new THREE.PlaneGeometry(32, 12);
-  var suMat = new THREE.MeshStandardMaterial({
-    color: 0x68a3ca,
-    roughness: 0.18,
-    metalness: 0.9,
-    envMapIntensity: 1.2
+  // Liman suyu: rıhtımı çevreleyen deniz — altta gerçek yansıtıcı, üstte dalgalı yarı saydam katman.
+  // (metalik düz levha dalgasız, yansımasız, kenarı bej boşluğa kesilen bir dikdörtgendi)
+  var dalga1 = _malzeme3b.dalgaNormali(256, 1, 0), dalga2 = _malzeme3b.dalgaNormali(256, 1.7, 2.1);
+  dalga1.repeat.set(30, 30); dalga2.repeat.set(18, 18);
+  var pikselOran = renderer.getPixelRatio();
+  var suAynasi = new THREE.Reflector(new THREE.PlaneGeometry(300, 300), {
+    clipBias: 0.003,
+    textureWidth: Math.min(1024, Math.round(kap.clientWidth * pikselOran)),
+    textureHeight: Math.min(1024, Math.round(kap.clientHeight * pikselOran)),
+    color: 0x6a90aa
   });
-  var suMesh = new THREE.Mesh(suGeo, suMat);
+  suAynasi.rotation.x = -Math.PI / 2;
+  suAynasi.position.y = -0.18;
+  scene.add(suAynasi);
+  var suMat = new THREE.MeshPhysicalMaterial({
+    color: 0x1d6896, metalness: 0, roughness: 0.16,
+    transparent: true, opacity: 0.68, depthWrite: false,
+    normalMap: dalga1, normalScale: new THREE.Vector2(0.45, 0.45),
+    clearcoat: 0.4, clearcoatRoughness: 0.12, clearcoatNormalMap: dalga2, clearcoatNormalScale: new THREE.Vector2(0.25, 0.25),
+    envMapIntensity: 0.35
+  });
+  var suMesh = new THREE.Mesh(new THREE.PlaneGeometry(300, 300), suMat);
   suMesh.rotation.x = -Math.PI / 2;
-  suMesh.position.set(0, -0.15, 15.8);
+  suMesh.position.y = -0.15;
   scene.add(suMesh);
+  // Rıhtım gövdesi: su rıhtımı çevrelediği için zemin levhası kenarda kâğıt gibi kalmasın
+  var rihtimGovde = new THREE.Mesh(new THREE.BoxGeometry(24, 2, 20),
+    new THREE.MeshStandardMaterial({ color: 0xb9b4ab, roughness: 0.9 }));
+  rihtimGovde.position.y = -1.01;
+  rihtimGovde.receiveShadow = true;
+  scene.add(rihtimGovde);
 
   var U = 1.9;
   var Ox = -4.75;
@@ -3060,6 +3376,8 @@ window.SAYFA_INIT[2] = function (kok) {
     if (!calisiyor) return;
     animId = requestAnimationFrame(animasyon);
     kontroller.update();
+    dalga1.offset.x += 0.0004;
+    dalga2.offset.y -= 0.0003;
     vincGuncelle(zaman || performance.now());
     renderer.render(scene, kamera);
   }
@@ -3312,9 +3630,9 @@ window.SAYFA_INIT[2] = function (kok) {
         <polygon points="400,252 520,324 500,344" fill="#cdc08a" opacity="0.16" />
 
         <!-- Deniz Feneri ve Orijin Etiketi -->
-        <rect x="420" y="258" width="96" height="22" rx="4" fill="#a3bde1" stroke="#3b6f9f" stroke-width="1.2" />
-        <text x="468" y="273" class="svg-not" fill="#1b1c3a" text-anchor="middle">Deniz Feneri</text>
-        <text x="468" y="292" class="svg-metin" fill="#1e3a5f" text-anchor="middle">Orijin</text>
+        <rect x="410" y="236" width="140" height="32" rx="10" fill="#a3bde1" stroke="#3b6f9f" stroke-width="1.5" />
+        <text x="480" y="259" class="svg-not" fill="#1b1c3a" text-anchor="middle" font-weight="700">Deniz Feneri</text>
+        <text x="478" y="291" class="svg-metin" fill="#1e3a5f" text-anchor="middle" font-weight="700">Orijin</text>
       </g>
 
       <!-- 5. Katman: Kurtarma Tekneleri -->
@@ -3350,8 +3668,8 @@ window.SAYFA_INIT[2] = function (kok) {
             <!-- Geniş bırakma hedef alanı -->
             <circle class="s3-tekne-hedef" cx="0" cy="0" r="42" fill="#a3bde1" fill-opacity="0.001" pointer-events="all" style="cursor: pointer;" />
             <!-- İsim etiketi -->
-            <rect x="-24" y="-38" width="48" height="16" rx="4" fill="#1e3a5f" stroke="#3b6f9f" stroke-width="1" />
-            <text x="0" y="-26" class="svg-not" fill="#f4eee1" text-anchor="middle">Alfa</text>
+            <rect x="-38" y="-54" width="76" height="32" rx="10" fill="#1e3a5f" stroke="#3b6f9f" stroke-width="1.5" />
+            <text x="0" y="-31" class="svg-not" fill="#f4eee1" text-anchor="middle" font-weight="700">Alfa</text>
             <!-- Eylemden sonra koordinat etiketi (başlangıçta gizli) -->
             <g class="s3-onay-etiket" style="display: none;">
               <rect x="-30" y="24" width="60" height="20" rx="4" fill="#27ae60" stroke="#162638" stroke-width="1.5" />
@@ -3391,8 +3709,8 @@ window.SAYFA_INIT[2] = function (kok) {
             <!-- Geniş bırakma hedef alanı -->
             <circle class="s3-tekne-hedef" cx="0" cy="0" r="42" fill="#a3bde1" fill-opacity="0.001" pointer-events="all" style="cursor: pointer;" />
             <!-- İsim etiketi -->
-            <rect x="-24" y="-38" width="48" height="16" rx="4" fill="#1e3a5f" stroke="#3b6f9f" stroke-width="1" />
-            <text x="0" y="-26" class="svg-not" fill="#f4eee1" text-anchor="middle">Beta</text>
+            <rect x="-38" y="-54" width="76" height="32" rx="10" fill="#1e3a5f" stroke="#3b6f9f" stroke-width="1.5" />
+            <text x="0" y="-31" class="svg-not" fill="#f4eee1" text-anchor="middle" font-weight="700">Beta</text>
             <!-- Eylemden sonra koordinat etiketi (başlangıçta gizli) -->
             <g class="s3-onay-etiket" style="display: none;">
               <rect x="-32" y="24" width="64" height="20" rx="4" fill="#27ae60" stroke="#162638" stroke-width="1.5" />
@@ -3432,8 +3750,8 @@ window.SAYFA_INIT[2] = function (kok) {
             <!-- Geniş bırakma hedef alanı -->
             <circle class="s3-tekne-hedef" cx="0" cy="0" r="42" fill="#a3bde1" fill-opacity="0.001" pointer-events="all" style="cursor: pointer;" />
             <!-- İsim etiketi -->
-            <rect x="-24" y="-38" width="48" height="16" rx="4" fill="#1e3a5f" stroke="#3b6f9f" stroke-width="1" />
-            <text x="0" y="-26" class="svg-not" fill="#f4eee1" text-anchor="middle">Gama</text>
+            <rect x="-38" y="-54" width="76" height="32" rx="10" fill="#1e3a5f" stroke="#3b6f9f" stroke-width="1.5" />
+            <text x="0" y="-31" class="svg-not" fill="#f4eee1" text-anchor="middle" font-weight="700">Gama</text>
             <!-- Eylemden sonra koordinat etiketi (başlangıçta gizli) -->
             <g class="s3-onay-etiket" style="display: none;">
               <rect x="-34" y="24" width="68" height="20" rx="4" fill="#27ae60" stroke="#162638" stroke-width="1.5" />
@@ -3473,8 +3791,8 @@ window.SAYFA_INIT[2] = function (kok) {
             <!-- Geniş bırakma hedef alanı -->
             <circle class="s3-tekne-hedef" cx="0" cy="0" r="42" fill="#a3bde1" fill-opacity="0.001" pointer-events="all" style="cursor: pointer;" />
             <!-- İsim etiketi -->
-            <rect x="-24" y="26" width="48" height="16" rx="4" fill="#1e3a5f" stroke="#3b6f9f" stroke-width="1" />
-            <text x="0" y="38" class="svg-not" fill="#f4eee1" text-anchor="middle">Delta</text>
+            <rect x="-38" y="24" width="76" height="32" rx="10" fill="#1e3a5f" stroke="#3b6f9f" stroke-width="1.5" />
+            <text x="0" y="47" class="svg-not" fill="#f4eee1" text-anchor="middle" font-weight="700">Delta</text>
             <!-- Eylemden sonra koordinat etiketi (başlangıçta gizli) -->
             <g class="s3-onay-etiket" style="display: none;">
               <rect x="-30" y="46" width="60" height="20" rx="4" fill="#27ae60" stroke="#162638" stroke-width="1.5" />
@@ -4597,8 +4915,8 @@ window.SAYFA_INIT[4] = function (kok) {
           <circle cx="200" cy="310" r="4" fill="#1e7856" opacity="0.7"/>
           <ellipse cx="196" cy="304" rx="5" ry="2.5" fill="#9fe3c5" opacity="0.6"/>
           <!-- İsim Levhası -->
-          <rect x="145" y="250" width="110" height="28" rx="6" fill="#f5faf7" stroke="#152820" stroke-width="1.5"/>
-          <line x1="148" y1="253" x2="252" y2="253" stroke="#1e7856" stroke-width="2" opacity="0.8"/>
+          <rect x="137" y="247" width="126" height="34" rx="10" fill="#f5faf7" stroke="#152820" stroke-width="1.5"/>
+          <line x1="143" y1="251" x2="257" y2="251" stroke="#1e7856" stroke-width="2" opacity="0.8"/>
           <text class="svg-metin" x="200" y="265" text-anchor="middle" dominant-baseline="central" fill="#152820">Batı Parkı</text>
           <!-- Eylemden Sonra: Koordinat & Sabitleme -->
           <g class="s5-durak-sonuc" id="s5-sonuc-bati" style="display:none;">
@@ -4620,8 +4938,8 @@ window.SAYFA_INIT[4] = function (kok) {
           <circle cx="620" cy="310" r="4" fill="#1e7856" opacity="0.7"/>
           <ellipse cx="616" cy="304" rx="5" ry="2.5" fill="#9fe3c5" opacity="0.6"/>
           <!-- İsim Levhası -->
-          <rect x="560" y="250" width="120" height="28" rx="6" fill="#f5faf7" stroke="#152820" stroke-width="1.5"/>
-          <line x1="563" y1="253" x2="677" y2="253" stroke="#1e7856" stroke-width="2" opacity="0.8"/>
+          <rect x="552" y="247" width="136" height="34" rx="10" fill="#f5faf7" stroke="#152820" stroke-width="1.5"/>
+          <line x1="558" y1="251" x2="682" y2="251" stroke="#1e7856" stroke-width="2" opacity="0.8"/>
           <text class="svg-metin" x="620" y="265" text-anchor="middle" dominant-baseline="central" fill="#152820">Doğu Sanayi</text>
           <!-- Eylemden Sonra: Koordinat & Sabitleme -->
           <g class="s5-durak-sonuc" id="s5-sonuc-dogu" style="display:none;">
@@ -4643,8 +4961,8 @@ window.SAYFA_INIT[4] = function (kok) {
           <circle cx="380" cy="130" r="4" fill="#1b4e82" opacity="0.7"/>
           <ellipse cx="376" cy="124" rx="5" ry="2.5" fill="#5d9dd8" opacity="0.6"/>
           <!-- İsim Levhası -->
-          <rect x="418" y="116" width="124" height="28" rx="6" fill="#f5faf7" stroke="#152820" stroke-width="1.5"/>
-          <line x1="421" y1="119" x2="539" y2="119" stroke="#1b4e82" stroke-width="2" opacity="0.8"/>
+          <rect x="410" y="113" width="140" height="34" rx="10" fill="#f5faf7" stroke="#152820" stroke-width="1.5"/>
+          <line x1="416" y1="117" x2="544" y2="117" stroke="#1b4e82" stroke-width="2" opacity="0.8"/>
           <text class="svg-metin" x="480" y="131" text-anchor="middle" dominant-baseline="central" fill="#152820">Kuzey Kulesi</text>
           <!-- Eylemden Sonra: Koordinat & Sabitleme -->
           <g class="s5-durak-sonuc" id="s5-sonuc-kuzey" style="display:none;">
@@ -4666,8 +4984,8 @@ window.SAYFA_INIT[4] = function (kok) {
           <circle cx="380" cy="430" r="4" fill="#1b4e82" opacity="0.7"/>
           <ellipse cx="376" cy="424" rx="5" ry="2.5" fill="#5d9dd8" opacity="0.6"/>
           <!-- İsim Levhası -->
-          <rect x="418" y="416" width="128" height="28" rx="6" fill="#f5faf7" stroke="#152820" stroke-width="1.5"/>
-          <line x1="421" y1="419" x2="543" y2="419" stroke="#1b4e82" stroke-width="2" opacity="0.8"/>
+          <rect x="410" y="413" width="144" height="34" rx="10" fill="#f5faf7" stroke="#152820" stroke-width="1.5"/>
+          <line x1="416" y1="417" x2="548" y2="417" stroke="#1b4e82" stroke-width="2" opacity="0.8"/>
           <text class="svg-metin" x="482" y="431" text-anchor="middle" dominant-baseline="central" fill="#152820">Güney Meydanı</text>
           <!-- Eylemden Sonra: Koordinat & Sabitleme -->
           <g class="s5-durak-sonuc" id="s5-sonuc-guney" style="display:none;">
@@ -4689,8 +5007,8 @@ window.SAYFA_INIT[4] = function (kok) {
           <circle cx="380" cy="310" r="5" fill="#f0a324" opacity="0.8"/>
           <ellipse cx="376" cy="304" rx="6" ry="3" fill="#f0a324" opacity="0.65"/>
           <!-- İsim Levhası -->
-          <rect x="415" y="250" width="115" height="28" rx="6" fill="#f5faf7" stroke="#152820" stroke-width="1.5"/>
-          <line x1="418" y1="253" x2="527" y2="253" stroke="#f0a324" stroke-width="2" opacity="0.8"/>
+          <rect x="407" y="247" width="131" height="34" rx="10" fill="#f5faf7" stroke="#152820" stroke-width="1.5"/>
+          <line x1="413" y1="251" x2="532" y2="251" stroke="#f0a324" stroke-width="2" opacity="0.8"/>
           <text class="svg-metin" x="472" y="265" text-anchor="middle" dominant-baseline="central" fill="#152820">Merkez Gar</text>
           <!-- Eylemden Sonra: Koordinat & Sabitleme -->
           <g class="s5-durak-sonuc" id="s5-sonuc-merkez" style="display:none;">
@@ -5225,7 +5543,7 @@ window.SAYFA_INIT[5] = function (kok) {
         <line x1="75" y1="340" x2="675" y2="340" stroke="#f5f8fb" stroke-width="2" stroke-dasharray="10 8"/>
         <!-- X Ekseni Oku -->
         <polygon points="680,329 700,340 680,351" fill="#2d4053" stroke="#1c2833" stroke-width="1.5"/>
-        <text x="665" y="372" class="svg-baslik" fill="#2d4053" text-anchor="middle">x ekseni</text>
+        <text x="665" y="398" class="svg-baslik" fill="#2d4053" text-anchor="middle">x ekseni</text>
 
         <!-- Y Ekseni Otoyolu ve Emniyet Şeritleri -->
         <rect x="422" y="50" width="16" height="445" rx="3" fill="#b0c2d4" stroke="#1c2833" stroke-width="1.5"/>
@@ -5248,7 +5566,7 @@ window.SAYFA_INIT[5] = function (kok) {
         <circle cx="430" cy="340" r="6" fill="#2d4053" stroke="#1c2833" stroke-width="1.5"/>
         <circle cx="430" cy="340" r="2.5" fill="#f5f8fb"/>
         <text x="458" y="355" class="svg-metin" fill="#2d4053" font-weight="bold">Orijin</text>
-        <text x="458" y="375" class="svg-not" fill="#5a6c7c">(0, 0)</text>
+        <text x="458" y="381" class="svg-not" fill="#5a6c7c">(0, 0)</text>
 
         <!-- Eksen Çentikleri ve Sayıları -->
         <line x1="230" y1="334" x2="230" y2="346" stroke="#f5f8fb" stroke-width="2"/>
@@ -5290,22 +5608,22 @@ window.SAYFA_INIT[5] = function (kok) {
       <g id="sayfa6-katman-on">
         <!-- Dikey Yol Bırakma Yuvası (x eksenine uzaklık) -->
         <g id="yuva-x-ekseni" class="s6-birakma-yuva" data-yuva="x-ekseni" role="button" tabindex="0" aria-label="x eksenine uzaklık bırakma yuvası">
-          <rect x="155" y="244" width="150" height="42" rx="8" fill="#fbf8f1" stroke="#c88424" stroke-width="2.5" stroke-dasharray="6 4" class="s6-yuva-cerceve"/>
-          <path d="M 160 252 V 248 H 164" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
-          <path d="M 300 252 V 248 H 296" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
-          <path d="M 160 278 V 282 H 164" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
-          <path d="M 300 278 V 282 H 296" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
-          <text x="230" y="270" class="svg-metin s6-yuva-metin" fill="#2d4053" text-anchor="middle">x eksenine uzaklık</text>
+          <rect x="155" y="236" width="150" height="60" rx="10" fill="#fbf8f1" stroke="#c88424" stroke-width="2.5" stroke-dasharray="6 4" class="s6-yuva-cerceve"/>
+          <path d="M 160 244 V 240 H 164" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
+          <path d="M 300 244 V 240 H 296" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
+          <path d="M 160 288 V 292 H 164" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
+          <path d="M 300 288 V 292 H 296" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
+          <text x="230" y="273" class="svg-metin s6-yuva-metin" fill="#2d4053" text-anchor="middle"><tspan x="230" dy="-12">x eksenine</tspan><tspan x="230" dy="24">uzaklık</tspan></text>
         </g>
 
         <!-- Yatay Yol Bırakma Yuvası (y eksenine uzaklık) -->
         <g id="yuva-y-ekseni" class="s6-birakma-yuva" data-yuva="y-ekseni" role="button" tabindex="0" aria-label="y eksenine uzaklık bırakma yuvası">
-          <rect x="255" y="169" width="150" height="42" rx="8" fill="#fbf8f1" stroke="#c88424" stroke-width="2.5" stroke-dasharray="6 4" class="s6-yuva-cerceve"/>
-          <path d="M 260 177 V 173 H 264" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
-          <path d="M 400 177 V 173 H 396" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
-          <path d="M 260 203 V 207 H 264" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
-          <path d="M 400 203 V 207 H 396" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
-          <text x="330" y="195" class="svg-metin s6-yuva-metin" fill="#2d4053" text-anchor="middle">y eksenine uzaklık</text>
+          <rect x="255" y="160" width="150" height="60" rx="10" fill="#fbf8f1" stroke="#c88424" stroke-width="2.5" stroke-dasharray="6 4" class="s6-yuva-cerceve"/>
+          <path d="M 260 168 V 164 H 264" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
+          <path d="M 400 168 V 164 H 396" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
+          <path d="M 260 212 V 216 H 264" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
+          <path d="M 400 212 V 216 H 396" fill="none" stroke="#c88424" stroke-width="1.5" opacity="0.6"/>
+          <text x="330" y="197" class="svg-metin s6-yuva-metin" fill="#2d4053" text-anchor="middle"><tspan x="330" dy="-12">y eksenine</tspan><tspan x="330" dy="24">uzaklık</tspan></text>
         </g>
 
         <!-- İstasyon A(-4, 3) İllüstrasyonu -->
@@ -5346,9 +5664,9 @@ window.SAYFA_INIT[5] = function (kok) {
           <circle cx="230" cy="190" r="6" fill="#e5a43b" stroke="#1c2833" stroke-width="2"/>
           <circle cx="230" cy="190" r="2" fill="#f5f8fb"/>
           <!-- İstasyon Başlık Kartı -->
-          <rect x="156" y="88" width="148" height="26" rx="10" fill="#b0c2d4" stroke="#566f88" stroke-width="1.5"/>
-          <circle cx="169" cy="101" r="3" fill="#e5a43b"/>
-          <text x="234" y="106" class="svg-metin" fill="#1b1c3a" text-anchor="middle" font-weight="bold">İstasyon A(-4, 3)</text>
+          <rect x="128" y="80" width="204" height="36" rx="12" fill="#b0c2d4" stroke="#566f88" stroke-width="1.5"/>
+          <circle cx="144" cy="98" r="4" fill="#e5a43b"/>
+          <text x="238" y="105" class="svg-metin" fill="#1b1c3a" text-anchor="middle" font-weight="bold">İstasyon A(-4, 3)</text>
         </g>
 
         <!-- Eylemden Sonra Açılacak Göstergeler -->
@@ -6297,6 +6615,12 @@ window.SAYFA_INIT[7] = function (kok) {
     var jMesh = new THREE.Mesh(jantGeo, demirMat);
     jMesh.rotation.z = Math.PI / 2;
     tGrup.add(jMesh);
+    // Dönüş görünsün: dış yüzde 4 bijon (tGrup X çevresinde döner)
+    for (var bj = 0; bj < 4; bj++) {
+      var bijon = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.026, 0.026), lastikMat);
+      bijon.position.set(pos.x > 0 ? 0.058 : -0.058, Math.cos(bj * Math.PI / 2) * 0.035, Math.sin(bj * Math.PI / 2) * 0.035);
+      tGrup.add(bijon);
+    }
 
     robotGrup.add(tGrup);
     tekerlekler.push(tGrup);
@@ -6307,9 +6631,9 @@ window.SAYFA_INIT[7] = function (kok) {
 
   var adimlar = [
     { hedef: "turuncu", kartId: "x_4_artar", eksen: "x", miktar: 4, pos: new THREE.Vector3(4 * birim, 0, 0), rotY: Math.PI / 2, ist: istasyonTuruncu },
-    { hedef: "yesil", kartId: "y_3_artar", eksen: "y", miktar: 3, pos: new THREE.Vector3(4 * birim, 0, -3 * birim), rotY: 0, ist: istasyonYesil },
+    { hedef: "yesil", kartId: "y_3_artar", eksen: "y", miktar: 3, pos: new THREE.Vector3(4 * birim, 0, -3 * birim), rotY: Math.PI, ist: istasyonYesil },
     { hedef: "mor", kartId: "x_5_azalir", eksen: "x", miktar: -5, pos: new THREE.Vector3(-1 * birim, 0, -3 * birim), rotY: -Math.PI / 2, ist: istasyonMor },
-    { hedef: "mavi", kartId: "y_3_azalir", eksen: "y", miktar: -3, pos: new THREE.Vector3(-1 * birim, 0, 0), rotY: Math.PI, ist: istasyonMavi }
+    { hedef: "mavi", kartId: "y_3_azalir", eksen: "y", miktar: -3, pos: new THREE.Vector3(-1 * birim, 0, 0), rotY: 0, ist: istasyonMavi }
   ];
 
   var mevcutAdim = 0;
@@ -6520,6 +6844,7 @@ window.SAYFA_INIT[7] = function (kok) {
     var zaman = saat.getElapsedTime();
 
     if (robotHareket) {
+      var oncekiX = robotGrup.position.x, oncekiZ = robotGrup.position.z;
       robotGrup.position.lerp(hedefPos, 0.06);
 
       var diffRot = hedefRotY - robotGrup.rotation.y;
@@ -6527,8 +6852,11 @@ window.SAYFA_INIT[7] = function (kok) {
       while (diffRot < -Math.PI) diffRot += Math.PI * 2;
       robotGrup.rotation.y += diffRot * 0.08;
 
+      // Yuvarlanma: yolun robotun ileri eksenine (yerel +z) izdüşümü / yarıçap
+      var ry = robotGrup.rotation.y;
+      var ileriYol = (robotGrup.position.x - oncekiX) * Math.sin(ry) + (robotGrup.position.z - oncekiZ) * Math.cos(ry);
       tekerlekler.forEach(function (t) {
-        t.rotation.x += 0.16;
+        t.rotation.x += ileriYol / 0.14;
       });
 
       if (robotGrup.position.distanceTo(hedefPos) < 0.03) {
@@ -6864,7 +7192,7 @@ window.SAYFA_INIT[7] = function (kok) {
           <!-- 5 Birim Sağa İlerleme -->
           <line x1="284" y1="196" x2="424" y2="196" stroke="#1aa898" stroke-width="3" stroke-dasharray="6,4"/>
           <polygon points="424,196 412,190 412,202" fill="#1aa898"/>
-          <text x="354" y="186" class="svg-not" text-anchor="middle" fill="#1aa898">+5 birim sağa</text>
+          <text x="350" y="181" class="svg-not" text-anchor="start" fill="#1aa898" font-weight="700">+5 birim sağa</text>
 
           <!-- Dönüş Düğümü (3, 3) -->
           <circle cx="424" cy="196" r="5" fill="#5c9ec4" stroke="#162a38" stroke-width="1.5"/>
@@ -6895,7 +7223,7 @@ window.SAYFA_INIT[7] = function (kok) {
           <circle cx="424" cy="308" r="2" fill="#edf2f5"/>
           <line x1="424" y1="308" x2="424" y2="288" stroke="#162a38" stroke-width="2"/>
           <polygon points="424,288 440,294 424,300" fill="url(#s8-grad-ikincil)" stroke="#162a38" stroke-width="1.5"/>
-          <text x="424" y="332" class="svg-not" text-anchor="middle" fill="#162a38">Hedef İstasyon (3, -1)</text>
+          <text x="444" y="336" class="svg-not" text-anchor="start" fill="#162a38" font-weight="700">Hedef İstasyon (3, -1)</text>
           </g>
         </g>
       </g>
@@ -7041,7 +7369,7 @@ window.SAYFA_INIT[8] = function (kok) {
 
 </div>
 
-<script src="ortak/1e6eeeabf34da7de.js"></script>
+<script src="ortak/9f91bdf0caca8a0d.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>

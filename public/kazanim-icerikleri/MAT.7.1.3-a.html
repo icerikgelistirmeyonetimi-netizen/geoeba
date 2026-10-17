@@ -679,6 +679,288 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 } )();
 
 </script>
+<script>/* Reflector.js — yerel gömme */
+/* three.js r155 örnek portu — Reflector (examples/jsm/objects/Reflector.js)
+ * Lisans: MIT (three.js yazarları). Global yapı (THREE.*) için IIFE olarak
+ * uyarlandı; ES modül/importmap yok. Düz AYNA / parlak zemin / durgun su için
+ * gerçek sahne yansıması: sahne her karede aynalanmış kamerayla bir dokuya
+ * çizilir (CubeCamera düz yüzeyde yanlış paralaks verir, bu doğru olanıdır).
+ * Kullanım:
+ *   var ayna = new THREE.Reflector(new THREE.PlaneGeometry(2, 1.2), {
+ *     clipBias: 0.003, textureWidth: 1024, textureHeight: 1024, color: 0x8a8a8a });
+ *   ayna.position.set(x, y, z); ayna.rotation.y = a;   // düzlemin +Z normali bakış tarafıdır
+ *   scene.add(ayna);
+ * Bedel: kare başına bir tam sahne çizimi daha (yansıma dokusu). Yüzey sayısı
+ * 1-2 ile sınırlı tutulur; hareket yoksa yine her kare çizer.
+ * Montaj bu dosyayı yalnız sayfada «Reflector» geçince gömer
+ * (uretici/sablon.py kutuphane_dosyalari). 2026-09-05. */
+( function () {
+
+	class Reflector extends THREE.Mesh {
+
+		constructor( geometry, options = {} ) {
+
+			super( geometry );
+
+			this.isReflector = true;
+			this.type = 'Reflector';
+			this.camera = new THREE.PerspectiveCamera();
+			// PORT EKİ: yardımcı kamera damgası — şablon köprüsü (sablon.html) bu
+			// kamerayla yapılan çizimi kayda/3B yuva izdüşümüne almaz (aksi hâlde
+			// yuva vuruş alanları her karede ayna kamerasına göre kayardı).
+			this.camera.userData.yardimci = true;
+
+			const scope = this;
+
+			const color = ( options.color !== undefined ) ? new THREE.Color( options.color ) : new THREE.Color( 0x7F7F7F );
+			const textureWidth = options.textureWidth || 512;
+			const textureHeight = options.textureHeight || 512;
+			const clipBias = options.clipBias || 0;
+			const shader = options.shader || Reflector.ReflectorShader;
+			const multisample = ( options.multisample !== undefined ) ? options.multisample : 4;
+
+			//
+
+			const reflectorPlane = new THREE.Plane();
+			const normal = new THREE.Vector3();
+			const reflectorWorldPosition = new THREE.Vector3();
+			const cameraWorldPosition = new THREE.Vector3();
+			const rotationMatrix = new THREE.Matrix4();
+			const lookAtPosition = new THREE.Vector3( 0, 0, - 1 );
+			const clipPlane = new THREE.Vector4();
+
+			const view = new THREE.Vector3();
+			const target = new THREE.Vector3();
+			const q = new THREE.Vector4();
+
+			const textureMatrix = new THREE.Matrix4();
+			const virtualCamera = this.camera;
+
+			const renderTarget = new THREE.WebGLRenderTarget( textureWidth, textureHeight, { samples: multisample, type: THREE.HalfFloatType } );
+
+			const material = new THREE.ShaderMaterial( {
+				uniforms: THREE.UniformsUtils.clone( shader.uniforms ),
+				fragmentShader: shader.fragmentShader,
+				vertexShader: shader.vertexShader
+			} );
+
+			material.uniforms[ 'tDiffuse' ].value = renderTarget.texture;
+			material.uniforms[ 'color' ].value = color;
+			material.uniforms[ 'textureMatrix' ].value = textureMatrix;
+
+			this.material = material;
+
+			this.onBeforeRender = function ( renderer, scene, camera ) {
+
+				// PORT EKİ (2026-09-05): kırılma (transmission) geçişi opak nesneleri
+				// mipmap'li yarı-float bir hedefe çizerken bu kancayı da tetikler;
+				// içeride yeniden sahne çizmek o paylaşılan hedefi ezer ve camın
+				// arkası ayna görüntüsüyle bozulur. Böyle bir hedef etkinken yansıma
+				// dokusu TAZELENMEZ (son kare kullanılır). EffectComposer hedefleri
+				// mipmap'siz olduğundan bloom zincirinde ayna yine her kare çizilir.
+				const etkinHedef = renderer.getRenderTarget();
+				if ( etkinHedef && etkinHedef.texture && etkinHedef.texture.generateMipmaps === true ) return;
+
+				reflectorWorldPosition.setFromMatrixPosition( scope.matrixWorld );
+				cameraWorldPosition.setFromMatrixPosition( camera.matrixWorld );
+
+				rotationMatrix.extractRotation( scope.matrixWorld );
+
+				normal.set( 0, 0, 1 );
+				normal.applyMatrix4( rotationMatrix );
+
+				view.subVectors( reflectorWorldPosition, cameraWorldPosition );
+
+				// Avoid rendering when reflector is facing away
+
+				if ( view.dot( normal ) > 0 ) return;
+
+				view.reflect( normal ).negate();
+				view.add( reflectorWorldPosition );
+
+				rotationMatrix.extractRotation( camera.matrixWorld );
+
+				lookAtPosition.set( 0, 0, - 1 );
+				lookAtPosition.applyMatrix4( rotationMatrix );
+				lookAtPosition.add( cameraWorldPosition );
+
+				target.subVectors( reflectorWorldPosition, lookAtPosition );
+				target.reflect( normal ).negate();
+				target.add( reflectorWorldPosition );
+
+				virtualCamera.position.copy( view );
+				virtualCamera.up.set( 0, 1, 0 );
+				virtualCamera.up.applyMatrix4( rotationMatrix );
+				virtualCamera.up.reflect( normal );
+				virtualCamera.lookAt( target );
+
+				virtualCamera.far = camera.far; // Used in WebGLBackground
+
+				virtualCamera.updateMatrixWorld();
+				virtualCamera.projectionMatrix.copy( camera.projectionMatrix );
+
+				// Update the texture matrix
+				textureMatrix.set(
+					0.5, 0.0, 0.0, 0.5,
+					0.0, 0.5, 0.0, 0.5,
+					0.0, 0.0, 0.5, 0.5,
+					0.0, 0.0, 0.0, 1.0
+				);
+				textureMatrix.multiply( virtualCamera.projectionMatrix );
+				textureMatrix.multiply( virtualCamera.matrixWorldInverse );
+				textureMatrix.multiply( scope.matrixWorld );
+
+				// Now update projection matrix with new clip plane, implementing code from: http://www.terathon.com/code/oblique.html
+				// Paper explaining this technique: http://www.terathon.com/lengyel/Lengyel-Oblique.pdf
+				reflectorPlane.setFromNormalAndCoplanarPoint( normal, reflectorWorldPosition );
+				reflectorPlane.applyMatrix4( virtualCamera.matrixWorldInverse );
+
+				clipPlane.set( reflectorPlane.normal.x, reflectorPlane.normal.y, reflectorPlane.normal.z, reflectorPlane.constant );
+
+				const projectionMatrix = virtualCamera.projectionMatrix;
+
+				q.x = ( Math.sign( clipPlane.x ) + projectionMatrix.elements[ 8 ] ) / projectionMatrix.elements[ 0 ];
+				q.y = ( Math.sign( clipPlane.y ) + projectionMatrix.elements[ 9 ] ) / projectionMatrix.elements[ 5 ];
+				q.z = - 1.0;
+				q.w = ( 1.0 + projectionMatrix.elements[ 10 ] ) / projectionMatrix.elements[ 14 ];
+
+				// Calculate the scaled plane vector
+				clipPlane.multiplyScalar( 2.0 / clipPlane.dot( q ) );
+
+				// Replacing the third row of the projection matrix
+				projectionMatrix.elements[ 2 ] = clipPlane.x;
+				projectionMatrix.elements[ 6 ] = clipPlane.y;
+				projectionMatrix.elements[ 10 ] = clipPlane.z + 1.0 - clipBias;
+				projectionMatrix.elements[ 14 ] = clipPlane.w;
+
+				// Render
+
+				scope.visible = false;
+
+				const currentRenderTarget = renderer.getRenderTarget();
+
+				const currentXrEnabled = renderer.xr.enabled;
+				const currentShadowAutoUpdate = renderer.shadowMap.autoUpdate;
+
+				renderer.xr.enabled = false; // Avoid camera modification
+				renderer.shadowMap.autoUpdate = false; // Avoid re-computing shadows
+
+				renderer.setRenderTarget( renderTarget );
+
+				renderer.state.buffers.depth.setMask( true ); // make sure the depth buffer is writable so it can be properly cleared, see #18897
+
+				if ( renderer.autoClear === false ) renderer.clear();
+				renderer.render( scene, virtualCamera );
+
+				renderer.xr.enabled = currentXrEnabled;
+				renderer.shadowMap.autoUpdate = currentShadowAutoUpdate;
+
+				renderer.setRenderTarget( currentRenderTarget );
+
+				// Restore viewport
+
+				const viewport = camera.viewport;
+
+				if ( viewport !== undefined ) {
+
+					renderer.state.viewport( viewport );
+
+				}
+
+				scope.visible = true;
+
+			};
+
+			this.getRenderTarget = function () {
+
+				return renderTarget;
+
+			};
+
+			this.dispose = function () {
+
+				renderTarget.dispose();
+				scope.material.dispose();
+
+			};
+
+		}
+
+	}
+
+	Reflector.ReflectorShader = {
+
+		uniforms: {
+
+			'color': {
+				value: null
+			},
+
+			'tDiffuse': {
+				value: null
+			},
+
+			'textureMatrix': {
+				value: null
+			}
+
+		},
+
+		vertexShader: /* glsl */`
+			uniform mat4 textureMatrix;
+			varying vec4 vUv;
+
+			#include <common>
+			#include <logdepthbuf_pars_vertex>
+
+			void main() {
+
+				vUv = textureMatrix * vec4( position, 1.0 );
+
+				gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+
+				#include <logdepthbuf_vertex>
+
+			}`,
+
+		fragmentShader: /* glsl */`
+			uniform vec3 color;
+			uniform sampler2D tDiffuse;
+			varying vec4 vUv;
+
+			#include <logdepthbuf_pars_fragment>
+
+			float blendOverlay( float base, float blend ) {
+
+				return( base < 0.5 ? ( 2.0 * base * blend ) : ( 1.0 - 2.0 * ( 1.0 - base ) * ( 1.0 - blend ) ) );
+
+			}
+
+			vec3 blendOverlay( vec3 base, vec3 blend ) {
+
+				return vec3( blendOverlay( base.r, blend.r ), blendOverlay( base.g, blend.g ), blendOverlay( base.b, blend.b ) );
+
+			}
+
+			void main() {
+
+				#include <logdepthbuf_fragment>
+
+				vec4 base = texture2DProj( tDiffuse, vUv );
+
+				gl_FragColor = vec4( blendOverlay( base.rgb, color ), 1.0 );
+
+				#include <tonemapping_fragment>
+				#include <colorspace_fragment>
+
+			}`
+	};
+
+	THREE.Reflector = Reflector;
+
+} )();
+
+</script>
 <script src="ortak/c94ff30389b6f9ad.js"></script>
 <script>/* pdnd-svg.js — yerel gömme */
 /* pdnd-svg.js — Pragmatic DnD'yi SVG düğümlerine açan köprü.
@@ -991,6 +1273,18 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
                      ? [] : hedefleriBul(ev.clientX, ev.clientY, vardi.kaynak);
       var yuk = konum(ev, hedefler);
       aktif = null;
+      // Bırakmanın düşmediği hedeflerden AYRIL (2026-10-17, vurgu sızıntısı
+      // taraması): pointercancel'da (dokunmatikte tarayıcı hareketi sürüklemeyi
+      // keser) ya da hedef dışında bırakınca üzerinde durulan yuvalar ne
+      // onDragLeave ne onDrop alıyordu; onDragEnter vurgusu açık kalıyordu.
+      // pdnd'de hedef listesi boşalınca hedefler onDragLeave alır. Sayfa
+      // işleyicisi hata atsa da bırakma akışı sürer.
+      var dusenEl = hedefler.map(function (h) { return h.element; });
+      vardi.oncekiler.forEach(function (h) {
+        if (dusenEl.indexOf(h.element) !== -1) { return; }
+        try { cagir(h.__yap, "onDragLeave", Object.assign({ self: h }, yuk)); }
+        catch (e) { console.warn("pdnd-svg: onDragLeave hatası", e); }
+      });
       hedefler.forEach(function (h) {
         cagir(h.__yap, "onDrop", Object.assign({ self: h }, yuk));
       });
@@ -1061,9 +1355,9 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
      yanındaki <ad>-ses/ klasöründe, göreli yolla. Ayar kapalıysa yuva BOŞ kalır
      ve gövde sonundaki anlatım motoru hiç kurulmaz. -->
 
-<link rel="stylesheet" href="ortak/e69c53cf44e7d3b8.css">
+<link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-16 21:19
+  montaj: 2026-10-17 03:54
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-17 11:16
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=uretim | zaman=2026-09-17 11:14
   sayfa 3: bilinmiyor (damgasız eski üretim)
@@ -4976,8 +5270,8 @@ window.SAYFA_INIT[6] = function (kok) {
   scene.background = new THREE.Color(0xf5f0ea);
 
   var camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
-  camera.position.set(0, 4.0, 13.0);
-  camera.lookAt(0, -0.2, 0);
+  camera.position.set(0, 1.7, 15.2);
+  camera.lookAt(0, -0.35, 0);
 
   var kontroller = new THREE.OrbitControls(camera, renderer.domElement);
   kontroller.enableDamping = true;
@@ -4985,7 +5279,7 @@ window.SAYFA_INIT[6] = function (kok) {
   kontroller.maxPolarAngle = Math.PI / 2 - 0.05;
   kontroller.minDistance = 6;
   kontroller.maxDistance = 22;
-  kontroller.target.set(0, -0.2, 0);
+  kontroller.target.set(0, -0.35, 0);
 
   scene.environment = new THREE.PMREMGenerator(renderer)
     .fromScene(new THREE.StudyoOrtami({ gok: "#f6f2ec", zemin: "#ded8ce" }), 0.04).texture;
@@ -5015,51 +5309,91 @@ window.SAYFA_INIT[6] = function (kok) {
   var dalgaNormali = _malzeme3b.dalgaNormali;
   var gurultuDoku = _malzeme3b.gurultuDoku;
 
-  var zeminDoku = gurultuDoku(512, "#ebe5dc", 0.15, 1.2, true);
+  var zeminDoku = gurultuDoku(512, "#e4d9c6", 0.3, 2, true);   // tane tamsayı/3 olmalı: 1.2 simsiyah doku veriyordu
   zeminDoku.wrapS = THREE.RepeatWrapping;
   zeminDoku.wrapT = THREE.RepeatWrapping;
   zeminDoku.repeat.set(4, 4);
   zeminDoku.anisotropy = renderer.capabilities.getMaxAnisotropy();
   zeminDoku.colorSpace = THREE.SRGBColorSpace;
 
-  var havuzW = 12.8, havuzD = 5.2, suDerinligi = 2.4, suSeviyesi = 0;
+  var havuzW = 34, havuzD = 5.2, suDerinligi = 2.4, suSeviyesi = 0;
   var dalga1 = dalgaNormali(256, 1, 0);
   var dalga2 = dalgaNormali(256, 1.7, 2.1);
   dalga1.repeat.set(4, 4);
   dalga2.repeat.set(2.5, 2.5);
 
+  // Su yüzeyi: altta gerçek yansıma (Reflector), üstte yarı saydam dalga katmanı.
+  // transmission'lı yüzey halkaları kırıp yanlarına hayalet kopyalar çiziyordu.
+  var pikselOran = renderer.getPixelRatio();
+  var suAynasi = new THREE.Reflector(new THREE.PlaneGeometry(havuzW, havuzD), {
+    clipBias: 0.003,
+    textureWidth: Math.min(1024, Math.round(w * pikselOran)),
+    textureHeight: Math.min(1024, Math.round(h * pikselOran)),
+    color: 0x6a90aa
+  });
+  suAynasi.rotation.x = -Math.PI / 2;
+  suAynasi.position.y = suSeviyesi - 0.02;
+  scene.add(suAynasi);
+
   var suMat = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,
-    metalness: 0,
-    roughness: 0.04,
-    transmission: 1,
-    ior: 1.33,
-    thickness: 1.0,
-    attenuationColor: new THREE.Color(0x3f9fcf),
-    attenuationDistance: 1.8,
-    normalMap: dalga1,
-    normalScale: new THREE.Vector2(0.45, 0.45),
-    clearcoat: 0.3,
-    clearcoatRoughness: 0.1,
-    clearcoatNormalMap: dalga2,
-    clearcoatNormalScale: new THREE.Vector2(0.25, 0.25),
+    color: 0x2a7fae, metalness: 0, roughness: 0.16,
+    transparent: true, opacity: 0.62, depthWrite: false,
+    normalMap: dalga1, normalScale: new THREE.Vector2(0.4, 0.4),
+    clearcoat: 0.4, clearcoatRoughness: 0.12, clearcoatNormalMap: dalga2,
+    clearcoatNormalScale: new THREE.Vector2(0.22, 0.22),
     envMapIntensity: 0.35
   });
-
   var suYuzeyi = new THREE.Mesh(new THREE.PlaneGeometry(havuzW, havuzD), suMat);
   suYuzeyi.rotation.x = -Math.PI / 2;
   suYuzeyi.position.y = suSeviyesi;
-  suYuzeyi.receiveShadow = true;
   scene.add(suYuzeyi);
 
-  var govdeMat = new THREE.MeshStandardMaterial({ color: 0x2a78a8, roughness: 0.9, side: THREE.DoubleSide });
+  // Su gövdesi: ön yüz cam gibi saydam (su altındaki sütunlar görünür), arka duvar
+  // yukarıdan aşağı koyulaşan mavi; üst yüz yok (yüzey ayrı), alt yüz yok (taban görünür)
+  function derinlikDokusu() {
+    var t = document.createElement("canvas");
+    t.width = 4; t.height = 256;
+    var c = t.getContext("2d");
+    var g = c.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, "#7fb6d3");
+    g.addColorStop(1, "#245f86");
+    c.fillStyle = g;
+    c.fillRect(0, 0, 4, 256);
+    var tx = new THREE.CanvasTexture(t);
+    tx.colorSpace = THREE.SRGBColorSpace;
+    return tx;
+  }
+  var arkaSuMat = new THREE.MeshBasicMaterial({ map: derinlikDokusu(), side: THREE.DoubleSide });
+  var onCamMat = new THREE.MeshPhysicalMaterial({
+    color: 0x3c8fbf, metalness: 0, roughness: 0.06,
+    transparent: true, opacity: 0.36, depthWrite: false,
+    clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 0.5
+  });
   var ustYok = new THREE.MeshBasicMaterial({ visible: false });
   var suGovdesi = new THREE.Mesh(
     new THREE.BoxGeometry(havuzW, suDerinligi, havuzD),
-    [govdeMat, govdeMat, ustYok, govdeMat, govdeMat, govdeMat]
+    [arkaSuMat, arkaSuMat, ustYok, ustYok, onCamMat, arkaSuMat]
   );
   suGovdesi.position.y = suSeviyesi - suDerinligi / 2 - 0.005;
   scene.add(suGovdesi);
+
+  // Havuz tabanı: su altında mavimsi kum (dış zeminden ayrışsın)
+  var havuzTabani = new THREE.Mesh(
+    new THREE.PlaneGeometry(havuzW, havuzD),
+    new THREE.MeshStandardMaterial({ color: 0x8fb8c8, roughness: 0.92, metalness: 0 })
+  );
+  havuzTabani.rotation.x = -Math.PI / 2;
+  havuzTabani.position.y = -suDerinligi + 0.004;
+  havuzTabani.receiveShadow = true;
+  scene.add(havuzTabani);
+
+  // Su çizgisi: cam ön yüzde sıfır seviyesini gösteren ince açık bant
+  var suCizgisi = new THREE.Mesh(
+    new THREE.BoxGeometry(havuzW, 0.035, 0.02),
+    new THREE.MeshBasicMaterial({ color: 0xd8eef7 })
+  );
+  suCizgisi.position.set(0, suSeviyesi - 0.02, havuzD / 2 + 0.012);
+  scene.add(suCizgisi);
 
   var tabanMat = new THREE.MeshStandardMaterial({
     color: 0xebe0d5,
@@ -5068,7 +5402,7 @@ window.SAYFA_INIT[6] = function (kok) {
     metalness: 0.05
   });
 
-  var zeminMesh = new THREE.Mesh(new THREE.PlaneGeometry(28, 20), tabanMat);
+  var zeminMesh = new THREE.Mesh(new THREE.PlaneGeometry(80, 40), tabanMat);
   zeminMesh.rotation.x = -Math.PI / 2;
   zeminMesh.position.y = -suDerinligi - 0.01;
   zeminMesh.receiveShadow = true;
@@ -5081,6 +5415,9 @@ window.SAYFA_INIT[6] = function (kok) {
   var arkaCeper = new THREE.Mesh(new THREE.BoxGeometry(havuzW + 0.5, 0.2, 0.25), ceperMat);
   arkaCeper.position.set(0, 0.05, -havuzD / 2 - 0.125);
   scene.add(arkaCeper);
+  var altCeper = new THREE.Mesh(new THREE.BoxGeometry(havuzW + 0.5, 0.16, 0.25), ceperMat);
+  altCeper.position.set(0, -suDerinligi + 0.07, havuzD / 2 + 0.125);
+  scene.add(altCeper);
   var solCeper = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.2, havuzD), ceperMat);
   solCeper.position.set(-havuzW / 2 - 0.125, 0.05, 0);
   scene.add(solCeper);
@@ -5433,6 +5770,9 @@ window.SAYFA_INIT[6] = function (kok) {
     rectTazele();
   }
   window.addEventListener("resize", boyutlandir);
+  if (window.ResizeObserver) {
+    new ResizeObserver(boyutlandir).observe(sahneKap);
+  }
 
   var calisiyor = true;
   var animasyonId = null;
@@ -5459,6 +5799,7 @@ window.SAYFA_INIT[6] = function (kok) {
     if (!calisiyor) {
       calisiyor = true;
       rectTazele();
+      boyutlandir();
       animasyonId = requestAnimationFrame(animasyonDongusu);
     }
   };
@@ -5538,52 +5879,65 @@ window.SAYFA_INIT[6] = function (kok) {
         <line x1="420" y1="194" x2="420" y2="226" stroke="#1d3557" stroke-width="3.5" stroke-linecap="round"/>
         <line x1="140" y1="194" x2="140" y2="226" stroke="#1d3557" stroke-width="3.5" stroke-linecap="round"/>
 
-        <!-- Bırakma Yuvaları -->
-        <!-- Yuva 1: -1/2 (x=560) -->
-        <g class="s7-yuva-grup" id="s7-yuva-1-2" data-deger="-1/2" role="button" tabindex="0" aria-label="Yuva -1/2">
-          <circle cx="560" cy="210" r="30" fill="#a8c0dc" opacity="0.05"/>
-          <circle class="s7-yuva-halka" cx="560" cy="210" r="26" fill="#fcfbf7" stroke="#457b9d" stroke-width="2.5" stroke-dasharray="4 3"/>
-          <circle cx="560" cy="210" r="3" fill="#457b9d" opacity="0.4"/>
-          <rect class="s7-hedef-vurus" x="530" y="180" width="60" height="60" rx="10" fill="#fcfbf7" fill-opacity="0.001"/>
+        <!-- Bırakma yuvaları: altı çeyrek çentiğinin hepsi (cevap konumu belli olmasın) -->
+        <g class="s7-yuva-grup" id="s7-yuva-1-4" data-deger="-1/4" role="button" tabindex="0" aria-label="Sayı doğrusu çentiği">
+          <circle class="s7-yuva-halka" cx="630" cy="210" r="24" fill="#fcfbf7" stroke="#457b9d" stroke-width="2.5" stroke-dasharray="4 3"/>
+          <line x1="630" y1="202" x2="630" y2="218" stroke="#457b9d" stroke-width="2" stroke-linecap="round"/>
+          <rect class="s7-hedef-vurus" x="598" y="178" width="64" height="64" rx="10" fill="#fcfbf7" fill-opacity="0.001"/>
+        </g>
+        <g class="s7-yuva-grup" id="s7-yuva-1-2" data-deger="-1/2" role="button" tabindex="0" aria-label="Sayı doğrusu çentiği">
+          <circle class="s7-yuva-halka" cx="560" cy="210" r="24" fill="#fcfbf7" stroke="#457b9d" stroke-width="2.5" stroke-dasharray="4 3"/>
+          <line x1="560" y1="202" x2="560" y2="218" stroke="#457b9d" stroke-width="2" stroke-linecap="round"/>
+          <rect class="s7-hedef-vurus" x="528" y="178" width="64" height="64" rx="10" fill="#fcfbf7" fill-opacity="0.001"/>
+        </g>
+        <g class="s7-yuva-grup" id="s7-yuva-3-4" data-deger="-3/4" role="button" tabindex="0" aria-label="Sayı doğrusu çentiği">
+          <circle class="s7-yuva-halka" cx="490" cy="210" r="24" fill="#fcfbf7" stroke="#457b9d" stroke-width="2.5" stroke-dasharray="4 3"/>
+          <line x1="490" y1="202" x2="490" y2="218" stroke="#457b9d" stroke-width="2" stroke-linecap="round"/>
+          <rect class="s7-hedef-vurus" x="458" y="178" width="64" height="64" rx="10" fill="#fcfbf7" fill-opacity="0.001"/>
+        </g>
+        <g class="s7-yuva-grup" id="s7-yuva-5-4" data-deger="-5/4" role="button" tabindex="0" aria-label="Sayı doğrusu çentiği">
+          <circle class="s7-yuva-halka" cx="350" cy="210" r="24" fill="#fcfbf7" stroke="#457b9d" stroke-width="2.5" stroke-dasharray="4 3"/>
+          <line x1="350" y1="202" x2="350" y2="218" stroke="#457b9d" stroke-width="2" stroke-linecap="round"/>
+          <rect class="s7-hedef-vurus" x="318" y="178" width="64" height="64" rx="10" fill="#fcfbf7" fill-opacity="0.001"/>
+        </g>
+        <g class="s7-yuva-grup" id="s7-yuva-3-2" data-deger="-3/2" role="button" tabindex="0" aria-label="Sayı doğrusu çentiği">
+          <circle class="s7-yuva-halka" cx="280" cy="210" r="24" fill="#fcfbf7" stroke="#457b9d" stroke-width="2.5" stroke-dasharray="4 3"/>
+          <line x1="280" y1="202" x2="280" y2="218" stroke="#457b9d" stroke-width="2" stroke-linecap="round"/>
+          <rect class="s7-hedef-vurus" x="248" y="178" width="64" height="64" rx="10" fill="#fcfbf7" fill-opacity="0.001"/>
+        </g>
+        <g class="s7-yuva-grup" id="s7-yuva-7-4" data-deger="-7/4" role="button" tabindex="0" aria-label="Sayı doğrusu çentiği">
+          <circle class="s7-yuva-halka" cx="210" cy="210" r="24" fill="#fcfbf7" stroke="#457b9d" stroke-width="2.5" stroke-dasharray="4 3"/>
+          <line x1="210" y1="202" x2="210" y2="218" stroke="#457b9d" stroke-width="2" stroke-linecap="round"/>
+          <rect class="s7-hedef-vurus" x="178" y="178" width="64" height="64" rx="10" fill="#fcfbf7" fill-opacity="0.001"/>
         </g>
 
-        <!-- Yuva 2: -3/4 (x=490) -->
-        <g class="s7-yuva-grup" id="s7-yuva-3-4" data-deger="-3/4" role="button" tabindex="0" aria-label="Yuva -3/4">
-          <circle cx="490" cy="210" r="30" fill="#a8c0dc" opacity="0.05"/>
-          <circle class="s7-yuva-halka" cx="490" cy="210" r="26" fill="#fcfbf7" stroke="#457b9d" stroke-width="2.5" stroke-dasharray="4 3"/>
-          <circle cx="490" cy="210" r="3" fill="#457b9d" opacity="0.4"/>
-          <rect class="s7-hedef-vurus" x="460" y="180" width="60" height="60" rx="10" fill="#fcfbf7" fill-opacity="0.001"/>
-        </g>
-
-        <!-- Yuva 3: -5/4 (x=350) -->
-        <g class="s7-yuva-grup" id="s7-yuva-5-4" data-deger="-5/4" role="button" tabindex="0" aria-label="Yuva -5/4">
-          <circle cx="350" cy="210" r="30" fill="#a8c0dc" opacity="0.05"/>
-          <circle class="s7-yuva-halka" cx="350" cy="210" r="26" fill="#fcfbf7" stroke="#457b9d" stroke-width="2.5" stroke-dasharray="4 3"/>
-          <circle cx="350" cy="210" r="3" fill="#457b9d" opacity="0.4"/>
-          <rect class="s7-hedef-vurus" x="320" y="180" width="60" height="60" rx="10" fill="#fcfbf7" fill-opacity="0.001"/>
-        </g>
-
-        <!-- Mesafe Çizgileri -->
+        <!-- Uzaklık çubukları: sıfıra uzaklık (yerleşince açılır) -->
         <g id="s7-mesafe-1-2" class="s7-mesafe-grup" opacity="0">
-          <path d="M 700 190 Q 630 145 560 190" fill="none" stroke="#457b9d" stroke-width="2.5" stroke-dasharray="5 3"/>
-          <circle cx="560" cy="190" r="4" fill="#457b9d"/>
-          <circle cx="700" cy="190" r="4" fill="#457b9d"/>
-          <rect x="608" y="152" width="44" height="20" rx="6" fill="#f5f0e6" stroke="#457b9d" stroke-width="1.5"/>
-          <text class="svg-not" x="630" y="166" fill="#1d3557" text-anchor="middle">1/2</text>
+          <line x1="700" y1="150" x2="700" y2="194" stroke="#8b96a0" stroke-width="1.5" stroke-dasharray="3 4"/>
+          <line x1="560" y1="150" x2="700" y2="150" stroke="#457b9d" stroke-width="3" stroke-linecap="round"/>
+          <line x1="560" y1="142" x2="560" y2="158" stroke="#457b9d" stroke-width="3" stroke-linecap="round"/>
+          <line x1="700" y1="142" x2="700" y2="158" stroke="#457b9d" stroke-width="3" stroke-linecap="round"/>
+          <line x1="560" y1="160" x2="560" y2="178" stroke="#457b9d" stroke-width="1.5" stroke-dasharray="3 3"/>
+          <rect x="508" y="123" width="40" height="54" rx="9" fill="#fcfbf7" stroke="#457b9d" stroke-width="1.5"/>
+          <text x="528" y="144.4" text-anchor="middle" class="svg-metin" fill="#18283b">1</text><line x1="518" y1="150" x2="538" y2="150" stroke="#18283b" stroke-width="2.5" stroke-linecap="round"/><text x="528" y="169.6" text-anchor="middle" class="svg-metin" fill="#18283b">2</text>
         </g>
-
         <g id="s7-mesafe-3-4" class="s7-mesafe-grup" opacity="0">
-          <path d="M 700 190 Q 595 115 490 190" fill="none" stroke="#2c4f7c" stroke-width="2.5" stroke-dasharray="5 3"/>
-          <circle cx="490" cy="190" r="4" fill="#2c4f7c"/>
-          <rect x="573" y="136" width="44" height="20" rx="6" fill="#f5f0e6" stroke="#2c4f7c" stroke-width="1.5"/>
-          <text class="svg-not" x="595" y="150" fill="#1d3557" text-anchor="middle">3/4</text>
+          <line x1="700" y1="106" x2="700" y2="194" stroke="#8b96a0" stroke-width="1.5" stroke-dasharray="3 4"/>
+          <line x1="490" y1="106" x2="700" y2="106" stroke="#2c4f7c" stroke-width="3" stroke-linecap="round"/>
+          <line x1="490" y1="98" x2="490" y2="114" stroke="#2c4f7c" stroke-width="3" stroke-linecap="round"/>
+          <line x1="700" y1="98" x2="700" y2="114" stroke="#2c4f7c" stroke-width="3" stroke-linecap="round"/>
+          <line x1="490" y1="116" x2="490" y2="178" stroke="#2c4f7c" stroke-width="1.5" stroke-dasharray="3 3"/>
+          <rect x="438" y="79" width="40" height="54" rx="9" fill="#fcfbf7" stroke="#2c4f7c" stroke-width="1.5"/>
+          <text x="458" y="100.4" text-anchor="middle" class="svg-metin" fill="#18283b">3</text><line x1="448" y1="106" x2="468" y2="106" stroke="#18283b" stroke-width="2.5" stroke-linecap="round"/><text x="458" y="125.6" text-anchor="middle" class="svg-metin" fill="#18283b">4</text>
         </g>
-
         <g id="s7-mesafe-5-4" class="s7-mesafe-grup" opacity="0">
-          <path d="M 700 190 Q 525 80 350 190" fill="none" stroke="#1d3557" stroke-width="2.5" stroke-dasharray="5 3"/>
-          <circle cx="350" cy="190" r="4" fill="#1d3557"/>
-          <rect x="503" y="118" width="44" height="20" rx="6" fill="#f5f0e6" stroke="#1d3557" stroke-width="1.5"/>
-          <text class="svg-not" x="525" y="132" fill="#1d3557" text-anchor="middle">5/4</text>
+          <line x1="700" y1="62" x2="700" y2="194" stroke="#8b96a0" stroke-width="1.5" stroke-dasharray="3 4"/>
+          <line x1="350" y1="62" x2="700" y2="62" stroke="#1d3557" stroke-width="3" stroke-linecap="round"/>
+          <line x1="350" y1="54" x2="350" y2="70" stroke="#1d3557" stroke-width="3" stroke-linecap="round"/>
+          <line x1="700" y1="54" x2="700" y2="70" stroke="#1d3557" stroke-width="3" stroke-linecap="round"/>
+          <line x1="350" y1="72" x2="350" y2="178" stroke="#1d3557" stroke-width="1.5" stroke-dasharray="3 3"/>
+          <rect x="298" y="35" width="40" height="54" rx="9" fill="#fcfbf7" stroke="#1d3557" stroke-width="1.5"/>
+          <text x="318" y="56.4" text-anchor="middle" class="svg-metin" fill="#18283b">5</text><line x1="308" y1="62" x2="328" y2="62" stroke="#18283b" stroke-width="2.5" stroke-linecap="round"/><text x="318" y="81.6" text-anchor="middle" class="svg-metin" fill="#18283b">4</text>
         </g>
       </g>
 
@@ -5591,37 +5945,34 @@ window.SAYFA_INIT[6] = function (kok) {
       <g id="sayfa7-katman-on">
         <!-- Tam Sayı Değer Etiketleri -->
         <text class="svg-baslik" x="700" y="258" fill="#1d3557" text-anchor="middle">0</text>
-        <text class="svg-baslik" x="420" y="258" fill="#1d3557" text-anchor="middle">-1</text>
-        <text class="svg-baslik" x="140" y="258" fill="#1d3557" text-anchor="middle">-2</text>
+        <text class="svg-baslik" x="420" y="258" fill="#1d3557" text-anchor="middle">−1</text>
+        <text class="svg-baslik" x="140" y="258" fill="#1d3557" text-anchor="middle">−2</text>
 
         <!-- Kilitlenen Rozetler -->
         <g class="s7-rozet" id="s7-rozet-1-2" opacity="0" pointer-events="none">
-          <circle cx="560" cy="210" r="25" fill="url(#s7-kart-degrade)" stroke="#2a9d8f" stroke-width="2.5" filter="url(#s7-golge)"/>
-          <ellipse cx="560" cy="198" rx="16" ry="6" fill="#fcfbf7" opacity="0.35"/>
-          <text class="svg-metin" x="560" y="216" fill="#18283b" text-anchor="middle" font-weight="bold">-1/2</text>
+          <circle cx="560" cy="210" r="30" fill="url(#s7-kart-degrade)" stroke="#2a9d8f" stroke-width="2.5" filter="url(#s7-golge)"/>
+          <text x="566" y="204.4" text-anchor="middle" class="svg-metin" fill="#18283b">1</text><line x1="556" y1="210" x2="576" y2="210" stroke="#18283b" stroke-width="2.5" stroke-linecap="round"/><text x="566" y="229.6" text-anchor="middle" class="svg-metin" fill="#18283b">2</text><text x="547.6" y="216.8" text-anchor="middle" class="svg-metin" fill="#18283b">−</text>
         </g>
 
         <g class="s7-rozet" id="s7-rozet-3-4" opacity="0" pointer-events="none">
-          <circle cx="490" cy="210" r="25" fill="url(#s7-kart-degrade)" stroke="#2a9d8f" stroke-width="2.5" filter="url(#s7-golge)"/>
-          <ellipse cx="490" cy="198" rx="16" ry="6" fill="#fcfbf7" opacity="0.35"/>
-          <text class="svg-metin" x="490" y="216" fill="#18283b" text-anchor="middle" font-weight="bold">-3/4</text>
+          <circle cx="490" cy="210" r="30" fill="url(#s7-kart-degrade)" stroke="#2a9d8f" stroke-width="2.5" filter="url(#s7-golge)"/>
+          <text x="496" y="204.4" text-anchor="middle" class="svg-metin" fill="#18283b">3</text><line x1="486" y1="210" x2="506" y2="210" stroke="#18283b" stroke-width="2.5" stroke-linecap="round"/><text x="496" y="229.6" text-anchor="middle" class="svg-metin" fill="#18283b">4</text><text x="477.6" y="216.8" text-anchor="middle" class="svg-metin" fill="#18283b">−</text>
         </g>
 
         <g class="s7-rozet" id="s7-rozet-5-4" opacity="0" pointer-events="none">
-          <circle cx="350" cy="210" r="25" fill="url(#s7-kart-degrade)" stroke="#2a9d8f" stroke-width="2.5" filter="url(#s7-golge)"/>
-          <ellipse cx="350" cy="198" rx="16" ry="6" fill="#fcfbf7" opacity="0.35"/>
-          <text class="svg-metin" x="350" y="216" fill="#18283b" text-anchor="middle" font-weight="bold">-5/4</text>
+          <circle cx="350" cy="210" r="30" fill="url(#s7-kart-degrade)" stroke="#2a9d8f" stroke-width="2.5" filter="url(#s7-golge)"/>
+          <text x="356" y="204.4" text-anchor="middle" class="svg-metin" fill="#18283b">5</text><line x1="346" y1="210" x2="366" y2="210" stroke="#18283b" stroke-width="2.5" stroke-linecap="round"/><text x="356" y="229.6" text-anchor="middle" class="svg-metin" fill="#18283b">4</text><text x="337.6" y="216.8" text-anchor="middle" class="svg-metin" fill="#18283b">−</text>
         </g>
 
         <!-- Sola Küçülen Değer Yön Göstergesi -->
         <g id="s7-yon-oku" opacity="0" class="s7-yon-grup">
-          <rect x="110" y="315" width="620" height="70" rx="14" fill="#f5f0e6" stroke="#2a9d8f" stroke-width="1.5" filter="url(#s7-golge)"/>
-          <line x1="680" y1="358" x2="160" y2="358" stroke="#2a9d8f" stroke-width="3.5" stroke-linecap="round"/>
-          <polygon points="150,358 168,351 168,365" fill="#2a9d8f"/>
-          <circle cx="680" cy="358" r="4.5" fill="#2a9d8f"/>
-          <text class="svg-metin" x="570" y="344" fill="#1d3557" text-anchor="middle" font-weight="bold">Sıfırın Solu</text>
-          <text class="svg-baslik" x="280" y="344" fill="#2a9d8f" text-anchor="middle" font-weight="bold">Küçülen Değer</text>
-          <text class="svg-not" x="420" y="375" fill="#3d4852" text-anchor="middle">Sola gidildikçe sıfırdan uzaklaşılır ve değerler küçülür.</text>
+          <rect x="110" y="296" width="620" height="112" rx="14" fill="#f5f0e6" stroke="#2a9d8f" stroke-width="1.5" filter="url(#s7-golge)"/>
+          <text class="svg-metin" x="680" y="328" fill="#1d3557" text-anchor="end" font-weight="bold">Sıfırın solu</text>
+          <text class="svg-metin" x="160" y="328" fill="#1f7a6f" text-anchor="start" font-weight="bold">Değer küçülür</text>
+          <line x1="680" y1="350" x2="168" y2="350" stroke="#2a9d8f" stroke-width="3.5" stroke-linecap="round"/>
+          <polygon points="152,350 170,343 170,357" fill="#2a9d8f"/>
+          <circle cx="680" cy="350" r="5" fill="#2a9d8f"/>
+          <text class="svg-not" x="420" y="390" fill="#3d4852" text-anchor="middle">Sola gidildikçe sıfırdan uzaklaşılır, değer küçülür.</text>
         </g>
       </g>
 </svg>
@@ -5637,14 +5988,14 @@ window.SAYFA_INIT[6] = function (kok) {
   <div class="kontrol-govde">
     <div class="s7-panel-kutu">
       <div class="s7-kart-havuzu">
-        <div class="kavram-kart s7-kart" role="button" tabindex="0" data-deger="-1/2" aria-label="Kesir -1/2">
-          <span class="s7-kart-deger">-1/2</span>
+        <div class="kavram-kart s7-kart" role="button" tabindex="0" data-deger="-1/2" aria-label="Kesir eksi 1 bölü 2">
+          <span class="s7-kart-deger">\( -\dfrac{1}{2} \)</span>
         </div>
-        <div class="kavram-kart s7-kart" role="button" tabindex="0" data-deger="-3/4" aria-label="Kesir -3/4">
-          <span class="s7-kart-deger">-3/4</span>
+        <div class="kavram-kart s7-kart" role="button" tabindex="0" data-deger="-3/4" aria-label="Kesir eksi 3 bölü 4">
+          <span class="s7-kart-deger">\( -\dfrac{3}{4} \)</span>
         </div>
-        <div class="kavram-kart s7-kart" role="button" tabindex="0" data-deger="-5/4" aria-label="Kesir -5/4">
-          <span class="s7-kart-deger">-5/4</span>
+        <div class="kavram-kart s7-kart" role="button" tabindex="0" data-deger="-5/4" aria-label="Kesir eksi 5 bölü 4">
+          <span class="s7-kart-deger">\( -\dfrac{5}{4} \)</span>
         </div>
       </div>
     </div>
@@ -5686,7 +6037,7 @@ window.SAYFA_INIT[6] = function (kok) {
     color: #18283b;
     font-weight: 700;
     width: 86px;
-    height: 64px;
+    height: 76px;
     padding: 12px;
     box-sizing: border-box;
     display: flex;
@@ -5765,6 +6116,18 @@ window.SAYFA_INIT[7] = function (kok) {
   var temizleyiciler = [];
   var seciliKart = null;
   var dogruSayisi = 0;
+
+  // Kartlar cevap sırasıyla (sağdan sola) diziliydi: açılışta karıştırılır
+  var havuz = kok.querySelector(".s7-kart-havuzu");
+  var kartDizi = Array.prototype.slice.call(havuz.children);
+  var ozgunSira = kartDizi.map(function (k) { return k.dataset.deger; }).join();
+  do {
+    for (var i = kartDizi.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var gecici = kartDizi[i]; kartDizi[i] = kartDizi[j]; kartDizi[j] = gecici;
+    }
+  } while (kartDizi.map(function (k) { return k.dataset.deger; }).join() === ozgunSira);
+  kartDizi.forEach(function (k) { havuz.appendChild(k); });
 
   var kartlar = kok.querySelectorAll(".s7-kart");
   var yuvalar = kok.querySelectorAll(".s7-yuva-grup");
@@ -5903,15 +6266,9 @@ window.SAYFA_INIT[7] = function (kok) {
         var targets = args.location.current.dropTargets;
 
         if (!targets || targets.length === 0) {
-          if (kartEl) {
-            kartEl.classList.remove("secili");
-            kartEl.classList.add("s7-titre");
-            setTimeout(function () {
-              kartEl.classList.remove("s7-titre");
-            }, 500);
-          }
+          // Boşa bırakılan kart yanlış sayılmaz, havuza döner
+          if (kartEl) kartEl.classList.remove("secili");
           seciliKart = null;
-          EGITSEL.dontVer(kok, "yanlis", "Sıfırın solundaki bölüntüleri say.");
           return;
         }
 
@@ -7056,203 +7413,14 @@ window.SAYFA_INIT[9] = function (kok) {
 
 <section class="bolum sahne s10-sahne-zemini">
   <div class="sahne-kap">
-    <svg viewBox="0 0 740 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Rasyonel Sayılar Sayı Doğrusu ve Karşılaştırma Sahnesi">
+    <svg viewBox="0 0 705 630" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Rasyonel Sayılar Sayı Doğrusu ve Karşılaştırma Sahnesi">
       <title>Rasyonel Sayılar Sayı Doğrusu ve Karşılaştırma Sahnesi</title>
-      <defs><linearGradient id="s10-st-zemin-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#f0f5fa"/><stop offset="100%" stop-color="#e2ecf5"/></linearGradient><linearGradient id="s10-st-kart-grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#f0f5fa"/></linearGradient><linearGradient id="s10-st-vurgu-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#bed8ed"/><stop offset="100%" stop-color="#6ba3d6"/></linearGradient><linearGradient id="s10-st-ikincil-grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#fae6be"/><stop offset="100%" stop-color="#e8af56"/></linearGradient><radialGradient id="s10-st-golge-grad" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#e4e8eb" stop-opacity="0.28"/><stop offset="100%" stop-color="#e2ecf5" stop-opacity="0"/></radialGradient>
-        <linearGradient id="s10-grad-zemin" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#f0f5fa"/>
-          <stop offset="100%" stop-color="#e2ecf5"/>
-        </linearGradient>
-        <linearGradient id="s10-grad-baskin" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#bed8ed"/>
-          <stop offset="50%" stop-color="#6ba3d6"/>
-          <stop offset="100%" stop-color="#3879b8"/>
-        </linearGradient>
-        <linearGradient id="s10-grad-altin" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#f9e6bf"/>
-          <stop offset="60%" stop-color="#d5bf9c"/>
-          <stop offset="100%" stop-color="#cab291"/>
-        </linearGradient>
-        <linearGradient id="s10-grad-vurgu" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#bed8ed"/>
-          <stop offset="100%" stop-color="#2b968a"/>
-        </linearGradient>
-        <linearGradient id="s10-grad-notr" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#f0f5fa"/>
-          <stop offset="100%" stop-color="#e4e8eb"/>
-        </linearGradient>
-      </defs>
-
-      <!-- ARKA KATMAN: Podyum ve Zemin Gölgeleri -->
-      <g id="sayfa10-katman-arka">
-        <ellipse cx="370" cy="520" rx="320" ry="24" fill="#a7c1dd" fill-opacity="0.18"/>
-        <path d="M 70 500 C 210 470, 530 470, 670 500 L 660 525 C 520 495, 220 495, 80 525 Z" fill="url(#s10-grad-notr)" stroke="#1e354d" stroke-width="3" stroke-linejoin="round"/>
-        <path d="M 90 502 C 220 475, 520 475, 650 502" stroke="#f0f5fa" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.8"/>
-      </g>
-
-      <!-- ORTA KATMAN: Sayı Doğrusu Rayı, Ayaklar, Çentikler ve Sıfır Anıtı -->
-      <g id="sayfa10-katman-orta">
-        <!-- Ayaklar -->
-        <g id="s10-ayak-sol">
-          <ellipse cx="140" cy="480" rx="20" ry="6" fill="#1e354d" fill-opacity="0.25"/>
-          <rect x="125" y="365" width="30" height="115" rx="8" fill="url(#s10-grad-baskin)" stroke="#1e354d" stroke-width="3"/>
-          <line x1="130" y1="375" x2="130" y2="470" stroke="#f0f5fa" stroke-width="2" stroke-linecap="round" stroke-opacity="0.6"/>
-        </g>
-        <g id="s10-ayak-orta">
-          <ellipse cx="370" cy="475" rx="20" ry="6" fill="#1e354d" fill-opacity="0.25"/>
-          <rect x="355" y="365" width="30" height="110" rx="8" fill="url(#s10-grad-baskin)" stroke="#1e354d" stroke-width="3"/>
-          <line x1="360" y1="375" x2="360" y2="465" stroke="#f0f5fa" stroke-width="2" stroke-linecap="round" stroke-opacity="0.6"/>
-        </g>
-        <g id="s10-ayak-sag">
-          <ellipse cx="600" cy="480" rx="20" ry="6" fill="#1e354d" fill-opacity="0.25"/>
-          <rect x="585" y="365" width="30" height="115" rx="8" fill="url(#s10-grad-baskin)" stroke="#1e354d" stroke-width="3"/>
-          <line x1="590" y1="375" x2="590" y2="470" stroke="#f0f5fa" stroke-width="2" stroke-linecap="round" stroke-opacity="0.6"/>
-        </g>
-
-        <!-- Ray Gövdesi -->
-        <rect x="50" y="345" width="640" height="30" rx="14" fill="url(#s10-grad-baskin)" stroke="#1e354d" stroke-width="3"/>
-        <path d="M 65 350 L 675 350" stroke="#f0f5fa" stroke-width="4" stroke-linecap="round" stroke-opacity="0.7"/>
-        <path d="M 65 370 L 675 370" stroke="#3879b8" stroke-width="3" stroke-linecap="round"/>
-
-        <!-- Uç Okları -->
-        <polygon points="40,360 55,348 55,372" fill="#3879b8" stroke="#1e354d" stroke-width="3" stroke-linejoin="round"/>
-        <polygon points="700,360 685,348 685,372" fill="#3879b8" stroke="#1e354d" stroke-width="3" stroke-linejoin="round"/>
-
-        <!-- Ana Çentikler ve Değer Etiketleri -->
-        <g id="s10-centikler-ana">
-          <!-- -3 -->
-          <line x1="100" y1="335" x2="100" y2="385" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/>
-          <text x="100" y="415" text-anchor="middle" class="svg-metin" fill="#1e354d">-3</text>
-          <!-- -2 -->
-          <line x1="190" y1="335" x2="190" y2="385" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/>
-          <text x="190" y="415" text-anchor="middle" class="svg-metin" fill="#1e354d">-2</text>
-          <!-- -1 -->
-          <line x1="280" y1="335" x2="280" y2="385" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/>
-          <text x="280" y="415" text-anchor="middle" class="svg-metin" fill="#1e354d">-1</text>
-          <!-- 0 -->
-          <line x1="370" y1="330" x2="370" y2="390" stroke="#2b968a" stroke-width="4" stroke-linecap="round"/>
-          <text x="370" y="415" text-anchor="middle" class="svg-metin" fill="#2b968a">0</text>
-          <!-- 1 -->
-          <line x1="460" y1="335" x2="460" y2="385" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/>
-          <text x="460" y="415" text-anchor="middle" class="svg-metin" fill="#1e354d">1</text>
-          <!-- 2 -->
-          <line x1="550" y1="335" x2="550" y2="385" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/>
-          <text x="550" y="415" text-anchor="middle" class="svg-metin" fill="#1e354d">2</text>
-          <!-- 3 -->
-          <line x1="640" y1="335" x2="640" y2="385" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/>
-          <text x="640" y="415" text-anchor="middle" class="svg-metin" fill="#1e354d">3</text>
-        </g>
-
-        <!-- Ara Çentikler -->
-        <g id="s10-centikler-ara">
-          <line x1="145" y1="350" x2="145" y2="370" stroke="#8c9ba6" stroke-width="2" stroke-linecap="round"/>
-          <line x1="235" y1="350" x2="235" y2="370" stroke="#8c9ba6" stroke-width="2" stroke-linecap="round"/>
-          <line x1="325" y1="350" x2="325" y2="370" stroke="#8c9ba6" stroke-width="2" stroke-linecap="round"/>
-          <line x1="415" y1="350" x2="415" y2="370" stroke="#8c9ba6" stroke-width="2" stroke-linecap="round"/>
-          <line x1="505" y1="350" x2="505" y2="370" stroke="#8c9ba6" stroke-width="2" stroke-linecap="round"/>
-          <line x1="595" y1="350" x2="595" y2="370" stroke="#8c9ba6" stroke-width="2" stroke-linecap="round"/>
-        </g>
-
-        <!-- Sıfır Başlangıç Noktası Anıtı -->
-        <g id="s10-sifir-aniti">
-          <ellipse cx="370" cy="345" rx="26" ry="8" fill="#1e354d" fill-opacity="0.3"/>
-          <path d="M 356 345 L 358 260 L 370 240 L 382 260 L 384 345 Z" fill="url(#s10-grad-vurgu)" stroke="#1e354d" stroke-width="3" stroke-linejoin="round"/>
-          <path d="M 360 265 L 370 248 L 372 340" stroke="#f0f5fa" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.7"/>
-          <circle cx="370" cy="225" r="16" fill="url(#s10-grad-altin)" stroke="#1e354d" stroke-width="3"/>
-          <text x="370" y="231" text-anchor="middle" class="svg-metin" fill="#1e354d">0</text>
-        </g>
-      </g>
-
-      <!-- ÖN KATMAN: Aktif Soruya Göre Değişen Dinamik Göstergeler -->
+      <defs><linearGradient id="s10-zemin" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f0f5fa"/><stop offset="100%" stop-color="#e2ecf5"/></linearGradient><linearGradient id="s10-dalga" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e2ecf5"/><stop offset="100%" stop-color="#bed8ed"/></linearGradient><linearGradient id="s10-ray" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#bed8ed"/><stop offset="50%" stop-color="#6ba3d6"/><stop offset="100%" stop-color="#3879b8"/></linearGradient><linearGradient id="s10-kagit" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#e2ecf5"/></linearGradient><radialGradient id="s10-igne" cx="0.35" cy="0.3" r="0.8"><stop offset="0%" stop-color="#a9dcd5"/><stop offset="55%" stop-color="#2b968a"/><stop offset="100%" stop-color="#1d6b62"/></radialGradient><radialGradient id="s10-balon-mavi" cx="0.35" cy="0.3" r="0.8"><stop offset="0%" stop-color="#e1eef8"/><stop offset="55%" stop-color="#6ba3d6"/><stop offset="100%" stop-color="#3879b8"/></radialGradient><radialGradient id="s10-balon-amber" cx="0.35" cy="0.3" r="0.8"><stop offset="0%" stop-color="#fdf1d8"/><stop offset="55%" stop-color="#e8af56"/><stop offset="100%" stop-color="#bd802b"/></radialGradient><radialGradient id="s10-balon-yesil" cx="0.35" cy="0.3" r="0.8"><stop offset="0%" stop-color="#d3ede9"/><stop offset="55%" stop-color="#5bb5aa"/><stop offset="100%" stop-color="#2b968a"/></radialGradient><linearGradient id="s10-cikolata" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#d99a48"/><stop offset="55%" stop-color="#a8692a"/><stop offset="100%" stop-color="#7a4a1a"/></linearGradient><linearGradient id="s10-hucre" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#e8b36a"/><stop offset="100%" stop-color="#b97a35"/></linearGradient><linearGradient id="s10-kurdele" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f0f5fa"/><stop offset="100%" stop-color="#bed8ed"/></linearGradient><linearGradient id="s10-kurdele-uc" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#6ba3d6"/><stop offset="100%" stop-color="#3879b8"/></linearGradient><linearGradient id="s10-ahsap" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#fae6be"/><stop offset="50%" stop-color="#e8af56"/><stop offset="100%" stop-color="#bd802b"/></linearGradient></defs>
+      <g id="sayfa10-katman-arka"><rect x="0" y="0" width="705" height="630" fill="url(#s10-zemin)"/><path d="M 0 478 C 160 448 330 506 520 470 C 600 456 660 460 705 468 L 705 630 L 0 630 Z" fill="url(#s10-dalga)" fill-opacity="0.75"/><path d="M 0 478 C 160 448 330 506 520 470 C 600 456 660 460 705 468" stroke="#ffffff" stroke-width="3" stroke-opacity="0.7" fill="none"/><path d="M 0 552 C 150 526 360 572 705 538 L 705 630 L 0 630 Z" fill="#bed8ed" fill-opacity="0.4"/></g>
       <g id="sayfa10-katman-on">
-        <!-- SORU 1: -3 Tam Sayısının Rasyonel Karşılığı Modeli --><g id="s10-sahne-q1">
-          <ellipse cx="100" cy="360" rx="22" ry="10" fill="#2b968a" fill-opacity="0.35"/>
-          <path d="M 100 345 L 100 240 L 160 200" stroke="#2b968a" stroke-width="2.5" stroke-dasharray="4 4"/>
-          <rect x="165" y="85" width="230" height="150" rx="16" fill="#a7c1dd" fill-opacity="0.15"/>
-          <rect x="160" y="80" width="230" height="150" rx="16" fill="url(#s10-grad-altin)" stroke="#1e354d" stroke-width="3"/>
-          <path d="M 175 95 Q 275 92 375 110" stroke="#f0f5fa" stroke-width="3.5" stroke-linecap="round" stroke-opacity="0.75"/>
-          <text x="275" y="112" text-anchor="middle" class="svg-not" fill="#1e354d">Rasyonel Sayı Dönüşümü</text>
-          <line x1="200" y1="160" x2="350" y2="160" stroke="#1e354d" stroke-width="4" stroke-linecap="round"/>
-          <text x="275" y="148" text-anchor="middle" class="svg-baslik" fill="#1e354d">-3</text>
-          <rect x="250" y="172" width="50" height="38" rx="8" fill="#f0f5fa" stroke="#1e354d" stroke-width="2.5"/>
-          <text x="275" y="198" text-anchor="middle" class="svg-baslik" fill="#2b968a">?</text>
-          <circle cx="178" cy="212" r="3" fill="#bd802b"/>
-          <circle cx="190" cy="212" r="3" fill="#bd802b"/>
-          <circle cx="360" cy="212" r="3" fill="#bd802b"/>
-          <circle cx="372" cy="212" r="3" fill="#bd802b"/>
-        </g>
-
-        <!-- SORU 2: 2/3 ve 3/5 Karşılaştırma Terazisi Modeli -->
-        <g id="s10-sahne-q2" style="display:none;">
-          <ellipse cx="370" cy="250" rx="60" ry="12" fill="#a7c1dd" fill-opacity="0.2"/>
-          <rect x="363" y="100" width="14" height="145" rx="6" fill="url(#s10-grad-baskin)" stroke="#1e354d" stroke-width="3"/>
-          <circle cx="370" cy="110" r="14" fill="url(#s10-grad-altin)" stroke="#1e354d" stroke-width="3"/>
-          <path d="M 230 140 Q 370 100 510 120" stroke="#1e354d" stroke-width="5" stroke-linecap="round" fill="none"/>
-          <!-- Sol Kefe -->
-          <line x1="230" y1="140" x2="200" y2="190" stroke="#8c9ba6" stroke-width="2"/>
-          <line x1="230" y1="140" x2="260" y2="190" stroke="#8c9ba6" stroke-width="2"/>
-          <path d="M 190 190 Q 230 215 270 190 Z" fill="url(#s10-grad-altin)" stroke="#1e354d" stroke-width="3"/>
-          <text x="230" y="175" text-anchor="middle" class="svg-baslik" fill="#1e354d">2/3</text>
-          <text x="230" y="235" text-anchor="middle" class="svg-not" fill="#3879b8">Ortak Payda: 10/15</text>
-          <!-- Sağ Kefe -->
-          <line x1="510" y1="120" x2="480" y2="170" stroke="#8c9ba6" stroke-width="2"/>
-          <line x1="510" y1="120" x2="540" y2="170" stroke="#8c9ba6" stroke-width="2"/>
-          <path d="M 470 170 Q 510 195 550 170 Z" fill="url(#s10-grad-altin)" stroke="#1e354d" stroke-width="3"/>
-          <text x="510" y="155" text-anchor="middle" class="svg-baslik" fill="#1e354d">3/5</text>
-          <text x="510" y="215" text-anchor="middle" class="svg-not" fill="#3879b8">Ortak Payda: 9/15</text>
-          <!-- Karşılaştırma Yuvası -->
-          <circle cx="370" cy="65" r="22" fill="#f0f5fa" stroke="#1e354d" stroke-width="3"/>
-          <text x="370" y="72" text-anchor="middle" class="svg-baslik" fill="#2b968a">?</text>
-        </g>
-
-        <!-- SORU 3: Negatif Sıralama ve Sıfıra Uzaklık Modeli -->
-        <g id="s10-sahne-q3" style="display:none;">
-          <!-- Sıfırdan Uzaklaşma Yayları -->
-          <path d="M 370 330 C 370 280, 325 280, 325 330" fill="none" stroke="#6ba3d6" stroke-width="3" stroke-dasharray="4 3"/>
-          <path d="M 370 330 C 370 230, 302 230, 302 330" fill="none" stroke="#e8af56" stroke-width="3" stroke-dasharray="4 3"/>
-          <path d="M 370 330 C 370 180, 257 180, 257 330" fill="none" stroke="#bd802b" stroke-width="3" stroke-dasharray="4 3"/>
-          <!-- 3 İşaretçi -->
-          <rect x="310" y="235" width="30" height="40" rx="8" fill="url(#s10-grad-baskin)" stroke="#1e354d" stroke-width="2.5"/>
-          <text x="325" y="260" text-anchor="middle" class="svg-not" fill="#1e354d">-1/2</text>
-          <rect x="287" y="185" width="30" height="40" rx="8" fill="url(#s10-grad-altin)" stroke="#1e354d" stroke-width="2.5"/>
-          <text x="302" y="210" text-anchor="middle" class="svg-not" fill="#1e354d">-3/4</text>
-          <rect x="242" y="135" width="30" height="40" rx="8" fill="url(#s10-grad-vurgu)" stroke="#1e354d" stroke-width="2.5"/>
-          <text x="257" y="160" text-anchor="middle" class="svg-not" fill="#1e354d">-5/4</text>
-          <!-- Uzaklaşma Yön Bandı -->
-          <path d="M 370 110 L 220 110 L 220 100 L 190 115 L 220 130 L 220 120 L 370 120 Z" fill="url(#s10-grad-vurgu)" stroke="#1e354d" stroke-width="2.5"/>
-          <text x="290" y="98" text-anchor="middle" class="svg-not" fill="#1e354d">Sıfırdan Uzaklaşma Yönü</text>
-        </g>
-
-        <!-- SORU 4: Solda Bulunma İlkesi Modeli -->
-        <g id="s10-sahne-q4" style="display:none;">
-          <!-- -2/3 ve -1/3 Konumları -->
-          <rect x="295" y="220" width="30" height="45" rx="8" fill="url(#s10-grad-altin)" stroke="#1e354d" stroke-width="3"/>
-          <text x="310" y="248" text-anchor="middle" class="svg-not" fill="#1e354d">-2/3</text>
-          <rect x="325" y="220" width="30" height="45" rx="8" fill="url(#s10-grad-baskin)" stroke="#1e354d" stroke-width="3"/>
-          <text x="340" y="248" text-anchor="middle" class="svg-not" fill="#1e354d">-1/3</text>
-          <!-- Sola Yönelim Oku -->
-          <path d="M 450 150 L 250 150 L 250 138 L 220 155 L 250 172 L 250 160 L 450 160 Z" fill="url(#s10-grad-vurgu)" stroke="#1e354d" stroke-width="3"/>
-          <text x="340" y="132" text-anchor="middle" class="svg-baslik" fill="#1e354d">Sayı Doğrusunda Sol Yön</text>
-          <text x="340" y="190" text-anchor="middle" class="svg-not" fill="#2b968a">Soldaki sayı daima küçüktür</text>
-        </g>
-
-        <!-- SORU 5: Dört Rasyonel Sayının Sıralanış Modeli -->
-        <g id="s10-sahne-q5" style="display:none;">
-          <circle cx="298" cy="270" r="16" fill="url(#s10-grad-altin)" stroke="#1e354d" stroke-width="2.5"/>
-          <text x="298" y="275" text-anchor="middle" class="svg-not" fill="#1e354d">-4/5</text>
-          <circle cx="352" cy="270" r="16" fill="url(#s10-grad-altin)" stroke="#1e354d" stroke-width="2.5"/>
-          <text x="352" y="275" text-anchor="middle" class="svg-not" fill="#1e354d">-1/5</text>
-          <circle cx="370" cy="270" r="16" fill="url(#s10-grad-vurgu)" stroke="#1e354d" stroke-width="2.5"/>
-          <text x="370" y="275" text-anchor="middle" class="svg-not" fill="#1e354d">0</text>
-          <circle cx="406" cy="270" r="16" fill="url(#s10-grad-baskin)" stroke="#1e354d" stroke-width="2.5"/>
-          <text x="406" y="275" text-anchor="middle" class="svg-not" fill="#1e354d">2/5</text>
-          <!-- Küçükten Büyüğe Sıralanış Oku -->
-          <path d="M 260 170 L 440 170 L 440 160 L 465 175 L 440 190 L 440 180 L 260 180 Z" fill="url(#s10-grad-vurgu)" stroke="#1e354d" stroke-width="2.5"/>
-          <text x="360" y="152" text-anchor="middle" class="svg-baslik" fill="#1e354d">Küçükten Büyüğe Sıralanış</text>
-          <text x="360" y="215" text-anchor="middle" class="svg-not" fill="#3879b8">Negatif Sayılar &lt; 0 &lt; Pozitif Sayılar</text>
-        </g>
+<g id="s10-sahne-q1"><g><rect x="54" y="421" width="597" height="18" rx="9" fill="url(#s10-ray)" stroke="#1e354d" stroke-width="2.5"/><path d="M 64 426 L 641 426" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-opacity="0.55" fill="none"/><path d="M 40 430 L 62 415 L 62 445 Z" fill="#3879b8" stroke="#1e354d" stroke-width="2.5" stroke-linejoin="round"/><path d="M 665 430 L 643 415 L 643 445 Z" fill="#3879b8" stroke="#1e354d" stroke-width="2.5" stroke-linejoin="round"/><line x1="95" y1="412" x2="95" y2="448" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="95" y="478" text-anchor="middle" class="svg-metin" fill="#1e354d">−4</text><line x1="180" y1="412" x2="180" y2="448" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="180" y="478" text-anchor="middle" class="svg-metin" fill="#1e354d">−3</text><line x1="265" y1="412" x2="265" y2="448" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="265" y="478" text-anchor="middle" class="svg-metin" fill="#1e354d">−2</text><line x1="350" y1="412" x2="350" y2="448" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="350" y="478" text-anchor="middle" class="svg-metin" fill="#1e354d">−1</text><line x1="435" y1="412" x2="435" y2="448" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="435" y="478" text-anchor="middle" class="svg-metin" fill="#1e354d">0</text><line x1="520" y1="412" x2="520" y2="448" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="520" y="478" text-anchor="middle" class="svg-metin" fill="#1e354d">1</text><line x1="605" y1="412" x2="605" y2="448" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="605" y="478" text-anchor="middle" class="svg-metin" fill="#1e354d">2</text></g><ellipse cx="180" cy="424" rx="18.9" ry="5" fill="#1e354d" fill-opacity="0.3"/><path d="M 180 421 L 218.42 333.96 A 42 42 0 1 0 141.58 333.96 Z" fill="url(#s10-igne)" stroke="#1e354d" stroke-width="3" stroke-linejoin="round"/><path d="M 153.96 302.3 A 30.24 30.24 0 0 1 177.9 284.24" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-opacity="0.5" fill="none"/><circle cx="180" cy="317" r="30.24" fill="#ffffff" fill-opacity="0.92"/><text x="180" y="324.7" text-anchor="middle" class="svg-baslik" fill="#1e354d">−3</text><path d="M 346 140 H 566 Q 594 140 594 168 V 262 Q 594 290 566 290 H 400 L 236 316 L 360 290 H 346 Q 318 290 318 262 V 168 Q 318 140 346 140 Z" transform="translate(5 7)" fill="#3879b8" fill-opacity="0.13"/><path d="M 346 140 H 566 Q 594 140 594 168 V 262 Q 594 290 566 290 H 400 L 236 316 L 360 290 H 346 Q 318 290 318 262 V 168 Q 318 140 346 140 Z" fill="url(#s10-kagit)" stroke="#1e354d" stroke-width="3" stroke-linejoin="round"/><path d="M 336 160 Q 348 152 392 152" stroke="#bed8ed" stroke-width="4" stroke-linecap="round" fill="none"/><text x="384" y="229.48" text-anchor="middle" class="svg-baslik" fill="#1e354d">−3</text><text x="434" y="229.48" text-anchor="middle" class="svg-baslik" fill="#1e354d">=</text><line x1="476" y1="222" x2="556" y2="222" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="516" y="245.1" text-anchor="middle" class="svg-baslik" fill="#1e354d">1</text><g data-soru-isareti="1"><rect x="484" y="160" width="64" height="52" rx="10" fill="#ffffff" stroke="#2b968a" stroke-width="3" stroke-dasharray="7 5"/><text x="516" y="193.7" text-anchor="middle" class="svg-baslik" fill="#2b968a">?</text></g><g data-cozum="1" style="display:none"><text x="462" y="229.48" text-anchor="middle" class="svg-baslik" fill="#2b968a">−</text><text x="516" y="215.4" text-anchor="middle" class="svg-baslik" fill="#2b968a">3</text></g></g><g id="s10-sahne-q2" style="display:none;"><ellipse cx="162" cy="444" rx="130" ry="11" fill="#7a4a1a" fill-opacity="0.28"/><rect x="26" y="262" width="272" height="172" rx="14" fill="url(#s10-cikolata)" stroke="#5e3812" stroke-width="3"/><rect x="40" y="276" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 46 281 H 76" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="90" y="276" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 96 281 H 126" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="140" y="276" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 146 281 H 176" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="190" y="276" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 196 281 H 226" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="240" y="276" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 246 281 H 276" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="40" y="326" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 46 331 H 76" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="90" y="326" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 96 331 H 126" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="140" y="326" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 146 331 H 176" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="190" y="326" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 196 331 H 226" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="240" y="326" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 246 331 H 276" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="40" y="376" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 46 381 H 76" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="90" y="376" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 96 381 H 126" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="140" y="376" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 146 381 H 176" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="190" y="376" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 196 381 H 226" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="240" y="376" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 246 381 H 276" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><path d="M 36 284 Q 36 270 52 269" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-opacity="0.5" fill="none"/><g data-cozum="1" style="display:none"><rect x="41.5" y="277.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="91.5" y="277.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="141.5" y="277.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="191.5" y="277.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="241.5" y="277.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="41.5" y="327.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="91.5" y="327.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="141.5" y="327.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="191.5" y="327.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="241.5" y="327.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/></g><ellipse cx="543" cy="444" rx="130" ry="11" fill="#7a4a1a" fill-opacity="0.28"/><rect x="407" y="262" width="272" height="172" rx="14" fill="url(#s10-cikolata)" stroke="#5e3812" stroke-width="3"/><rect x="421" y="276" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 427 281 H 457" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="471" y="276" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 477 281 H 507" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="521" y="276" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 527 281 H 557" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="571" y="276" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 577 281 H 607" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="621" y="276" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 627 281 H 657" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="421" y="326" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 427 331 H 457" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="471" y="326" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 477 331 H 507" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="521" y="326" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 527 331 H 557" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="571" y="326" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 577 331 H 607" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="621" y="326" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 627 331 H 657" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="421" y="376" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 427 381 H 457" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="471" y="376" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 477 381 H 507" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="521" y="376" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 527 381 H 557" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="571" y="376" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 577 381 H 607" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><rect x="621" y="376" width="44" height="44" rx="6" fill="url(#s10-hucre)" stroke="#7a4a1a" stroke-width="1.5"/><path d="M 627 381 H 657" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.45" fill="none"/><path d="M 417 284 Q 417 270 433 269" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-opacity="0.5" fill="none"/><g data-cozum="1" style="display:none"><rect x="422.5" y="277.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="472.5" y="277.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="522.5" y="277.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="422.5" y="327.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="472.5" y="327.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="522.5" y="327.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="422.5" y="377.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="472.5" y="377.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/><rect x="522.5" y="377.5" width="41" height="41" rx="5" fill="#5bb5aa" fill-opacity="0.85" stroke="#ffffff" stroke-width="2.5"/></g><path d="M 162 118 C 132 76 80 202 60 262" stroke="#1e354d" stroke-width="2" stroke-opacity="0.6" fill="none"/><rect x="119" y="112" width="94" height="108" rx="16" fill="#3879b8" fill-opacity="0.13"/><rect x="115" y="106" width="94" height="108" rx="16" fill="url(#s10-kagit)" stroke="#1e354d" stroke-width="3"/><circle cx="162" cy="118" r="5" fill="#e2ecf5" stroke="#1e354d" stroke-width="2"/><text x="162" y="161.84" text-anchor="middle" class="svg-baslik" fill="#1e354d">2</text><line x1="151.4" y1="168" x2="172.6" y2="168" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="162" y="189.56" text-anchor="middle" class="svg-baslik" fill="#1e354d">3</text><path d="M 543 118 C 513 76 461 202 441 262" stroke="#1e354d" stroke-width="2" stroke-opacity="0.6" fill="none"/><rect x="500" y="112" width="94" height="108" rx="16" fill="#3879b8" fill-opacity="0.13"/><rect x="496" y="106" width="94" height="108" rx="16" fill="url(#s10-kagit)" stroke="#1e354d" stroke-width="3"/><circle cx="543" cy="118" r="5" fill="#e2ecf5" stroke="#1e354d" stroke-width="2"/><text x="543" y="161.84" text-anchor="middle" class="svg-baslik" fill="#1e354d">3</text><line x1="532.4" y1="168" x2="553.6" y2="168" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="543" y="189.56" text-anchor="middle" class="svg-baslik" fill="#1e354d">5</text><circle cx="352.5" cy="352" r="30" fill="#1d6b62" fill-opacity="0.18"/><circle cx="352.5" cy="348" r="30" fill="#ffffff" stroke="#2b968a" stroke-width="3.5"/><g data-soru-isareti="1"><text x="352.5" y="355.92" text-anchor="middle" class="svg-baslik" fill="#2b968a">?</text></g><g data-cozum="1" style="display:none"><text x="352.5" y="355.92" text-anchor="middle" class="svg-baslik" fill="#2b968a">&gt;</text><path d="M 148 462 H 155 L 162 452 L 169 462 H 176 Q 186 462 186 472 V 514 Q 186 524 176 524 H 148 Q 138 524 138 514 V 472 Q 138 462 148 462 Z" fill="#ffffff" stroke="#2b968a" stroke-width="2.5" stroke-linejoin="round"/><text x="162" y="483.4" text-anchor="middle" class="svg-metin" fill="#1e354d">10</text><line x1="146" y1="489" x2="178" y2="489" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="162" y="508.6" text-anchor="middle" class="svg-metin" fill="#1e354d">15</text><path d="M 529 462 H 536 L 543 452 L 550 462 H 557 Q 567 462 567 472 V 514 Q 567 524 557 524 H 529 Q 519 524 519 514 V 472 Q 519 462 529 462 Z" fill="#ffffff" stroke="#2b968a" stroke-width="2.5" stroke-linejoin="round"/><text x="543" y="483.4" text-anchor="middle" class="svg-metin" fill="#1e354d">9</text><line x1="527" y1="489" x2="559" y2="489" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="543" y="508.6" text-anchor="middle" class="svg-metin" fill="#1e354d">15</text></g></g><g id="s10-sahne-q3" style="display:none;"><g><rect x="54" y="446" width="597" height="18" rx="9" fill="url(#s10-ray)" stroke="#1e354d" stroke-width="2.5"/><path d="M 64 451 L 641 451" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-opacity="0.55" fill="none"/><path d="M 40 455 L 62 440 L 62 470 Z" fill="#3879b8" stroke="#1e354d" stroke-width="2.5" stroke-linejoin="round"/><path d="M 665 455 L 643 440 L 643 470 Z" fill="#3879b8" stroke="#1e354d" stroke-width="2.5" stroke-linejoin="round"/><line x1="95" y1="437" x2="95" y2="473" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="95" y="503" text-anchor="middle" class="svg-metin" fill="#1e354d">−2</text><line x1="158.75" y1="444" x2="158.75" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="222.5" y1="444" x2="222.5" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="286.25" y1="444" x2="286.25" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="350" y1="437" x2="350" y2="473" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="350" y="503" text-anchor="middle" class="svg-metin" fill="#1e354d">−1</text><line x1="413.75" y1="444" x2="413.75" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="477.5" y1="444" x2="477.5" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="541.25" y1="444" x2="541.25" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="605" y1="437" x2="605" y2="473" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="605" y="503" text-anchor="middle" class="svg-metin" fill="#1e354d">0</text></g><path d="M 178 252 C 192 271.3 164 294.7 182 322" stroke="#1e354d" stroke-width="2" stroke-linecap="round" fill="none" stroke-opacity="0.75"/><path d="M 171 253 L 185 253 L 178 242 Z" fill="url(#s10-balon-mavi)" stroke="#1e354d" stroke-width="2" stroke-linejoin="round"/><path d="M 178 112 C 240.72 112 234 214.3 178 244 C 122 214.3 115.28 112 178 112 Z" fill="url(#s10-balon-mavi)" stroke="#1e354d" stroke-width="3" stroke-linejoin="round"/><ellipse cx="151.12" cy="150.28" rx="9.52" ry="19.8" transform="rotate(28 151.12 150.28)" fill="#ffffff" fill-opacity="0.45"/><path d="M 208.8 201.1 Q 200.4 224.2 180.8 232.12" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.25" fill="none"/><ellipse cx="178" cy="180" rx="40" ry="43" fill="#ffffff" fill-opacity="0.9"/><text x="187.24" y="173.84" text-anchor="middle" class="svg-baslik" fill="#1e354d">3</text><line x1="176.64" y1="180" x2="197.84" y2="180" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="187.24" y="201.56" text-anchor="middle" class="svg-baslik" fill="#1e354d">4</text><text x="167.4" y="187.48" text-anchor="middle" class="svg-baslik" fill="#1e354d">−</text><path d="M 352 214 C 338 233.3 366 256.7 348 284" stroke="#1e354d" stroke-width="2" stroke-linecap="round" fill="none" stroke-opacity="0.75"/><path d="M 345 215 L 359 215 L 352 204 Z" fill="url(#s10-balon-amber)" stroke="#1e354d" stroke-width="2" stroke-linejoin="round"/><path d="M 352 74 C 414.72 74 408 176.3 352 206 C 296 176.3 289.28 74 352 74 Z" fill="url(#s10-balon-amber)" stroke="#1e354d" stroke-width="3" stroke-linejoin="round"/><ellipse cx="325.12" cy="112.28" rx="9.52" ry="19.8" transform="rotate(28 325.12 112.28)" fill="#ffffff" fill-opacity="0.45"/><path d="M 382.8 163.1 Q 374.4 186.2 354.8 194.12" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.25" fill="none"/><ellipse cx="352" cy="142" rx="40" ry="43" fill="#ffffff" fill-opacity="0.9"/><text x="361.24" y="135.84" text-anchor="middle" class="svg-baslik" fill="#1e354d">1</text><line x1="350.64" y1="142" x2="371.84" y2="142" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="361.24" y="163.56" text-anchor="middle" class="svg-baslik" fill="#1e354d">2</text><text x="341.4" y="149.48" text-anchor="middle" class="svg-baslik" fill="#1e354d">−</text><path d="M 526 266 C 540 285.3 512 308.7 530 336" stroke="#1e354d" stroke-width="2" stroke-linecap="round" fill="none" stroke-opacity="0.75"/><path d="M 519 267 L 533 267 L 526 256 Z" fill="url(#s10-balon-yesil)" stroke="#1e354d" stroke-width="2" stroke-linejoin="round"/><path d="M 526 126 C 588.72 126 582 228.3 526 258 C 470 228.3 463.28 126 526 126 Z" fill="url(#s10-balon-yesil)" stroke="#1e354d" stroke-width="3" stroke-linejoin="round"/><ellipse cx="499.12" cy="164.28" rx="9.52" ry="19.8" transform="rotate(28 499.12 164.28)" fill="#ffffff" fill-opacity="0.45"/><path d="M 556.8 215.1 Q 548.4 238.2 528.8 246.12" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.25" fill="none"/><ellipse cx="526" cy="194" rx="40" ry="43" fill="#ffffff" fill-opacity="0.9"/><text x="535.24" y="187.84" text-anchor="middle" class="svg-baslik" fill="#1e354d">5</text><line x1="524.64" y1="194" x2="545.84" y2="194" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="535.24" y="215.56" text-anchor="middle" class="svg-baslik" fill="#1e354d">4</text><text x="515.4" y="201.48" text-anchor="middle" class="svg-baslik" fill="#1e354d">−</text><g data-cozum="1" style="display:none"><circle cx="286.25" cy="455" r="9" fill="#2b968a" stroke="#ffffff" stroke-width="3"/><path d="M 269.85 369 H 302.65 Q 312.65 369 312.65 379 V 421 Q 312.65 431 302.65 431 H 293.25 L 286.25 441 L 279.25 431 H 269.85 Q 259.85 431 259.85 421 V 379 Q 259.85 369 269.85 369 Z" fill="#ffffff" stroke="#2b968a" stroke-width="2.5" stroke-linejoin="round"/><text x="294.65" y="390.4" text-anchor="middle" class="svg-metin" fill="#1e354d">5</text><line x1="284.65" y1="396" x2="304.65" y2="396" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="294.65" y="415.6" text-anchor="middle" class="svg-metin" fill="#1e354d">4</text><text x="276.25" y="402.8" text-anchor="middle" class="svg-metin" fill="#1e354d">−</text><circle cx="413.75" cy="455" r="9" fill="#2b968a" stroke="#ffffff" stroke-width="3"/><path d="M 397.35 369 H 430.15 Q 440.15 369 440.15 379 V 421 Q 440.15 431 430.15 431 H 420.75 L 413.75 441 L 406.75 431 H 397.35 Q 387.35 431 387.35 421 V 379 Q 387.35 369 397.35 369 Z" fill="#ffffff" stroke="#2b968a" stroke-width="2.5" stroke-linejoin="round"/><text x="422.15" y="390.4" text-anchor="middle" class="svg-metin" fill="#1e354d">3</text><line x1="412.15" y1="396" x2="432.15" y2="396" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="422.15" y="415.6" text-anchor="middle" class="svg-metin" fill="#1e354d">4</text><text x="403.75" y="402.8" text-anchor="middle" class="svg-metin" fill="#1e354d">−</text><circle cx="477.5" cy="455" r="9" fill="#2b968a" stroke="#ffffff" stroke-width="3"/><path d="M 461.1 369 H 493.9 Q 503.9 369 503.9 379 V 421 Q 503.9 431 493.9 431 H 484.5 L 477.5 441 L 470.5 431 H 461.1 Q 451.1 431 451.1 421 V 379 Q 451.1 369 461.1 369 Z" fill="#ffffff" stroke="#2b968a" stroke-width="2.5" stroke-linejoin="round"/><text x="485.9" y="390.4" text-anchor="middle" class="svg-metin" fill="#1e354d">1</text><line x1="475.9" y1="396" x2="495.9" y2="396" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="485.9" y="415.6" text-anchor="middle" class="svg-metin" fill="#1e354d">2</text><text x="467.5" y="402.8" text-anchor="middle" class="svg-metin" fill="#1e354d">−</text></g></g><g id="s10-sahne-q4" style="display:none;"><g><rect x="54" y="461" width="597" height="18" rx="9" fill="url(#s10-ray)" stroke="#1e354d" stroke-width="2.5"/><path d="M 64 466 L 641 466" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-opacity="0.55" fill="none"/><path d="M 40 470 L 62 455 L 62 485 Z" fill="#3879b8" stroke="#1e354d" stroke-width="2.5" stroke-linejoin="round"/><path d="M 665 470 L 643 455 L 643 485 Z" fill="#3879b8" stroke="#1e354d" stroke-width="2.5" stroke-linejoin="round"/><line x1="125" y1="452" x2="125" y2="488" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="125" y="518" text-anchor="middle" class="svg-metin" fill="#1e354d">−1</text><line x1="276.67" y1="459" x2="276.67" y2="481" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="428.33" y1="459" x2="428.33" y2="481" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="580" y1="452" x2="580" y2="488" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="580" y="518" text-anchor="middle" class="svg-metin" fill="#1e354d">0</text></g><path d="M 214 142 L 142 142 L 168 184 L 142 226 L 214 226 Z" fill="url(#s10-kurdele-uc)" stroke="#1e354d" stroke-width="3" stroke-linejoin="round"/><path d="M 491 142 L 563 142 L 537 184 L 563 226 L 491 226 Z" fill="url(#s10-kurdele-uc)" stroke="#1e354d" stroke-width="3" stroke-linejoin="round"/><path d="M 214 226 L 196 210 L 214 210 Z" fill="#3879b8" stroke="#1e354d" stroke-width="2" stroke-linejoin="round"/><path d="M 491 226 L 509 210 L 491 210 Z" fill="#3879b8" stroke="#1e354d" stroke-width="2" stroke-linejoin="round"/><path d="M 196 124 Q 352.5 112 509 124 L 509 210 Q 352.5 198 196 210 Z" transform="translate(4 7)" fill="#3879b8" fill-opacity="0.13"/><path d="M 196 124 Q 352.5 112 509 124 L 509 210 Q 352.5 198 196 210 Z" fill="url(#s10-kurdele)" stroke="#1e354d" stroke-width="3" stroke-linejoin="round"/><path d="M 212 134 Q 270 126 318 125" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-opacity="0.9" fill="none"/><text x="281.24" y="153.84" text-anchor="middle" class="svg-baslik" fill="#1e354d">2</text><line x1="270.64" y1="160" x2="291.84" y2="160" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="281.24" y="181.56" text-anchor="middle" class="svg-baslik" fill="#1e354d">3</text><text x="261.4" y="167.48" text-anchor="middle" class="svg-baslik" fill="#1e354d">−</text><text x="352.5" y="167.92" text-anchor="middle" class="svg-baslik" fill="#1e354d">&lt;</text><text x="442.24" y="153.84" text-anchor="middle" class="svg-baslik" fill="#1e354d">1</text><line x1="431.64" y1="160" x2="452.84" y2="160" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="442.24" y="181.56" text-anchor="middle" class="svg-baslik" fill="#1e354d">3</text><text x="422.4" y="167.48" text-anchor="middle" class="svg-baslik" fill="#1e354d">−</text><g data-soru-isareti="1"><circle cx="520" cy="108" r="5" fill="#ffffff" stroke="#2b968a" stroke-width="2.5"/><circle cx="536" cy="90" r="8" fill="#ffffff" stroke="#2b968a" stroke-width="2.5"/><ellipse cx="596" cy="58" rx="68" ry="32" fill="#ffffff" stroke="#2b968a" stroke-width="3"/><text x="596" y="65" text-anchor="middle" class="svg-metin" fill="#1d6b62">Neden?</text></g><g data-cozum="1" style="display:none"><circle cx="276.67" cy="470" r="9" fill="#2b968a" stroke="#ffffff" stroke-width="3"/><path d="M 260.27 384 H 293.07 Q 303.07 384 303.07 394 V 436 Q 303.07 446 293.07 446 H 283.67 L 276.67 456 L 269.67 446 H 260.27 Q 250.27 446 250.27 436 V 394 Q 250.27 384 260.27 384 Z" fill="#ffffff" stroke="#2b968a" stroke-width="2.5" stroke-linejoin="round"/><text x="285.07" y="405.4" text-anchor="middle" class="svg-metin" fill="#1e354d">2</text><line x1="275.07" y1="411" x2="295.07" y2="411" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="285.07" y="430.6" text-anchor="middle" class="svg-metin" fill="#1e354d">3</text><text x="266.67" y="417.8" text-anchor="middle" class="svg-metin" fill="#1e354d">−</text><circle cx="428.33" cy="470" r="9" fill="#2b968a" stroke="#ffffff" stroke-width="3"/><path d="M 411.93 384 H 444.73 Q 454.73 384 454.73 394 V 436 Q 454.73 446 444.73 446 H 435.33 L 428.33 456 L 421.33 446 H 411.93 Q 401.93 446 401.93 436 V 394 Q 401.93 384 411.93 384 Z" fill="#ffffff" stroke="#2b968a" stroke-width="2.5" stroke-linejoin="round"/><text x="436.73" y="405.4" text-anchor="middle" class="svg-metin" fill="#1e354d">1</text><line x1="426.73" y1="411" x2="446.73" y2="411" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="436.73" y="430.6" text-anchor="middle" class="svg-metin" fill="#1e354d">3</text><text x="418.33" y="417.8" text-anchor="middle" class="svg-metin" fill="#1e354d">−</text><path d="M 500 330 L 232 330" stroke="#2b968a" stroke-width="5" stroke-linecap="round" fill="none"/><path d="M 206 330 L 234 314 L 234 346 Z" fill="#2b968a" stroke="#1d6b62" stroke-width="2" stroke-linejoin="round"/><text x="366" y="308" text-anchor="middle" class="svg-metin" fill="#1d6b62">Solda olan daha küçük</text></g></g><g id="s10-sahne-q5" style="display:none;"><g><rect x="74" y="446" width="557" height="18" rx="9" fill="url(#s10-ray)" stroke="#1e354d" stroke-width="2.5"/><path d="M 84 451 L 621 451" stroke="#ffffff" stroke-width="3" stroke-linecap="round" stroke-opacity="0.55" fill="none"/><path d="M 60 455 L 82 440 L 82 470 Z" fill="#3879b8" stroke="#1e354d" stroke-width="2.5" stroke-linejoin="round"/><path d="M 645 455 L 623 440 L 623 470 Z" fill="#3879b8" stroke="#1e354d" stroke-width="2.5" stroke-linejoin="round"/><line x1="115" y1="437" x2="115" y2="473" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="115" y="503" text-anchor="middle" class="svg-metin" fill="#1e354d">−1</text><line x1="162.5" y1="444" x2="162.5" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="210" y1="444" x2="210" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="257.5" y1="444" x2="257.5" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="305" y1="444" x2="305" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="352.5" y1="437" x2="352.5" y2="473" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="352.5" y="503" text-anchor="middle" class="svg-metin" fill="#1e354d">0</text><line x1="400" y1="444" x2="400" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="447.5" y1="444" x2="447.5" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="495" y1="444" x2="495" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="542.5" y1="444" x2="542.5" y2="466" stroke="#1e354d" stroke-width="2" stroke-linecap="round" stroke-opacity="0.7"/><line x1="590" y1="437" x2="590" y2="473" stroke="#1e354d" stroke-width="3" stroke-linecap="round"/><text x="590" y="503" text-anchor="middle" class="svg-metin" fill="#1e354d">1</text></g><ellipse cx="30" cy="560" rx="22" ry="6" fill="#bd802b" fill-opacity="0.3"/><rect x="22" y="100" width="16" height="460" rx="7" fill="url(#s10-ahsap)" stroke="#7a4a1a" stroke-width="2.5"/><circle cx="30" cy="100" r="11" fill="url(#s10-ahsap)" stroke="#7a4a1a" stroke-width="2.5"/><path d="M 27 120 V 300" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.4" fill="none"/><ellipse cx="675" cy="560" rx="22" ry="6" fill="#bd802b" fill-opacity="0.3"/><rect x="667" y="100" width="16" height="460" rx="7" fill="url(#s10-ahsap)" stroke="#7a4a1a" stroke-width="2.5"/><circle cx="675" cy="100" r="11" fill="url(#s10-ahsap)" stroke="#7a4a1a" stroke-width="2.5"/><path d="M 672 120 V 300" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-opacity="0.4" fill="none"/><path d="M 30 112 Q 352.5 212 675 112" stroke="#1e354d" stroke-width="2.5" fill="none" stroke-linecap="round"/><g transform="rotate(-3 142 140.7)"><rect x="98" y="146.7" width="96" height="120" rx="14" fill="#3879b8" fill-opacity="0.13"/><rect x="94" y="142.7" width="96" height="120" rx="14" fill="url(#s10-kagit)" stroke="#1e354d" stroke-width="3"/><path d="M 106 156.7 H 138" stroke="#bed8ed" stroke-width="4" stroke-linecap="round" fill="none"/><text x="142" y="200.54" text-anchor="middle" class="svg-baslik" fill="#1e354d">2</text><line x1="131.4" y1="206.7" x2="152.6" y2="206.7" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="142" y="228.26" text-anchor="middle" class="svg-baslik" fill="#1e354d">5</text><rect x="133" y="126.7" width="8" height="34" rx="3" fill="url(#s10-ahsap)" stroke="#7a4a1a" stroke-width="1.8"/><rect x="143" y="126.7" width="8" height="34" rx="3" fill="url(#s10-ahsap)" stroke="#7a4a1a" stroke-width="1.8"/><circle cx="142" cy="144.7" r="3.5" fill="#8c9ba6" stroke="#1e354d" stroke-width="1.2"/></g><g transform="rotate(2 281 159.54)"><rect x="237" y="165.54" width="96" height="120" rx="14" fill="#3879b8" fill-opacity="0.13"/><rect x="233" y="161.54" width="96" height="120" rx="14" fill="url(#s10-kagit)" stroke="#1e354d" stroke-width="3"/><path d="M 245 175.54 H 277" stroke="#bed8ed" stroke-width="4" stroke-linecap="round" fill="none"/><text x="290.24" y="219.38" text-anchor="middle" class="svg-baslik" fill="#1e354d">4</text><line x1="279.64" y1="225.54" x2="300.84" y2="225.54" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="290.24" y="247.1" text-anchor="middle" class="svg-baslik" fill="#1e354d">5</text><text x="270.4" y="233.02" text-anchor="middle" class="svg-baslik" fill="#1e354d">−</text><rect x="272" y="145.54" width="8" height="34" rx="3" fill="url(#s10-ahsap)" stroke="#7a4a1a" stroke-width="1.8"/><rect x="282" y="145.54" width="8" height="34" rx="3" fill="url(#s10-ahsap)" stroke="#7a4a1a" stroke-width="1.8"/><circle cx="281" cy="163.54" r="3.5" fill="#8c9ba6" stroke="#1e354d" stroke-width="1.2"/></g><g transform="rotate(-2 424 159.54)"><rect x="380" y="165.54" width="96" height="120" rx="14" fill="#3879b8" fill-opacity="0.13"/><rect x="376" y="161.54" width="96" height="120" rx="14" fill="url(#s10-kagit)" stroke="#1e354d" stroke-width="3"/><path d="M 388 175.54 H 420" stroke="#bed8ed" stroke-width="4" stroke-linecap="round" fill="none"/><text x="424" y="229.24" text-anchor="middle" class="svg-baslik" fill="#1e354d">0</text><rect x="415" y="145.54" width="8" height="34" rx="3" fill="url(#s10-ahsap)" stroke="#7a4a1a" stroke-width="1.8"/><rect x="425" y="145.54" width="8" height="34" rx="3" fill="url(#s10-ahsap)" stroke="#7a4a1a" stroke-width="1.8"/><circle cx="424" cy="163.54" r="3.5" fill="#8c9ba6" stroke="#1e354d" stroke-width="1.2"/></g><g transform="rotate(3 563 140.7)"><rect x="519" y="146.7" width="96" height="120" rx="14" fill="#3879b8" fill-opacity="0.13"/><rect x="515" y="142.7" width="96" height="120" rx="14" fill="url(#s10-kagit)" stroke="#1e354d" stroke-width="3"/><path d="M 527 156.7 H 559" stroke="#bed8ed" stroke-width="4" stroke-linecap="round" fill="none"/><text x="572.24" y="200.54" text-anchor="middle" class="svg-baslik" fill="#1e354d">1</text><line x1="561.64" y1="206.7" x2="582.84" y2="206.7" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="572.24" y="228.26" text-anchor="middle" class="svg-baslik" fill="#1e354d">5</text><text x="552.4" y="214.18" text-anchor="middle" class="svg-baslik" fill="#1e354d">−</text><rect x="554" y="126.7" width="8" height="34" rx="3" fill="url(#s10-ahsap)" stroke="#7a4a1a" stroke-width="1.8"/><rect x="564" y="126.7" width="8" height="34" rx="3" fill="url(#s10-ahsap)" stroke="#7a4a1a" stroke-width="1.8"/><circle cx="563" cy="144.7" r="3.5" fill="#8c9ba6" stroke="#1e354d" stroke-width="1.2"/></g><g data-cozum="1" style="display:none"><circle cx="162.5" cy="455" r="9" fill="#2b968a" stroke="#ffffff" stroke-width="3"/><path d="M 146.1 369 H 178.9 Q 188.9 369 188.9 379 V 421 Q 188.9 431 178.9 431 H 169.5 L 162.5 441 L 155.5 431 H 146.1 Q 136.1 431 136.1 421 V 379 Q 136.1 369 146.1 369 Z" fill="#ffffff" stroke="#2b968a" stroke-width="2.5" stroke-linejoin="round"/><text x="170.9" y="390.4" text-anchor="middle" class="svg-metin" fill="#1e354d">4</text><line x1="160.9" y1="396" x2="180.9" y2="396" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="170.9" y="415.6" text-anchor="middle" class="svg-metin" fill="#1e354d">5</text><text x="152.5" y="402.8" text-anchor="middle" class="svg-metin" fill="#1e354d">−</text><circle cx="305" cy="455" r="9" fill="#2b968a" stroke="#ffffff" stroke-width="3"/><path d="M 288.6 369 H 321.4 Q 331.4 369 331.4 379 V 421 Q 331.4 431 321.4 431 H 312 L 305 441 L 298 431 H 288.6 Q 278.6 431 278.6 421 V 379 Q 278.6 369 288.6 369 Z" fill="#ffffff" stroke="#2b968a" stroke-width="2.5" stroke-linejoin="round"/><text x="313.4" y="390.4" text-anchor="middle" class="svg-metin" fill="#1e354d">1</text><line x1="303.4" y1="396" x2="323.4" y2="396" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="313.4" y="415.6" text-anchor="middle" class="svg-metin" fill="#1e354d">5</text><text x="295" y="402.8" text-anchor="middle" class="svg-metin" fill="#1e354d">−</text><circle cx="352.5" cy="455" r="9" fill="#2b968a" stroke="#ffffff" stroke-width="3"/><circle cx="447.5" cy="455" r="9" fill="#2b968a" stroke="#ffffff" stroke-width="3"/><path d="M 439.5 369 H 455.5 Q 465.5 369 465.5 379 V 421 Q 465.5 431 455.5 431 H 454.5 L 447.5 441 L 440.5 431 H 439.5 Q 429.5 431 429.5 421 V 379 Q 429.5 369 439.5 369 Z" fill="#ffffff" stroke="#2b968a" stroke-width="2.5" stroke-linejoin="round"/><text x="447.5" y="390.4" text-anchor="middle" class="svg-metin" fill="#1e354d">2</text><line x1="437.5" y1="396" x2="457.5" y2="396" stroke="#1e354d" stroke-width="2.5" stroke-linecap="round"/><text x="447.5" y="415.6" text-anchor="middle" class="svg-metin" fill="#1e354d">5</text></g></g>
       </g>
-</svg>
+    </svg>
   </div>
 </section>
 
@@ -7329,10 +7497,17 @@ window.SAYFA_INIT[10] = function (kok) {
     }
   ];
 
+  // Sahne: yalnız etkin sorunun grubu görünür; soru cevaplanınca (motor doğru şıkkı
+  // işaretleyince) grubun çözüm katmanı açılır, «?» işaretleri kapanır.
   function sahneGuncelle(no) {
+    var bitti = !!kok.querySelector(".kontrol-govde .dogru-secim");
     for (var i = 1; i <= 5; i++) {
       var g = kok.querySelector("#s10-sahne-q" + i);
-      if (g) { g.style.display = (i === no) ? "inline" : "none"; }
+      if (!g) { continue; }
+      g.style.display = (i === no) ? "inline" : "none";
+      var cz = g.querySelectorAll("[data-cozum]"), si = g.querySelectorAll("[data-soru-isareti]"), j;
+      for (j = 0; j < cz.length; j++) { cz[j].style.display = (i === no && bitti) ? "inline" : "none"; }
+      for (j = 0; j < si.length; j++) { si[j].style.display = (i === no && bitti) ? "none" : "inline"; }
     }
   }
 
@@ -7368,7 +7543,7 @@ window.SAYFA_INIT[10] = function (kok) {
 
 </div>
 
-<script src="ortak/f413087fbcfb2c8a.js"></script>
+<script src="ortak/7dce46cf2bd844f3.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>
