@@ -414,7 +414,7 @@
 
 <link rel="stylesheet" href="ortak/5568ce18c06ca457.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 03:53
+  montaj: 2026-10-17 22:05
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-16 18:17
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-16 18:12
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-16 18:13
@@ -1659,9 +1659,13 @@ window.SAYFA_INIT[1] = function (kok) {
   #sayfa-2 .s2-suruklenebilir:active {
     cursor: grabbing;
   }
-  #sayfa-2 .s2-koli-secili {
+  #sayfa-2 .s2-koli-secili:not(.s2-koli-suruklenir) {
     transform: translate(230px, 350px) scale(1.1) !important;
   }
+  /* köprünün imleci izleyen yarı saydam kopyası (id'si yok): asıl koli zaten imleci izliyor */
+  #sayfa-2 .s2-koli-surukle:not([id]) { visibility: hidden !important; }
+  /* fareyle tutunca SVG tabindex öğesine koyu odak halkası çizilmesin (klavye odağı kalır) */
+  #sayfa-2 .s2-koli-surukle:focus:not(:focus-visible) { outline: none; }
   #sayfa-2 .s2-vurgu-rakam.s2-onlar-aktif {
     fill: #e6a117;
     font-weight: 900;
@@ -1757,7 +1761,18 @@ window.SAYFA_INIT[2] = function (kok) {
   var isAnimating = false;
   var temizleyiciler = [];
 
+  /* Sürükleme: koli imleci TUTULAN noktasından izler; bırakma kararı imlece değil kolinin
+     (sınır kısıtından önceki) konumuna bakar. Koli sürüklenirken 1.1 büyür (seçili görünüm). */
+  var SURUKLE_OLCEK = 1.1;
+  var KOLI_G = 140, KOLI_Y = 105;            // koli gövdesi (SVG birimi)
+  var SAHNE_G = 850, SAHNE_Y = 600;          // SVG viewBox
+  var tutLokal = { x: 0, y: 0 };             // tutulan nokta, kolinin kendi uzayında
+  var istenenX = 230, istenenY = 360;        // kolinin kısılmamış sol-üst konumu
+  var vurgulu = null;                        // sürüklerken kolinin üstünde olduğu konteyner
+  var sonBirakma = 0;                        // sürükleme sonrası tarayıcı click'ini yutmak için
+
   var aktifKoliEl = kok.querySelector("#s2-aktif-koli");
+  var svgKok = aktifKoliEl.ownerSVGElement;
   var haleEl = kok.querySelector("#s2-koli-hale");
   var uyariEl = kok.querySelector("#s2-koli-uyari");
   var koliBinler = kok.querySelector("#s2-koli-binler");
@@ -1831,7 +1846,9 @@ window.SAYFA_INIT[2] = function (kok) {
       koliOnlar.classList.add("s2-onlar-aktif");
       koliBirler.classList.add("s2-onlar-aktif");
     } else {
-      aktifKoliEl.classList.remove("s2-koli-secili");
+      aktifKoliEl.classList.remove("s2-koli-secili", "s2-koli-suruklenir");
+      istenenX = 230; istenenY = 360;
+      tutLokal = { x: 0, y: 0 };
       haleEl.setAttribute("opacity", "0");
       koliOnlar.classList.remove("s2-onlar-aktif");
       koliBirler.classList.remove("s2-onlar-aktif");
@@ -1883,7 +1900,8 @@ window.SAYFA_INIT[2] = function (kok) {
     } else {
       // Yanlış tasnif
       uyariEl.setAttribute("opacity", "1");
-      aktifKoliEl.classList.add("s2-titreme");
+      // sürüklenmiş koli bırakıldığı yerde durur (titreme animasyonu onu eve ışınlardı); yalnız evdeki koli titrer
+      if (!aktifKoliEl.classList.contains("s2-koli-suruklenir")) aktifKoliEl.classList.add("s2-titreme");
       EGITSEL.dontVer(kok, "yanlis", "Sayının son iki basamağını (onlar ve birler) incele.");
 
       setTimeout(function () {
@@ -1899,6 +1917,8 @@ window.SAYFA_INIT[2] = function (kok) {
 
   // Tıklama etkileşimleri
   aktifKoliEl.addEventListener("click", function () {
+    // sürüklemenin bırakışından hemen sonra gelen tarayıcı click'i seçimi geri açmasın
+    if (performance.now() - sonBirakma < 400) return;
     if (!isAnimating) {
       secimAyarla(!isSelected);
     }
@@ -1937,12 +1957,88 @@ window.SAYFA_INIT[2] = function (kok) {
     });
   }
 
+  function ekranToSvg(cx, cy) {
+    var p = svgKok.createSVGPoint();
+    p.x = cx; p.y = cy;
+    return p.matrixTransform(svgKok.getScreenCTM().inverse());
+  }
+
+  function koliKonumla(x, y, olcek) {
+    aktifKoliEl.style.transform = "translate(" + x + "px, " + y + "px) scale(" + olcek + ")";
+  }
+
+  function kisitla(v, ust) {
+    return Math.max(0, Math.min(ust, v));
+  }
+
+  function dikdortgen(el) {
+    return { x: +el.getAttribute("x"), y: +el.getAttribute("y"),
+             g: +el.getAttribute("width"), y2: +el.getAttribute("height") };
+  }
+  var DIK_ALT = dikdortgen(hedefAltEl), DIK_UST = dikdortgen(hedefUstEl);
+
+  // Kolinin MERKEZİ hangi konteynerin içinde? (x, y: kısılmamış sol-üst konum)
+  function hedefBul(x, y) {
+    var mx = x + KOLI_G * SURUKLE_OLCEK / 2, my = y + KOLI_Y * SURUKLE_OLCEK / 2;
+    var liste = [["alt", DIK_ALT], ["ust", DIK_UST]];
+    for (var i = 0; i < liste.length; i++) {
+      var d = liste[i][1];
+      if (mx >= d.x && mx <= d.x + d.g && my >= d.y && my <= d.y + d.y2) return liste[i][0];
+    }
+    return null;
+  }
+
+  function evineDon() {
+    secimAyarla(false);
+    aktifKoliEl.style.transition = "transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
+    aktifKoliEl.style.transform = "translate(230px, 360px)";
+  }
+
+  // Tutma ofseti: sürükleme eşiği aşılmadan önce, basılan nokta kolinin kendi uzayında saklanır
+  aktifKoliEl.addEventListener("pointerdown", function (e) {
+    if (e.button !== 0) return;
+    var p = svgKok.createSVGPoint();
+    p.x = e.clientX; p.y = e.clientY;
+    var yerel = p.matrixTransform(aktifKoliEl.getScreenCTM().inverse());
+    tutLokal = { x: yerel.x, y: yerel.y };
+  });
+
   // Sürükle-Bırak (pdnd) kurulumu
   if (window.pdnd) {
     var dClean = pdnd.draggable({
       element: aktifKoliEl,
       canDrag: function () { return !isAnimating && currentIndex < PAKETLER.length; },
-      getInitialData: function () { return { tip: "koli", index: currentIndex }; }
+      getInitialData: function () { return { tip: "koli", index: currentIndex }; },
+      onDragStart: function () {
+        aktifKoliEl.classList.add("s2-koli-suruklenir");
+        secimAyarla(true);
+        aktifKoliEl.style.transition = "none";
+      },
+      onDrag: function (args) {
+        var inp = args.location.current.input;
+        var pt = ekranToSvg(inp.clientX, inp.clientY);
+        istenenX = pt.x - SURUKLE_OLCEK * tutLokal.x;
+        istenenY = pt.y - SURUKLE_OLCEK * tutLokal.y;
+        koliKonumla(kisitla(istenenX, SAHNE_G - KOLI_G * SURUKLE_OLCEK),
+                    kisitla(istenenY, SAHNE_Y - KOLI_Y * SURUKLE_OLCEK), SURUKLE_OLCEK);
+        var h = hedefBul(istenenX, istenenY);
+        if (h !== vurgulu) {
+          hedefVurguTemizle();
+          if (h) hedefVurgula(h);
+          vurgulu = h;
+        }
+      },
+      onDrop: function () {
+        sonBirakma = performance.now();
+        vurgulu = null;
+        hedefVurguTemizle();
+        var h = hedefBul(istenenX, istenenY);
+        if (h) {
+          degerlendir(h);
+        } else {
+          evineDon();
+        }
+      }
     });
 
     var dtAltClean = pdnd.dropTargetForElements({
@@ -1957,32 +2053,8 @@ window.SAYFA_INIT[2] = function (kok) {
       getData: function () { return { hedef: "ust" }; }
     });
 
-    var monClean = pdnd.monitorForElements({
-      onDragStart: function () {
-        secimAyarla(true);
-      },
-      onDragEnter: function (args) {
-        if (args.location.current.dropTargets.length > 0) {
-          var h = args.location.current.dropTargets[0].data.hedef;
-          hedefVurgula(h);
-        }
-      },
-      onDragLeave: function () {
-        hedefVurguTemizle();
-      },
-      onDrop: function (args) {
-        hedefVurguTemizle();
-        if (args.location.current.dropTargets.length > 0) {
-          var h = args.location.current.dropTargets[0].data.hedef;
-          degerlendir(h);
-        } else {
-          secimAyarla(false);
-          aktifKoliEl.style.transform = "translate(230px, 360px)";
-        }
-      }
-    });
-
-    temizleyiciler.push(dClean, dtAltClean, dtUstClean, monClean);
+    // Bırakma karar/vurgusu draggable'ın onDrag/onDrop'unda (kolinin konumundan); yuvalar kayıtlı kalır.
+    temizleyiciler.push(dClean, dtAltClean, dtUstClean);
   }
 
   paketGuncelle();
@@ -3100,7 +3172,7 @@ window.SAYFA_INIT[4] = function (kok) {
 
 </div>
 
-<script src="ortak/078defd995f3c882.js"></script>
+<script src="ortak/a9e6ea03d5abba9a.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>

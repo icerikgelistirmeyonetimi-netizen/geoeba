@@ -1073,7 +1073,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 03:53
+  montaj: 2026-10-17 22:09
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 16:55
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 16:53
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-17 16:52
@@ -2409,8 +2409,14 @@ window.SAYFA_INIT[1] = function (kok) {
     touch-action: none;
     transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
-  #sayfa-2 .s2-cerceve-grup:focus-visible {
+  #sayfa-2 .s2-cerceve-grup:focus-visible,
+  #sayfa-2 .s2-cerceve-grup:focus:not(:focus-visible) {
     outline: none;
+  }
+  /* pdnd-svg köprüsü sürüklerken çerçevenin id'siz, yarı saydam kopyasını imleçle gezdirir; çerçevenin
+     kendisi de taşındığı için iki çerçeve görünüyordu. Kopyada id yok (asılda var): yalnız kopya gizlenir. */
+  #sayfa-2 .s2-cerceve-grup:not([id]) {
+    visibility: hidden !important;
   }
   #sayfa-2 .s2-cerceve-grup:focus-visible #s2-cerceve-cizgi {
     stroke-width: 4px;
@@ -2590,14 +2596,80 @@ window.SAYFA_INIT[2] = function (kok) {
   // Basketbol sahasından orta bahçeye gereken kayma: dx = 235, dy = 155
   var HEDEF_DX = 235;
   var HEDEF_DY = 155;
+  // Çerçeve kayması hedeften bu kadar (SVG birimi) yakınsa orta bahçeyi kaplıyor sayılır.
+  var YAKINLIK = 55;
+
+  var svgKok = cerceve.ownerSVGElement;
+  var katman = cerceve.parentNode;   // çerçevenin translate'i bu grubun koordinatındadır
+  // Çerçevenin şu anki kayması (translate) ve öğrencinin çerçeveyi tuttuğu nokta: imleç − kayma farkı
+  // pointerdown'da saklanır (köprünün location.initial'i pointerdown değil, eşiği aşan ilk harekettir).
+  var konumX = 0;
+  var konumY = 0;
+  var tutmaOfseti = { dx: 0, dy: 0 };
+  // İmleç − ofset: öğrencinin çerçeveyi götürmek istediği kayma. Vurgu ve karar imlecin altındaki
+  // hedefe değil bu KONUMA bakar (yoksa köşeden tutulan çerçeve hedefin dışındayken «doğru» çıkardı).
+  var istenenX = 0;
+  var istenenY = 0;
+  var hedefteMi = false;
+  // Sürükleme bitince tarayıcının gönderdiği click seçimi geri açmasın (tıkla-seç yedeği).
+  var sonBirakma = 0;
+
+  function birakmaSonrasiTik() {
+    return Date.now() - sonBirakma < 400;
+  }
+
+  function ekranToSvg(clientX, clientY) {
+    var pt = svgKok.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    var ctm = katman.getScreenCTM();
+    if (ctm) {
+      return pt.matrixTransform(ctm.inverse());
+    }
+    var r = svgKok.getBoundingClientRect();
+    return {
+      x: ((clientX - r.left) / r.width) * 800,
+      y: ((clientY - r.top) / r.height) * 580
+    };
+  }
+
+  // Yaylanarak geri dönerken (0,4 sn) tutulursa çerçeve mantıksal değil GÖRÜNEN yerinden başlasın.
+  function gorunenKonum() {
+    var m = cerceve.getScreenCTM();
+    var p = katman.getScreenCTM();
+    if (!m || !p) return { x: konumX, y: konumY };
+    var g = p.inverse().multiply(m);
+    return { x: g.e, y: g.f };
+  }
+
+  function konumGuncelle(x, y) {
+    konumX = x;
+    konumY = y;
+    cerceve.style.transform = "translate(" + x + "px, " + y + "px)";
+  }
+
+  function hedefeYakin(x, y) {
+    var dx = x - HEDEF_DX;
+    var dy = y - HEDEF_DY;
+    return Math.sqrt(dx * dx + dy * dy) <= YAKINLIK;
+  }
+
+  function hedefVurgu(acik) {
+    if (hedefteMi === acik) return;
+    hedefteMi = acik;
+    if (ortaBahceCizgi) {
+      ortaBahceCizgi.setAttribute("stroke-width", acik ? "5" : "3");
+    }
+  }
 
   function basariUygula() {
     if (kilitli) return;
     kilitli = true;
     secili = false;
+    hedefteMi = false;
 
     // Çerçeveyi orta bahçeye yerleştir ve kilitle
-    cerceve.style.transform = "translate(" + HEDEF_DX + "px, " + HEDEF_DY + "px)";
+    konumGuncelle(HEDEF_DX, HEDEF_DY);
     cerceve.classList.remove("s2-cerceve-secili", "s2-cerceve-surukleniyor");
     cerceve.classList.add("s2-cerceve-kilitli");
     cerceve.setAttribute("aria-disabled", "true");
@@ -2629,7 +2701,11 @@ window.SAYFA_INIT[2] = function (kok) {
   function sifirla() {
     kilitli = false;
     secili = false;
-    cerceve.style.transform = "translate(0px, 0px)";
+    hedefteMi = false;
+    tutmaOfseti = { dx: 0, dy: 0 };
+    istenenX = 0;
+    istenenY = 0;
+    konumGuncelle(0, 0);
     cerceve.classList.remove("s2-cerceve-kilitli", "s2-cerceve-secili", "s2-cerceve-surukleniyor");
     cerceve.removeAttribute("aria-disabled");
 
@@ -2653,8 +2729,17 @@ window.SAYFA_INIT[2] = function (kok) {
   }
 
   // Tıkla-Seç Yedeği (Akıllı tahta ve klavye için zorunlu - Madde 19)
-  cerceve.addEventListener("click", function () {
+  cerceve.addEventListener("pointerdown", function (e) {
     if (kilitli) return;
+    var pt = ekranToSvg(e.clientX, e.clientY);
+    var g = gorunenKonum();
+    tutmaOfseti = { dx: pt.x - g.x, dy: pt.y - g.y };
+    istenenX = g.x;
+    istenenY = g.y;
+  });
+
+  cerceve.addEventListener("click", function () {
+    if (kilitli || birakmaSonrasiTik()) return;
     secili = !secili;
     cerceve.classList.toggle("s2-cerceve-secili", secili);
     if (secili) {
@@ -2670,7 +2755,7 @@ window.SAYFA_INIT[2] = function (kok) {
   });
 
   hedefAlan.addEventListener("click", function () {
-    if (kilitli) return;
+    if (kilitli || birakmaSonrasiTik()) return;
     if (secili) {
       basariUygula();
     } else {
@@ -2682,7 +2767,7 @@ window.SAYFA_INIT[2] = function (kok) {
   var bolgeBasket = kok.querySelector("#s2-bolge-basket");
   if (bolgeBasket) {
     bolgeBasket.addEventListener("click", function (e) {
-      if (kilitli) return;
+      if (kilitli || birakmaSonrasiTik()) return;
       if (secili && e.target !== cerceve && !cerceve.contains(e.target)) {
         secili = false;
         cerceve.classList.remove("s2-cerceve-secili");
@@ -2693,54 +2778,47 @@ window.SAYFA_INIT[2] = function (kok) {
 
   // Pragmatic Drag and Drop (pdnd) Kurulumu (Madde 19)
   if (window.pdnd) {
-    var baslangicIstemciX = 0;
-    var baslangicIstemciY = 0;
-    var uzerindeHedefVar = false;
-
     var surukleTemizle = pdnd.draggable({
       element: cerceve,
       canDrag: function () { return !kilitli; },
       getInitialData: function () { return { tip: "orneklem-cercevesi" }; },
-      onDragStart: function (args) {
+      onDragStart: function () {
         cerceve.classList.add("s2-cerceve-surukleniyor");
-        baslangicIstemciX = args.location.current.input.clientX;
-        baslangicIstemciY = args.location.current.input.clientY;
       },
       onDrag: function (args) {
-        var dx = args.location.current.input.clientX - baslangicIstemciX;
-        var dy = args.location.current.input.clientY - baslangicIstemciY;
-        cerceve.style.transform = "translate(" + dx + "px, " + dy + "px)";
+        if (kilitli) return;
+        var inp = args.location && args.location.current && args.location.current.input;
+        if (!inp) return;
+        // Çerçeve TUTULDUĞU noktadan taşınır; vurgu da konuma bakar.
+        var pt = ekranToSvg(inp.clientX, inp.clientY);
+        istenenX = pt.x - tutmaOfseti.dx;
+        istenenY = pt.y - tutmaOfseti.dy;
+        konumGuncelle(istenenX, istenenY);
+        hedefVurgu(hedefeYakin(istenenX, istenenY));
       },
       onDrop: function () {
         cerceve.classList.remove("s2-cerceve-surukleniyor");
-        if (!uzerindeHedefVar && !kilitli) {
+        sonBirakma = Date.now();
+        if (kilitli) return;
+        // Karar imlecin altındaki hedefe değil ÇERÇEVENİN konumuna bakar (son onDrag'in konumu:
+        // pointercancel'da girdi koordinatı güvenilmez).
+        if (hedefeYakin(istenenX, istenenY)) {
+          basariUygula();
+        } else {
           // Yanlış yere bırakıldı: yaylanarak başlangıç konumuna geri döner
-          cerceve.style.transform = "translate(0px, 0px)";
+          hedefVurgu(false);
+          konumGuncelle(0, 0);
           EGITSEL.dontVer(kok, "yanlis", "Çerçeveyi orta bahçeye taşı.");
         }
       }
     });
 
+    // Bırakma hedefi pdnd'ye kayıtlı kalır; vurgu ve karar imlece değil çerçevenin konumuna bağlı
+    // olduğundan (yukarıdaki sürükleme işleyicisi) hedef olayları sonuç üretmez.
     var hedefTemizle = pdnd.dropTargetForElements({
       element: hedefAlan,
       canDrop: function (args) {
-        return args.source.data && args.source.data.tip === "orneklem-cercevesi";
-      },
-      onDragEnter: function () {
-        uzerindeHedefVar = true;
-        if (ortaBahceCizgi) {
-          ortaBahceCizgi.setAttribute("stroke-width", "5");
-        }
-      },
-      onDragLeave: function () {
-        uzerindeHedefVar = false;
-        if (ortaBahceCizgi) {
-          ortaBahceCizgi.setAttribute("stroke-width", "3");
-        }
-      },
-      onDrop: function () {
-        uzerindeHedefVar = false;
-        basariUygula();
+        return !kilitli && args.source.data && args.source.data.tip === "orneklem-cercevesi";
       }
     });
 
@@ -3053,7 +3131,6 @@ window.SAYFA_INIT[3] = function (kok) {
   var duvarMesh = new THREE.Mesh(duvarGeo, duvarMat);
   duvarMesh.position.set(0, 6, -8);
   duvarMesh.receiveShadow = true;
-  scene.add(duvarMesh);
 
   var supurgelikMat = new THREE.MeshStandardMaterial({
     color: 0xdbd6d1,
@@ -3064,7 +3141,38 @@ window.SAYFA_INIT[3] = function (kok) {
   var supurgelikMesh = new THREE.Mesh(supurgelikGeo, supurgelikMat);
   supurgelikMesh.position.set(0, 0.175, -7.9);
   supurgelikMesh.receiveShadow = true;
-  scene.add(supurgelikMesh);
+
+  // Gök + ufka sönen zemin (dünya yönüne bağlı; zemin kenarı görünmez)
+  var s3gzM3 = MALZEME3B(renderer);
+  (function () {
+    var UFUK = '#e9e3da';
+    var c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+    var g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 512);
+    gr.addColorStop(0.0, '#efe9e1'); gr.addColorStop(0.42, '#efe9e1'); gr.addColorStop(0.5, UFUK); gr.addColorStop(1.0, UFUK);
+    g.fillStyle = gr; g.fillRect(0, 0, 1024, 512);
+    var gok = new THREE.CanvasTexture(c);
+    gok.mapping = THREE.EquirectangularReflectionMapping; gok.colorSpace = THREE.SRGBColorSpace;
+    scene.background = gok;
+    var zd = new THREE.Mesh(new THREE.CircleGeometry(30, 96), (function () {
+      var _r = s3gzM3.gurultuDoku(512, '#e6dfd6', 0.3, 1, true);
+      _r.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      return s3gzM3.yuzeyDoku(new THREE.MeshStandardMaterial({ color: 0xffffff, map: _r, normalMap: s3gzM3.normalDokusu(_r, 1.2),
+        normalScale: new THREE.Vector2(0.5, 0.5), roughness: 0.95, metalness: 0 }), 60, 60, 2);
+    })());
+    zd.rotation.x = -Math.PI / 2; zd.position.y = -0.002; zd.receiveShadow = true; zd.userData.zemin = true;
+    scene.add(zd);
+    var c2 = document.createElement('canvas'); c2.width = c2.height = 512;
+    var g2 = c2.getContext('2d'), r2 = g2.createRadialGradient(256, 256, 0, 256, 256, 256);
+    r2.addColorStop(0, 'rgba(255,255,255,0)'); r2.addColorStop(0.27, 'rgba(255,255,255,0)');
+    r2.addColorStop(0.565, 'rgba(255,255,255,0.72)'); r2.addColorStop(0.86, 'rgba(255,255,255,1)'); r2.addColorStop(1, 'rgba(255,255,255,1)');
+    g2.fillStyle = r2; g2.fillRect(0, 0, 512, 512);
+    var orti = new THREE.Mesh(new THREE.CircleGeometry(30, 96), new THREE.MeshBasicMaterial({
+      color: new THREE.Color(UFUK), map: new THREE.CanvasTexture(c2), transparent: true, depthWrite: false, toneMapped: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    orti.rotation.x = -Math.PI / 2; orti.position.y = -0.002 + 0.012;
+    scene.add(orti);
+  })();
+
 
   var golgeKanvas = document.createElement('canvas');
   golgeKanvas.width = 128;
@@ -3613,7 +3721,7 @@ window.SAYFA_INIT[4] = function (kok) {
   scene.background = new THREE.Color(0xf3efe8);
 
   var camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
-  camera.position.set(0, 3.8, 6.8);
+  camera.position.set(0, 4.3, 8.4);
 
   var controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -3667,7 +3775,38 @@ window.SAYFA_INIT[4] = function (kok) {
   var bordurMat = new THREE.MeshStandardMaterial({ color: 0xdbd6d1, roughness: 0.7, metalness: 0 });
   var bordurMesh = new THREE.Mesh(new THREE.BoxGeometry(30, 0.12, 0.08), bordurMat);
   bordurMesh.position.set(0, 0.06, -7);
-  scene.add(bordurMesh);
+
+  // Gök + ufka sönen zemin (dünya yönüne bağlı; zemin kenarı görünmez)
+  var s4gzM3 = MALZEME3B(renderer);
+  (function () {
+    var UFUK = '#e9e3da';
+    var c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+    var g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 512);
+    gr.addColorStop(0.0, '#efe9e1'); gr.addColorStop(0.42, '#efe9e1'); gr.addColorStop(0.5, UFUK); gr.addColorStop(1.0, UFUK);
+    g.fillStyle = gr; g.fillRect(0, 0, 1024, 512);
+    var gok = new THREE.CanvasTexture(c);
+    gok.mapping = THREE.EquirectangularReflectionMapping; gok.colorSpace = THREE.SRGBColorSpace;
+    scene.background = gok;
+    var zd = new THREE.Mesh(new THREE.CircleGeometry(30, 96), (function () {
+      var _r = s4gzM3.gurultuDoku(512, '#e6dfd6', 0.3, 1, true);
+      _r.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      return s4gzM3.yuzeyDoku(new THREE.MeshStandardMaterial({ color: 0xffffff, map: _r, normalMap: s4gzM3.normalDokusu(_r, 1.2),
+        normalScale: new THREE.Vector2(0.5, 0.5), roughness: 0.95, metalness: 0 }), 60, 60, 2);
+    })());
+    zd.rotation.x = -Math.PI / 2; zd.position.y = -0.002; zd.receiveShadow = true; zd.userData.zemin = true;
+    scene.add(zd);
+    var c2 = document.createElement('canvas'); c2.width = c2.height = 512;
+    var g2 = c2.getContext('2d'), r2 = g2.createRadialGradient(256, 256, 0, 256, 256, 256);
+    r2.addColorStop(0, 'rgba(255,255,255,0)'); r2.addColorStop(0.27, 'rgba(255,255,255,0)');
+    r2.addColorStop(0.565, 'rgba(255,255,255,0.72)'); r2.addColorStop(0.86, 'rgba(255,255,255,1)'); r2.addColorStop(1, 'rgba(255,255,255,1)');
+    g2.fillStyle = r2; g2.fillRect(0, 0, 512, 512);
+    var orti = new THREE.Mesh(new THREE.CircleGeometry(30, 96), new THREE.MeshBasicMaterial({
+      color: new THREE.Color(UFUK), map: new THREE.CanvasTexture(c2), transparent: true, depthWrite: false, toneMapped: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    orti.rotation.x = -Math.PI / 2; orti.position.y = -0.002 + 0.012;
+    scene.add(orti);
+  })();
+
 
   function kontakGolgesiYap(genislik, derinlik, opaklik) {
     var cv = document.createElement("canvas");
@@ -3736,15 +3875,15 @@ window.SAYFA_INIT[4] = function (kok) {
   kutuGrup.position.set(1.6, 0, 0);
 
   var pleksiMat = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,
+    color: 0xd7eeee,
     metalness: 0,
-    roughness: 0.02,
-    transmission: 0.98,
-    ior: 1.49,
-    thickness: 0.08,
-    attenuationColor: new THREE.Color(0x3bbab6),
-    attenuationDistance: 2.5,
-    specularIntensity: 0.9,
+    roughness: 0.06,
+    transparent: true,
+    opacity: 0.2,
+    depthWrite: false,
+    clearcoat: 1,
+    clearcoatRoughness: 0.05,
+    specularIntensity: 1,
     envMapIntensity: 1.0,
     side: THREE.DoubleSide
   });
@@ -3993,6 +4132,7 @@ window.SAYFA_INIT[4] = function (kok) {
 
   var tuvalRect = renderer.domElement.getBoundingClientRect();
   function kutuKontrol(clientX, clientY) {
+    tuvalRect = renderer.domElement.getBoundingClientRect();   // ölçek/geçiş sonrası bayat kalmasın
     var x = ((clientX - tuvalRect.left) / tuvalRect.width) * 2 - 1;
     var y = -((clientY - tuvalRect.top) / tuvalRect.height) * 2 + 1;
     var raycaster = new THREE.Raycaster();
@@ -6232,7 +6372,38 @@ window.SAYFA_INIT[8] = function (kok) {
   zeminMesh.rotation.x = -Math.PI / 2;
   zeminMesh.position.y = -0.01;
   zeminMesh.receiveShadow = true;
-  scene.add(zeminMesh);
+
+  // Gök + ufka sönen zemin (dünya yönüne bağlı; zemin kenarı görünmez)
+  var s8gzM3 = MALZEME3B(renderer);
+  (function () {
+    var UFUK = '#e9e3da';
+    var c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+    var g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 512);
+    gr.addColorStop(0.0, '#efe9e1'); gr.addColorStop(0.42, '#efe9e1'); gr.addColorStop(0.5, UFUK); gr.addColorStop(1.0, UFUK);
+    g.fillStyle = gr; g.fillRect(0, 0, 1024, 512);
+    var gok = new THREE.CanvasTexture(c);
+    gok.mapping = THREE.EquirectangularReflectionMapping; gok.colorSpace = THREE.SRGBColorSpace;
+    scene.background = gok;
+    var zd = new THREE.Mesh(new THREE.CircleGeometry(30, 96), (function () {
+      var _r = s8gzM3.gurultuDoku(512, '#e6dfd6', 0.3, 1, true);
+      _r.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      return s8gzM3.yuzeyDoku(new THREE.MeshStandardMaterial({ color: 0xffffff, map: _r, normalMap: s8gzM3.normalDokusu(_r, 1.2),
+        normalScale: new THREE.Vector2(0.5, 0.5), roughness: 0.95, metalness: 0 }), 60, 60, 2);
+    })());
+    zd.rotation.x = -Math.PI / 2; zd.position.y = -0.012; zd.receiveShadow = true; zd.userData.zemin = true;
+    scene.add(zd);
+    var c2 = document.createElement('canvas'); c2.width = c2.height = 512;
+    var g2 = c2.getContext('2d'), r2 = g2.createRadialGradient(256, 256, 0, 256, 256, 256);
+    r2.addColorStop(0, 'rgba(255,255,255,0)'); r2.addColorStop(0.27, 'rgba(255,255,255,0)');
+    r2.addColorStop(0.565, 'rgba(255,255,255,0.72)'); r2.addColorStop(0.86, 'rgba(255,255,255,1)'); r2.addColorStop(1, 'rgba(255,255,255,1)');
+    g2.fillStyle = r2; g2.fillRect(0, 0, 512, 512);
+    var orti = new THREE.Mesh(new THREE.CircleGeometry(30, 96), new THREE.MeshBasicMaterial({
+      color: new THREE.Color(UFUK), map: new THREE.CanvasTexture(c2), transparent: true, depthWrite: false, toneMapped: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    orti.rotation.x = -Math.PI / 2; orti.position.y = -0.012 + 0.012;
+    scene.add(orti);
+  })();
+
 
   var podyumDoku = dokuOlustur('#ebe0d5', 'rgba(203,139,82,0.25)', 'izgara');
   var podyumMat = new THREE.MeshStandardMaterial({
@@ -6721,7 +6892,7 @@ window.SAYFA_INIT[8] = function (kok) {
 
 </div>
 
-<script src="ortak/9f91bdf0caca8a0d.js"></script>
+<script src="ortak/c4843973138cf39f.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>

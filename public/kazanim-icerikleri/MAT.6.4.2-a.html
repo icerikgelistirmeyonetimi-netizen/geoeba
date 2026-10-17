@@ -911,7 +911,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 03:53
+  montaj: 2026-10-17 22:06
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-19 02:56
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-19 02:57
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-19 02:56
@@ -2483,7 +2483,7 @@ window.SAYFA_INIT[3] = function (kok) {
 
   var scene = new THREE.Scene();
   var camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
-  camera.position.set(3.2, 8.5, 25);
+  camera.position.set(3.4, 9.6, 29);
 
   var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setSize(w, h);
@@ -2494,7 +2494,7 @@ window.SAYFA_INIT[3] = function (kok) {
   kapsayici.appendChild(renderer.domElement);
 
   var controls = new THREE.OrbitControls(camera, renderer.domElement);
-  controls.target.set(3.2, 4, 0);
+  controls.target.set(3.4, 4.2, 0);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
   controls.maxPolarAngle = Math.PI / 2 - 0.02;
@@ -2768,8 +2768,8 @@ window.SAYFA_INIT[3] = function (kok) {
   });
 
   btnKamera.addEventListener("click", function () {
-    camera.position.set(3.2, 8.5, 25);
-    controls.target.set(3.2, 4, 0);
+    camera.position.set(3.4, 9.6, 29);
+    controls.target.set(3.4, 4.2, 0);
     controls.update();
   });
 
@@ -3153,6 +3153,12 @@ window.SAYFA_INIT[3] = function (kok) {
     cursor: grabbing;
   }
 
+  /* Köprü, sürüklenen düğümün imleci izleyen kopyasını (kimliği silinmiş) kök svg'ye ekler;
+     asıl üçgen de taşındığı için kopya gizlenir (sürüklerken tek üçgen görünür) */
+  #sayfa-4 .s4-es-ucgen-grup:not([id]) {
+    visibility: hidden !important;
+  }
+
   #sayfa-4 .s4-es-ucgen-grup.s4-hoverde #s4-es-secim-cizgi {
     opacity: 0.85;
   }
@@ -3275,6 +3281,38 @@ window.SAYFA_INIT[4] = function (kok) {
   var isSelected = false;
   var temizleyiciler = [];
 
+  /* Sürükleme: tutma ofseti + karar. İmleç üçgenin neresinden tutulduysa orası imlecin altında kalır
+     (ofset = tutma anında imleç − üçgenin yerel orijini); karar mıknatıs/kısıt uygulanmamış konuma bakar. */
+  var SEC_OLCEK = 1.05;
+  var tutmaOfseti = { dx: 0, dy: 0 };   // yerel (ölçeksiz) birim
+  var istenenX = BASLANGIC_X;           // imleç − ofset (mıknatıssız)
+  var istenenY = BASLANGIC_Y;
+  var kararVerildi = false;             // bir bırakmada tek karar/tek dönüt
+  var sonBirakma = 0;                   // bırakma anı: hemen ardından gelen click tıkla-seç yedeğini tetiklemesin
+  var svgKok = kok.querySelector(".s4-tuval");
+
+  function ekranToSvg(cx, cy) {
+    var ctm = svgKok.getScreenCTM();
+    if (!ctm) return null;
+    var p = svgKok.createSVGPoint();
+    p.x = cx;
+    p.y = cy;
+    return p.matrixTransform(ctm.inverse());
+  }
+
+  function olcek() {
+    return (!isLocked && isSelected) ? SEC_OLCEK : 1;
+  }
+
+  // Hedef bölge: (200,280) (440,280) (340,440) üçgeni
+  function hedefBolgedeMi(x, y) {
+    function isaret(px, py, qx, qy, rx, ry) { return (px - rx) * (qy - ry) - (qx - rx) * (py - ry); }
+    var d1 = isaret(x, y, 200, 280, 440, 280);
+    var d2 = isaret(x, y, 440, 280, 340, 440);
+    var d3 = isaret(x, y, 340, 440, 200, 280);
+    return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
+  }
+
   // Görünümü güncelle
   function guncelleGorunum(animate) {
     if (animate) {
@@ -3386,6 +3424,11 @@ window.SAYFA_INIT[4] = function (kok) {
     currentX = BASLANGIC_X;
     currentY = BASLANGIC_Y;
     currentAngle = 0;
+    istenenX = BASLANGIC_X;
+    istenenY = BASLANGIC_Y;
+    tutmaOfseti = { dx: 0, dy: 0 };
+    kararVerildi = false;
+    sonBirakma = 0;
 
     paralelkenarHat.setAttribute("opacity", "0");
 
@@ -3441,9 +3484,23 @@ window.SAYFA_INIT[4] = function (kok) {
     sifirla();
   });
 
+  // Tutma ofseti: pointerdown anında imleç ile üçgenin GÖRÜNEN orijini arasındaki fark
+  // (köprünün location.initial girdisi pointerdown değil, eşiği aşan ilk harekettir)
+  esGrup.addEventListener("pointerdown", function (e) {
+    var imlec = ekranToSvg(e.clientX, e.clientY);
+    if (!imlec) return;
+    var m = esGrup.getScreenCTM();   // yay animasyonu sürerken de görünen konum
+    var orijin = m ? ekranToSvg(m.e, m.f) : null;
+    var ox = orijin ? orijin.x : currentX;
+    var oy = orijin ? orijin.y : currentY;
+    var s = olcek();
+    tutmaOfseti = { dx: (imlec.x - ox) / s, dy: (imlec.y - oy) / s };
+  });
+
   // Tıkla-seç yedeği (hedef alana tıklama)
   hedefAlani.addEventListener("click", function () {
     if (isLocked) return;
+    if (Date.now() - sonBirakma < 400) return;   // sürüklemeden hemen sonraki click yedeği tetiklemesin
     if (currentAngle === 180) {
       kenetlen();
     } else {
@@ -3453,6 +3510,21 @@ window.SAYFA_INIT[4] = function (kok) {
 
   // Pragmatic DnD (pdnd) Entegrasyonu
   if (window.pdnd) {
+    /* Bırakma kararı: hem sürüklenenin hem hedef bölgesinin onDrop'u aynı bırakmada çalışır; tek karar,
+       tek dönüt. Karar imlecin altındaki hedefe DEĞİL üçgenin kendi (mıknatıssız) konumuna bakar:
+       yerel orijin hedefe 45 birimden yakınsa ya da hedef bölgenin içindeyse ve 180° döndürüldüyse yerleşir. */
+    function birakKarar() {
+      if (isLocked || kararVerildi) return;
+      kararVerildi = true;
+      sonBirakma = Date.now();
+      var yakin = Math.hypot(istenenX - HEDEF_X, istenenY - HEDEF_Y) <= 45;
+      if (currentAngle === 180 && (yakin || hedefBolgedeMi(istenenX, istenenY))) {
+        kenetlen();
+      } else {
+        geriDon(true);
+      }
+    }
+
     // Sürüklenebilir Eş Üçgen
     var dClean = pdnd.draggable({
       element: esGrup,
@@ -3464,18 +3536,13 @@ window.SAYFA_INIT[4] = function (kok) {
       },
       onDragStart: function () {
         isSelected = true;
+        kararVerildi = false;
+        istenenX = currentX;
+        istenenY = currentY;
         esGrup.style.transition = "none";
       },
       onDrop: function () {
-        // Hedef dışına bırakıldıysa kontrol
-        if (!isLocked) {
-          var mesafe = Math.hypot(currentX - HEDEF_X, currentY - HEDEF_Y);
-          if (mesafe <= 45 && currentAngle === 180) {
-            kenetlen();
-          } else {
-            geriDon(true);
-          }
-        }
+        birakKarar();
       }
     });
     temizleyiciler.push(dClean);
@@ -3486,34 +3553,27 @@ window.SAYFA_INIT[4] = function (kok) {
       canDrop: function (args) {
         return args.source.data.tip === "es-ucgen";
       },
-      onDrop: function (args) {
-        if (currentAngle === 180) {
-          kenetlen();
-        } else {
-          geriDon(true);
-        }
+      onDrop: function () {
+        birakKarar();
       }
     });
     temizleyiciler.push(tClean);
 
-    // Konum takibi (onDrag)
+    // Konum takibi (onDrag): üçgenin orijini = imleç − tutma ofseti
     var mClean = pdnd.monitorForElements({
       onDrag: function (args) {
         if (args.source.element === esGrup && args.location && args.location.current) {
-          var dropTarget = args.location.current.dropTargets[0];
-          // SVG koordinat dönüşümü
-          var svg = kok.querySelector(".s4-tuval");
-          var pt = svg.createSVGPoint();
-          pt.x = args.location.current.input.clientX;
-          pt.y = args.location.current.input.clientY;
-          var ctm = svg.getScreenCTM();
-          if (ctm) {
-            var svgPt = pt.matrixTransform(ctm.inverse());
-            currentX = Math.round(svgPt.x);
-            currentY = Math.round(svgPt.y);
+          var inp = args.location.current.input;
+          var svgPt = ekranToSvg(inp.clientX, inp.clientY);
+          if (svgPt) {
+            var s = olcek();
+            istenenX = svgPt.x - tutmaOfseti.dx * s;
+            istenenY = svgPt.y - tutmaOfseti.dy * s;
+            currentX = istenenX;
+            currentY = istenenY;
 
-            // Mıknatıs etkisi (35 piksel toleransı)
-            var mesafe = Math.hypot(currentX - HEDEF_X, currentY - HEDEF_Y);
+            // Mıknatıs etkisi (35 piksel toleransı): yalnız görünen konuma
+            var mesafe = Math.hypot(istenenX - HEDEF_X, istenenY - HEDEF_Y);
             if (mesafe <= 35 && currentAngle === 180) {
               currentX = HEDEF_X;
               currentY = HEDEF_Y;
@@ -6120,7 +6180,7 @@ window.SAYFA_INIT[9] = function (kok) {
 
 </div>
 
-<script src="ortak/fcddfd686cf8f799.js"></script>
+<script src="ortak/1e815196a58cd784.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>

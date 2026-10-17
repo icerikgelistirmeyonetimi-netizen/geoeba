@@ -841,7 +841,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 03:54
+  montaj: 2026-10-17 22:07
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 16:15
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 16:14
   sayfa 3: bilinmiyor (damgasız eski üretim)
@@ -1382,7 +1382,7 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
 
       <!-- KATMAN 3: Sürüklenebilir f(a) Değer Noktası -->
       <g id="sayfa1-katman-on">
-        <g id="s1-surukle-grup" transform="translate(380, 370)" role="button" tabindex="0" aria-label="f(a) Noktası">
+        <g id="s1-surukle-grup" class="s1-nokta" transform="translate(380, 370)" role="button" tabindex="0" aria-label="f(a) Noktası">
           <ellipse cx="0" cy="14" rx="13" ry="4.5" fill="#162233" opacity="0.25" />
           <circle id="s1-fa-odak" cx="0" cy="0" r="17" fill="none" stroke="#158a62" stroke-width="2.5" stroke-dasharray="3 3" opacity="0" />
           <circle id="s1-fa-govde" cx="0" cy="0" r="11" fill="url(#s1-grad-nokta)" stroke="#162233" stroke-width="2.5" />
@@ -1480,6 +1480,25 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
     cursor: -webkit-grabbing;
   }
 
+  /* Sürükleme köprüsünün imleci izleyen hayalet kopyası gizli: nokta kendisi tutulduğu
+     yerden sürükleniyor; ikinci, yarı saydam bir f(a) noktası kafa karıştırıyordu.
+     (Kopyanın id'si silinir, sınıfı kalır.) */
+  #sayfa-1 .s1-nokta:not([id]) {
+    visibility: hidden !important;
+  }
+
+  /* Sürüklerken nokta imleci geriden izlemesin: geçiş yalnız bırakma/klavye/tıkla-seç
+     yerleşmesinde çalışır. */
+  #sayfa-1 #s1-surukle-grup.s1-suruklenirken {
+    transition: none;
+  }
+
+  /* Fareyle odaklanınca Chrome SVG öğesine koyu :focus halkası çiziyor; klavye odağı
+     (:focus-visible) görünür kalır. */
+  #sayfa-1 #s1-surukle-grup:focus:not(:focus-visible) {
+    outline: none;
+  }
+
 }
 </style>
 
@@ -1507,6 +1526,32 @@ window.SAYFA_INIT[1] = function (kok) {
   var simdikiY = BASLANGIC_Y;
   var kilitli = false;
   var odakli = false;
+
+  // Nokta TUTULDUĞU yerden taşınır: imleç − merkez farkı pointerdown'da saklanır
+  // (köprünün location.initial'i pointerdown değil, eşiği aşan ilk harekettir). Nokta yalnız
+  // düşey gider, bu yüzden yalnız y ofseti var.
+  var tutmaOfseti = { dy: 0 };
+  // İmleç − ofset: öğrencinin noktayı götürmek istediği yer. Görünen konum 100–440'a kısılır;
+  // karar KISILMAMIŞ yere bakar, imlecin altındaki yuvaya değil.
+  var istenenY = BASLANGIC_Y;
+  // Sürükleme bitince tarayıcının gönderdiği click tıkla-seç yedeğini geri açmasın.
+  var sonBirakma = 0;
+
+  function birakmaSonrasiTik() {
+    return Date.now() - sonBirakma < 400;
+  }
+
+  function ekranToSvgY(clientX, clientY) {
+    var pt = svgEl.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    var ctm = svgEl.getScreenCTM();
+    if (ctm) {
+      return pt.matrixTransform(ctm.inverse()).y;
+    }
+    var rect = svgEl.getBoundingClientRect();
+    return (clientY - rect.top) * (560 / rect.height);
+  }
 
   function degeriGuncelle(y) {
     var val = ((460 - y) / 60).toFixed(1);
@@ -1582,6 +1627,10 @@ window.SAYFA_INIT[1] = function (kok) {
 
   function sifirla() {
     kilitli = false;
+    tutmaOfseti = { dy: 0 };
+    istenenY = BASLANGIC_Y;
+    sonBirakma = 0;
+    noktaGrup.classList.remove("s1-suruklenirken");
     setOdak(false);
     konumuAyarla(BASLANGIC_Y);
 
@@ -1597,8 +1646,13 @@ window.SAYFA_INIT[1] = function (kok) {
 
   sifirlaBtn.addEventListener("click", sifirla);
 
+  noktaGrup.addEventListener("pointerdown", function (e) {
+    tutmaOfseti = { dy: ekranToSvgY(e.clientX, e.clientY) - simdikiY };
+  });
+
   noktaGrup.addEventListener("click", function (e) {
     e.stopPropagation();
+    if (birakmaSonrasiTik()) return;
     if (!kilitli) {
       setOdak(!odakli);
     }
@@ -1619,14 +1673,16 @@ window.SAYFA_INIT[1] = function (kok) {
 
   hedefAlani.addEventListener("click", function (e) {
     e.stopPropagation();
+    if (birakmaSonrasiTik()) return;
     hedefeKilitle();
   });
 
   if (dikeyHat) {
     dikeyHat.addEventListener("click", function (e) {
-      var rect = svgEl.getBoundingClientRect();
-      var svgY = (e.clientY - rect.top) * (560 / rect.height);
-      serbestBirak(svgY);
+      if (birakmaSonrasiTik()) return;
+      // Sürüklemeyle aynı çeviri: getBoundingClientRect oranı «meet» boşluğunu hesaba katmaz
+      // ve tıklanan yer ile nokta arasında kayma bırakırdı.
+      serbestBirak(ekranToSvgY(e.clientX, e.clientY));
     });
   }
 
@@ -1638,42 +1694,35 @@ window.SAYFA_INIT[1] = function (kok) {
         canDrag: function () { return !kilitli; },
         getInitialData: function () { return { id: "fa-nokta" }; },
         onDragStart: function () {
+          noktaGrup.classList.add("s1-suruklenirken");
           setOdak(true);
         },
         onDrag: function (args) {
           var input = args.location && args.location.current && args.location.current.input;
           if (input) {
-            var rect = svgEl.getBoundingClientRect();
-            var svgY = (input.clientY - rect.top) * (560 / rect.height);
-            if (svgY < 100) svgY = 100;
-            if (svgY > 440) svgY = 440;
-            konumuAyarla(svgY);
+            istenenY = ekranToSvgY(input.clientX, input.clientY) - tutmaOfseti.dy;
+            konumuAyarla(istenenY);
           }
         },
-        onDrop: function (args) {
+        onDrop: function () {
+          sonBirakma = Date.now();
+          noktaGrup.classList.remove("s1-suruklenirken");
           setOdak(false);
-          var dropTargets = args.location && args.location.current && args.location.current.dropTargets;
-          var hedefeDustu = dropTargets && dropTargets.some(function (t) {
-            return t.element === hedefAlani || (t.data && t.data.id === "limit-hedef");
-          });
-          if (hedefeDustu || Math.abs(simdikiY - HEDEF_Y) <= TOLERANS) {
-            hedefeKilitle();
-          } else {
-            serbestBirak(simdikiY);
-          }
+          // Karar imlecin altındaki yuvaya değil NOKTANIN kısılmamış konumuna bakar (son
+          // onDrag'in konumu: pointercancel'da girdi koordinatı güvenilmez); kısıt yalnız
+          // görünen konuma uygulanır.
+          serbestBirak(istenenY);
         }
       })
     );
 
+    // Yuva kayıtlı kalır ama bırakmayı o vermez: yuva imlecin altındayken nokta uzakta olabilir.
     temizleyiciler.push(
       pdnd.dropTargetForElements({
         element: hedefAlani,
         getData: function () { return { id: "limit-hedef" }; },
         canDrop: function (args) {
           return args.source && args.source.data && args.source.data.id === "fa-nokta";
-        },
-        onDrop: function () {
-          hedefeKilitle();
         }
       })
     );
@@ -4027,7 +4076,7 @@ window.SAYFA_INIT[6] = function (kok) {
 
 </div>
 
-<script src="ortak/8da5b99b00e4cc6b.js"></script>
+<script src="ortak/1fe3bf660ae1e62f.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>

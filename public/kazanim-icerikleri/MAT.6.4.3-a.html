@@ -911,7 +911,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 03:53
+  montaj: 2026-10-17 22:09
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-17 09:28
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=yerlesim | zaman=2026-09-17 09:32
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 09:29
@@ -3938,6 +3938,19 @@ window.SAYFA_INIT[3] = function (kok) {
     cursor: grabbing;
     filter: drop-shadow(0 0 8px #d99b26);
   }
+  /* Sürüklerken konum geçişi yok (imleci 0,5 sn geriden izlemesin); bırakınca geri dönüş yine yumuşak. */
+  #sayfa-4 .s4-hareketli.s4-tutuluyor {
+    transition: filter 0.2s ease;
+  }
+  /* Köprünün imleci izleyen kopyası (kimliği silinir): aslı taşındığı için gizli. */
+  #sayfa-4 .s4-hareketli:not([id]) {
+    visibility: hidden !important;
+  }
+  /* Fare odağında koyu halka çizme; klavye odağı (:focus-visible) kalır. */
+  #sayfa-4 .s4-hareketli:focus:not(:focus-visible),
+  #sayfa-4 #s4-hedef-alan:focus:not(:focus-visible) {
+    outline: none;
+  }
   #sayfa-4 .s4-hareketli.s4-secili {
     filter: drop-shadow(0 0 10px #d99b26);
   }
@@ -4041,6 +4054,58 @@ window.SAYFA_INIT[4] = function (kok) {
 
   var baslangicMerkez = { x: 340, y: 193 };
 
+  /* Sürükleme: üçgenin başvuru noktası (merkez tutamacı) = başlangıç merkezi + öteleme.
+     Tutulan nokta imlece sıçramasın diye tutma ofseti pointerdown'da saklanır;
+     istenen = imleç − ofset, karar bu (kısıtsız) konuma bakar. */
+  var tutmaOfseti = null;
+  var istenen = null;
+  var suruklendi = false;
+  var sonBirakma = 0;
+  var HEDEF_UCGEN = [[175, 305], [485, 305], [575, 135]];
+
+  function simdikiOteleme() {
+    try {
+      var m = new DOMMatrix(window.getComputedStyle(hareketliG).transform);
+      return { x: m.m41, y: m.m42 };
+    } catch (err) {
+      return { x: 0, y: 0 };
+    }
+  }
+
+  function ofsetKur(clientX, clientY) {
+    var pt = ekranToSvg(clientX, clientY);
+    var o = simdikiOteleme();
+    tutmaOfseti = {
+      dx: pt.x - (baslangicMerkez.x + o.x),
+      dy: pt.y - (baslangicMerkez.y + o.y)
+    };
+  }
+
+  function hedefIcindeMi(x, y) {
+    var isaret = null;
+    for (var i = 0; i < 3; i++) {
+      var a = HEDEF_UCGEN[i];
+      var b = HEDEF_UCGEN[(i + 1) % 3];
+      var c = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]);
+      if (c === 0) continue;
+      if (isaret === null) isaret = c > 0;
+      else if (isaret !== (c > 0)) return false;
+    }
+    return true;
+  }
+
+  function hedefVurgula(ac) {
+    if (ac) hedefAlan.classList.add("s4-hedef-ustunde");
+    else hedefAlan.classList.remove("s4-hedef-ustunde");
+  }
+
+  function surukleSifirla() {
+    surukleniyor = false;
+    tutmaOfseti = null;
+    istenen = null;
+    hedefVurgula(false);
+  }
+
   /* Uzman 3. tur (6. sınıf genel): en çok 2 hatalı bırakma; 2. hatada üçgen eşinin üstüne oturur. */
   var HAK = 2;
   var yanlisSay = 0;
@@ -4100,6 +4165,10 @@ window.SAYFA_INIT[4] = function (kok) {
     hareketliG.classList.remove("s4-secili");
     hareketliG.classList.remove("s4-tutuluyor");
     hareketliG.style.transform = "";
+    surukleSifirla();
+    suruklendi = false;
+    hareketliG.style.transition = "";
+    sonBirakma = 0;
     pulsHalka.classList.remove("s4-puls-aktif");
     if (svgYarimAlan) svgYarimAlan.style.display = "none";
     if (formulAlani) formulAlani.style.display = "none";
@@ -4108,8 +4177,38 @@ window.SAYFA_INIT[4] = function (kok) {
     }
   }
 
-  hareketliG.addEventListener("click", function () {
+  /* Sürüklemeyi bitiren pointerup'ın ardından gelen tarayıcı click'i tıkla-seç yedeğini tetiklemesin. */
+  function surukleSonrasiClick(e) {
+    return e && e.detail !== 0 && Date.now() - sonBirakma < 400;
+  }
+
+  /* Basılınca geri dönüş geçişi sürüyorsa üçgen tutulduğu yerde durur (görünen konum = ofsetin ölçüldüğü konum);
+     sürükleme olmadan bırakılırsa geçiş kaldığı yerden sürer. */
+  function basilinceDondur(e) {
+    var o = simdikiOteleme();
+    hareketliG.style.transition = "none";
+    hareketliG.style.transform = "translate(" + o.x + "px, " + o.y + "px)";
+    ofsetKur(e.clientX, e.clientY);
+    suruklendi = false;
+    var birak = function () {
+      window.removeEventListener("pointerup", birak);
+      window.removeEventListener("pointercancel", birak);
+      if (suruklendi || tamamlandi) return;
+      hareketliG.style.transition = "";
+      hareketliG.style.transform = "";
+    };
+    window.addEventListener("pointerup", birak);
+    window.addEventListener("pointercancel", birak);
+  }
+
+  hareketliG.addEventListener("pointerdown", function (e) {
+    if (tamamlandi || e.button !== 0) return;
+    basilinceDondur(e);
+  });
+
+  hareketliG.addEventListener("click", function (e) {
     if (tamamlandi) return;
+    if (surukleSonrasiClick(e)) return;
     secili = !secili;
     if (secili) {
       hareketliG.classList.add("s4-secili");
@@ -4118,15 +4217,21 @@ window.SAYFA_INIT[4] = function (kok) {
     }
   });
 
+  /* SVG öğelerinde click() yöntemi yok: klavye yolu aynı işleyiciden bir click olayıyla geçer. */
+  function tiklaTetikle(el) {
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  }
+
   hareketliG.addEventListener("keydown", function (e) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      hareketliG.click();
+      tiklaTetikle(hareketliG);
     }
   });
 
-  hedefAlan.addEventListener("click", function () {
+  hedefAlan.addEventListener("click", function (e) {
     if (tamamlandi) return;
+    if (surukleSonrasiClick(e)) return;
     if (secili) {
       cakistir();
     } else {
@@ -4137,7 +4242,7 @@ window.SAYFA_INIT[4] = function (kok) {
   hedefAlan.addEventListener("keydown", function (e) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      hedefAlan.click();
+      tiklaTetikle(hedefAlan);
     }
   });
 
@@ -4149,31 +4254,35 @@ window.SAYFA_INIT[4] = function (kok) {
     temizleyiciler.forEach(function (fn) { if (typeof fn === "function") fn(); });
     temizleyiciler = [];
 
-    if (typeof pdnd !== "undefined" && pdnd.draggable && pdnd.dropTargetForElements) {
+    if (typeof pdnd !== "undefined" && pdnd.draggable) {
       var d = pdnd.draggable({
         element: hareketliG,
         canDrag: function () { return !tamamlandi; },
-        onDragStart: function () {
+        onDragStart: function (args) {
           surukleniyor = true;
+          suruklendi = true;
+          istenen = null;
+          if (!tutmaOfseti) {
+            var ilk = args && args.location && args.location.initial && args.location.initial.input;
+            if (ilk) ofsetKur(ilk.clientX, ilk.clientY);
+          }
           hareketliG.classList.add("s4-tutuluyor");
         },
         onDrag: function (args) {
-          if (args && args.location && args.location.current && args.location.current.input) {
-            var pt = ekranToSvg(args.location.current.input.clientX, args.location.current.input.clientY);
-            var dx = pt.x - baslangicMerkez.x;
-            var dy = pt.y - baslangicMerkez.y;
-            hareketliG.style.transform = "translate(" + dx + "px, " + dy + "px)";
-          }
+          var inp = args && args.location && args.location.current && args.location.current.input;
+          if (!inp || !tutmaOfseti) return;
+          var pt = ekranToSvg(inp.clientX, inp.clientY);
+          istenen = { x: pt.x - tutmaOfseti.dx, y: pt.y - tutmaOfseti.dy };
+          hareketliG.style.transform = "translate(" + (istenen.x - baslangicMerkez.x) + "px, " + (istenen.y - baslangicMerkez.y) + "px)";
+          hedefVurgula(hedefIcindeMi(istenen.x, istenen.y));
         },
-        onDrop: function (args) {
-          surukleniyor = false;
+        onDrop: function () {
+          /* Karar imlecin altındaki hedefe değil, üçgenin kendi (imleç − ofset) konumuna bakar. */
+          var hedefeDustu = !!istenen && hedefIcindeMi(istenen.x, istenen.y);
+          sonBirakma = Date.now();
+          surukleSifirla();
+          hareketliG.style.transition = "";
           hareketliG.classList.remove("s4-tutuluyor");
-          var hedefeDustu = false;
-          if (args && args.location && args.location.current && args.location.current.dropTargets) {
-            hedefeDustu = args.location.current.dropTargets.some(function (t) {
-              return t.element === hedefAlan;
-            });
-          }
           if (hedefeDustu) {
             cakistir();
           } else {
@@ -4182,21 +4291,6 @@ window.SAYFA_INIT[4] = function (kok) {
         }
       });
       temizleyiciler.push(d);
-
-      var t = pdnd.dropTargetForElements({
-        element: hedefAlan,
-        canDrop: function () { return !tamamlandi; },
-        onDragEnter: function () {
-          hedefAlan.classList.add("s4-hedef-ustunde");
-        },
-        onDragLeave: function () {
-          hedefAlan.classList.remove("s4-hedef-ustunde");
-        },
-        onDrop: function () {
-          hedefAlan.classList.remove("s4-hedef-ustunde");
-        }
-      });
-      temizleyiciler.push(t);
     }
   }
 
@@ -7582,10 +7676,11 @@ window.SAYFA_INIT[10] = function (kok) {
   scene.background = new THREE.Color(0xf4f2f1);
 
   var camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 100);
-  var varsayilanCamPos = new THREE.Vector3(0, 14, 16);
+  var varsayilanCamPos = new THREE.Vector3(0, 15, 18);
   var kusbakisiCamPos = new THREE.Vector3(0, 21, 0.01);
   var hedefCamPos = varsayilanCamPos.clone();
   var hedefLookAt = new THREE.Vector3(0, 0, 0);
+  var kameraGecisi = false;   // yalnız düğmeyle istenen geçişte true
 
   camera.position.copy(varsayilanCamPos);
   camera.lookAt(hedefLookAt);
@@ -7604,6 +7699,7 @@ window.SAYFA_INIT[10] = function (kok) {
   controls.maxPolarAngle = Math.PI / 2 - 0.05;
   controls.minDistance = 6;
   controls.maxDistance = 32;
+  controls.addEventListener('start', function () { kameraGecisi = false; });
 
   // Stüdyo Ortamı
   if (typeof THREE.StudyoOrtami === 'function') {
@@ -8062,6 +8158,7 @@ window.SAYFA_INIT[10] = function (kok) {
 
   // Hover efekti
   kap.addEventListener('pointermove', function (e) {
+    rect = kap.getBoundingClientRect();
     pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
@@ -8097,6 +8194,7 @@ window.SAYFA_INIT[10] = function (kok) {
   // Tıklama İşleyicisi
   kap.addEventListener('pointerdown', function (e) {
     e.preventDefault();
+    rect = kap.getBoundingClientRect();
     pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
 
@@ -8187,6 +8285,7 @@ window.SAYFA_INIT[10] = function (kok) {
   var btnKusbakisi = kok.querySelector('#s10-btn-kusbakisi');
 
   btnPerspektif.addEventListener('click', function () {
+    kameraGecisi = true;
     hedefCamPos.copy(varsayilanCamPos);
     hedefLookAt.set(0, 0, 0);
     btnPerspektif.classList.add('secili');
@@ -8194,6 +8293,7 @@ window.SAYFA_INIT[10] = function (kok) {
   });
 
   btnKusbakisi.addEventListener('click', function () {
+    kameraGecisi = true;
     hedefCamPos.copy(kusbakisiCamPos);
     hedefLookAt.set(0, 0, 0);
     btnKusbakisi.classList.add('secili');
@@ -8231,6 +8331,7 @@ window.SAYFA_INIT[10] = function (kok) {
       'Bordür taşlarını aşan 2 çim bölgesini modelde seçin.';
     kok.querySelector('#s10-durum-kart').classList.remove('tamamlandi');
 
+    kameraGecisi = true;
     hedefCamPos.copy(varsayilanCamPos);
     hedefLookAt.set(0, 0, 0);
     btnPerspektif.classList.add('secili');
@@ -8245,8 +8346,12 @@ window.SAYFA_INIT[10] = function (kok) {
     animasyonZamani += 0.03;
 
     // Kamera yumuşak geçiş
-    camera.position.lerp(hedefCamPos, 0.08);
-    controls.target.lerp(hedefLookAt, 0.08);
+    // Kamera yalnız düğmeyle istenen geçişte hedefe çekilir (her kare çekmek orbit'i öldürüyordu).
+    if (kameraGecisi) {
+      camera.position.lerp(hedefCamPos, 0.08);
+      controls.target.lerp(hedefLookAt, 0.08);
+      if (camera.position.distanceTo(hedefCamPos) < 0.03 && controls.target.distanceTo(hedefLookAt) < 0.03) kameraGecisi = false;
+    }
     controls.update();
 
     // Yanıp sönme ve titreşim efekti (hatalı tıklamada)
@@ -10895,7 +11000,7 @@ window.SAYFA_INIT[14] = function (kok) {
 
 </div>
 
-<script src="ortak/60ce65ebfae62627.js"></script>
+<script src="ortak/7a752723625332cf.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>

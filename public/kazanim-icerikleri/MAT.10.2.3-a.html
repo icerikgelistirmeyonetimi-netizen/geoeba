@@ -912,7 +912,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 03:54
+  montaj: 2026-10-17 22:07
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 05:12
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 05:10
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 05:08
@@ -2092,7 +2092,7 @@ window.SAYFA_INIT[1] = function (kok) {
         </g>
 
         <!-- Dinamik İzleme Noktası -->
-        <g id="s2-nokta" transform="translate(370, 230)" style="cursor: grab; touch-action: none;" role="button" aria-label="İzleme Noktası" tabindex="0">
+        <g id="s2-nokta" class="s2-nokta-sur" transform="translate(370, 230)" style="cursor: grab; touch-action: none;" role="button" aria-label="İzleme Noktası" tabindex="0">
           <ellipse id="s2-nokta-golge" cx="0" cy="12" rx="10" ry="4" fill="#122438" fill-opacity="0.25"/>
           <circle id="s2-nokta-halka" cx="0" cy="0" r="16" fill="none" stroke="#ff9f1a" stroke-width="2.5" stroke-dasharray="4 3" opacity="0.6"/>
           <circle id="s2-nokta-govde" cx="0" cy="0" r="8" fill="url(#s2-grad-nokta)" stroke="#122438" stroke-width="2.5"/>
@@ -2148,6 +2148,10 @@ window.SAYFA_INIT[1] = function (kok) {
 @layer sayfa {
 
   #sayfa-2 .s2-sahne-zemini { background: linear-gradient(180deg, #fbf8f1 0%, #fbf8f1 100%); }
+  /* pdnd-svg köprüsünün imleç izleyen kopyası (id'siz) gizli: nokta aslı taşınıyor */
+  #sayfa-2 .s2-nokta-sur:not([id]) { visibility: hidden !important; }
+  /* fare odağı halkası yok; klavye odağı (:focus-visible) kalır */
+  #sayfa-2 .s2-nokta-sur:focus:not(:focus-visible) { outline: none; }
   #sayfa-2 .s2-panel-grup {
     display: flex;
     flex-direction: column;
@@ -2196,6 +2200,9 @@ window.SAYFA_INIT[2] = function (kok) {
   var guncelX = 4.0;
   var kilitli = false;
   var surukleniyor = false;
+  // Tutma ofseti (SVG birimi, yalnız x: y eğriden gelir) ve son bırakma anı
+  var tutmaDx = 0;
+  var sonBirakma = 0;
 
   var svgEl = kok.querySelector("svg");
   var noktaEl = kok.querySelector("#s2-nokta");
@@ -2266,7 +2273,9 @@ window.SAYFA_INIT[2] = function (kok) {
   }
 
   function surukleBitir() {
+    if (surukleniyor) sonBirakma = Date.now();
     surukleniyor = false;
+    tutmaDx = 0;
     noktaGovde.setAttribute("r", "8");
     noktaHalka.setAttribute("r", "16");
     noktaHalka.setAttribute("opacity", "0.6");
@@ -2289,12 +2298,15 @@ window.SAYFA_INIT[2] = function (kok) {
     var ctm = svgEl.getScreenCTM();
     if (!ctm) return;
     var svgP = pt.matrixTransform(ctm.inverse());
-    var xHesap = (svgP.x - x0) / sx;
+    var xHesap = (svgP.x - tutmaDx - x0) / sx;
     konumuGuncelle(xHesap);
   }
 
   noktaEl.addEventListener("pointerdown", function (e) {
     e.preventDefault();
+    // Tutulan yer ile noktanın merkezi arasındaki fark: nokta imlece sıçramasın
+    var tp = svgKoordinat(e);
+    tutmaDx = tp ? tp.x - (x0 + guncelX * sx) : 0;
     surukleBasla();
     if (noktaEl.setPointerCapture) {
       noktaEl.setPointerCapture(e.pointerId);
@@ -2304,10 +2316,7 @@ window.SAYFA_INIT[2] = function (kok) {
   noktaEl.addEventListener("pointermove", function (e) {
     if (!surukleniyor) return;
     e.preventDefault();
-    var p = svgKoordinat(e);
-    if (!p) return;
-    var xHesap = (p.x - x0) / sx;
-    konumuGuncelle(xHesap);
+    isaretciHareket(e.clientX, e.clientY);
   });
 
   noktaEl.addEventListener("pointerup", function (e) {
@@ -2323,6 +2332,8 @@ window.SAYFA_INIT[2] = function (kok) {
 
   svgEl.addEventListener("click", function (e) {
     if (e.target === noktaEl || noktaEl.contains(e.target)) return;
+    // sürüklemenin bırakılışındaki click, tıkla-seç yolunu geri açmasın
+    if (Date.now() - sonBirakma < 400) return;
     var p = svgKoordinat(e);
     if (!p) return;
     var xHesap = (p.x - x0) / sx;
@@ -2362,10 +2373,20 @@ window.SAYFA_INIT[2] = function (kok) {
   // Şık sırasını Fisher-Yates ile karıştır
   var izgara = kok.querySelector(".s2-kart-izgara");
   var kartlar = Array.from(izgara.children);
-  for (var i = kartlar.length - 1; i > 0; i--) {
-    var j = Math.floor(Math.random() * (i + 1));
-    izgara.appendChild(kartlar[j]);
-  }
+  // Takaslı Fisher-Yates (17.10): eski döngü takas yapmadığı için yanlıydı; 3+ öğede yazılı/önceki sıra yinelenmez.
+  (function (dizi) {
+    var yazili = dizi.slice();
+    var onceki = dizi.slice().sort(function (a, b) { return a.compareDocumentPosition(b) & 4 ? -1 : 1; });
+    var ayni = function (s) { return dizi.every(function (o, n) { return o === s[n]; }); };
+    var deneme = 0;
+    do {
+      for (var i = dizi.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var gecici = dizi[i]; dizi[i] = dizi[j]; dizi[j] = gecici;
+      }
+    } while (dizi.length > 2 && (ayni(yazili) || ayni(onceki)) && ++deneme < 20);
+    dizi.forEach(function (o) { izgara.appendChild(o); });
+  })(Array.prototype.slice.call(kartlar));
   var cocuklar = izgara.querySelectorAll(".s2-nitelik-kart");
   cocuklar.forEach(function (k, idx) {
     var kutu = k.querySelector(".kutucuk");
@@ -5508,11 +5529,20 @@ window.SAYFA_INIT[7] = function (kok) {
   var kartlar = Array.prototype.slice.call(kartHavuzu.querySelectorAll(".s7-kart"));
 
   function kartlariKaristir() {
-    for (var i = kartlar.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      kartHavuzu.appendChild(kartlar[j]);
-      kartlar.splice(j, 1);
-    }
+    // Takaslı Fisher-Yates (17.10): eski döngü tekdüzeydi ama yazılı sırayı da verebiliyordu; 3+ öğede yazılı/önceki sıra yinelenmez.
+    (function (dizi) {
+      var yazili = dizi.slice();
+      var onceki = dizi.slice().sort(function (a, b) { return a.compareDocumentPosition(b) & 4 ? -1 : 1; });
+      var ayni = function (s) { return dizi.every(function (o, n) { return o === s[n]; }); };
+      var deneme = 0;
+      do {
+        for (var i = dizi.length - 1; i > 0; i--) {
+          var j = Math.floor(Math.random() * (i + 1));
+          var gecici = dizi[i]; dizi[i] = dizi[j]; dizi[j] = gecici;
+        }
+      } while (dizi.length > 2 && (ayni(yazili) || ayni(onceki)) && ++deneme < 20);
+      dizi.forEach(function (o) { kartHavuzu.appendChild(o); });
+    })(Array.prototype.slice.call(kartlar));
     kartlar = Array.prototype.slice.call(kartHavuzu.querySelectorAll(".s7-kart"));
   }
   kartlariKaristir();
@@ -7384,10 +7414,20 @@ window.SAYFA_INIT[11] = function (kok) {
 
   // Kart Sırasını Karıştır (Fisher-Yates)
   function karistir() {
-    for (var i = kartlar.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      havuz.appendChild(kartlar[j]);
-    }
+    // Takaslı Fisher-Yates (17.10): eski döngü takas yapmadığı için yanlıydı; 3+ öğede yazılı/önceki sıra yinelenmez.
+    (function (dizi) {
+      var yazili = dizi.slice();
+      var onceki = dizi.slice().sort(function (a, b) { return a.compareDocumentPosition(b) & 4 ? -1 : 1; });
+      var ayni = function (s) { return dizi.every(function (o, n) { return o === s[n]; }); };
+      var deneme = 0;
+      do {
+        for (var i = dizi.length - 1; i > 0; i--) {
+          var j = Math.floor(Math.random() * (i + 1));
+          var gecici = dizi[i]; dizi[i] = dizi[j]; dizi[j] = gecici;
+        }
+      } while (dizi.length > 2 && (ayni(yazili) || ayni(onceki)) && ++deneme < 20);
+      dizi.forEach(function (o) { havuz.appendChild(o); });
+    })(Array.prototype.slice.call(kartlar));
   }
   karistir();
 
@@ -10311,7 +10351,7 @@ window.SAYFA_INIT[16] = function (kok) {
 
 </div>
 
-<script src="ortak/a8be47877df32ba3.js"></script>
+<script src="ortak/0db8b07e5af7b286.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>

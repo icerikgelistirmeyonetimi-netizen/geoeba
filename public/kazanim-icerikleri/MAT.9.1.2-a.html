@@ -912,7 +912,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/44603180d754919b.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 03:54
+  montaj: 2026-10-17 22:06
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 22:37
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-18 22:37
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 22:39
@@ -2333,10 +2333,20 @@ window.SAYFA_INIT[2] = function (kok) {
       var kapsayici = kok.querySelector(".s2-kart-kapsayici");
       if (kapsayici) {
         var kartDizisi = Array.prototype.slice.call(kapsayici.children);
-        for (var m = kartDizisi.length - 1; m > 0; m--) {
-          var n = Math.floor(Math.random() * (m + 1));
-          kapsayici.appendChild(kartDizisi[n]);
-        }
+        // Takaslı Fisher-Yates (17.10): eski döngü takas yapmadığı için yanlıydı; 3+ öğede yazılı/önceki sıra yinelenmez.
+        (function (dizi) {
+          var yazili = dizi.slice();
+          var onceki = dizi.slice().sort(function (a, b) { return a.compareDocumentPosition(b) & 4 ? -1 : 1; });
+          var ayni = function (s) { return dizi.every(function (o, n) { return o === s[n]; }); };
+          var deneme = 0;
+          do {
+            for (var m = dizi.length - 1; m > 0; m--) {
+              var n = Math.floor(Math.random() * (m + 1));
+              var gecici = dizi[m]; dizi[m] = dizi[n]; dizi[n] = gecici;
+            }
+          } while (dizi.length > 2 && (ayni(yazili) || ayni(onceki)) && ++deneme < 20);
+          dizi.forEach(function (o) { kapsayici.appendChild(o); });
+        })(Array.prototype.slice.call(kartDizisi));
       }
 
       if (window.SABLON_TOAST) {
@@ -3055,16 +3065,33 @@ window.SAYFA_INIT[3] = function (kok) {
   #sayfa-4 .s4-sahne-zemini {
     background: linear-gradient(180deg, #fbf8f1 0%, #f4eee1 100%);
   }
+  /* Şeridin yeri iki değişkenle (--s4-x, --s4-y: evine göre çeviri) verilir; seçili/kaldırılmış
+     hâl aynı çeviriye 1.1 ölçek ekler. Ölçek şeridin KENDİ merkezinden büyür (fill-box): eskiden
+     SVG öğesinin varsayılan kutusu viewBox olduğundan seçili şerit sahne ortasına göre ~18 birim
+     kayıyordu. */
   #sayfa-4 .s4-surukle-serit {
     cursor: grab;
     touch-action: none;
+    transform: translate(var(--s4-x, 0px), var(--s4-y, 0px));
+    transform-box: fill-box;
+    transform-origin: center;
     transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 250ms ease;
   }
   #sayfa-4 .s4-surukle-serit.s4-secili {
     cursor: grabbing;
-    filter: drop-shadow(0 0 0 3px #ffffff) drop-shadow(0 6px 12px rgba(28, 38, 51, 0.35));
-    transform: scale(1.1);
-    transform-origin: center;
+    filter: drop-shadow(0 6px 12px rgba(28, 38, 51, 0.35));
+    transform: translate(var(--s4-x, 0px), var(--s4-y, 0px)) scale(1.1);
+  }
+  /* Sürükleme köprüsünün imleci izleyen hayalet kopyası (kimliği silinmiş) gizli: şeridin
+     kendisi tutulduğu noktadan sürükleniyor; ikinci, yarı saydam bir şerit kafa karıştırıyordu. */
+  #sayfa-4 .s4-surukle-serit:not([id]) {
+    visibility: hidden !important;
+  }
+  /* Fareyle odaklanınca Chrome SVG öğesine :focus halkası (koyu dikdörtgen) çiziyor; klavye odağı
+     (:focus-visible) şablonun [role="button"] kuralıyla görünür kalır. */
+  #sayfa-4 .s4-surukle-serit:focus:not(:focus-visible),
+  #sayfa-4 #s4-hedef-yuva:focus:not(:focus-visible) {
+    outline: none;
   }
   #sayfa-4 .s4-yerlesti {
     opacity: 0.65;
@@ -3170,6 +3197,112 @@ window.SAYFA_INIT[4] = function (kok) {
   var eksenB = kok.querySelector("#s4-eksen-b");
   var dogruVurgu = kok.querySelector("#s4-dogru-vurgu");
   var birlesimYazi = kok.querySelector("#s4-birlesim-yazi");
+  var svg = seritA.ownerSVGElement;
+
+  // Sürükleme: şeridin KENDİSİ tutulduğu noktadan taşınır (köprünün hayalet kopyası CSS'te gizli).
+  // Şeridin yeri evine göre çeviri (--s4-x, --s4-y); karar imlece değil şeridin yerine bakar.
+  var KALDIR = 1.1;   // .s4-secili ölçeği (CSS'tekiyle aynı)
+  var KENAR = 4;      // şeridin sahne kenarına en çok yaklaşabileceği boşluk (SVG birimi)
+  // Karar noktası: şeridin gövde dikdörtgeninin merkezi (+ çeviri) sayı doğrusu bandının içindeyse
+  // şerit doğrusunun üzerine inmiş sayılır. Band, görünür «dogru-vurgu» çerçevesiyle aynıdır.
+  function govdeMerkezi(el) {
+    var r = el.querySelector("rect");
+    return {
+      x: parseFloat(r.getAttribute("x")) + parseFloat(r.getAttribute("width")) / 2,
+      y: parseFloat(r.getAttribute("y")) + parseFloat(r.getAttribute("height")) / 2
+    };
+  }
+  var SERITLER = {
+    A: { el: seritA, m: govdeMerkezi(seritA) },
+    B: { el: seritB, m: govdeMerkezi(seritB) }
+  };
+  var BAND = {
+    x1: parseFloat(hedefYuva.getAttribute("x")),
+    y1: parseFloat(hedefYuva.getAttribute("y"))
+  };
+  BAND.x2 = BAND.x1 + parseFloat(hedefYuva.getAttribute("width"));
+  BAND.y2 = BAND.y1 + parseFloat(hedefYuva.getAttribute("height"));
+
+  // İmleç − ofset: öğrencinin şeridi götürmek istediği KISILMAMIŞ çeviri. Görünen konum sahne
+  // sınırına kısılır; vurgu ve karar kısılmamış yere bakar. Ofset pointerdown'da saklanır
+  // (köprünün location.initial'i pointerdown değil, eşiği aşan ilk harekettir).
+  var tutmaOfseti = { dx: 0, dy: 0 };
+  var istenen = { x: 0, y: 0 };
+  var kisit = null;
+  // Sürükleme bitince tarayıcının gönderdiği click seçimi geri açmasın (tıkla-seç yedeği).
+  var sonBirakma = 0;
+
+  function birakmaSonrasiTik() {
+    return Date.now() - sonBirakma < 400;
+  }
+
+  function ekranToSvg(clientX, clientY) {
+    var pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    var ctm = svg.getScreenCTM();
+    return ctm ? pt.matrixTransform(ctm.inverse()) : pt;
+  }
+
+  function seritKonumla(el, x, y) {
+    el.style.setProperty("--s4-x", x + "px");
+    el.style.setProperty("--s4-y", y + "px");
+  }
+
+  // Şeridin ŞU ANKİ (geçiş sürüyorsa yarıdaki) çevirisi ve ölçeği.
+  function seritDurumu(el) {
+    var d = { x: 0, y: 0, k: 1 };
+    var t = getComputedStyle(el).transform;
+    if (t && t !== "none") {
+      var m = new DOMMatrix(t);
+      d.x = m.e;
+      d.y = m.f;
+      d.k = Math.sqrt(m.a * m.a + m.b * m.b) || 1;
+    }
+    return d;
+  }
+
+  function tutmaKaydet(tur, e) {
+    var el = SERITLER[tur].el;
+    var pt = ekranToSvg(e.clientX, e.clientY);
+    var d = seritDurumu(el);
+    kisit = null;
+    try {
+      var bb = el.getBBox();
+      var cx = bb.x + bb.width / 2;
+      var cy = bb.y + bb.height / 2;
+      // Tutulan nokta merkezden (imleç − merkez − çeviri) / şimdiki ölçek kadar uzakta; kaldırılınca
+      // ölçek KALDIR olur, aynı nokta imlecin altında kalsın diye ofset KALDIR ölçekli tutuşla kurulur.
+      tutmaOfseti = {
+        dx: cx + KALDIR * (pt.x - cx - d.x) / d.k,
+        dy: cy + KALDIR * (pt.y - cy - d.y) / d.k
+      };
+      var vb = svg.viewBox.baseVal;
+      var yarimW = bb.width * KALDIR / 2;
+      var yarimH = bb.height * KALDIR / 2;
+      kisit = {
+        x1: KENAR - cx + yarimW, x2: vb.width - KENAR - cx - yarimW,
+        y1: KENAR - cy + yarimH, y2: vb.height - KENAR - cy - yarimH
+      };
+    } catch (err) {
+      tutmaOfseti = { dx: pt.x - d.x, dy: pt.y - d.y };
+    }
+    istenen = { x: d.x, y: d.y };
+  }
+
+  function kisitla(v, alt, ust) {
+    return kisit ? Math.max(alt, Math.min(ust, v)) : v;
+  }
+
+  function seritBandda(tur, x, y) {
+    var mx = SERITLER[tur].m.x + x;
+    var my = SERITLER[tur].m.y + y;
+    return mx >= BAND.x1 && mx <= BAND.x2 && my >= BAND.y1 && my <= BAND.y2;
+  }
+
+  function vurguAyarla(acik) {
+    if (dogruVurgu) dogruVurgu.setAttribute("opacity", acik ? "1" : "0");
+  }
 
   // Uzman notu: şerit sayı doğrusu üzerindeki YERİNE iner (kayar), sonra eksende
   // kendi rengindeki bantla (uç nokta dolu/boş) gösterilir.
@@ -3178,7 +3311,7 @@ window.SAYFA_INIT[4] = function (kok) {
       yerlesenA = true;
       seritA.classList.remove("s4-secili");
       seritA.classList.add("s4-yerlesti");
-      seritA.style.transform = "translate(0px, 124px)";
+      seritKonumla(seritA, 0, 124);
       setTimeout(function () { seritA.style.display = "none"; eksenA.setAttribute("display", "inline"); }, 320);
       durumEtiketA.textContent = "Sayı doğrusunda";
       durumEtiketA.classList.add("s4-tamam");
@@ -3186,7 +3319,7 @@ window.SAYFA_INIT[4] = function (kok) {
       yerlesenB = true;
       seritB.classList.remove("s4-secili");
       seritB.classList.add("s4-yerlesti");
-      seritB.style.transform = "translate(0px, 80px)";
+      seritKonumla(seritB, 0, 80);
       setTimeout(function () { seritB.style.display = "none"; eksenB.setAttribute("display", "inline"); }, 320);
       durumEtiketB.textContent = "Sayı doğrusunda";
       durumEtiketB.classList.add("s4-tamam");
@@ -3211,18 +3344,21 @@ window.SAYFA_INIT[4] = function (kok) {
   function basaDon(tur) {
     if (tur === "A" && !yerlesenA) {
       seritA.classList.remove("s4-secili");
-      seritA.style.transform = "translate(0px, 0px)";
+      seritKonumla(seritA, 0, 0);
     } else if (tur === "B" && !yerlesenB) {
       seritB.classList.remove("s4-secili");
-      seritB.style.transform = "translate(0px, 0px)";
+      seritKonumla(seritB, 0, 0);
     }
     seciliSerit = null;
     // Boşa bırakma yanlış cevap değildir: nötr yönlendirme.
     window.SABLON_TOAST("Şeridi sayı doğrusunun üzerine bırak.");
   }
 
+  seritA.addEventListener("pointerdown", function (e) { tutmaKaydet("A", e); });
+  seritB.addEventListener("pointerdown", function (e) { tutmaKaydet("B", e); });
+
   seritA.addEventListener("click", function () {
-    if (yerlesenA) { return; }
+    if (yerlesenA || birakmaSonrasiTik()) { return; }
     if (seciliSerit === "A") {
       seciliSerit = null;
       seritA.classList.remove("s4-secili");
@@ -3234,7 +3370,7 @@ window.SAYFA_INIT[4] = function (kok) {
   });
 
   seritB.addEventListener("click", function () {
-    if (yerlesenB) { return; }
+    if (yerlesenB || birakmaSonrasiTik()) { return; }
     if (seciliSerit === "B") {
       seciliSerit = null;
       seritB.classList.remove("s4-secili");
@@ -3246,6 +3382,7 @@ window.SAYFA_INIT[4] = function (kok) {
   });
 
   hedefYuva.addEventListener("click", function () {
+    if (birakmaSonrasiTik()) { return; }
     if (seciliSerit) {
       yuvayaYerlestir(seciliSerit);
     } else if (!(yerlesenA && yerlesenB)) {
@@ -3253,24 +3390,30 @@ window.SAYFA_INIT[4] = function (kok) {
     }
   });
 
+  // SVG öğelerinde .click() yöntemi yoktur (yalnız HTMLElement'te); klavye yolu tıklamayla AYNI
+  // işleyiciden geçsin diye click olayı gönderilir.
+  function tikla(el) {
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  }
+
   seritA.addEventListener("keydown", function (e) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      seritA.click();
+      tikla(seritA);
     }
   });
 
   seritB.addEventListener("keydown", function (e) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      seritB.click();
+      tikla(seritB);
     }
   });
 
   hedefYuva.addEventListener("keydown", function (e) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      hedefYuva.click();
+      tikla(hedefYuva);
     }
   });
 
@@ -3287,23 +3430,39 @@ window.SAYFA_INIT[4] = function (kok) {
     });
     pdnd.dropTargetForElements({
       element: hedefYuva,
-      getData: function () { return { hedef: "birlesim" }; },
-      onDragEnter: function () { if (dogruVurgu) dogruVurgu.setAttribute("opacity", "1"); },
-      onDragLeave: function () { if (dogruVurgu) dogruVurgu.setAttribute("opacity", "0"); },
-      onDrop: function () { if (dogruVurgu) dogruVurgu.setAttribute("opacity", "0"); }
+      getData: function () { return { hedef: "birlesim" }; }
+      // Vurgu ve karar İMLECE değil ŞERİDİN yerine bakar (izleyicinin onDrag/onDrop'u): şerit uçtan
+      // tutulduysa imleç bandın içindeyken şerit bandın dışında kalabilir.
     });
     pdnd.monitorForElements({
       onDragStart: function (args) {
-        var s = args.source.data.serit;
-        if (s === "A") { seritA.classList.add("s4-secili"); }
-        if (s === "B") { seritB.classList.add("s4-secili"); }
+        var s = SERITLER[args.source.data.serit];
+        if (!s) { return; }
+        s.el.style.transition = "none";   // sürüklerken şerit imleci gecikmesiz izler
+        s.el.classList.add("s4-secili");
+      },
+      onDrag: function (args) {
+        var tur = args.source.data.serit;
+        var s = SERITLER[tur];
+        var inp = args.location && args.location.current && args.location.current.input;
+        if (!s || !inp) { return; }
+        var pt = ekranToSvg(inp.clientX, inp.clientY);
+        istenen = { x: pt.x - tutmaOfseti.dx, y: pt.y - tutmaOfseti.dy };
+        if (kisit) {
+          seritKonumla(s.el, kisitla(istenen.x, kisit.x1, kisit.x2), kisitla(istenen.y, kisit.y1, kisit.y2));
+        } else {
+          seritKonumla(s.el, istenen.x, istenen.y);
+        }
+        vurguAyarla(seritBandda(tur, istenen.x, istenen.y));
       },
       onDrop: function (args) {
         var s = args.source.data.serit;
-        var hedefVardi = args.location.current.dropTargets.some(function (dt) {
-          return dt.element === hedefYuva;
-        });
-        if (hedefVardi) {
+        if (!SERITLER[s]) { return; }
+        sonBirakma = Date.now();
+        vurguAyarla(false);
+        SERITLER[s].el.style.transition = "";   // bırakınca şerit yerine KAYARAK iner / evine döner
+        // Karar kısılmamış çeviriye bakar (son onDrag'in yeri: pointercancel'da girdi güvenilmez).
+        if (seritBandda(s, istenen.x, istenen.y)) {
           yuvayaYerlestir(s);
         } else {
           basaDon(s);
@@ -3317,13 +3476,18 @@ window.SAYFA_INIT[4] = function (kok) {
     yerlesenB = false;
     seciliSerit = null;
 
-    seritA.style.display = "";
-    seritA.style.transform = "";
-    seritA.classList.remove("s4-secili", "s4-yerlesti");
-
-    seritB.style.display = "";
-    seritB.style.transform = "";
-    seritB.classList.remove("s4-secili", "s4-yerlesti");
+    [seritA, seritB].forEach(function (el) {
+      el.style.display = "";
+      el.style.transition = "";
+      el.style.removeProperty("--s4-x");
+      el.style.removeProperty("--s4-y");
+      el.classList.remove("s4-secili", "s4-yerlesti");
+    });
+    tutmaOfseti = { dx: 0, dy: 0 };
+    istenen = { x: 0, y: 0 };
+    kisit = null;
+    sonBirakma = 0;
+    vurguAyarla(false);
 
     sonucBant.classList.add("s4-gizli");
     sonucPanel.classList.add("s4-gizli");
@@ -9717,7 +9881,7 @@ window.SAYFA_INIT[15] = function (kok) {
 
 </div>
 
-<script src="ortak/63295b316bfeef23.js"></script>
+<script src="ortak/3bfde4be72e8e148.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>

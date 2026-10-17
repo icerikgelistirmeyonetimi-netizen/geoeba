@@ -909,7 +909,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/44603180d754919b.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 03:54
+  montaj: 2026-10-17 22:06
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 22:49
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 22:53
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-10-16 20:25
@@ -1526,6 +1526,13 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
   #sayfa-1 .s1-sablon-grup:active {
     cursor: grabbing;
   }
+  /* Köprü sürüklerken imleci izleyen bir kopya da çizer (id'siz); aslı zaten taşındığı için gizlenir */
+  #sayfa-1 .s1-sablon-grup:not([id]) {
+    visibility: hidden !important;
+  }
+  #sayfa-1 .s1-sablon-grup:focus:not(:focus-visible) {
+    outline: none;
+  }
   #sayfa-1 .s1-sablon-grup:hover .s1-sablon-isima {
     stroke-opacity: 0.8;
     stroke-width: 12;
@@ -1580,7 +1587,25 @@ window.SAYFA_INIT[1] = function (kok) {
   var isLocked = false;
   var secili = false;
 
+  // Şablon gövdesi (460–620 × 120–400) çevirmeyle sahnenin (760 × 560) dışına çıkıp kaybolmasın
+  var MIN_X = -440, MAX_X = 120, MIN_Y = -80, MAX_Y = 120;
+  function kisitla(v, alt, ust) {
+    return Math.max(alt, Math.min(ust, v));
+  }
+
+  function ekranToSvg(cx, cy) {
+    var m = svgEl.getScreenCTM();
+    if (!m) return { x: cx, y: cy };
+    var p = svgEl.createSVGPoint();
+    p.x = cx;
+    p.y = cy;
+    var q = p.matrixTransform(m.inverse());
+    return { x: q.x, y: q.y };
+  }
+
   function setKonum(x, y) {
+    x = kisitla(x, MIN_X, MAX_X);
+    y = kisitla(y, MIN_Y, MAX_Y);
     currX = x;
     currY = y;
     sablonEl.style.transform = "translate(" + x + "px, " + y + "px)";
@@ -1590,8 +1615,16 @@ window.SAYFA_INIT[1] = function (kok) {
 
   setKonum(startX, startY);
 
-  var dragStartX = 0;
-  var dragStartY = 0;
+  // Tutma ofseti: imleç ile şablon konumu (çeviri) arasındaki fark, pointerdown anında saklanır
+  // (köprünün "initial" girdisi eşiği aşan ilk harekettir, basış anı değil).
+  var tutmaOfseti = { dx: 0, dy: 0 };
+  var sonBirakma = 0;
+
+  sablonEl.addEventListener("pointerdown", function (e) {
+    if (isLocked) return;
+    var pt = ekranToSvg(e.clientX, e.clientY);
+    tutmaOfseti = { dx: pt.x - currX, dy: pt.y - currY };
+  });
 
   if (window.pdnd && pdnd.draggable) {
     pdnd.draggable({
@@ -1599,24 +1632,21 @@ window.SAYFA_INIT[1] = function (kok) {
       canDrag: function () { return !isLocked; },
       getInitialData: function () { return { type: "sablon" }; },
       onDragStart: function () {
-        dragStartX = currX;
-        dragStartY = currY;
         sablonEl.classList.add("s1-odak");
       },
       onDrag: function (args) {
-        if (args.location && args.location.initial && args.location.current) {
-          var dx = args.location.current.input.clientX - args.location.initial.input.clientX;
-          var dy = args.location.current.input.clientY - args.location.initial.input.clientY;
-          var ctm = svgEl.getScreenCTM();
-          var olcek = ctm && ctm.a ? ctm.a : 1;
-          var svgDx = dx / olcek;
-          var svgDy = dy / olcek;
-          var targetX = Math.round((dragStartX + svgDx) / 40) * 40;
-          var targetY = Math.round((dragStartY + svgDy) / 40) * 40;
-          setKonum(targetX, targetY);
-        }
+        var inp = args.location && args.location.current && args.location.current.input;
+        if (!inp) return;
+        var pt = ekranToSvg(inp.clientX, inp.clientY);
+        // Şablonun istenen konumu = imleç − tutma ofseti, 40 birimlik ızgaraya oturur
+        setKonum(
+          Math.round((pt.x - tutmaOfseti.dx) / 40) * 40,
+          Math.round((pt.y - tutmaOfseti.dy) / 40) * 40
+        );
       },
       onDrop: function () {
+        secili = false;
+        sonBirakma = Date.now();
         sablonEl.classList.remove("s1-odak");
       }
     });
@@ -1625,6 +1655,8 @@ window.SAYFA_INIT[1] = function (kok) {
   sablonEl.addEventListener("click", function (e) {
     if (isLocked) return;
     e.stopPropagation();
+    // Sürüklemenin ardından gelen click tıkla-seç yedeğini geri açmasın
+    if (Date.now() - sonBirakma < 400) return;
     secili = !secili;
     if (secili) {
       sablonEl.classList.add("s1-odak");
@@ -1660,6 +1692,7 @@ window.SAYFA_INIT[1] = function (kok) {
 
   svgEl.addEventListener("click", function (e) {
     if (isLocked || !secili) return;
+    if (Date.now() - sonBirakma < 400) return;
     var pt = svgEl.createSVGPoint();
     pt.x = e.clientX;
     pt.y = e.clientY;
@@ -1709,6 +1742,8 @@ window.SAYFA_INIT[1] = function (kok) {
   yenidenBtn.addEventListener("click", function () {
     isLocked = false;
     secili = false;
+    tutmaOfseti = { dx: 0, dy: 0 };
+    sonBirakma = 0;
     sablonEl.classList.remove("s1-kilitli", "s1-odak");
 
     sablonGovde.setAttribute("fill", "#1eb5c7");
@@ -7408,7 +7443,7 @@ window.SAYFA_INIT[14] = function (kok) {
 
 </div>
 
-<script src="ortak/60ce65ebfae62627.js"></script>
+<script src="ortak/7a752723625332cf.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>

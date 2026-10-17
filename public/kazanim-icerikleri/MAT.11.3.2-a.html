@@ -841,7 +841,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 03:54
+  montaj: 2026-10-17 22:07
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 14:20
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 14:21
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 14:23
@@ -2522,6 +2522,14 @@ window.SAYFA_INIT[2] = function (kok) {
   #sayfa-3 .s3-tutamac-grup.surukleniyor {
     cursor: grabbing;
   }
+  /* Köprü sürüklerken imleci izleyen bir kopya da çizer; tutamacın aslı zaten
+     taşındığı için kopya (kimliği silinmiş) gizlenir. */
+  #sayfa-3 .s3-tutamac-grup:not([id]) {
+    visibility: hidden !important;
+  }
+  #sayfa-3 .s3-tutamac-grup:focus:not(:focus-visible) {
+    outline: none;
+  }
   #sayfa-3 .s3-tutamac-ic {
     transition: transform 0.2s ease;
     transform-origin: 0 0;
@@ -2577,7 +2585,13 @@ window.SAYFA_INIT[3] = function (kok) {
 
   var Y_BASLANGIC = 360;
   var Y_HEDEF = 490;
+  var HEDEF_UST_Y = 460;              // "Sıfır Tabanı" kutusunun üst kenarı (s3-hedef-grup)
   var aktifT = 0;
+  var istenenY = Y_BASLANGIC;         // tutamacın KISILMAMIŞ y'si (imleç - tutma ofseti)
+  var tutmaEkranY = Y_BASLANGIC;      // pointerdown'daki imleç y'si (SVG birimi)
+  var tutmaOfsetiY = 0;               // tutulan nokta ile tutamaç merkezi arasındaki y farkı
+  var sonBirakma = -1000;             // sürükleme sonrası click'i yutmak için
+  var animNo = 0;
   var kilitli = false;
   var secili = false;
   var temizleyiciler = [];
@@ -2662,10 +2676,23 @@ window.SAYFA_INIT[3] = function (kok) {
     }
   }
 
+  function tutamacY() {
+    return Y_BASLANGIC + aktifT * (Y_HEDEF - Y_BASLANGIC);
+  }
+
+  function ekranToSvgY(cx, cy) {
+    var pt = svgEl.createSVGPoint();
+    pt.x = cx;
+    pt.y = cy;
+    return pt.matrixTransform(svgEl.getScreenCTM().inverse()).y;
+  }
+
   function yayAnimasyonu(baslangicT, hedefT) {
     var baslangicZamani = performance.now();
     var sure = 340;
+    var no = ++animNo;
     function adim(suan) {
+      if (no !== animNo) return;      // yeni bir sürükleme animasyonu iptal etti
       var gecen = suan - baslangicZamani;
       var ilerleme = Math.min(1, gecen / sure);
       var yumusak = 1 - Math.pow(1 - ilerleme, 3);
@@ -2712,29 +2739,27 @@ window.SAYFA_INIT[3] = function (kok) {
       getInitialData: function () { return { tip: "tutamac" }; },
       onDragStart: function () {
         tutamacEl.classList.add("surukleniyor");
+        animNo++;                       // süren geri-sarma animasyonu sürüklemeyle çakışmasın
+        istenenY = tutamacY();
+        tutmaOfsetiY = tutmaEkranY - istenenY;
       },
       onDrag: function (args) {
         if (kilitli) return;
-        var clientY = (args.location && args.location.current && args.location.current.input)
-                      ? args.location.current.input.clientY : 0;
-        var pt = svgEl.createSVGPoint();
-        pt.x = 0;
-        pt.y = clientY;
-        var svgP = pt.matrixTransform(svgEl.getScreenCTM().inverse());
-        var yeniT = (svgP.y - Y_BASLANGIC) / (Y_HEDEF - Y_BASLANGIC);
-        guncelle(yeniT);
+        var inp = (args.location && args.location.current && args.location.current.input) || null;
+        if (!inp) return;
+        // Karar ve konum imleçten değil, tutma ofseti düşülmüş KISILMAMIŞ y'den gelir;
+        // raya kısıt yalnız görünen konuma (guncelle) uygulanır.
+        istenenY = ekranToSvgY(inp.clientX, inp.clientY) - tutmaOfsetiY;
+        guncelle((istenenY - Y_BASLANGIC) / (Y_HEDEF - Y_BASLANGIC));
+        hedefCerceveEl.classList.toggle("uzerinde", istenenY >= HEDEF_UST_Y);
       },
-      onDrop: function (args) {
+      onDrop: function () {
         tutamacEl.classList.remove("surukleniyor");
-        var dropHedefleri = (args.location && args.location.current && args.location.current.dropTargets) || [];
-        var isTarget = false;
-        for (var i = 0; i < dropHedefleri.length; i++) {
-          if (dropHedefleri[i].element === hedefAlaniEl) {
-            isTarget = true;
-            break;
-          }
-        }
-        if (isTarget || aktifT >= 0.85) {
+        hedefCerceveEl.classList.remove("uzerinde");
+        sonBirakma = performance.now();
+        // Tutamaç merkezi "Sıfır Tabanı" kutusuna indiyse (ray sonunu aşan çekiş dahil:
+        // tutamaç rayın ucunda, kutunun ortasında durur) tamamlanır; imleç değil tutamaç sayılır.
+        if (istenenY >= HEDEF_UST_Y) {
           tamamla();
         } else {
           yayAnimasyonu(aktifT, 0);
@@ -2742,29 +2767,19 @@ window.SAYFA_INIT[3] = function (kok) {
       }
     });
     temizleyiciler.push(dragTemizle);
-
-    var dropTemizle = pdnd.dropTargetForElements({
-      element: hedefAlaniEl,
-      canDrop: function (args) {
-        return !kilitli && args.source && args.source.data && args.source.data.tip === "tutamac";
-      },
-      onDragEnter: function () {
-        hedefCerceveEl.classList.add("uzerinde");
-      },
-      onDragLeave: function () {
-        hedefCerceveEl.classList.remove("uzerinde");
-      },
-      onDrop: function () {
-        hedefCerceveEl.classList.remove("uzerinde");
-        tamamla();
-      }
-    });
-    temizleyiciler.push(dropTemizle);
   }
+
+  // Tutma noktası pointerdown'da saklanır (köprünün ilk girdisi pointerdown değil,
+  // eşiği aşan ilk harekettir); ofset onDragStart'ta tutamacın o anki yerinden çıkar.
+  tutamacEl.addEventListener("pointerdown", function (e) {
+    if (kilitli || e.button !== 0) return;
+    tutmaEkranY = ekranToSvgY(e.clientX, e.clientY);
+  });
 
   // Tıkla-Seç Yedeği (Akıllı tahta ve klavye erişilebilirliği)
   tutamacEl.addEventListener("click", function () {
     if (kilitli) return;
+    if (performance.now() - sonBirakma < 400) return;   // sürüklemenin ardından gelen click
     secili = !secili;
     tutamacEl.classList.toggle("odak", secili);
   });
@@ -5186,7 +5201,7 @@ window.SAYFA_INIT[8] = function (kok) {
 
 </div>
 
-<script src="ortak/9f91bdf0caca8a0d.js"></script>
+<script src="ortak/c4843973138cf39f.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>

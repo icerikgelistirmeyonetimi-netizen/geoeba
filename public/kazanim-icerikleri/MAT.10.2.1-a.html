@@ -1074,7 +1074,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 03:54
+  montaj: 2026-10-17 22:07
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:44
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:43
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 04:45
@@ -4452,6 +4452,16 @@ window.SAYFA_INIT[4] = function (kok) {
   stroke: var(--vurgu);
   filter: drop-shadow(0 0 8px var(--vurgu-acik));
 }
+/* Köprünün imleci izleyen kopyası kimliksiz ve aynı sınıflı; ok aslı da taşındığı için
+   sürüklerken iki ok görünüyordu. Asıl (kimlikli) kalır, kopya gizlenir. */
+#sayfa-5 .s5-suruklenebilir-ok:not([id]) {
+  visibility: hidden !important;
+}
+/* Fareyle odaklanınca Chrome SVG öğesine koyu :focus halkası çiziyor; klavye odağı kalır. */
+#sayfa-5 .s5-suruklenebilir-ok:focus:not(:focus-visible),
+#sayfa-5 #s5-kilavuz-nokta:focus:not(:focus-visible) {
+  outline: none;
+}
 #sayfa-5 .s5-bilgi-kart {
   background: var(--panel);
   border: 1px solid var(--cizgi);
@@ -4615,6 +4625,10 @@ window.SAYFA_INIT[5] = function (kok) {
   var seciliOk = false;
   var surukleniyorNokta = false;
   var surukleniyorOk = false;
+  var okX = 0;                          // okun görünen merkezi (svg birimi)
+  var okY = 0;
+  var tutmaOfseti = { dx: 0, dy: 0 };   // tutulan nokta − ok merkezi (svg birimi)
+  var sonBirakma = 0;                   // sürükleme sonrası click'i yutmak için
 
   var svgEl = kok.querySelector(".s5-svg-tuval");
   var noktaEl = kok.querySelector("#s5-kilavuz-nokta");
@@ -4645,6 +4659,8 @@ window.SAYFA_INIT[5] = function (kok) {
 
     noktaEl.setAttribute("transform", "translate(" + sX + ", " + sY + ")");
     if (!surukleniyorOk) {
+      okX = sX;
+      okY = sY - 48;
       okEl.setAttribute("transform", "translate(" + sX + ", " + (sY - 48) + ")");
       okEl.style.setProperty("--tx", sX + "px");
       okEl.style.setProperty("--ty", (sY - 48) + "px");
@@ -4792,12 +4808,70 @@ window.SAYFA_INIT[5] = function (kok) {
   var okBaslangicY = 0;
   var suruklendiMi = false;
 
+  function ekranToSvg(cx, cy) {
+    var ctm = svgEl.getScreenCTM();
+    if (!ctm) return null;
+    var p = svgEl.createSVGPoint();
+    p.x = cx;
+    p.y = cy;
+    return p.matrixTransform(ctm.inverse());
+  }
+
+  function svgToEkran(x, y) {
+    var ctm = svgEl.getScreenCTM();
+    if (!ctm) return null;
+    var p = svgEl.createSVGPoint();
+    p.x = x;
+    p.y = y;
+    return p.matrixTransform(ctm);
+  }
+
+  // Okun merkezi = imleç − tutma ofseti. Ok sahne dışına (sağdaki kutulara) taşabildiği için
+  // kısıt yok; hem görünen konum hem bırakma kararı buradan gelir.
+  function okMerkezi(e) {
+    var p = ekranToSvg(e.clientX, e.clientY);
+    if (!p) return null;
+    return { x: p.x - tutmaOfseti.dx, y: p.y - tutmaOfseti.dy };
+  }
+
+  function okuTasi(e) {
+    var m = okMerkezi(e);
+    if (!m) return;
+    okX = m.x;
+    okY = m.y;
+    okEl.setAttribute("transform", "translate(" + m.x + ", " + m.y + ")");
+  }
+
+  // Karar imlecin değil OKUN altındaki hedefe bakar: yön okunu uçtan tutup bırakınca imleç bir
+  // aralık kutusunda, ok başka yerde kalabilir. Ok merkezi hangi kutu ya da sahne yuvasındaysa o.
+  function hedefBul(e) {
+    var m = okMerkezi(e);
+    var s = m ? svgToEkran(m.x, m.y) : null;
+    if (!s) return null;
+    var katmanlar = document.elementsFromPoint(s.x, s.y);
+    for (var i = 0; i < katmanlar.length; i++) {
+      var h = katmanlar[i].closest(".s5-hedef-kutu, .s5-sahne-hedef");
+      if (h && kok.contains(h)) return h;
+    }
+    return null;
+  }
+
+  function kutulariTemizle(vurgulu) {
+    kok.querySelectorAll(".s5-hedef-kutu").forEach(function (kutu) {
+      kutu.classList.toggle("uzerinde", kutu === vurgulu);
+    });
+  }
+
   okEl.addEventListener("pointerdown", function (e) {
     e.preventDefault();
     surukleniyorOk = true;
     suruklendiMi = false;
     okBaslangicX = e.clientX;
     okBaslangicY = e.clientY;
+    // Tutma ofseti: tıklanan nokta okun merkezinden ne kadar uzakta (pdnd'nin eşikli
+    // başlangıç girdisi değil, gerçek pointerdown)
+    var p = ekranToSvg(e.clientX, e.clientY);
+    tutmaOfseti = p ? { dx: p.x - okX, dy: p.y - okY } : { dx: 0, dy: 0 };
     okEl.setPointerCapture(e.pointerId);
   });
 
@@ -4808,21 +4882,9 @@ window.SAYFA_INIT[5] = function (kok) {
     if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
       suruklendiMi = true;
     }
-    var ctm = svgEl.getScreenCTM();
-    if (ctm) {
-      var svgP = svgEl.createSVGPoint();
-      svgP.x = e.clientX;
-      svgP.y = e.clientY;
-      var p = svgP.matrixTransform(ctm.inverse());
-      okEl.setAttribute("transform", "translate(" + p.x + ", " + p.y + ")");
-    }
-
-    var eleman = document.elementFromPoint(e.clientX, e.clientY);
-    var hedef = eleman ? eleman.closest(".s5-hedef-kutu") : null;
-    kok.querySelectorAll(".s5-hedef-kutu").forEach(function (kutu) {
-      if (kutu === hedef) kutu.classList.add("uzerinde");
-      else kutu.classList.remove("uzerinde");
-    });
+    okuTasi(e);
+    var hedef = hedefBul(e);
+    kutulariTemizle(hedef && hedef.classList.contains("s5-hedef-kutu") ? hedef : null);
   });
 
   okEl.addEventListener("pointerup", function (e) {
@@ -4830,12 +4892,10 @@ window.SAYFA_INIT[5] = function (kok) {
     surukleniyorOk = false;
     try { okEl.releasePointerCapture(e.pointerId); } catch (err) {}
 
-    var eleman = document.elementFromPoint(e.clientX, e.clientY);
-    var hedef = eleman ? eleman.closest(".s5-hedef-kutu") : null;
-    kok.querySelectorAll(".s5-hedef-kutu").forEach(function (kutu) {
-      kutu.classList.remove("uzerinde");
-    });
+    var hedef = hedefBul(e);
+    kutulariTemizle(null);
 
+    if (suruklendiMi) sonBirakma = Date.now();
     if (suruklendiMi && hedef) {
       degerlendir(hedef.dataset.tur);
     } else if (!suruklendiMi) {
@@ -4864,6 +4924,7 @@ window.SAYFA_INIT[5] = function (kok) {
   // Hedef kutular tıklama ve klavye desteği
   kok.querySelectorAll(".s5-hedef-kutu").forEach(function (kutu) {
     kutu.addEventListener("click", function () {
+      if (Date.now() - sonBirakma < 400) return;   // sürüklemenin ardından gelen click
       degerlendir(kutu.dataset.tur);
     });
     kutu.addEventListener("keydown", function (e) {
@@ -4882,26 +4943,17 @@ window.SAYFA_INIT[5] = function (kok) {
         canDrag: function () { return true; },
         getInitialData: function () {
           return { tur: ARALIKLAR[aralikBul(aktifX)].tur };
+        },
+        // Sayfanın kendi pointermove'u ile aynı konum mantığı (ofsetli); iki yazış aynı değeri verir
+        onDrag: function (a) {
+          if (surukleniyorOk) okuTasi(a.location.current.input);
         }
       });
-      kok.querySelectorAll(".s5-hedef-kutu").forEach(function (kutu) {
-        pdnd.dropTargetForElements({
-          element: kutu,
-          onDragEnter: function () { kutu.classList.add("uzerinde"); },
-          onDragLeave: function () { kutu.classList.remove("uzerinde"); },
-          onDrop: function () {
-            kutu.classList.remove("uzerinde");
-            degerlendir(kutu.dataset.tur);
-          }
-        });
-      });
-      kok.querySelectorAll(".s5-sahne-hedef").forEach(function (hedef) {
-        pdnd.dropTargetForElements({
-          element: hedef,
-          onDrop: function () {
-            degerlendir(hedef.dataset.tur);
-          }
-        });
+      // Bırakma kararı tek yerde, okEl'in pointerup'ında verilir (okun merkezine göre).
+      // Köprünün hedef olayları imleç altındaki hedefi bildirir; burada karar verselerdi
+      // hem ikinci bir dönüt çıkar hem de imleç hedefteyken ok uzaktaysa «doğru» sayılırdı.
+      kok.querySelectorAll(".s5-hedef-kutu, .s5-sahne-hedef").forEach(function (hedef) {
+        pdnd.dropTargetForElements({ element: hedef });
       });
     } catch (err) {}
   }
@@ -4913,6 +4965,8 @@ window.SAYFA_INIT[5] = function (kok) {
       tamamlananlar = [false, false, false, false];
       aktifX = -4;
       seciliOk = false;
+      tutmaOfseti = { dx: 0, dy: 0 };
+      sonBirakma = 0;
       okEl.classList.remove("secili");
 
       for (var i = 0; i < 4; i++) {
@@ -7508,10 +7562,20 @@ window.SAYFA_INIT[10] = function (kok) {
 
   function karistir() {
     var ogeler = Array.prototype.slice.call(izgaraEl.children);
-    for (var i = ogeler.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      izgaraEl.appendChild(ogeler[j]);
-    }
+    // Takaslı Fisher-Yates (17.10): eski döngü takas yapmadığı için yanlıydı; 3+ öğede yazılı/önceki sıra yinelenmez.
+    (function (dizi) {
+      var yazili = dizi.slice();
+      var onceki = dizi.slice().sort(function (a, b) { return a.compareDocumentPosition(b) & 4 ? -1 : 1; });
+      var ayni = function (s) { return dizi.every(function (o, n) { return o === s[n]; }); };
+      var deneme = 0;
+      do {
+        for (var i = dizi.length - 1; i > 0; i--) {
+          var j = Math.floor(Math.random() * (i + 1));
+          var gecici = dizi[i]; dizi[i] = dizi[j]; dizi[j] = gecici;
+        }
+      } while (dizi.length > 2 && (ayni(yazili) || ayni(onceki)) && ++deneme < 20);
+      dizi.forEach(function (o) { izgaraEl.appendChild(o); });
+    })(Array.prototype.slice.call(ogeler));
   }
 
   function vurgulariAyarla(hedef, goster) {
@@ -8865,7 +8929,7 @@ window.SAYFA_INIT[12] = function (kok) {
 
 </div>
 
-<script src="ortak/01b848bfdfd26391.js"></script>
+<script src="ortak/8a827639773020e0.js"></script>
 
 <script src="ortak/4e7c647fbd0dfb0c.js"></script>
 <script>

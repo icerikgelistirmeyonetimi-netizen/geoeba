@@ -1,7 +1,7 @@
 
 /* ============ SABİT MEKANİK: yalnız ileri/geri, kilit YOK ============ */
 (function () {
-  const SAYFA_SAYISI = 14;
+  const SAYFA_SAYISI = 19;
   // Yerleşim ayarı montajda yazılır (parcalar/<KOD>/sablon_ayar.json).
   // OTO_GECIS: etkinlik tamamlanınca sonraki sayfaya kendiliğinden geçilir —
   // footer kapalıyken ZORUNLUDUR (başka ileri yolu yok).
@@ -1124,12 +1124,90 @@
     addEventListener("sablon:goruntu-degisti", () => {
       for (let i = kayitlar.length - 1; i >= 0; i--) {
         const k = kayitlar[i];
-        if (!k.r.domElement || !k.r.domElement.isConnected) { kayitlar.splice(i, 1); continue; }
+        if (!k.r.domElement || !k.r.domElement.isConnected) { kutuBirak(k); kayitlar.splice(i, 1); continue; }
         oraniUygula(k);
         // Kamera en-boy oranı DEĞİŞMEZ (mantıksal boyut sabit), bu yüzden
         // updateProjectionMatrix gerekmez; yalnız tampon büyür.
       }
     });
+
+    /* ---- TUVAL-KUTU İZLEYİCİSİ (2026-10-17, kara bant taraması) ----------
+       Şablon CSS'i .sahne-kap içindeki tuvali ebeveyninin %100'üne gerer; kutu
+       sonradan değişirse çizim tamponunu (setSize) ve kamera oranını uyarlamak
+       sayfaya kalıyordu. ÖLÇÜM (yayımlı 664 3B sayfa, kap 80 px kısaltıldı):
+       242'si ResizeObserver'la, 405'i yalnız window 'resize' ile uyuyor, 15'i
+       HİÇ uymuyor (resize'ı yalnız işaretçi dikdörtgeni için dinliyor) → görüntü
+       gerilir. Bugünkü sabit 1280×720 yerleşimde tetikleyen yok; bu ileriye
+       dönük sigorta — 15 modül tek tek düzenlenmedi.
+       Renderer AKTİF sayfada ilk kez çizince tuvalin ebeveyni izlenir; yalnız
+       tuval .sahne-kap içindeyse (paneldeki sabit küçük tuvallere dokunulmaz).
+       Kap GERÇEKTEN değişince (son görülen boyuttan farklı, 0 değil — gizli
+       sayfa 0 ölçer) bir sonraki karede:
+       (a) TEK window 'resize' gönderilir: sayfanın boyutlandir()'ı ve işaretçi
+           dikdörtgeni önbellekleri (rectTazele/rectGuncelle) tazelenir;
+       (b) renderer boyutu bundan sonra hâlâ değişimden önceki gibiyse (sayfa
+           uyarlamadı) setSize tuvalin CSS boyutuna çekilir; o renderer'ın son
+           ekran kamerası perspektifse aspect + updateProjectionMatrix.
+           Ortografik kameraya dokunulmaz (çerçeve sayfanın kararı).
+       BİLİNEN SINIR: EffectComposer (bloom) merkezden boyutlanmaz — composer
+       sayfanın kapanışında durur; yalnız MAT.6.3.1 s1 etkilenir (geçiş
+       tamponları eski boyutta kalır). Kopan tuvalin gözcüsü bırakılır. */
+    const kutuBekleyen = new Set();
+    let kutuKareIstendi = false;
+    const kutuV = new THREE.Vector2();
+
+    function kutuBirak(kayit) {
+      if (kayit.kutuIz) { kayit.kutuIz.gozcu.disconnect(); kayit.kutuIz = null; }
+      kutuBekleyen.delete(kayit);
+    }
+
+    function kutuIzle(kayit) {
+      const c = kayit.r.domElement, kap = c && c.parentElement;
+      if (!kap || !c.isConnected) return;            // DOM'a henüz eklenmedi → sonraki çizimde yine dene
+      kayit.kutuDenendi = true;
+      if (typeof ResizeObserver === "undefined" || !c.closest(".sahne-kap")) return;
+      kayit.r.getSize(kutuV);
+      // rw/rh: değişimden ÖNCEKİ renderer boyutu — (b) sayfa uyarladı mı diye buna bakar
+      const iz = {kap: kap, w: kap.clientWidth, h: kap.clientHeight, rw: kutuV.x, rh: kutuV.y, t0: 0, sayac: 0};
+      iz.gozcu = new ResizeObserver(() => {
+        if (!c.isConnected || c.parentElement !== kap) { kutuBirak(kayit); kayit.kutuDenendi = false; return; }
+        const w = kap.clientWidth, h = kap.clientHeight;
+        if (!w || !h || (w === iz.w && h === iz.h)) return;
+        iz.w = w; iz.h = h;
+        kutuBekleyen.add(kayit);
+        if (!kutuKareIstendi) { kutuKareIstendi = true; requestAnimationFrame(kutuKaresi); }
+      });
+      iz.gozcu.observe(kap);
+      kayit.kutuIz = iz;
+    }
+
+    function kutuKaresi() {
+      kutuKareIstendi = false;
+      const liste = Array.from(kutuBekleyen);
+      if (!liste.length) return;
+      // Bekleyenler olay SÜRESİNCE listede kalır: sayfanın resize'daki setSize'ı «önceki boyut»u ezmesin.
+      window.dispatchEvent(new Event("resize"));                          // (a)
+      for (const kayit of liste) {
+        kutuBekleyen.delete(kayit);
+        const iz = kayit.kutuIz, c = kayit.r.domElement;
+        if (!iz) continue;
+        if (!c.isConnected) { kutuBirak(kayit); continue; }
+        kayit.r.getSize(kutuV);
+        const uyarladi = Math.abs(kutuV.x - iz.rw) >= 1 || Math.abs(kutuV.y - iz.rh) >= 1;
+        const w = c.clientWidth, h = c.clientHeight;
+        if (!uyarladi && w && h && (Math.abs(kutuV.x - w) >= 1 || Math.abs(kutuV.y - h) >= 1)) {   // (b)
+          // Sigorta: kap tuvalin boyutundan besleniyorsa (döngü) 2 sn'de 10 düzeltmeden sonra bırak.
+          const simdi = performance.now();
+          if (simdi - iz.t0 > 2000) { iz.t0 = simdi; iz.sayac = 0; }
+          if (++iz.sayac > 10) { kutuBirak(kayit); continue; }
+          kayit.r.setSize(w, h);
+          const kam = kayit.ekranKamera || kayit.kamera;
+          if (kam && kam.isPerspectiveCamera) { kam.aspect = w / h; kam.updateProjectionMatrix(); }
+          kayit.r.getSize(kutuV);
+        }
+        iz.rw = kutuV.x; iz.rh = kutuV.y;
+      }
+    }
 
     function KopruluRenderer(arg) {
       const opt = Object.assign({ antialias: true, alpha: true, powerPreference: "high-performance" }, arg || {});
@@ -1155,6 +1233,12 @@
       r.setSize = function (w, h, stilGuncelle) {
         if (kayit.ickullanim) return asilSetSize(w, h, stilGuncelle);
         kayit.w = w; kayit.h = h;                 // MANTIKSAL boyut saklanır
+        // Kap durgunken sayfanın kendi setSize'ı izleyicinin «önceki boyut»unu tazeler;
+        // kap değişirken (ölçü farklı ya da kare bekliyor) dokunulmaz — uyarlama orada okunur.
+        const iz = kayit.kutuIz;
+        if (iz && !kutuBekleyen.has(kayit) && iz.kap.clientWidth === iz.w && iz.kap.clientHeight === iz.h) {
+          iz.rw = w; iz.rh = h;
+        }
         asilSetSize(w, h, stilGuncelle);
         kayit.sonOran = 0;                        // boyut değişti → oran tazelensin
         oraniUygula(kayit);
@@ -1217,6 +1301,9 @@
         // «sahne» alanında kalır; okuyucular ekranSahne || sahne kullanır.
         const ekrana = !r.getRenderTarget || r.getRenderTarget() === null;
         if (ekrana) { ky.ekranSahne = sahne; ky.ekranKamera = kamera; }
+        // Tuval-kutu izleyicisi kamerayı köprünün KENDİ kaydından okur (parça SAHNE3B'yi ezebilir, aşağıda).
+        kayit.kamera = kamera;
+        if (ekrana) kayit.ekranKamera = kamera;
         if (!kayit.sayfaEl || kayit.sayfaEl.classList.contains("aktif")) {
           if (ekrana || !k.sonSahne) {
             k.sonKamera = kamera;
@@ -1238,6 +1325,7 @@
         // gitmez. Tek sayfalık içerikte .sayfa hep aktiftir → etkisiz.
         // (sayfaEl yukarıda, kayıt bloğunda çözülür.)
         if (kayit.sayfaEl && !kayit.sayfaEl.classList.contains("aktif")) return;
+        if (!kayit.kutuDenendi) kutuIzle(kayit);   // tuval-kutu izleyicisi (yukarıda)
         // 3B yuva vuruş alanları HER KAREDE izdüşümden tazelenir (kamera ya da
         // orbit değişince kayar). Kanca yalnız egitsel3b.js gömülüyse vardır;
         // yoksa bu satır sessiz no-op'tur — köprü içerik yüzünden çökmez.
