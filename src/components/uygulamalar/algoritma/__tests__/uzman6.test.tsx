@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { UNITELER } from '../mufredat';
 import { calistir } from '../yorumlayici';
 import { AkisSemasi } from '../AkisSemasi';
-import { SozdeKodGorunumu } from '../SozdeKodGorunumu';
+import { BlokDuzenleyici } from '../BlokDuzenleyici';
 import type { Program } from '../program';
 
 describe('Uzman 6. tur: görünür hata ve algoritma gösterimleri', () => {
@@ -24,7 +24,7 @@ describe('Uzman 6. tur: görünür hata ve algoritma gösterimleri', () => {
   it('bütün 7–8. sınıf görevlerinin sözde kodu ve akış şeması çizilir; şema yazısı dar panelde küçültülmez', () => {
     for(const u of UNITELER.filter(u=>u.sinif===7||u.sinif===8)) for(const g of u.gorevler) {
       const akis=renderToStaticMarkup(<AkisSemasi program={g.cozum}/>);
-      const sozde=renderToStaticMarkup(<SozdeKodGorunumu program={g.cozum}/>);
+      const sozde=renderToStaticMarkup(<BlokDuzenleyici program={g.cozum} sozde/>);
       expect(akis,g.id).toContain('BAŞLA'); expect(akis,g.id).toContain('BİTİR');
       expect(akis,g.id).toContain('max-width:none'); expect(akis,g.id).not.toContain('NaN');
       expect(sozde,g.id).toContain('BAŞLA'); expect(sozde,g.id).toContain('BİTİR');

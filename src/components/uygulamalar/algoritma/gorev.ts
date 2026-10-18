@@ -20,8 +20,20 @@ export const GOREV_TURU_ADI: Record<GorevTuru, string> = {
   tahmin: 'Tahmin et',
 };
 
-/** Kod panelinin görünümleri (7–8. sınıfta seçilebilir) */
+/** Kod panelinin görünümleri */
 export type KodGorunumu = 'bloklar' | 'dogal' | 'sozde' | 'akis';
+
+/** Akış şeması bu sınıftan başlar; 1–2. sınıfta (okumaya yeni başlayanlar) kod paneli sözde kod ve kartlardır */
+export const AKIS_SEMASI_SINIFI = 3;
+
+/**
+ * Kod panelinin sekmeleri, sırasıyla (kullanıcı kararı 2026-10-18): her sınıfta ilk açılan sözde koddur; akış şeması
+ * yaşı yetenlerde ikinci, bloklar (1–2. sınıfta kartlar) her zaman üçüncü seçenektir. Doğal dil (5, 7–8) en sonda.
+ * Sözde kod ve bloklar aynı programı düzenler; akış şeması ve doğal dil canlı aynadır.
+ */
+export function kodGorunumleri(sinif: number, dogalDil: boolean): KodGorunumu[] {
+  return ['sozde', ...(sinif >= AKIS_SEMASI_SINIFI ? (['akis'] as const) : []), 'bloklar', ...(dogalDil ? (['dogal'] as const) : [])];
+}
 
 export interface Kazanim {
   kod: string;
@@ -71,7 +83,7 @@ export interface Gorev {
   degiskenler?: string[];
   /** İfadelerde seçilebilecek ölçümler */
   olcumler?: OlcumTuru[];
-  /** 7–8. sınıf: görev açılınca kod panelinin görünümü (okuma görevleri akış şeması ya da sözde kodla açılır) */
+  /** 7–8. sınıf: görev açılınca kod panelinin görünümü (yoksa sözde kod; okuma görevleri akış şemasıyla da açılabilir) */
   ilkGorunum?: KodGorunumu;
 }
 
@@ -109,7 +121,7 @@ export interface Unite {
   kazanimlar: string[];
   sure: string;
   uygunluk?: string;
-  /** Kod panelinin görünümü: 1–2. sınıfta numaralı kartlar · 3–6 bloklar · 7–8 bloklar, sözde kod ve akış şeması */
+  /** Blok görünümünün biçimi: 1–2. sınıfta numaralı kartlar · 3–6 bloklar · 7–8 ifadeli bloklar (sekmeler: kodGorunumleri) */
   gorunum: 'kart' | 'blok' | 'ifade';
   /** Görev açılınca yönerge kendiliğinden okunur (okumaya yeni başlayanlar) */
   sesliYonerge: boolean;

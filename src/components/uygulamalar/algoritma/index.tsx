@@ -17,11 +17,10 @@ import { KalipKarti } from './KalipKarti';
 import { kalipBul } from './kaliplar';
 import { SIMGE } from './simgeler';
 import { AkisSemasi } from './AkisSemasi';
-import { SozdeKodGorunumu } from './SozdeKodGorunumu';
 import { DogalDilGorunumu, GosterimAnahtari } from './DogalDilGorunumu';
 import { AritmetikInceleme, temelDuzeyMetni } from './AritmetikInceleme';
 import { CozumKarti } from './CozumKarti';
-import { GOREV_TURU_ADI, type Gorev, type KodGorunumu, type Unite } from './gorev';
+import { GOREV_TURU_ADI, kodGorunumleri, type Gorev, type KodGorunumu, type Unite } from './gorev';
 import { UNITELER, sinifGruplari, uniteBul } from './mufredat';
 import { gorevGuncelle, gorevKaydi, gorevKodu, ilkEksikGorev, kaydiYaz, kaydiYukle, uniteGuncelle, uniteIlerlemesi, uniteKaydi, type LabKaydi } from './kayit';
 import { blokSayisi, bloklar, sayiMetni, type Program } from './program';
@@ -106,8 +105,11 @@ function GorevEkrani({
   const [cozumAcik, setCozumAcik] = useState(false);
   const yorumOnayi = useRef(false);
   const tahminGorevi = gorev.tur === 'tahmin' && !!gorev.tahmin;
-  const [gorunum, setGorunum] = useState<KodGorunumu>('bloklar');
-  useEffect(() => setGorunum(gorev.ilkGorunum ?? 'bloklar'), [gorev.id, gorev.ilkGorunum]);
+  // Her görev sözde kodla açılır (okuma görevleri kendi görünümüyle); bloklar üçüncü seçenektir (kodGorunumleri)
+  const [gorunum, setGorunum] = useState<KodGorunumu>('sozde');
+  useEffect(() => setGorunum(gorev.ilkGorunum ?? 'sozde'), [gorev.id, gorev.ilkGorunum]);
+  const gorunumler = kodGorunumleri(unite.sinif, ifadeBirimi);
+  const etkinGorunum = gorunumler.includes(gorunum) ? gorunum : 'sozde';
   const program = useMemo(() => gorevKodu(kayit, unite, gorev), [kayit, unite, gorev]);
   const programRef = useRef(program);
   programRef.current = program;
@@ -476,28 +478,31 @@ function GorevEkrani({
     </button>
   );
 
-  const GORUNUMLER: [KodGorunumu, string, (p: { className?: string }) => React.ReactElement][] = [
-    ['bloklar', 'Bloklar', SIMGE.bloklar],
-    ['dogal', 'Doğal dil', SIMGE.sozde],
-    ['sozde', 'Sözde kod', SIMGE.sozde],
-    ['akis', 'Akış şeması', SIMGE.akis],
-  ];
-  const gorunumSecici = ifadeBirimi && (
+  const GORUNUMLER: Record<KodGorunumu, [string, (p: { className?: string }) => React.ReactElement]> = {
+    sozde: ['Sözde kod', SIMGE.sozde],
+    akis: ['Akış şeması', SIMGE.akis],
+    bloklar: [kart ? 'Kartlar' : 'Bloklar', SIMGE.bloklar],
+    dogal: ['Doğal dil', SIMGE.sozde],
+  };
+  const gorunumSecici = (
     <div className="flex flex-wrap items-center gap-1 border-b border-border px-2 py-2" role="tablist" aria-label="Kod görünümü" data-kod-gorunumu>
-      {GORUNUMLER.map(([k, ad, S]) => (
-        <button
-          key={k}
-          type="button"
-          role="tab"
-          aria-selected={!incelemeAcik && gorunum === k}
-          onClick={() => { setGorunum(k); setIncelemeAcik(false); }}
-          className={`inline-flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-full px-2 text-[13px] font-bold transition-colors ${gorunum === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
-          data-gorunum={k}
-        >
-          <S className="h-4 w-4 shrink-0" />
-          {ad}
-        </button>
-      ))}
+      {gorunumler.map((k) => {
+        const [ad, S] = GORUNUMLER[k];
+        return (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={!incelemeAcik && etkinGorunum === k}
+            onClick={() => { setGorunum(k); setIncelemeAcik(false); }}
+            className={`inline-flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-full px-2 text-[13px] font-bold transition-colors ${etkinGorunum === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+            data-gorunum={k}
+          >
+            <S className="h-4 w-4 shrink-0" />
+            {ad}
+          </button>
+        );
+      })}
     </div>
   );
   const kodIcerigi =
@@ -513,30 +518,36 @@ function GorevEkrani({
           }
         }} />
       </div>
-    ) : gorunum === 'bloklar' || !ifadeBirimi ? (
-      <BlokDuzenleyici
-        key={gorev.id}
-        program={program}
-        onDegis={tahminGorevi ? undefined : programDegis}
-        aracKutusu={gorev.aracKutusu}
-        aktif={aktif}
-        sayimlar={sayimlar}
-        baslik={tahminGorevi ? 'Kod (önce tahmin et)' : 'Kodun'}
-        kutuBasligi={kart ? 'Kartlar' : 'Bloklar'}
-        ek={tahminGorevi ? null : baslangicaDon}
-        kart={kart}
-        enFazlaBlok={gorev.enCokBlok}
-        degiskenler={degiskenAdlari}
-        olcumler={gorev.olcumler}
-        temel={unite.sinif === 5}
-      />
+    ) : etkinGorunum === 'bloklar' || etkinGorunum === 'sozde' ? (
+      <div className="flex min-h-0 flex-1 flex-col">
+        {etkinGorunum === 'sozde' && ifadeBirimi && <div className="shrink-0 px-3 pt-3"><GosterimAnahtari acik={false} /></div>}
+        <div className="min-h-0 flex-1">
+          <BlokDuzenleyici
+            key={gorev.id}
+            program={program}
+            onDegis={tahminGorevi ? undefined : programDegis}
+            aracKutusu={gorev.aracKutusu}
+            aktif={aktif}
+            sayimlar={sayimlar}
+            baslik={tahminGorevi ? 'Kod (önce tahmin et)' : 'Kodun'}
+            kutuBasligi={etkinGorunum === 'sozde' ? 'Komutlar' : kart ? 'Kartlar' : 'Bloklar'}
+            ek={tahminGorevi ? null : baslangicaDon}
+            kart={kart}
+            enFazlaBlok={gorev.enCokBlok}
+            degiskenler={degiskenAdlari}
+            olcumler={gorev.olcumler}
+            temel={unite.sinif === 5}
+            sozde={etkinGorunum === 'sozde'}
+          />
+        </div>
+      </div>
     ) : (
-      <div className="min-h-0 flex-1 overflow-auto px-3 pb-4 pt-3" data-kod-aynasi={gorunum}>
-        {gorunum === 'dogal' ? <DogalDilGorunumu program={program} /> : <>
-          <GosterimAnahtari akis={gorunum === 'akis'} />
-          {gorunum === 'sozde' ? <SozdeKodGorunumu program={program} aktif={aktif} temel={unite.sinif === 5} /> : <AkisSemasi program={program} aktif={aktif} />}
+      <div className="min-h-0 flex-1 overflow-auto px-3 pb-4 pt-3" data-kod-aynasi={etkinGorunum}>
+        {etkinGorunum === 'dogal' ? <DogalDilGorunumu program={program} /> : <>
+          <GosterimAnahtari akis />
+          <AkisSemasi program={program} aktif={aktif} />
         </>}
-        {!tahminGorevi && <p className="mt-3 text-[12px] font-semibold text-muted-foreground">Kodu değiştirmek için Bloklar görünümüne geç.</p>}
+        {!tahminGorevi && <p className="mt-3 text-[12px] font-semibold text-muted-foreground">Kodu değiştirmek için Sözde kod ya da {kart ? 'Kartlar' : 'Bloklar'} görünümüne geç.</p>}
       </div>
     );
   const kod = (
@@ -558,7 +569,7 @@ function GorevEkrani({
         {kod}
       </div>
       <OgretmenNotu acik={notAcik} onKapat={() => setNotAcik(false)} unite={unite} />
-      {cozumAcik && <CozumKarti program={gorev.cozum} onKapat={() => setCozumAcik(false)} />}
+      {cozumAcik && <CozumKarti program={gorev.cozum} onKapat={() => setCozumAcik(false)} sozde={etkinGorunum !== 'bloklar'} />}
       {sonAcik && (
         <UniteSonu
           unite={unite}

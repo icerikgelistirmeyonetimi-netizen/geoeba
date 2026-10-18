@@ -12,6 +12,8 @@
  * - 5. sınıftan: atama bloğu (sayaç ← sayaç + 1) ve karşılaştırmalı koşullar; ifadenin işlenenlerine
  *   (sayı, değişken, ölçüm) ve işlemine dokununca küçük bir seçim listesi açılır. "Eğer" bloğunun
  *   "değilse" kolu ayrı bir kap gibi seçilir. 8. sınıfta kendi komutunu tanımlama.
+ * - Sözde kod biçimi (`sozde`, kod panelinin ilk sekmesi): aynı program satır numaralı ders kitabı sözde koduyla
+ *   (BAŞLA … BİTİR, "4 KEZ TEKRARLA … TEKRAR SONU") gösterilir; ekleme, taşıma ve seçim çipleri aynıdır.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -40,8 +42,12 @@ import {
   kezMetni,
   konumBul,
   kosulAnahtari,
+  SOZDE_KOSUL_EGER,
+  SOZDE_KOSUL_KADAR,
   sablondanBlok,
   sayiMetni,
+  sozdeBasligi,
+  sozdeKapanisi,
   tasi,
   type Blok,
   type BlokSablonu,
@@ -132,6 +138,11 @@ export interface BlokDuzenleyiciProps {
   olcumler?: OlcumTuru[];
   /** 5. sınıfta işlem göstergeleri; değişken terminolojisi ve kalan işlemi öğretilmez. */
   temel?: boolean;
+  /**
+   * Sözde kod biçimi: aynı program ders kitabı sözde kodu satırlarıyla (BAŞLA … BİTİR, satır numaralı, "4 KEZ
+   * TEKRARLA … TEKRAR SONU") düzenlenir. Sürükle-bırak, dokun-ekle ve seçim çipleri bloklardaki gibidir.
+   */
+  sozde?: boolean;
 }
 
 type Kaynak = { tur: 'yeni'; sablon: BlokSablonu; iskeletSira?: number } | { tur: 'tasi'; blokId: string };
@@ -468,9 +479,9 @@ function IfadeCipleri({ ifade, onDegis, sozluk, duzenlenebilir }: { ifade: Ifade
 
 const HAP = 'inline-flex min-h-[32px] flex-wrap items-center gap-0.5 rounded-full bg-white/95 px-1.5 text-[14px] font-extrabold text-ada-murekkep';
 
-function KarsilastirmaCipleri({ kosul, onDegis, sozluk, duzenlenebilir }: { kosul: Karsilastirma; onDegis: (k: Karsilastirma) => void; sozluk: Sozluk; duzenlenebilir: boolean }) {
+function KarsilastirmaCipleri({ kosul, onDegis, sozluk, duzenlenebilir, cerceve = '' }: { kosul: Karsilastirma; onDegis: (k: Karsilastirma) => void; sozluk: Sozluk; duzenlenebilir: boolean; cerceve?: string }) {
   return (
-    <span className={HAP} data-surukleme-yok={duzenlenebilir || undefined}>
+    <span className={`${HAP} ${cerceve}`} data-surukleme-yok={duzenlenebilir || undefined}>
       <IfadeCipleri ifade={kosul.sol} sozluk={sozluk} duzenlenebilir={duzenlenebilir} onDegis={(sol) => onDegis({ ...kosul, sol })} />
       <IsaretCipi<KarsilastirmaOp> deger={kosul.op} secenekler={KARSILASTIRMALAR} yazi={(t) => t} duzenlenebilir={duzenlenebilir} etiket="Karşılaştırma seç" onSec={(op) => onDegis({ ...kosul, op })} />
       <IfadeCipleri ifade={kosul.sag} sozluk={sozluk} duzenlenebilir={duzenlenebilir} onDegis={(sag) => onDegis({ ...kosul, sag })} />
@@ -499,6 +510,7 @@ export function BlokDuzenleyici({
   degiskenler = [],
   olcumler = [],
   temel = false,
+  sozde = false,
 }: BlokDuzenleyiciProps) {
   const duzenlenebilir = !!onDegis;
   const kokRef = useRef<HTMLDivElement>(null);
@@ -681,6 +693,35 @@ export function BlokDuzenleyici({
   const aktifSon = aktif?.yigin[aktif.yigin.length - 1] ?? null;
   const n = blokSayisi(program);
   const gunc = (id: string, d: Parameters<typeof guncelle>[2]) => degis(guncelle(programRef.current, id, d));
+  /** Sözde kodda beyaz çiplerin açık zeminde de seçilmesi için ince çerçeve */
+  const cerceve = sozde ? 'ring-1 ring-foreground/15' : '';
+
+  // Sözde kod satır numaraları çizim sırasıyla verilir: yardımcılar satırları yukarıdan aşağı üretir. Numara program
+  // alanına göre konumlanır (satırlar ve kaplar konumlanmaz), iç içe satırlarda da sol kenarda hizalı durur.
+  let satirSayaci = 0;
+  const satirNo = () => (
+    <span aria-hidden className="absolute left-0 w-8 select-none pr-2 text-right font-mono text-[12px] font-semibold tabular-nums text-muted-foreground" data-satir-no>
+      {++satirSayaci}
+    </span>
+  );
+  const SOZDE_SATIR = `flex ${kart ? 'min-h-[46px] text-[17px]' : 'min-h-[36px] text-[15px]'} select-none flex-wrap items-center gap-x-2 gap-y-1 rounded-[8px] py-1 pl-3 pr-1.5 font-mono font-bold text-foreground`;
+  /** Sözde kod satırının zemini: çalışırken şu anki satır mercan, yığındakiler hafif renkli */
+  const sozdeZemini = (yiginda: boolean, simdiki: boolean, hata: boolean) =>
+    simdiki ? (hata ? 'bg-[#d9534f]/15' : 'bg-ada-mercan/15') : yiginda ? 'bg-primary/[0.07]' : duzenlenebilir ? 'hover:bg-muted/70' : '';
+  /** Satırın solundaki çizgi blok türünün renginde; şu anki satırda mercan */
+  const sozdeCizgisi = (renk: string, simdiki = false, hata = false, vurgu?: string) =>
+    [`inset ${simdiki ? 4 : 3}px 0 0 ${hata ? '#d9534f' : simdiki ? '#d9805f' : renk}`, vurgu ? `0 0 0 2px ${vurgu}` : ''].filter(Boolean).join(', ');
+  /** Sözde kodda gövdenin girintisi: türün renginde ince dikey çizgi */
+  const girinti = (renk: string, icerik: React.ReactNode, anahtar?: string) => (
+    <div className="flex">
+      <div className="flex w-[22px] shrink-0 justify-center py-1">
+        <span className="w-[2px] rounded-full" style={{ background: renk, opacity: 0.45 }} />
+      </div>
+      <div className={`min-w-0 flex-1 py-0.5 ${anahtar && seciliKap === anahtar ? 'rounded-[8px] outline-dashed outline-2 -outline-offset-2 outline-ada-mercan' : ''}`} data-kap-govdesi={anahtar}>
+        {icerik}
+      </div>
+    </div>
+  );
 
   // Çizim yardımcıları düz işlevdir (bileşen değil): her çizimde yeniden bağlanmazlar, odak korunur
   const yer = (ebeveyn: string | null, indeks: number, bos = false) => {
@@ -693,7 +734,7 @@ export function BlokDuzenleyici({
           data-yer={`${ebeveyn ?? 'kok'}|${indeks}`}
           className={`my-1 flex min-h-[40px] items-center rounded-[10px] border-2 border-dashed px-3 text-[13px] font-semibold transition-colors ${hedefMi ? 'border-ada-mercan bg-ada-mercan/10 text-foreground' : 'border-foreground/15 text-muted-foreground'}`}
         >
-          {duzenlenebilir ? (seciliKap === ebeveyn ? 'Yeni bloklar buraya eklenir' : 'Blokları buraya bırak') : 'Boş'}
+          {duzenlenebilir ? (seciliKap === ebeveyn ? `Yeni ${sozde ? 'komutlar' : 'bloklar'} buraya eklenir` : `${sozde ? 'Komutları' : 'Blokları'} buraya bırak`) : 'Boş'}
         </div>
       );
     }
@@ -718,6 +759,7 @@ export function BlokDuzenleyici({
   };
 
   const kapGovdesi = (renk: string, yiginda: boolean, anahtar: string, l: Blok[]) => {
+    if (sozde) return girinti(renk, liste(l, anahtar), anahtar);
     const secili = seciliKap === anahtar;
     return (
       <div className="flex">
@@ -753,7 +795,7 @@ export function BlokDuzenleyici({
         type="button"
         data-surukleme-yok
         onClick={() => degis(cikar(programRef.current, b.id)[0])}
-        className="ml-1 hidden h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black/15 text-white hover:bg-black/30 focus-visible:flex group-hover/blok:flex group-focus-within/blok:flex"
+        className={`ml-1 hidden h-7 w-7 shrink-0 items-center justify-center rounded-full ${sozde ? 'bg-foreground/10 text-foreground hover:bg-foreground/20' : 'bg-black/15 text-white hover:bg-black/30'} focus-visible:flex group-hover/blok:flex group-focus-within/blok:flex`}
         aria-label={`${blokBasligi(b)} bloğunu sil`}
         title="Sil"
       >
@@ -761,14 +803,49 @@ export function BlokDuzenleyici({
       </button>
     );
     const rozet = sayim && (
-      <span className="ml-auto shrink-0 rounded-full bg-white/90 px-2 py-0.5 text-[12px] font-extrabold tabular-nums text-ada-murekkep" data-sayim>
+      <span className={`ml-auto shrink-0 rounded-full bg-white/90 px-2 py-0.5 font-sans text-[12px] font-extrabold tabular-nums text-ada-murekkep ${cerceve}`} data-sayim>
         {sayim}
+      </span>
+    );
+    const atamaHapi = b.tur === 'ata' && (
+      <span className={`${HAP} ${cerceve}`} data-surukleme-yok={duzenlenebilir || undefined}>
+        {duzenlenebilir && sozluk.degiskenler.length > 1 ? (
+          <label className="relative inline-flex items-center rounded-full py-0.5 pl-1.5 pr-5 text-[#8a2f55] hover:bg-black/5">
+            {b.degisken}
+            <SIMGE.ok className="pointer-events-none absolute right-0.5 h-3 w-3 rotate-90" />
+            <select className="absolute inset-0 cursor-pointer opacity-0" value={b.degisken} onChange={(e) => gunc(b.id, { degisken: e.target.value })} aria-label={temel ? 'İşlem göstergesini seç' : 'Değişkeni seç'}>
+              {sozluk.degiskenler.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <span className="px-1 text-[#8a2f55]">{b.degisken}</span>
+        )}
+        <span className="px-0.5 text-ada-murekkep/70">←</span>
+        <IfadeCipleri ifade={b.ifade} sozluk={sozluk} duzenlenebilir={duzenlenebilir} onDegis={(ifade) => gunc(b.id, { ifade })} />
       </span>
     );
 
     if (!govdeliMi(b)) {
       let icerik: React.ReactNode;
-      if (b.tur === 'eylem') {
+      if (sozde) {
+        // Salt okunurken sözde kod düz metindir; düzenlenirken atamanın işlenenleri çiple seçilir
+        icerik =
+          b.tur === 'ata' && duzenlenebilir ? (
+            <>
+              {temel && <span>HESAPLA</span>}
+              {atamaHapi}
+            </>
+          ) : (
+            <>
+              {kart && b.tur === 'eylem' && <EylemSimgesi eylem={b.eylem} className="h-6 w-6 shrink-0" />}
+              <span className="min-w-0 break-words">{temel && b.tur === 'ata' ? `HESAPLA ${sozdeBasligi(b)}` : sozdeBasligi(b)}</span>
+            </>
+          );
+      } else if (b.tur === 'eylem') {
         icerik = (
           <>
             <EylemSimgesi eylem={b.eylem} className={kart ? 'h-7 w-7 shrink-0' : 'h-5 w-5 shrink-0'} />
@@ -783,29 +860,10 @@ export function BlokDuzenleyici({
           </>
         );
       } else {
-        const adSec = duzenlenebilir && sozluk.degiskenler.length > 1;
         icerik = (
           <>
             <SIMGE.degisken className="h-5 w-5 shrink-0" />
-            <span className={HAP} data-surukleme-yok={duzenlenebilir || undefined}>
-              {adSec ? (
-                <label className="relative inline-flex items-center rounded-full py-0.5 pl-1.5 pr-5 text-[#8a2f55] hover:bg-black/5">
-                  {b.degisken}
-                  <SIMGE.ok className="pointer-events-none absolute right-0.5 h-3 w-3 rotate-90" />
-                  <select className="absolute inset-0 cursor-pointer opacity-0" value={b.degisken} onChange={(e) => gunc(b.id, { degisken: e.target.value })} aria-label={temel ? 'İşlem göstergesini seç' : 'Değişkeni seç'}>
-                    {sozluk.degiskenler.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : (
-                <span className="px-1 text-[#8a2f55]">{b.degisken}</span>
-              )}
-              <span className="px-0.5 text-ada-murekkep/70">←</span>
-              <IfadeCipleri ifade={b.ifade} sozluk={sozluk} duzenlenebilir={duzenlenebilir} onDegis={(ifade) => gunc(b.id, { ifade })} />
-            </span>
+            {atamaHapi}
           </>
         );
       }
@@ -817,12 +875,20 @@ export function BlokDuzenleyici({
           aria-label={blokBasligi(b)}
           onKeyDown={(e) => blokTusu(e, b)}
           onPointerDown={(e) => basla(e, { tur: 'tasi', blokId: b.id })}
-          className={`group/blok flex ${kart ? 'min-h-[54px] gap-3 pl-2 text-[17px]' : 'min-h-[44px] gap-2 px-3 text-[15px]'} select-none items-center rounded-[10px] pr-3 font-bold text-white outline-none transition-[box-shadow,opacity] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${duzenlenebilir ? 'cursor-grab active:cursor-grabbing' : ''} ${surukleniyor ? 'opacity-35' : ''}`}
-          style={{ background: renk, boxShadow: halka ?? '0 1px 0 rgba(0,0,0,0.18), 0 2px 6px -2px rgba(0,0,0,0.25)', touchAction: duzenlenebilir ? 'none' : undefined }}
+          className={`group/blok outline-none transition-[box-shadow,opacity] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${duzenlenebilir ? 'cursor-grab active:cursor-grabbing' : ''} ${surukleniyor ? 'opacity-35' : ''} ${
+            sozde ? `${SOZDE_SATIR} ${sozdeZemini(yiginda, simdiki, hata)}` : `flex ${kart ? 'min-h-[54px] gap-3 pl-2 text-[17px]' : 'min-h-[44px] gap-2 px-3 text-[15px]'} select-none items-center rounded-[10px] pr-3 font-bold text-white`
+          }`}
+          style={
+            sozde
+              ? { boxShadow: sozdeCizgisi(renk, simdiki, hata, vurgu), touchAction: duzenlenebilir ? 'none' : undefined }
+              : { background: renk, boxShadow: halka ?? '0 1px 0 rgba(0,0,0,0.18), 0 2px 6px -2px rgba(0,0,0,0.25)', touchAction: duzenlenebilir ? 'none' : undefined }
+          }
           data-aktif={simdiki || undefined}
           data-yiginda={yiginda || undefined}
+          data-sozde-satir={sozde || undefined}
         >
-          {kart && sira !== undefined && (
+          {sozde && satirNo()}
+          {!sozde && kart && sira !== undefined && (
             <span className="flex h-8 min-w-8 shrink-0 items-center justify-center rounded-full bg-white/95 px-1.5 text-[15px] font-extrabold tabular-nums text-ada-murekkep" data-adim-no>
               {sira}
             </span>
@@ -835,18 +901,17 @@ export function BlokDuzenleyici({
     }
 
     let baslikIcerigi: React.ReactNode;
-    if (b.tur === 'tekrarlaKez') {
-      baslikIcerigi = b.kezIfade ? (
+    if (sozde && !duzenlenebilir) {
+      baslikIcerigi = <span className="min-w-0 break-words">{sozdeBasligi(b)}</span>;
+    } else if (b.tur === 'tekrarlaKez') {
+      baslikIcerigi = (
         <>
-          <span className={HAP} data-surukleme-yok={duzenlenebilir || undefined}>
-            <IfadeCipleri ifade={b.kezIfade} sozluk={sozluk} duzenlenebilir={duzenlenebilir} onDegis={(kezIfade) => gunc(b.id, { kezIfade })} />
-          </span>
-          <span>kez tekrarla</span>
-        </>
-      ) : (
-        <>
-          {duzenlenebilir ? (
-            <span className="flex items-center rounded-full bg-white/95 text-ada-murekkep" data-surukleme-yok>
+          {b.kezIfade ? (
+            <span className={`${HAP} ${cerceve}`} data-surukleme-yok={duzenlenebilir || undefined}>
+              <IfadeCipleri ifade={b.kezIfade} sozluk={sozluk} duzenlenebilir={duzenlenebilir} onDegis={(kezIfade) => gunc(b.id, { kezIfade })} />
+            </span>
+          ) : duzenlenebilir ? (
+            <span className={`flex items-center rounded-full bg-white/95 text-ada-murekkep ${cerceve}`} data-surukleme-yok>
               <button type="button" className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-black/5 disabled:opacity-40" onClick={() => gunc(b.id, { kez: b.kez - 1 })} disabled={b.kez <= KEZ_EN_AZ} aria-label="Tekrar sayısını azalt">
                 <SIMGE.eksi className="h-4 w-4" />
               </button>
@@ -860,11 +925,13 @@ export function BlokDuzenleyici({
           ) : (
             <span className="rounded-full bg-white/95 px-2.5 py-0.5 text-[15px] font-extrabold tabular-nums text-ada-murekkep">{b.kez}</span>
           )}
-          <span>kez tekrarla</span>
+          <span>{sozde ? 'KEZ TEKRARLA' : 'kez tekrarla'}</span>
         </>
       );
     } else if (b.tur === 'tanim') {
-      baslikIcerigi = (
+      baslikIcerigi = sozde ? (
+        <span>{sozdeBasligi(b)}</span>
+      ) : (
         <>
           <span>tanımla</span>
           <span className="rounded-full bg-white/95 px-2.5 py-0.5 text-[14px] font-extrabold tracking-[0.02em] text-ada-murekkep">{b.ad}</span>
@@ -873,25 +940,86 @@ export function BlokDuzenleyici({
     } else {
       const kosullar = b.tur === 'eger' ? kosulSecenekleri.eger : kosulSecenekleri.kadar;
       const kosul = b.kosul;
-      baslikIcerigi = (
+      const kosulMetinleri = sozde ? (b.tur === 'eger' ? SOZDE_KOSUL_EGER : SOZDE_KOSUL_KADAR) : b.tur === 'eger' ? KOSUL_EGER : KOSUL_KADAR;
+      const kosulCipi = karsilastirmaMi(kosul) ? (
+        <KarsilastirmaCipleri kosul={kosul} sozluk={sozluk} duzenlenebilir={duzenlenebilir} onDegis={(k) => gunc(b.id, { kosul: k })} cerceve={cerceve} />
+      ) : (
+        <KosulCipi kosul={kosul} metin={kosulMetinleri} secenekler={duzenlenebilir ? kosullar : []} onSec={(k) => gunc(b.id, { kosul: k })} sade={sozde} cerceve={cerceve} />
+      );
+      baslikIcerigi = sozde ? (
+        <>
+          {b.tur === 'eger' && <span>EĞER</span>}
+          {kosulCipi}
+          <span>{b.tur === 'eger' ? 'İSE' : karsilastirmaMi(kosul) ? 'OLANA KADAR TEKRARLA' : 'TEKRARLA'}</span>
+        </>
+      ) : (
         <>
           {b.tur === 'eger' && <span>eğer</span>}
-          {karsilastirmaMi(kosul) ? (
-            <KarsilastirmaCipleri kosul={kosul} sozluk={sozluk} duzenlenebilir={duzenlenebilir} onDegis={(k) => gunc(b.id, { kosul: k })} />
-          ) : (
-            <KosulCipi kosul={kosul} metin={b.tur === 'eger' ? KOSUL_EGER : KOSUL_KADAR} secenekler={duzenlenebilir ? kosullar : []} onSec={(k) => gunc(b.id, { kosul: k })} />
-          )}
+          {kosulCipi}
           {karsilastirmaMi(kosul) && <span>{b.tur === 'eger' ? 'ise' : 'olana kadar'}</span>}
           {b.tur === 'tekrarlaKadar' && <span>tekrarla</span>}
         </>
       );
     }
-    const baslikSimgesi =
-      b.tur === 'eger' ? <SIMGE.eger className="h-5 w-5 shrink-0" /> : b.tur === 'tekrarlaKadar' ? <SIMGE.tekrarlaKadar className="h-5 w-5 shrink-0" /> : b.tur === 'tanim' ? <SIMGE.komut className="h-5 w-5 shrink-0" /> : <SIMGE.tekrarlaKez className="h-5 w-5 shrink-0" />;
     const kapSec = (anahtar: string) => (e: React.MouseEvent) => {
       if (!duzenlenebilir || (e.target as HTMLElement).closest('button, select, input, [data-ifade-secimi]') || performance.now() - sonBirakma.current < 250) return;
       setSeciliKap((s) => (s === anahtar ? null : anahtar));
     };
+
+    if (sozde) {
+      // Satırlar yukarıdan aşağı sırayla kurulur (satır numaraları bu sırayla verilir)
+      const baslikSatiri = (
+        <div
+          onPointerDown={(e) => basla(e, { tur: 'tasi', blokId: b.id })}
+          onClick={kapSec(b.id)}
+          className={`${SOZDE_SATIR} ${sozdeZemini(yiginda, simdiki, hata)} ${duzenlenebilir ? 'cursor-grab active:cursor-grabbing' : ''}`}
+          style={{ boxShadow: sozdeCizgisi(renk, simdiki, hata, vurgu), touchAction: duzenlenebilir ? 'none' : undefined }}
+        >
+          {satirNo()}
+          {baslikIcerigi}
+          {rozet}
+          {silDugmesi}
+        </div>
+      );
+      const govde = kapGovdesi(renk, yiginda, b.id, b.govde);
+      const degilse = b.tur === 'eger' && b.degilse && (
+        <>
+          <div onClick={kapSec(b.id + DEGILSE)} className={`${SOZDE_SATIR} ${duzenlenebilir ? 'cursor-pointer hover:bg-muted/70' : ''}`} style={{ boxShadow: sozdeCizgisi(renk) }} data-degilse>
+            {satirNo()}
+            DEĞİLSE
+          </div>
+          {kapGovdesi(renk, yiginda, b.id + DEGILSE, b.degilse)}
+        </>
+      );
+      const kapanis = (
+        <div className={SOZDE_SATIR} style={{ boxShadow: sozdeCizgisi(renk) }} data-kapanis>
+          {satirNo()}
+          {sozdeKapanisi(b)}
+        </div>
+      );
+      return (
+        <div
+          data-blok-id={b.id}
+          tabIndex={0}
+          role="group"
+          aria-label={blokBasligi(b)}
+          onKeyDown={(e) => blokTusu(e, b)}
+          className={`group/blok rounded-[8px] outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${surukleniyor ? 'opacity-35' : ''}`}
+          data-aktif={simdiki || undefined}
+          data-yiginda={yiginda || undefined}
+          data-secili-kap={seciliKap === b.id || undefined}
+          data-sozde-satir
+        >
+          {baslikSatiri}
+          {govde}
+          {degilse}
+          {kapanis}
+        </div>
+      );
+    }
+
+    const baslikSimgesi =
+      b.tur === 'eger' ? <SIMGE.eger className="h-5 w-5 shrink-0" /> : b.tur === 'tekrarlaKadar' ? <SIMGE.tekrarlaKadar className="h-5 w-5 shrink-0" /> : b.tur === 'tanim' ? <SIMGE.komut className="h-5 w-5 shrink-0" /> : <SIMGE.tekrarlaKez className="h-5 w-5 shrink-0" />;
 
     return (
       <div
@@ -950,11 +1078,11 @@ export function BlokDuzenleyici({
     if (!surukleme) return null;
     const k = surukleme.kaynak;
     let icerik: React.ReactNode;
-    if (k.tur === 'yeni') icerik = <SablonCipi s={k.sablon} />;
+    if (k.tur === 'yeni') icerik = <SablonCipi s={k.sablon} sozde={sozde} temel={temel} />;
     else {
       const b = findBlok(program, k.blokId);
       const ic = b ? [...bloklar([b])].length - 1 : 0;
-      icerik = b ? <SablonCipi s={blokSablonu(b)} ek={ic ? `+${ic}` : undefined} /> : null;
+      icerik = b ? <SablonCipi s={blokSablonu(b)} ek={ic ? `+${ic}` : undefined} sozde={sozde} temel={temel} /> : null;
     }
     return createPortal(
       <div style={{ position: 'fixed', left: surukleme.x + 10, top: surukleme.y + 8, pointerEvents: 'none', zIndex: 2147483000, transform: 'rotate(-2deg)' }} data-surukleme-hayali>
@@ -965,8 +1093,55 @@ export function BlokDuzenleyici({
     );
   };
 
+  /** Boş programın bırakma alanı (sözde kodda BAŞLA ile BİTİR arasında) */
+  const bosProgram = (indeks: number) => (
+    <div
+      data-yer={`kok|${indeks}`}
+      className={`mt-1 flex ${sozde ? 'min-h-[96px]' : 'min-h-[120px]'} flex-col items-center justify-center gap-1 rounded-[14px] border-2 border-dashed px-4 text-center transition-colors ${surukleme?.hedef && surukleme.hedef.ebeveyn === null && surukleme.hedef.indeks === indeks ? 'border-ada-mercan bg-ada-mercan/10' : 'border-foreground/15'}`}
+    >
+      <span className="text-[15px] font-bold text-foreground">{duzenlenebilir ? 'Program boş' : 'Program yok'}</span>
+      {duzenlenebilir && (
+        <span className={`${kart ? 'text-[15px]' : 'text-[13px]'} font-medium text-muted-foreground`}>
+          {sozde ? 'Yukarıdaki komutlardan birine dokun ya da komutu buraya sürükle.' : kart ? 'Yukarıdaki kartlardan birine dokun ya da kartı buraya sürükle.' : 'Yukarıdaki bloklardan birini buraya sürükle ya da bloğa dokun.'}
+        </span>
+      )}
+    </div>
+  );
+
+  /** Sözde kodun kökü: komut tanımları BAŞLA'dan önce (ders kitabı düzeni), ana program BAŞLA … BİTİR arasında */
+  const sozdeKok = () => {
+    const tanimlar: [Blok, number][] = [];
+    const ana: [Blok, number][] = [];
+    program.forEach((b, i) => (b.tur === 'tanim' ? tanimlar : ana).push([b, i]));
+    // Yerler programdaki sırayı izler: bir satırın ardındaki yer onun sırası + 1 (öbür gruptaki satırlar araya girse de)
+    const grup = (l: [Blok, number][]) => [
+      yer(null, l[0][1]),
+      ...l.map(([b, i]) => (
+        <React.Fragment key={b.id}>
+          {blokOgesi(b)}
+          {yer(null, i + 1)}
+        </React.Fragment>
+      )),
+    ];
+    const kenar = 'hsl(var(--foreground) / 0.3)';
+    const yapi = (metin: string) => (
+      <div className={SOZDE_SATIR} style={{ boxShadow: sozdeCizgisi(kenar) }} data-yapi-satiri>
+        {satirNo()}
+        {metin}
+      </div>
+    );
+    return (
+      <>
+        {tanimlar.length > 0 && <div className="mb-2">{grup(tanimlar)}</div>}
+        {yapi('BAŞLA')}
+        {girinti(kenar, ana.length ? grup(ana) : bosProgram(program.length))}
+        {yapi('BİTİR')}
+      </>
+    );
+  };
+
   return (
-    <div ref={kokRef} className="flex h-full min-h-0 flex-col" data-blok-duzenleyici>
+    <div ref={kokRef} className="flex h-full min-h-0 flex-col" data-blok-duzenleyici data-sozde-kod={sozde || undefined}>
       {duzenlenebilir && kutu.length > 0 && (
         <div ref={kutuRef} className={`max-h-[32%] shrink-0 overflow-y-auto border-b border-border px-3 ${kompakt ? 'py-2' : 'py-3'} ${surukleme?.sil ? 'bg-ada-mercan/10' : ''}`} data-arac-kutusu>
           <div className="mb-2 flex items-center justify-between gap-2">
@@ -993,7 +1168,7 @@ export function BlokDuzenleyici({
                   style={{ touchAction: 'none' }}
                   aria-label={`${blokBasligi(s)} bloğunu ekle`}
                 >
-                  <SablonCipi s={s} buyuk={kart} />
+                  <SablonCipi s={s} buyuk={kart} sozde={sozde} temel={temel} />
                 </button>
               );
             })}
@@ -1012,42 +1187,33 @@ export function BlokDuzenleyici({
       </div>
       <div
         ref={alanRef}
-        className="relative min-h-0 flex-1 overflow-auto px-3 pb-4 pt-1"
+        className={`relative min-h-0 flex-1 overflow-auto ${sozde ? 'pl-9 pr-3' : 'px-3'} pb-4 pt-1`}
         data-program-alani
         onClick={(e) => {
           if (e.target === e.currentTarget) setSeciliKap(null);
         }}
       >
-        {program.length === 0 ? (
-          <div data-yer="kok|0" className={`mt-1 flex min-h-[120px] flex-col items-center justify-center gap-1 rounded-[14px] border-2 border-dashed px-4 text-center transition-colors ${surukleme?.hedef ? 'border-ada-mercan bg-ada-mercan/10' : 'border-foreground/15'}`}>
-            <span className="text-[15px] font-bold text-foreground">{duzenlenebilir ? 'Program boş' : 'Program yok'}</span>
-            {duzenlenebilir && (
-              <span className={`${kart ? 'text-[15px]' : 'text-[13px]'} font-medium text-muted-foreground`}>
-                {kart ? 'Yukarıdaki kartlardan birine dokun ya da kartı buraya sürükle.' : 'Yukarıdaki bloklardan birini buraya sürükle ya da bloğa dokun.'}
-              </span>
-            )}
-          </div>
-        ) : (
-          liste(program, null)
-        )}
+        {sozde ? sozdeKok() : program.length === 0 ? bosProgram(0) : liste(program, null)}
       </div>
       {typeof document !== 'undefined' && surukleneniGoster()}
     </div>
   );
 }
 
-function KosulCipi({ kosul, metin, secenekler, onSec }: { kosul: KosulTuru; metin: Record<KosulTuru, string>; secenekler: KosulTuru[]; onSec: (k: Kosul) => void }) {
+/** `sade` (sözde kod): simgesiz; seçenek yoksa çip değil düz yazı */
+function KosulCipi({ kosul, metin, secenekler, onSec, sade = false, cerceve = '' }: { kosul: KosulTuru; metin: Record<KosulTuru, string>; secenekler: KosulTuru[]; onSec: (k: Kosul) => void; sade?: boolean; cerceve?: string }) {
   const icerik = (
     <>
-      <KosulSimgesi kosul={kosul} className="h-[18px] w-[18px] shrink-0" />
+      {!sade && <KosulSimgesi kosul={kosul} className="h-[18px] w-[18px] shrink-0" />}
       <span>{metin[kosul]}</span>
     </>
   );
   if (secenekler.length <= 1) {
+    if (sade) return <span>{metin[kosul]}</span>;
     return <span className="inline-flex items-center gap-1.5 rounded-full bg-white/95 px-2.5 py-1 text-[14px] font-extrabold text-ada-murekkep">{icerik}</span>;
   }
   return (
-    <label className="relative inline-flex items-center gap-1.5 rounded-full bg-white/95 py-1 pl-2.5 pr-7 text-[14px] font-extrabold text-ada-murekkep" data-surukleme-yok>
+    <label className={`relative inline-flex items-center gap-1.5 rounded-full bg-white/95 py-1 pl-2.5 pr-7 text-[14px] font-extrabold text-ada-murekkep ${cerceve}`} data-surukleme-yok>
       {icerik}
       <SIMGE.ok className="pointer-events-none absolute right-2 h-3.5 w-3.5 rotate-90" />
       <select className="absolute inset-0 cursor-pointer opacity-0" value={kosul} onChange={(e) => onSec(e.target.value as KosulTuru)} aria-label="Koşulu seç">
@@ -1063,10 +1229,23 @@ function KosulCipi({ kosul, metin, secenekler, onSec }: { kosul: KosulTuru; meti
 
 const SABLON_HAP = 'inline-flex items-center gap-1 rounded-full bg-white/95 px-2 py-0.5 text-[14px] font-extrabold text-ada-murekkep';
 
-/** Araç kutusu ve sürükleme hayali için tek parça blok görünümü. */
-export function SablonCipi({ s, ek, buyuk = false }: { s: BlokSablonu; ek?: string; buyuk?: boolean }) {
+/** Araç kutusu ve sürükleme hayali için tek parça blok görünümü; `sozde`: blokun sözde kod satırı. */
+export function SablonCipi({ s, ek, buyuk = false, sozde = false, temel = false }: { s: BlokSablonu; ek?: string; buyuk?: boolean; sozde?: boolean; temel?: boolean }) {
   const renk = KATEGORI_RENGI[kategori(s)];
   const govdeli = s.tur === 'tekrarlaKez' || s.tur === 'tekrarlaKadar' || s.tur === 'eger' || s.tur === 'tanim';
+  if (sozde) {
+    return (
+      <span
+        className={`inline-flex select-none items-center gap-2 rounded-[8px] border border-border bg-card pr-3 font-mono font-bold text-foreground ${buyuk ? 'min-h-[52px] pl-3.5 text-[17px]' : 'min-h-[40px] pl-3 text-[14.5px]'}`}
+        style={{ boxShadow: `inset 4px 0 0 ${renk}, 0 1px 2px rgba(0,0,0,0.08)` }}
+      >
+        {buyuk && s.tur === 'eylem' && <EylemSimgesi eylem={s.eylem} className="h-6 w-6 shrink-0" />}
+        {temel && s.tur === 'ata' ? `HESAPLA ${sozdeBasligi(s)}` : sozdeBasligi(s)}
+        {s.tur === 'eger' && s.degilse && <span className="text-[13px] opacity-70">/ DEĞİLSE</span>}
+        {ek && <span className="rounded-full bg-foreground/10 px-1.5 font-sans text-[12px]">{ek}</span>}
+      </span>
+    );
+  }
   let icerik: React.ReactNode;
   switch (s.tur) {
     case 'eylem':

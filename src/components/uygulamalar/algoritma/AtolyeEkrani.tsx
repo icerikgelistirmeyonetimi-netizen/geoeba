@@ -14,7 +14,6 @@ import { SahneAlani, type SahneTutamaci } from './SahneAlani';
 import { IpucuKarti } from './IpucuKarti';
 import { BlokDuzenleyici } from './BlokDuzenleyici';
 import { AkisSemasi } from './AkisSemasi';
-import { SozdeKodGorunumu } from './SozdeKodGorunumu';
 import { DogalDilGorunumu, GosterimAnahtari } from './DogalDilGorunumu';
 import { CozumKarti } from './CozumKarti';
 import { temelDuzeyMetni } from './AritmetikInceleme';
@@ -30,7 +29,7 @@ import { sahneAdi } from './sahneAdi';
 import { ekranKonumu, useOynatici } from './useOynatici';
 import { adimAnlatimi, baslangicAnlatimi } from './anlatici';
 import { izgara, koordinatlar } from './dunya';
-import type { Atolye, KodGorunumu } from './gorev';
+import { kodGorunumleri, type Atolye, type KodGorunumu } from './gorev';
 
 function Yildiz({ dolu }: { dolu: boolean }) {
   return <SIMGE.yildiz dolu={dolu} className={`h-4 w-4 ${dolu ? 'text-ada-fener' : 'text-muted-foreground/60'}`} />;
@@ -98,7 +97,10 @@ export function AtolyeEkrani({
   /** Açılan ipucu sayısı (en az 1): "Bir ipucu daha" sıradakini açar; başka atölyeye geçince başa döner */
   const [acilanIpucu, setAcilanIpucu] = useState(1);
   useEffect(() => setAcilanIpucu(1), [atolye.id]);
-  const [gorunum, setGorunum] = useState<KodGorunumu>('bloklar');
+  // Atölye sözde kodla açılır; bloklar üçüncü seçenektir (kodGorunumleri)
+  const [gorunum, setGorunum] = useState<KodGorunumu>('sozde');
+  const gorunumler = kodGorunumleri(atolye.sinif, ifadeBirimi);
+  const etkinGorunum = gorunumler.includes(gorunum) ? gorunum : 'sozde';
 
   const sahneRef = useRef<SahneTutamaci>(null);
   const onBitti = useCallback(
@@ -305,49 +307,60 @@ export function AtolyeEkrani({
     </section>
   );
 
-  const GORUNUMLER: [KodGorunumu, string, (p: { className?: string }) => React.ReactElement][] = [
-    ['bloklar', 'Bloklar', SIMGE.bloklar],
-    ['dogal', 'Doğal dil', SIMGE.sozde],
-    ['sozde', 'Sözde kod', SIMGE.sozde],
-    ['akis', 'Akış şeması', SIMGE.akis],
-  ];
+  const GORUNUMLER: Record<KodGorunumu, [string, (p: { className?: string }) => React.ReactElement]> = {
+    sozde: ['Sözde kod', SIMGE.sozde],
+    akis: ['Akış şeması', SIMGE.akis],
+    bloklar: [kart ? 'Kartlar' : 'Bloklar', SIMGE.bloklar],
+    dogal: ['Doğal dil', SIMGE.sozde],
+  };
   const kod = (
     <aside className={`${dar ? 'mx-3 mb-4 min-h-[460px] rounded-[calc(var(--radius)-2px)] border' : 'w-[clamp(340px,34%,460px)] shrink-0 border-l'} flex min-h-0 flex-col border-border bg-card`} aria-label="Kod">
-      {ifadeBirimi && (
-        <div className="flex flex-wrap items-center gap-1 border-b border-border px-2 py-2" role="tablist" aria-label="Kod görünümü">
-          {GORUNUMLER.map(([k, ad, S]) => (
+      <div className="flex flex-wrap items-center gap-1 border-b border-border px-2 py-2" role="tablist" aria-label="Kod görünümü" data-kod-gorunumu>
+        {gorunumler.map((k) => {
+          const [ad, S] = GORUNUMLER[k];
+          return (
             <button
               key={k}
               type="button"
               role="tab"
-              aria-selected={gorunum === k}
+              aria-selected={etkinGorunum === k}
               onClick={() => setGorunum(k)}
-              className={`inline-flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-full px-2 text-[13px] font-bold ${gorunum === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+              className={`inline-flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-full px-2 text-[13px] font-bold ${etkinGorunum === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+              data-gorunum={k}
             >
               <S className="h-4 w-4 shrink-0" />
               {ad}
             </button>
-          ))}
+          );
+        })}
+      </div>
+      {etkinGorunum === 'bloklar' || etkinGorunum === 'sozde' ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {etkinGorunum === 'sozde' && ifadeBirimi && <div className="shrink-0 px-3 pt-3"><GosterimAnahtari acik={false} /></div>}
+          <div className="min-h-0 flex-1">
+            <BlokDuzenleyici
+              key={ayriKod ? `${atolye.id}:${dunyaId}` : atolye.id}
+              program={program}
+              onDegis={programDegis}
+              aracKutusu={atolye.aracKutusu}
+              aktif={aktif}
+              sayimlar={sayimlar}
+              baslik={ayriKod ? `${dunyaSira + 1}. sahanın kodu` : 'Kodun'}
+              kutuBasligi={etkinGorunum === 'sozde' ? 'Komutlar' : kart ? 'Kartlar' : 'Bloklar'}
+              kart={kart}
+              enFazlaBlok={atolye.enCokBlok}
+              degiskenler={degiskenAdlari}
+              olcumler={atolye.olcumler}
+              temel={atolye.sinif === 5}
+              sozde={etkinGorunum === 'sozde'}
+            />
+          </div>
         </div>
-      )}
-      {gorunum === 'bloklar' || !ifadeBirimi ? (
-        <BlokDuzenleyici
-          key={ayriKod ? `${atolye.id}:${dunyaId}` : atolye.id}
-          program={program}
-          onDegis={programDegis}
-          aracKutusu={atolye.aracKutusu}
-          aktif={aktif}
-          sayimlar={sayimlar}
-          baslik={ayriKod ? `${dunyaSira + 1}. sahanın kodu` : 'Kodun'}
-          kutuBasligi={kart ? 'Kartlar' : 'Bloklar'}
-          kart={kart}
-          enFazlaBlok={atolye.enCokBlok}
-          degiskenler={degiskenAdlari}
-          olcumler={atolye.olcumler}
-          temel={atolye.sinif === 5}
-        />
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto px-3 pb-4 pt-3">{gorunum === 'dogal' ? <DogalDilGorunumu program={program} /> : <><GosterimAnahtari akis={gorunum === 'akis'} />{gorunum === 'sozde' ? <SozdeKodGorunumu program={program} aktif={aktif} temel={atolye.sinif === 5} /> : <AkisSemasi program={program} aktif={aktif} />}</>}</div>
+        <div className="min-h-0 flex-1 overflow-auto px-3 pb-4 pt-3" data-kod-aynasi={etkinGorunum}>
+          {etkinGorunum === 'dogal' ? <DogalDilGorunumu program={program} /> : <><GosterimAnahtari akis /><AkisSemasi program={program} aktif={aktif} /></>}
+          <p className="mt-3 text-[12px] font-semibold text-muted-foreground">Kodu değiştirmek için Sözde kod ya da {kart ? 'Kartlar' : 'Bloklar'} görünümüne geç.</p>
+        </div>
       )}
     </aside>
   );
@@ -359,7 +372,7 @@ export function AtolyeEkrani({
         {tuval}
         {kod}
       </div>
-      {cozumAcik && <CozumKarti program={atolye.cozumler?.[dunyaSira] ?? atolye.cozum} onKapat={() => setCozumAcik(false)} />}
+      {cozumAcik && <CozumKarti program={atolye.cozumler?.[dunyaSira] ?? atolye.cozum} onKapat={() => setCozumAcik(false)} sozde={etkinGorunum !== 'bloklar'} />}
     </div>
   );
 }

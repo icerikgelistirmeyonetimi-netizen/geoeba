@@ -1,7 +1,7 @@
 /**
  * Algoritma Laboratuvarı — 8. sınıf (Araştırma adası): dört ünite.
  *
- * Kod paneli 7. sınıftaki gibi üç gösterim sunar (Bloklar · Sözde kod · Akış şeması). Çizgi robotu
+ * Kod paneli 7. sınıftaki gibi gösterimler sunar (Sözde kod · Akış şeması · Bloklar · Doğal dil). Çizgi robotu
  * koordinat düzleminde çalışır: y yukarı doğru artar, en alttaki sıra y = 0; x ve y ölçümleri
  * robotun koordinatlarıdır. Kendi komutunu tanımlama (tanımla ŞEKİL / ŞEKİL) bu sınıfta gelir.
  * Başarı cümlelerindeki sayılar izden hesaplanır. Kazanımlar TYMM listesindendir.

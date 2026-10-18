@@ -749,50 +749,48 @@ function sozdeKosul(k: Kosul): string {
   return karsilastirmaMi(k) ? karsilastirmaMetni(k) : SOZDE_KOSUL[k];
 }
 
+/** "KEZ TEKRARLA", "OLANA KADAR TEKRARLA" ve "EĞER … İSE" satırlarındaki koşul yazımı (sözde kod düzenleyicisinin çipleri) */
+export const SOZDE_KOSUL_EGER: Record<KosulTuru, string> = SOZDE_KOSUL;
+export const SOZDE_KOSUL_KADAR = Object.fromEntries(Object.entries(KOSUL_KADAR).map(([k, m]) => [k, m.toLocaleUpperCase('tr-TR')])) as Record<KosulTuru, string>;
+
+/** Blokun sözde kod satırı; gövdeli bloklarda açılış satırı ("4 KEZ TEKRARLA", "EĞER toprak kuru İSE") */
+export function sozdeBasligi(b: Blok | BlokSablonu): string {
+  switch (b.tur) {
+    case 'eylem':
+      return SOZDE_EYLEM[b.eylem];
+    case 'ata':
+      return atamaMetni(b);
+    case 'cagir':
+      return b.ad;
+    case 'tekrarlaKez':
+      return `${kezMetni(b)} KEZ TEKRARLA`;
+    case 'tekrarlaKadar':
+      return karsilastirmaMi(b.kosul) ? `${karsilastirmaMetni(b.kosul)} OLANA KADAR TEKRARLA` : `${SOZDE_KOSUL_KADAR[b.kosul]} TEKRARLA`;
+    case 'eger':
+      return `EĞER ${sozdeKosul(b.kosul)} İSE`;
+    case 'tanim':
+      return `TANIMLA ${b.ad}`;
+  }
+}
+
+/** Gövdeli blokun kapanış satırı */
+export function sozdeKapanisi(b: Blok | BlokSablonu): string {
+  return b.tur === 'eger' ? 'EĞER SONU' : b.tur === 'tanim' ? 'TANIM SONU' : 'TEKRAR SONU';
+}
+
 /** Ders kitaplarındaki Türkçe sözde kod biçimi, satır satır (etkin satır vurgusu için blok kimliğiyle). */
 export function sozdeSatirlar(p: Program, basBitir = true): SozdeSatir[] {
   const satirlar: SozdeSatir[] = [];
   const yaz = (liste: Blok[], g: number) => {
     for (const b of liste) {
-      switch (b.tur) {
-        case 'eylem':
-          satirlar.push({ metin: SOZDE_EYLEM[b.eylem], girinti: g, blokId: b.id });
-          break;
-        case 'ata':
-          satirlar.push({ metin: atamaMetni(b), girinti: g, blokId: b.id });
-          break;
-        case 'cagir':
-          satirlar.push({ metin: b.ad, girinti: g, blokId: b.id });
-          break;
-        case 'tekrarlaKez':
-          satirlar.push({ metin: `${kezMetni(b)} KEZ TEKRARLA`, girinti: g, blokId: b.id });
-          yaz(b.govde, g + 1);
-          satirlar.push({ metin: 'TEKRAR SONU', girinti: g, blokId: b.id, kapanis: true });
-          break;
-        case 'tekrarlaKadar':
-          satirlar.push({
-            metin: karsilastirmaMi(b.kosul) ? `${karsilastirmaMetni(b.kosul)} OLANA KADAR TEKRARLA` : `${KOSUL_KADAR[b.kosul].toLocaleUpperCase('tr-TR')} TEKRARLA`,
-            girinti: g,
-            blokId: b.id,
-          });
-          yaz(b.govde, g + 1);
-          satirlar.push({ metin: 'TEKRAR SONU', girinti: g, blokId: b.id, kapanis: true });
-          break;
-        case 'eger':
-          satirlar.push({ metin: `EĞER ${sozdeKosul(b.kosul)} İSE`, girinti: g, blokId: b.id });
-          yaz(b.govde, g + 1);
-          if (b.degilse) {
-            satirlar.push({ metin: 'DEĞİLSE', girinti: g, blokId: b.id, kapanis: true });
-            yaz(b.degilse, g + 1);
-          }
-          satirlar.push({ metin: 'EĞER SONU', girinti: g, blokId: b.id, kapanis: true });
-          break;
-        case 'tanim':
-          satirlar.push({ metin: `TANIMLA ${b.ad}`, girinti: g, blokId: b.id });
-          yaz(b.govde, g + 1);
-          satirlar.push({ metin: 'TANIM SONU', girinti: g, blokId: b.id, kapanis: true });
-          break;
+      satirlar.push({ metin: sozdeBasligi(b), girinti: g, blokId: b.id });
+      if (!govdeliMi(b)) continue;
+      yaz(b.govde, g + 1);
+      if (b.tur === 'eger' && b.degilse) {
+        satirlar.push({ metin: 'DEĞİLSE', girinti: g, blokId: b.id, kapanis: true });
+        yaz(b.degilse, g + 1);
       }
+      satirlar.push({ metin: sozdeKapanisi(b), girinti: g, blokId: b.id, kapanis: true });
     }
   };
   if (!basBitir) {

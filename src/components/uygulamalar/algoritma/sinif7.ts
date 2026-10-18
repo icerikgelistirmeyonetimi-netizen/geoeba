@@ -1,8 +1,8 @@
 /**
  * Algoritma Laboratuvarı — 7. sınıf (Araştırma adası): dört ünite.
  *
- * Kod paneli üç gösterim sunar: Bloklar · Sözde kod · Akış şeması (düzenleme bloklarda, ötekiler canlı
- * ayna). Okuma görevleri (tahmin, hatayı bul) akış şeması ya da sözde kodla açılır. Değişkenler ve
+ * Kod paneli bütün sınıflardaki sırayla gösterimler sunar: Sözde kod · Akış şeması · Bloklar · Doğal dil (düzenleme
+ * sözde kodda ve bloklarda, ötekiler canlı ayna). Görevler sözde kodla açılır; 1. görev akış şemasıyla. Değişkenler ve
  * karşılaştırmalar 5–6. sınıftan bilinir; bu sınıfta algoritma denklem, eşitsizlik, hacim ve yansıma
  * düşüncesine bağlanır. Başarı cümlelerindeki sayılar izden hesaplanır. Kazanımlar TYMM listesindendir.
  *
@@ -149,7 +149,7 @@ const IFADE_GOREVLERI: Gorev[] = [
     id: 's7-ifade-4',
     tur: 'hata',
     baslik: 'Sözde kodu izle',
-    yonerge: 'Sözde kodu satır satır izle: Robot domatesleri sayıyor ama sayımlardan biri yanlış çıkıyor. Hatayı bul, bloklarda düzelt.',
+    yonerge: 'Sözde kodu satır satır izle: Robot domatesleri sayıyor ama sayımlardan biri yanlış çıkıyor. Hatayı bul ve düzelt.',
     ilkGorunum: 'sozde',
     dunya: HASAT_HATA,
     hedef: hasatHedefi(4, 3),
@@ -682,11 +682,11 @@ export const SINIF7: readonly Unite[] = [
     },
     ogretmenNotu: {
       hedef:
-        'Öğrenci aynı algoritmayı adım adım yazı, sözde kod ve akış şemasıyla okur ve yazar; bir gösterimden ötekine çevirir, sözde koddaki hatayı bulup bloklarda düzeltir.',
+        'Öğrenci aynı algoritmayı adım adım yazı, sözde kod ve akış şemasıyla okur ve yazar; bir gösterimden ötekine çevirir, sözde koddaki hatayı bulup düzeltir.',
       dersler: [
         {
           baslik: '1. ders',
-          metin: 'Fişsiz "Üç dilde sulama" (20 dk). Ardından 1. görev: akış şemasını okuyup depoda kalan suyu tahmin etme. Kod panelinin başlığındaki Bloklar · Sözde kod · Akış şeması seçimi tanıtılır.',
+          metin: 'Fişsiz "Üç dilde sulama" (20 dk). Ardından 1. görev: akış şemasını okuyup depoda kalan suyu tahmin etme. Kod panelinin başlığındaki Sözde kod · Akış şeması · Bloklar seçimi tanıtılır.',
         },
         {
           baslik: '2. ders',
