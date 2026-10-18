@@ -911,7 +911,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 22:06
+  montaj: 2026-10-18 06:22
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 21:35
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 21:37
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 21:36
@@ -3033,7 +3033,11 @@ window.SAYFA_INIT[2] = function (kok) {
     background: linear-gradient(180deg, #fbf8f1 0%, #f4eee1 100%);
   }
 
+  /* fill-box olmadan ölçek merkezi tüm sahnenin (viewBox) ortasıdır: seçilen
+     blok ~11 px sol-üste kayıyordu; blok kendi merkezinde büyüsün. */
   #sayfa-3 .s3-blok {
+    transform-box: fill-box;
+    transform-origin: center;
     cursor: grab;
     touch-action: none;
     transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), stroke 0.2s ease, opacity 0.2s ease;
@@ -3043,9 +3047,12 @@ window.SAYFA_INIT[2] = function (kok) {
     outline: none;
   }
 
+  #sayfa-3 .s3-blok:focus:not(:focus-visible) {
+    outline: none;
+  }
+
   #sayfa-3 .s3-blok.s3-secili {
     transform: scale(1.05);
-    transform-origin: center;
   }
 
   #sayfa-3 .s3-blok.s3-secili rect {
@@ -3256,6 +3263,23 @@ window.SAYFA_INIT[3] = function (kok) {
 
   var temizleyiciler = [];
 
+  // Sürüklerken görünen nesne köprünün hayaletidir (aslı yerinde kalır); hayalet
+  // imleçten tutma ofseti kadar uzakta gezer. Karar imlece değil hayaletin
+  // merkezine (imleç − ofset) bakar.
+  var tutma = { dx: 0, dy: 0 };
+  var hayaletUstunde = false;
+  var sonBirakma = 0;
+
+  function hayaletHipoUstunde(inp) {
+    var svg = hipoVurus.ownerSVGElement;
+    var ctm = hipoVurus.getScreenCTM();
+    if (!inp || !svg || !ctm) return false;
+    var p = svg.createSVGPoint();
+    p.x = inp.clientX - tutma.dx;
+    p.y = inp.clientY - tutma.dy;
+    return hipoVurus.isPointInFill(p.matrixTransform(ctm.inverse()));
+  }
+
   function durumuGuncelle() {
     sayacEl.textContent = yerlesenSayisi + " / 25";
     if (yerlesenSayisi === 25) {
@@ -3352,8 +3376,14 @@ window.SAYFA_INIT[3] = function (kok) {
 
   // TIKLA-SEÇ YEDEĞİ (AKILLI TAHTA VE DOKUNMATİK UYUMLU)
   blokListesi.forEach(function (blok) {
+    blok.addEventListener("pointerdown", function (e) {
+      var r = blok.getBoundingClientRect();
+      tutma = { dx: e.clientX - (r.left + r.width / 2), dy: e.clientY - (r.top + r.height / 2) };
+    });
     blok.addEventListener("click", function (e) {
       e.stopPropagation();
+      // Sürüklemenin ardından tarayıcının gönderdiği click seçimi geri açmasın.
+      if (Date.now() - sonBirakma < 400) return;
       blokSec(blok);
     });
     blok.addEventListener("keydown", function (e) {
@@ -3404,13 +3434,27 @@ window.SAYFA_INIT[3] = function (kok) {
             return { type: "blok", id: blok.dataset.id };
           },
           onDragStart: function () {
-            blokSec(blok);
+            hayaletUstunde = false;
+            // Önceden tıkla-seçle seçilmişse blokSec seçimi geri alırdı.
+            if (seciliBlok !== blok) blokSec(blok);
+          },
+          onDrag: function (args) {
+            var ustte = hayaletHipoUstunde(args.location.current.input);
+            if (ustte !== hayaletUstunde) {
+              hayaletUstunde = ustte;
+              hipoHucreVurgula(ustte);
+            }
           },
           onDrop: function (args) {
-            if (!args.location.current.dropTargets.length) {
+            var ustte = hayaletHipoUstunde(args.location.current.input);
+            hayaletUstunde = false;
+            sonBirakma = Date.now();
+            hipoHucreVurgula(false);
+            if (ustte && yerlesenSayisi < 25) {
+              siradakiBlokYerlestir(blok);
+            } else {
               blok.classList.remove("s3-secili");
               seciliBlok = null;
-              hipoHucreVurgula(false);
               EGITSEL.dontVer(kok, "yanlis", "Blokları hipotenüs karesine bırakın.");
             }
           }
@@ -3418,21 +3462,12 @@ window.SAYFA_INIT[3] = function (kok) {
       );
     });
 
+    // Karar ve vurgu, sürüklenen bloğun onDrag/onDrop'unda hayalet merkezine göre verilir.
     temizleyiciler.push(
       pdnd.dropTargetForElements({
         element: hipoVurus,
         canDrop: function (args) {
           return args.source.data.type === "blok" && yerlesenSayisi < 25;
-        },
-        onDragEnter: function () {
-          hipoHucreVurgula(true);
-        },
-        onDragLeave: function () {
-          hipoHucreVurgula(false);
-        },
-        onDrop: function () {
-          hipoHucreVurgula(false);
-          hipoAlaninaBirakildi();
         }
       })
     );
@@ -3484,6 +3519,9 @@ window.SAYFA_INIT[3] = function (kok) {
     seciliBlok = null;
     seciliKart = null;
     kartYerlesti = false;
+    tutma = { dx: 0, dy: 0 };
+    hayaletUstunde = false;
+    sonBirakma = 0;
 
     blokListesi.forEach(function (blok) {
       blok.classList.remove("s3-yerlesti", "s3-secili");

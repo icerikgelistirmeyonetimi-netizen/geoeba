@@ -1074,7 +1074,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/f937580d291efd72.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 22:07
+  montaj: 2026-10-18 06:22
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-19 22:48
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-19 22:48
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-19 22:48
@@ -2973,6 +2973,15 @@ window.SAYFA_INIT[2] = function (kok) {
     cursor: grabbing;
   }
 
+  #sayfa-3 .s3-surukle-tutamak:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Köprünün imleci izleyen kopyasının id'si yok; asıl tutamak ibreyle zaten dönüyor. */
+  #sayfa-3 .s3-surukle-tutamak:not([id]) {
+    visibility: hidden !important;
+  }
+
   #sayfa-3 .s3-halka-hale {
     opacity: 0;
     transition: opacity 0.25s ease, stroke-width 0.25s ease;
@@ -3099,6 +3108,28 @@ window.SAYFA_INIT[3] = function (kok) {
   var guncelAci = 0;
   var kilitli = false;
   var secili = false;
+  var tutmaOfseti = 0;     /* tutulan noktanın imleç açısı − ibre açısı (derece) */
+  var animId = null;       /* geri dönüş animasyonunun rAF kimliği */
+  var animYarida = false;  /* tutma anında animasyon kesildi; sürükleme olmazsa sürdürülür */
+  var suruklendi = false;
+  var sonBirakma = 0;      /* sürüklemenin bittiği an: ardından gelen click yutulur */
+
+  function aciSar(a) {
+    a = a % 360;
+    return a < 0 ? a + 360 : a;
+  }
+
+  function aciFarki(a, b) {
+    var d = aciSar(a - b);
+    return d > 180 ? d - 360 : d;
+  }
+
+  function animIptal() {
+    if (animId !== null) {
+      cancelAnimationFrame(animId);
+      animId = null;
+    }
+  }
 
   function ibreDondur(deg) {
     if (ibreGrup) {
@@ -3141,14 +3172,16 @@ window.SAYFA_INIT[3] = function (kok) {
       yayCiz(araAci);
 
       if (t < 1) {
-        requestAnimationFrame(adim);
+        animId = requestAnimationFrame(adim);
       } else {
+        animId = null;
         guncelAci = 0;
         ibreDondur(0);
         yayCiz(0);
       }
     }
-    requestAnimationFrame(adim);
+    animIptal();
+    animId = requestAnimationFrame(adim);
   }
 
   function kitleHedefe() {
@@ -3208,6 +3241,27 @@ window.SAYFA_INIT[3] = function (kok) {
     return deg;
   }
 
+  /* Tutma ofseti: köprünün location.initial.input'u pointerdown değil, eşiği aşan ilk
+     harekettir; ofset sayfanın kendi pointerdown'ında alınır. Tutulan nokta ibreye göre
+     hangi açıdaysa ibre imleci o açı farkıyla izler (tutamak imlece sıçramaz). */
+  tutmaHalkasi.addEventListener("pointerdown", function (e) {
+    if (kilitli || e.button !== 0) return;
+    animYarida = animId !== null;
+    animIptal();
+    suruklendi = false;
+    tutmaOfseti = aciFarki(aciHesapla(e.clientX, e.clientY), guncelAci);
+
+    /* Geri dönüş animasyonu sürerken tutuldu ve sürükleme olmadan bırakıldıysa animasyonu sürdür. */
+    function bitti() {
+      window.removeEventListener("pointerup", bitti, true);
+      window.removeEventListener("pointercancel", bitti, true);
+      if (animYarida && !suruklendi && !kilitli) animasyonlaSifirla();
+      animYarida = false;
+    }
+    window.addEventListener("pointerup", bitti, true);
+    window.addEventListener("pointercancel", bitti, true);
+  });
+
   /* 2B Sürükle-Bırak (pdnd) Kurulumu */
   if (typeof pdnd !== "undefined" && pdnd.draggable && pdnd.dropTargetForElements) {
     pdnd.draggable({
@@ -3220,24 +3274,29 @@ window.SAYFA_INIT[3] = function (kok) {
       },
       onDragStart: function () {
         if (kilitli) return;
+        suruklendi = true;
+        animIptal();
         tutmaHalkasi.classList.add("s3-secili");
       },
       onDrag: function (args) {
         if (kilitli) return;
         var input = args.location && args.location.current && args.location.current.input;
         if (!input) return;
-        var deg = aciHesapla(input.clientX, input.clientY);
+        var deg = aciSar(aciHesapla(input.clientX, input.clientY) - tutmaOfseti);
         guncelAci = deg;
         ibreDondur(deg);
         yayCiz(deg);
       },
       onDrop: function () {
+        sonBirakma = performance.now();
         tutmaHalkasi.classList.remove("s3-secili");
         if (kilitli) return;
+        /* Karar imlecin altındaki yuvaya değil ibrenin (tutamağın) açısına bağlıdır. */
         degerlendirBitis(guncelAci);
       }
     });
 
+    /* Yuva kaydı korunur; bırakma kararı yuvanın onDrop'undan değil ibre açısından verilir. */
     pdnd.dropTargetForElements({
       element: hedef3,
       getData: function () {
@@ -3245,9 +3304,6 @@ window.SAYFA_INIT[3] = function (kok) {
       },
       canDrop: function (args) {
         return args.source && args.source.data && args.source.data.rol === "yelkovan-tutamak";
-      },
-      onDrop: function () {
-        kitleHedefe();
       }
     });
   }
@@ -3255,6 +3311,8 @@ window.SAYFA_INIT[3] = function (kok) {
   /* Tıkla-Seç Yedeği */
   tutmaHalkasi.addEventListener("click", function () {
     if (kilitli) return;
+    /* Sürüklemenin ardından tarayıcının gönderdiği click seçimi geri açmasın. */
+    if (performance.now() - sonBirakma < 400) return;
     secili = !secili;
     if (secili) {
       tutmaHalkasi.classList.add("s3-secili");
@@ -3291,6 +3349,11 @@ window.SAYFA_INIT[3] = function (kok) {
       kilitli = false;
       secili = false;
       guncelAci = 0;
+      tutmaOfseti = 0;
+      suruklendi = false;
+      animYarida = false;
+      sonBirakma = 0;
+      animIptal();
       tutmaHalkasi.classList.remove("s3-secili");
       hedef3.classList.remove("s3-kilitlendi");
       yayEl.classList.remove("s3-yay-belirgin");

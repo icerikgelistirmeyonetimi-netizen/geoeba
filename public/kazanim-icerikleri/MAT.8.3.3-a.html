@@ -910,7 +910,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 22:06
+  montaj: 2026-10-18 06:22
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 20:48
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 20:50
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 20:47
@@ -2106,6 +2106,10 @@ window.SAYFA_INIT[1] = function (kok) {
 #sayfa-2 .s2-tutamak:active {
   cursor: grabbing;
 }
+/* Köprünün imleci izleyen hayalet kopyası (id'siz) gizli: asıl kol kendisi dönüyor */
+#sayfa-2 .s2-tutamak:not([id]) {
+  visibility: hidden !important;
+}
 #sayfa-2 .s2-hedef {
   cursor: pointer;
   outline: none;
@@ -2200,6 +2204,8 @@ window.SAYFA_INIT[2] = function (kok) {
     secimAyarla(null);
   }
 
+  // Karar kolun GÖRÜNEN ucuna bakar (imlecin altındaki yuvaya değil); açı sınırı
+  // (-80..-10 / -170..-110) hedef açısından ≥ 31 derece uzak, kısıtlı ve kısıtsız karar aynı.
   function hedefeYakinMi(kol) {
     var x, y;
     if (kol === "c") {
@@ -2223,23 +2229,49 @@ window.SAYFA_INIT[2] = function (kok) {
     return pt.matrixTransform((kok.querySelector("#s2-kadraj") || svg).getScreenCTM().inverse());
   }
 
-  function surukleC(clientX, clientY) {
-    if (cKilitli) return;
+  // Tutma ofseti: kol, imleci değil imlecin menteşe çevresindeki DÖNÜŞÜNÜ izler;
+  // yayın neresinden tutulursa tutulsun kol tutulan açıdan başlar, imlece sıçramaz.
+  var tutma = null;
+  var sonBirakma = 0;
+
+  function imlecAcisi(kol, clientX, clientY) {
     var p = svgNoktasi(clientX, clientY);
-    var aci = Math.atan2(p.y - 390, p.x - 270) * 180 / Math.PI;
-    if (aci < -80) aci = -80;
-    if (aci > -10) aci = -10;
-    guncelleC(aci, false);
+    return Math.atan2(p.y - 390, p.x - (kol === "c" ? 270 : 590)) * 180 / Math.PI;
   }
 
-  function surukleB(clientX, clientY) {
-    if (bKilitli) return;
-    var p = svgNoktasi(clientX, clientY);
-    var aci = Math.atan2(p.y - 390, p.x - 590) * 180 / Math.PI;
-    if (aci > 0) aci -= 360;
-    if (aci < -170) aci = -170;
-    if (aci > -110) aci = -110;
-    guncelleB(aci, false);
+  function aciFarki(a, b) {
+    var d = a - b;
+    while (d > 180) d -= 360;
+    while (d <= -180) d += 360;
+    return d;
+  }
+
+  // Geri dönüş animasyonu sürerken tutulursa ekranda görünen açıdan devam et
+  function gorunenAci(kol) {
+    try {
+      var m = new DOMMatrixReadOnly(getComputedStyle(kol === "c" ? kolC : kolB).transform);
+      var a = Math.atan2(m.b, m.a) * 180 / Math.PI;
+      if (isFinite(a)) return a;
+    } catch (err) { /* varsayılan aşağıda */ }
+    return kol === "c" ? cAci : bAci;
+  }
+
+  function tutmaBaslat(kol, e) {
+    if (kol === "c" ? cKilitli : bKilitli) return;
+    tutma = { kol: kol, aci0: gorunenAci(kol), ptr: imlecAcisi(kol, e.clientX, e.clientY), toplam: 0 };
+  }
+
+  function surukle(kol, clientX, clientY) {
+    if (kol === "c" ? cKilitli : bKilitli) return;
+    var ptr = imlecAcisi(kol, clientX, clientY);
+    if (!tutma || tutma.kol !== kol) {
+      tutma = { kol: kol, aci0: kol === "c" ? cAci : bAci, ptr: ptr, toplam: 0 };
+    }
+    tutma.toplam += aciFarki(ptr, tutma.ptr);
+    tutma.ptr = ptr;
+    var istenen = tutma.aci0 + tutma.toplam;
+    if (kol === "c") guncelleC(Math.max(-80, Math.min(-10, istenen)), false);
+    else guncelleB(Math.max(-170, Math.min(-110, istenen)), false);
   }
 
   // Pragmatic DnD kurulumu
@@ -2267,14 +2299,13 @@ window.SAYFA_INIT[2] = function (kok) {
       onDrag: function (args) {
         var kol = args.source.data.kol;
         var inp = args.location.current.input;
-        if (kol === "c") surukleC(inp.clientX, inp.clientY);
-        else if (kol === "b") surukleB(inp.clientX, inp.clientY);
+        surukle(kol, inp.clientX, inp.clientY);
       },
       onDrop: function (args) {
         var kol = args.source.data.kol;
-        if (args.location.current.dropTargets && args.location.current.dropTargets.length > 0) {
-          kilitle(kol);
-        } else if (hedefeYakinMi(kol)) {
+        sonBirakma = Date.now();
+        tutma = null;
+        if (hedefeYakinMi(kol)) {
           kilitle(kol);
         } else {
           geriDon(kol);
@@ -2284,9 +2315,13 @@ window.SAYFA_INIT[2] = function (kok) {
     }));
   }
 
+  tutamakC.addEventListener("pointerdown", function (e) { tutmaBaslat("c", e); });
+  tutamakB.addEventListener("pointerdown", function (e) { tutmaBaslat("b", e); });
+
   // Tıkla-seç yedeği ve klavye erişilebilirliği
+  // (sürüklemeden hemen sonra tarayıcının ürettiği click seçimi geri açmasın)
   tutamakC.addEventListener("click", function () {
-    if (cKilitli) return;
+    if (cKilitli || Date.now() - sonBirakma < 400) return;
     secimAyarla(seciliKol === "c" ? null : "c");
   });
   tutamakC.addEventListener("keydown", function (e) {
@@ -2297,7 +2332,7 @@ window.SAYFA_INIT[2] = function (kok) {
   });
 
   tutamakB.addEventListener("click", function () {
-    if (bKilitli) return;
+    if (bKilitli || Date.now() - sonBirakma < 400) return;
     secimAyarla(seciliKol === "b" ? null : "b");
   });
   tutamakB.addEventListener("keydown", function (e) {
@@ -2323,6 +2358,8 @@ window.SAYFA_INIT[2] = function (kok) {
   btnSifirla.addEventListener("click", function () {
     cKilitli = false;
     bKilitli = false;
+    tutma = null;
+    sonBirakma = 0;
     secimAyarla(null);
     guncelleC(-15, true);
     guncelleB(-165, true);
@@ -5432,6 +5469,10 @@ window.SAYFA_INIT[7] = function (kok) {
   #sayfa-8 .s8-tutamac:active {
     cursor: grabbing;
   }
+  /* Köprünün imleci izleyen hayalet kopyası (id'siz) gizli: asıl tutamaç kendisi ışında kayıyor */
+  #sayfa-8 .s8-tutamac:not([id]) {
+    visibility: hidden !important;
+  }
   #sayfa-8 .s8-bilgi-kart {
     display: flex;
     flex-direction: column;
@@ -5498,6 +5539,10 @@ window.SAYFA_INIT[8] = function (kok) {
   var tB = tMinB;
   var kenetlendi = false;
   var aktifTutamac = null;
+  // Tutma ofseti: tutulan noktanın tutamaç merkezinden ışın boyu uzaklığı (SVG birimi)
+  var tutmaA = 0;
+  var tutmaB = 0;
+  var sonBirakma = 0;
 
   function setOdak(tutamac, acik) {
     if (kenetlendi) return;
@@ -5613,7 +5658,7 @@ window.SAYFA_INIT[8] = function (kok) {
           var p = getSvgCoord(args.location.current.input.clientX, args.location.current.input.clientY);
           var vx = p.x - Ax;
           var vy = p.y - Ay;
-          var t = vx * uxA + vy * uyA;
+          var t = vx * uxA + vy * uyA - tutmaA;
           if (t < tMinA) t = tMinA;
           if (t > lenA) t = lenA;
           tA = t;
@@ -5622,6 +5667,7 @@ window.SAYFA_INIT[8] = function (kok) {
         }
       },
       onDrop: function () {
+        sonBirakma = Date.now();
         setOdak("a", false);
         kenetlenmeKontrol();
       }
@@ -5641,7 +5687,7 @@ window.SAYFA_INIT[8] = function (kok) {
           var p = getSvgCoord(args.location.current.input.clientX, args.location.current.input.clientY);
           var vx = p.x - Bx;
           var vy = p.y - By;
-          var t = vx * uxB + vy * uyB;
+          var t = vx * uxB + vy * uyB - tutmaB;
           if (t < tMinB) t = tMinB;
           if (t > lenB) t = lenB;
           tB = t;
@@ -5650,19 +5696,32 @@ window.SAYFA_INIT[8] = function (kok) {
         }
       },
       onDrop: function () {
+        sonBirakma = Date.now();
         setOdak("b", false);
         kenetlenmeKontrol();
       }
     });
   }
 
-  elA.addEventListener("click", function () {
+  elA.addEventListener("pointerdown", function (e) {
     if (kenetlendi) return;
+    var p = getSvgCoord(e.clientX, e.clientY);
+    tutmaA = (p.x - Ax) * uxA + (p.y - Ay) * uyA - tA;
+  });
+  elB.addEventListener("pointerdown", function (e) {
+    if (kenetlendi) return;
+    var p = getSvgCoord(e.clientX, e.clientY);
+    tutmaB = (p.x - Bx) * uxB + (p.y - By) * uyB - tB;
+  });
+
+  // Sürüklemeden hemen sonra tarayıcının ürettiği click tıkla-seç odağını geri açmasın
+  elA.addEventListener("click", function () {
+    if (kenetlendi || Date.now() - sonBirakma < 400) return;
     setOdak("a", aktifTutamac !== "a");
     setOdak("b", false);
   });
   elB.addEventListener("click", function () {
-    if (kenetlendi) return;
+    if (kenetlendi || Date.now() - sonBirakma < 400) return;
     setOdak("b", aktifTutamac !== "b");
     setOdak("a", false);
   });
@@ -5700,6 +5759,9 @@ window.SAYFA_INIT[8] = function (kok) {
     kenetlendi = false;
     tA = tMinA;
     tB = tMinB;
+    tutmaA = 0;
+    tutmaB = 0;
+    sonBirakma = 0;
     setOdak("a", false);
     setOdak("b", false);
     cizGuncelle();

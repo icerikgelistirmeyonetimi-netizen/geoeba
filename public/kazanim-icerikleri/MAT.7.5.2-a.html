@@ -913,7 +913,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 22:06
+  montaj: 2026-10-18 06:22
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-19 03:19
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-19 03:17
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-19 03:18
@@ -3465,7 +3465,9 @@ window.SAYFA_INIT[3] = function (kok) {
   #sayfa-4 .s4-kavrama-noktasi { cursor: grab; touch-action: none; outline: none; transition: transform 0.15s ease-out; }
   #sayfa-4 .s4-kavrama-noktasi:hover .s4-odak-halka,
   #sayfa-4 .s4-kavrama-noktasi:focus .s4-odak-halka { stroke-width: 2.5; fill-opacity: 0.3; }
-  #sayfa-4 .s4-kavrama-noktasi.s4-surukleniyor { cursor: grabbing; }
+  #sayfa-4 .s4-kavrama-noktasi.s4-surukleniyor { cursor: grabbing; transition: none; }
+  /* pdnd-svg köprüsü sürüklenen düğümün id'siz, imleci izleyen bir kopyasını da çizer; asıl A zaten taşındığı için kopya ikinci bir A gibi görünür */
+  #sayfa-4 .s4-kavrama-noktasi:not([id]) { visibility: hidden !important; }
   #sayfa-4 .s4-hedef-yuva { cursor: pointer; outline: none; }
   #sayfa-4 .s4-hedef-yuva:hover circle:first-child { fill-opacity: 0.18; }
 
@@ -3476,6 +3478,7 @@ window.SAYFA_INIT[3] = function (kok) {
 window.SAYFA_INIT[4] = function (kok) {
   var svg = kok.querySelector("svg");
   var aGrup = kok.querySelector("#s4-nokta-a");
+  var topuz = aGrup.querySelector(".s4-ana-topuz");
   var ucgenAlan = kok.querySelector("#s4-ucgen-alan");
   var kenarAB = kok.querySelector("#s4-kenar-ab");
   var kenarAC = kok.querySelector("#s4-kenar-ac");
@@ -3502,6 +3505,10 @@ window.SAYFA_INIT[4] = function (kok) {
   var suankiY = BASLANGIC.y;
   var sonGecerli = null;
   var animId = null;
+  var animHedef = null;
+  var tutmaOfseti = { dx: 0, dy: 0 };   /* tutulan nokta ile A merkezi arasındaki fark (SVG birimi) */
+  var surukleBasladi = false;
+  var yarimKalan = null;                /* geri dönüş sürerken tutulduysa varış noktası */
 
   function svgKoordinat(clientX, clientY) {
     var ctm = svg.getScreenCTM();
@@ -3574,12 +3581,15 @@ window.SAYFA_INIT[4] = function (kok) {
 
   function yumusakDonus(hedefX, hedefY) {
     if (animId) cancelAnimationFrame(animId);
+    animHedef = { x: hedefX, y: hedefY };
     var baslaX = suankiX;
     var baslaY = suankiY;
     var t = 0;
     function adim() {
       t += 0.08;
       if (t >= 1) {
+        animId = null;
+        animHedef = null;
         cizgileriGuncelle(hedefX, hedefY);
         return;
       }
@@ -3625,17 +3635,54 @@ window.SAYFA_INIT[4] = function (kok) {
 
   var temizleyiciler = [];
 
-  if (window.pdnd && pdnd.draggable && pdnd.dropTargetForElements) {
+  /* A tutulduğu noktadan tutulur: sürüklerken A merkezi = imleç - tutma ofseti.
+     Köprünün location.initial'ı pointerdown değil, eşiği aşan ilk harekettir; ofset burada saklanır. */
+  function tutmaBitti() {
+    window.removeEventListener("pointerup", tutmaBitti);
+    window.removeEventListener("pointercancel", tutmaBitti);
+    if (!surukleBasladi && yarimKalan) {   /* sürüklemeden bırakıldı: yarım kalan geri dönüşü bitir */
+      var h = yarimKalan;
+      yarimKalan = null;
+      yumusakDonus(h.x, h.y);
+    }
+  }
+  aGrup.addEventListener("pointerdown", function (e) {
+    if (e.button !== 0) return;
+    surukleBasladi = false;
+    yarimKalan = null;
+    if (animId) {                          /* geri dönüş/kenetlenme sürerken yeniden tutuldu */
+      cancelAnimationFrame(animId);
+      animId = null;
+      yarimKalan = animHedef;
+      animHedef = null;
+    }
+    /* CSS geçişi (transform 0.15s) yüzünden ekranda görünen konum nitelikten geride kalabilir: tutma görünen konuma kurulur */
+    var r = topuz.getBoundingClientRect();
+    var gor = svgKoordinat(r.left + r.width / 2, r.top + r.height / 2);
+    if (Math.abs(gor.x - suankiX) > 0.5 || Math.abs(gor.y - suankiY) > 0.5) {
+      cizgileriGuncelle(gor.x, gor.y);
+    }
+    var pt = svgKoordinat(e.clientX, e.clientY);
+    tutmaOfseti = { dx: pt.x - suankiX, dy: pt.y - suankiY };
+    window.addEventListener("pointerup", tutmaBitti);
+    window.addEventListener("pointercancel", tutmaBitti);
+  });
+
+  /* Bırakma kararı imlece değil A'nın görünen konumuna bağlıdır (imleç - ofset); iki hedef yuvası da buradan kenetlenir. */
+  if (window.pdnd && pdnd.draggable) {
     temizleyiciler.push(
       pdnd.draggable({
         element: aGrup,
         onDragStart: function () {
+          surukleBasladi = true;
+          yarimKalan = null;
           aGrup.classList.add("s4-surukleniyor");
         },
         onDrag: function (args) {
           if (args.location && args.location.current && args.location.current.input) {
-            var pt = svgKoordinat(args.location.current.input.clientX, args.location.current.input.clientY);
-            cizgileriGuncelle(pt.x, pt.y);
+            var inp = args.location.current.input;
+            var pt = svgKoordinat(inp.clientX, inp.clientY);
+            cizgileriGuncelle(pt.x - tutmaOfseti.dx, pt.y - tutmaOfseti.dy);
           }
         },
         onDrop: function (args) {
@@ -3643,28 +3690,10 @@ window.SAYFA_INIT[4] = function (kok) {
           var input = args.location && args.location.current ? args.location.current.input : null;
           if (input) {
             var pt = svgKoordinat(input.clientX, input.clientY);
-            birakildiKontrol(pt.x, pt.y);
+            birakildiKontrol(pt.x - tutmaOfseti.dx, pt.y - tutmaOfseti.dy);
           } else {
             birakildiKontrol(suankiX, suankiY);
           }
-        }
-      })
-    );
-
-    temizleyiciler.push(
-      pdnd.dropTargetForElements({
-        element: yuvaCesit,
-        onDrop: function () {
-          hedefeKenetlen("cesitkenar");
-        }
-      })
-    );
-
-    temizleyiciler.push(
-      pdnd.dropTargetForElements({
-        element: yuvaIkiz,
-        onDrop: function () {
-          hedefeKenetlen("ikizkenar");
         }
       })
     );
@@ -3693,6 +3722,8 @@ window.SAYFA_INIT[4] = function (kok) {
 
   btnSifirla.addEventListener("click", function () {
     sonGecerli = null;
+    tutmaOfseti = { dx: 0, dy: 0 };
+    yarimKalan = null;
     yumusakDonus(BASLANGIC.x, BASLANGIC.y);
     paneliGuncelle(null);
   });

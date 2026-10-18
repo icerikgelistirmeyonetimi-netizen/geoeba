@@ -911,7 +911,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 22:06
+  montaj: 2026-10-18 06:22
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 15:28
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-17 15:30
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=yerlesim | zaman=2026-09-17 15:29
@@ -1992,6 +1992,10 @@ window.SAYFA_INIT[1] = function (kok) {
     cursor: grab;
     outline: none;
   }
+  /* pdnd-svg köprüsünün imleci izleyen kopyası (id'siz): asıl tutamaç zaten taşınıyor */
+  #sayfa-2 .s2-tutamac:not([id]) {
+    visibility: hidden !important;
+  }
   #sayfa-2 .s2-tutamac-olcek {
     transition: transform 0.15s ease-out;
     transform-box: fill-box;
@@ -2043,6 +2047,9 @@ window.SAYFA_INIT[2] = function (kok) {
   var suAnkiS = 0;
   var kilitliDurak = 0;
   var animasyonId = null;
+  var tutmaNoktasi = null;
+  var tutmaOfseti = { dx: 0, dy: 0 };
+  var sonBirakma = 0;
 
   var tutamac = kok.querySelector("#s2-tutamac");
   var maviYay = kok.querySelector("#s2-ip-mavi-yay");
@@ -2195,30 +2202,47 @@ window.SAYFA_INIT[2] = function (kok) {
         canDrag: function () { return true; },
         getInitialData: function () { return { tip: "tutamac" }; },
         onDragStart: function () {
+          // Yaylanma sürerken yeniden tutulursa animasyon tutamaçla yarışmasın;
+          // tutma ofsetini de tutamacın o anki gerçek konumundan yeniden al.
+          if (animasyonId) {
+            cancelAnimationFrame(animasyonId);
+            animasyonId = null;
+          }
+          if (tutmaNoktasi) {
+            tutmaOfseti.dx = tutmaNoktasi.x - (x0 + suAnkiS);
+          }
           tutamac.classList.add("s2-surukleniyor");
         },
         onDrag: function (args) {
           if (args.location && args.location.current && args.location.current.input) {
             var pt = svgNoktasi(args.location.current.input.clientX, args.location.current.input.clientY);
-            var s = pt.x - x0;
-            guncelleSahne(s);
+            // Tutamaç imlece değil, tutulduğu noktaya göre gider; ray dışına çıkma kısıtı (0..2πr)
+            // guncelleSahne'de yalnız görünen konuma uygulanır.
+            var istenenX = pt.x - tutmaOfseti.dx;
+            guncelleSahne(istenenX - x0);
           }
         },
         onDrop: function (args) {
           tutamac.classList.remove("s2-surukleniyor");
+          sonBirakma = Date.now();
           var pt = null;
           if (args.location && args.location.current && args.location.current.input) {
             pt = svgNoktasi(args.location.current.input.clientX, args.location.current.input.clientY);
           }
-          if (!pt || Math.abs(pt.y - yHat) > 50) {
+          // Karar imlecin altındaki alana değil, tutamacın KISILMAMIŞ konumuna (imleç - ofset) bağlıdır.
+          var istenenX = pt ? pt.x - tutmaOfseti.dx : 0;
+          var istenenY = pt ? pt.y - tutmaOfseti.dy : 0;
+          if (!pt || Math.abs(istenenY - yHat) > 50) {
             yaylan(kilitliDurak === 1 ? yayYarim : 0);
             EGITSEL.dontVer(kok, "yanlis", "İpi cetvel boyunca çekin.");
             return;
           }
-          if (Math.abs(pt.x - xYarim) <= cekimAlani) {
+          if (Math.abs(istenenX - xYarim) <= cekimAlani) {
             hedefeUlas(1);
-          } else if (Math.abs(pt.x - xTam) <= cekimAlani) {
+          } else if (Math.abs(istenenX - xTam) <= cekimAlani) {
             hedefeUlas(2);
+          } else if (Math.abs(istenenX - x0) <= cekimAlani) {
+            hedefeUlas(0);
           } else {
             yaylan(kilitliDurak === 1 ? yayYarim : 0);
             EGITSEL.dontVer(kok, "yanlis", "İpi cetvel boyunca çekin.");
@@ -2226,31 +2250,26 @@ window.SAYFA_INIT[2] = function (kok) {
         }
       })
     );
-
-    var durakHedefleri = [
-      { el: kok.querySelector("#s2-durak-0-alan"), id: 0 },
-      { el: kok.querySelector("#s2-durak-yarim-alan"), id: 1 },
-      { el: kok.querySelector("#s2-durak-tam-alan"), id: 2 }
-    ];
-    durakHedefleri.forEach(function (h) {
-      if (!h.el) return;
-      temizleyiciler.push(
-        pdnd.dropTargetForElements({
-          element: h.el,
-          getData: function () { return { durakId: h.id }; },
-          onDrop: function () {
-            hedefeUlas(h.id);
-          }
-        })
-      );
-    });
   }
+
+  // Tutma ofseti: pdnd'nin ilk girdisi eşiği aşan ilk harekettir, tutma anı değil; bu yüzden
+  // sayfanın kendi pointerdown'ında tutulan nokta ile tutamaç merkezi arasındaki fark saklanır.
+  tutamac.addEventListener("pointerdown", function (e) {
+    if (e.button !== 0) return;
+    var pt = svgNoktasi(e.clientX, e.clientY);
+    tutmaNoktasi = pt;
+    tutmaOfseti = { dx: pt.x - (x0 + suAnkiS), dy: pt.y - yHat };
+  });
 
   // Tıkla-seç erişilebilirlik yedeği
   function tutamacSecimTetikle() {
     tutamac.classList.toggle("s2-secili");
   }
-  tutamac.addEventListener("click", tutamacSecimTetikle);
+  tutamac.addEventListener("click", function () {
+    // Sürükleme bırakılınca tarayıcının üreteceği click seçimi yeniden açmasın
+    if (Date.now() - sonBirakma < 400) return;
+    tutamacSecimTetikle();
+  });
   tutamac.addEventListener("keydown", function (e) {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -2272,6 +2291,8 @@ window.SAYFA_INIT[2] = function (kok) {
   });
 
   btnSifirla.addEventListener("click", function () {
+    tutmaNoktasi = null;
+    tutmaOfseti = { dx: 0, dy: 0 };
     hedefeUlas(0);
   });
 

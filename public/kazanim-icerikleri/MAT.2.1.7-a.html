@@ -1073,7 +1073,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/5568ce18c06ca457.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-17 22:05
+  montaj: 2026-10-18 06:21
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-16 06:23
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-16 06:20
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-16 06:20
@@ -6159,6 +6159,11 @@ window.SAYFA_INIT[6] = function (kok) {
   #sayfa-7 .s7-dilim.s7-kilitli {
     cursor: default;
   }
+  /* Chrome, SVG tabindex öğesine fare odağında da koyu :focus halkası çizer;
+     klavye odağı (:focus-visible) tarayıcının kendi halkasıyla görünür kalır. */
+  #sayfa-7 .s7-dilim:focus:not(:focus-visible) {
+    outline: none;
+  }
   #sayfa-7 .s7-yuva {
     cursor: pointer;
   }
@@ -6171,6 +6176,12 @@ window.SAYFA_INIT[7] = function (kok) {
   var seciliDilimId = null;
   var yuvaDolu = { '1a': null, '1b': null, '2a': null, '2b': null };
   var dilimYer = { '1': null, '2': null, '3': null, '4': null };
+
+  /* Sürükleme durumu. Köprünün hayaleti dilimi tutma ofsetiyle (imleç farkı
+     kadar) izler; bırakma kararı imlece değil bu hayaletin konumuna bakar. */
+  var tutma = null;        // {x, y: tutma anı imleç; cx, cy: o anki dilim merkezi; iptal}
+  var vurguYuva = null;    // sürüklerken vurgulu yuva
+  var sonBirakma = 0;      // sürükleme sonrası click'i yutmak için
 
   var BASLANGIC_KONUMLAR = {
     '1': { x: 252, y: 480, rot: 0 },
@@ -6287,7 +6298,15 @@ window.SAYFA_INIT[7] = function (kok) {
   var dilimler = kok.querySelectorAll('.s7-dilim');
   dilimler.forEach(function (d) {
     var id = d.getAttribute('data-id');
+    // Köprünün kendi pointerdown'ından ÖNCE kayıt olmalı (pdnd.draggable aşağıda).
+    d.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0 || dilimYer[id]) return;
+      var r = d.getBoundingClientRect();
+      tutma = { x: e.clientX, y: e.clientY, cx: r.left + r.width / 2, cy: r.top + r.height / 2, iptal: false };
+      window.addEventListener('pointercancel', iptalYakala, true);
+    });
     d.addEventListener('click', function () {
+      if (Date.now() - sonBirakma < 400) return;   // sürükleme sonrası click tıkla-seç'i geri açmasın
       if (dilimYer[id]) return;
       if (seciliDilimId === id) {
         secimGuncelle(null);
@@ -6330,6 +6349,38 @@ window.SAYFA_INIT[7] = function (kok) {
     });
   }
 
+  // pointercancel (tarayıcı hareketi devralır): bırakma sayılmaz, yanlış dönütü verilir.
+  function iptalYakala() {
+    window.removeEventListener('pointercancel', iptalYakala, true);
+    if (tutma) tutma.iptal = true;
+  }
+
+  // Hayaletin merkezi (tutma anındaki dilim merkezi + imleç farkı) hangi yuvaya
+  // yakın? Yuva merkezine yarım yuva boyundan biraz fazla uzaklıktaki en yakın yuva.
+  function hayaletYuvasi(girdi) {
+    if (!tutma || tutma.iptal || !girdi) return null;
+    var gx = tutma.cx + (girdi.clientX - tutma.x);
+    var gy = tutma.cy + (girdi.clientY - tutma.y);
+    var bulunan = null;
+    var enKucuk = Infinity;
+    yuvalar.forEach(function (y) {
+      var r = y.getBoundingClientRect();
+      var uzak = Math.hypot(gx - (r.left + r.width / 2), gy - (r.top + r.height / 2));
+      if (uzak <= r.width * 0.55 && uzak < enKucuk) {
+        enKucuk = uzak;
+        bulunan = y.getAttribute('data-yuva');
+      }
+    });
+    return bulunan;
+  }
+
+  function vurguAyarla(yId) {
+    if (yId === vurguYuva) return;
+    if (vurguYuva) yuvaVurguAyarla(vurguYuva, false);
+    vurguYuva = yId;
+    if (yId) yuvaVurguAyarla(yId, true);
+  }
+
   var temizleyiciler = [];
   if (typeof pdnd !== 'undefined') {
     dilimler.forEach(function (d) {
@@ -6340,40 +6391,34 @@ window.SAYFA_INIT[7] = function (kok) {
         getInitialData: function () { return { id: id }; },
         onDragStart: function () {
           secimGuncelle(id);
+        },
+        onDrag: function (args) {
+          var yId = hayaletYuvasi(args.location.current.input);
+          vurguAyarla(yId && !yuvaDolu[yId] ? yId : null);
+        },
+        // Karar imlecin altındaki hedefe değil hayaletin konumuna bakar; yuva
+        // boşsa yerleşir, hiçbir yuvaya yakın değilse ya da yuva doluysa yerlestir() yanlış verir.
+        onDrop: function (args) {
+          sonBirakma = Date.now();
+          var yId = hayaletYuvasi(args.location.current.input);
+          vurguAyarla(null);
+          tutma = null;
+          yerlestir(id, yId);
         }
       });
       temizleyiciler.push(c1);
     });
 
+    // Yuvalar hedef olarak kayıtlı kalır (tek motor pdnd); vurgu ve karar hayalete göre sürücüde yürür.
     yuvalar.forEach(function (y) {
       var yId = y.getAttribute('data-yuva');
       var c2 = pdnd.dropTargetForElements({
         element: y,
         canDrop: function () { return !yuvaDolu[yId]; },
-        getData: function () { return { yuvaId: yId }; },
-        onDragEnter: function () { yuvaVurguAyarla(yId, true); },
-        onDragLeave: function () { yuvaVurguAyarla(yId, false); },
-        onDrop: function (args) {
-          yuvaVurguAyarla(yId, false);
-          var sId = args.source && args.source.data ? args.source.data.id : seciliDilimId;
-          yerlestir(sId, yId);
-        }
+        getData: function () { return { yuvaId: yId }; }
       });
       temizleyiciler.push(c2);
     });
-
-    var c3 = pdnd.monitorForElements({
-      onDrop: function (args) {
-        if (!args.location.current.dropTargets.length) {
-          var sId = args.source && args.source.data ? args.source.data.id : seciliDilimId;
-          if (sId && !dilimYer[sId]) {
-            EGITSEL.dontVer(kok, 'yanlis', 'Boş çeyrek yuvaya yerleştir.');
-            secimGuncelle(null);
-          }
-        }
-      }
-    });
-    temizleyiciler.push(c3);
   }
 
   var sifirlaBtn = kok.querySelector('#s7-sifirla-btn');
@@ -6397,6 +6442,8 @@ window.SAYFA_INIT[7] = function (kok) {
         yuvaVurguAyarla(k, false);
       }
       seciliDilimId = null;
+      tutma = null;
+      vurguYuva = null;
 
       for (var kp = 1; kp <= 2; kp++) {
         var is1 = kok.querySelector('#s7-isima-' + kp);
