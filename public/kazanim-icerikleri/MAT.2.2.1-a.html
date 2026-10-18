@@ -1075,7 +1075,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/5568ce18c06ca457.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-18 06:21
+  montaj: 2026-10-18 14:48
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=rotus | zaman=2026-09-16 06:51
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-16 06:53
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-16 06:51
@@ -3903,6 +3903,11 @@ window.SAYFA_INIT[3] = function (kok) {
     touch-action: none;
   }
 
+  /* pdnd-svg köprüsünün imleci izleyen kopyası (id'si silinir, sınıfı kalır): asıl tutamaç zaten taşınıyor */
+  #sayfa-4 .s4-tutamac:not([id]) {
+    visibility: hidden !important;
+  }
+
   #sayfa-4 .s4-tutamac-ic {
     transform-origin: center;
     transform-box: fill-box;
@@ -3966,6 +3971,21 @@ window.SAYFA_INIT[4] = function (kok) {
   var sifirlaBtn = kok.querySelector("#s4-sifirla-btn");
   var vurusAlanlari = kok.querySelectorAll(".s4-vurus-alani");
 
+  // Sürükleme durumu: tutma ofseti (yalnız x ekseni), kısıtlanmamış istenen konum, bırakma anı
+  var tutmaOfsetiX = 0;
+  var istenenX = baslangicX;
+  var suruklemede = false;
+  var sonBirakma = 0;
+
+  function ekranToSvg(clientX, clientY) {
+    var ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    var pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    return pt.matrixTransform(ctm.inverse());
+  }
+
   function yayGuncelle(x) {
     if (x <= baslangicX) {
       yay.setAttribute("d", "M " + baslangicX + " 365 Q " + baslangicX + " 365 " + baslangicX + " 365");
@@ -4015,7 +4035,8 @@ window.SAYFA_INIT[4] = function (kok) {
     setTimeout(function () {
       tutamac.classList.remove("s4-hata-uyari");
       tutamacIc.classList.remove("s4-titreme");
-      tutamacKonumla(baslangicX);
+      // Geri dönüş sırasında yeniden tutulduysa tutamacı elinden çekme: sürükleme konumu belirler
+      if (!suruklemede) tutamacKonumla(baslangicX);
       hedefIsima.setAttribute("opacity", "0");
       secili = false;
       tutamac.classList.remove("s4-aktif");
@@ -4025,6 +4046,7 @@ window.SAYFA_INIT[4] = function (kok) {
   // Akıllı tahta ve klavye için tıkla-seç yedeği
   tutamac.addEventListener("click", function () {
     if (kilitli) return;
+    if (Date.now() - sonBirakma < 400) return; // sürükleme sonrası tarayıcının click'i seçimi geri açmasın
     secili = !secili;
     tutamac.classList.toggle("s4-aktif", secili);
     tutamac.setAttribute("aria-pressed", secili ? "true" : "false");
@@ -4051,30 +4073,39 @@ window.SAYFA_INIT[4] = function (kok) {
     });
   });
 
+  // Tutma ofseti: köprünün ilk girdisi pointerdown değil, eşiği aşan ilk harekettir; ofseti burada al
+  tutamac.addEventListener("pointerdown", function (e) {
+    if (kilitli) return;
+    var pt = ekranToSvg(e.clientX, e.clientY);
+    if (!pt) return;
+    tutmaOfsetiX = pt.x - mevcutX;
+  });
+
   // Pragmatic DnD (pdnd) Entegrasyonu
   if (window.pdnd && window.pdnd.draggable) {
     window.pdnd.draggable({
       element: tutamac,
       canDrag: function () { return !kilitli; },
       onDragStart: function () {
+        suruklemede = true;
+        istenenX = mevcutX;
         tutamac.classList.add("s4-aktif");
       },
       onDrag: function (data) {
         if (!data.location || !data.location.current || !data.location.current.input) return;
-        var pt = svg.createSVGPoint();
-        pt.x = data.location.current.input.clientX;
-        pt.y = data.location.current.input.clientY;
-        var ctm = svg.getScreenCTM();
-        if (!ctm) return;
-        var svgPt = pt.matrixTransform(ctm.inverse());
-        
-        var val = snapDeger(svgPt.x);
+        var inp = data.location.current.input;
+        var svgPt = ekranToSvg(inp.clientX, inp.clientY);
+        if (!svgPt) return;
+
+        // İstenen konum = imleç - tutma ofseti (sınır kısıtından ÖNCE); karar buna bağlıdır
+        istenenX = svgPt.x - tutmaOfsetiX;
+        var val = snapDeger(istenenX);
         var sx = snapX(val);
         // 24 piksellik mıknatıslanma alanı
-        if (Math.abs(svgPt.x - sx) <= 12) {
+        if (Math.abs(istenenX - sx) <= 12) {
           tutamacKonumla(sx);
         } else {
-          var clampedX = Math.max(baslangicX, Math.min(750, svgPt.x));
+          var clampedX = Math.max(baslangicX, Math.min(750, istenenX));
           tutamacKonumla(clampedX);
         }
 
@@ -4082,7 +4113,9 @@ window.SAYFA_INIT[4] = function (kok) {
         hedefIsima.setAttribute("opacity", "0");
       },
       onDrop: function () {
-        var sonDeger = snapDeger(mevcutX);
+        suruklemede = false;
+        sonBirakma = Date.now();
+        var sonDeger = snapDeger(istenenX);
         if (sonDeger === hedefDeger) {
           hedefBasari();
         } else {
@@ -4112,6 +4145,10 @@ window.SAYFA_INIT[4] = function (kok) {
   sifirlaBtn.addEventListener("click", function () {
     kilitli = false;
     secili = false;
+    suruklemede = false;
+    tutmaOfsetiX = 0;
+    istenenX = baslangicX;
+    sonBirakma = 0;
     tutamac.classList.remove("s4-aktif", "s4-hata-uyari");
     tutamacIc.classList.remove("s4-titreme");
     tutamacKonumla(baslangicX);

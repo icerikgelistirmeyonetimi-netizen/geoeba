@@ -912,7 +912,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-18 06:22
+  montaj: 2026-10-18 14:31
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=yerlesim | zaman=2026-09-18 20:59
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 20:57
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 20:59
@@ -1531,6 +1531,10 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
     cursor: ns-resize;
     touch-action: none;
   }
+  /* pdnd-svg köprüsü sürüklenen tutamacın kimliksiz yarı saydam kopyasını çizer; asıl tutamaç zaten imleçle taşınıyor */
+  #sayfa-1 .s1-tutus-alani:not([id]) {
+    visibility: hidden !important;
+  }
   #sayfa-1 .s1-nabiz-kesen {
     animation: s1-kesen-nabiz-anim 1.2s ease-in-out infinite alternate;
   }
@@ -1722,43 +1726,79 @@ window.SAYFA_INIT[1] = function (kok) {
     haleGoster(false);
   });
 
-  var baslaY = 0;
   var surukleniyor = false;
+  var tutmaOfseti = 0;   // tutulan nokta - kiriş y'si (SVG birimi); tutamaçtan tutulunca kiriş imlece sıçramaz
+  var sinirYonu = 0;     // kısılmamış konum sınırı aştıysa +1/-1: yaylanma uyarısı gezinti başına bir kez
+
+  // Ekran -> SVG kullanıcı birimi: sahne kutuya uydurulmuş viewBox'la ölçeklenir,
+  // sabit bir yükseklikle oranlamak ölçeği kaydırır (imleç 150 px, kiriş 124 px).
+  function ekranToSvg(clientX, clientY) {
+    var ctm = svgEl.getScreenCTM();
+    if (!ctm) return null;
+    var p = svgEl.createSVGPoint();
+    p.x = clientX;
+    p.y = clientY;
+    return p.matrixTransform(ctm.inverse());
+  }
+
+  // Tek sürükleme mantığı: pdnd onDrag ve kendi pointermove'u aynı yoldan geçer.
+  // Karar KISILMAMIŞ istenen konuma (imleç - ofset) bakar; kısıt yalnız görünen kirişe uygulanır.
+  function surukleHareket(clientX, clientY) {
+    if (!surukleniyor) return;
+    var pt = ekranToSvg(clientX, clientY);
+    if (!pt) return;
+    var hedefDy = pt.y - Oy - tutmaOfseti;
+    if (Math.abs(hedefDy) > 165) {
+      var yon = hedefDy > 0 ? 1 : -1;
+      if (yon !== sinirYonu) {
+        sinirYonu = yon;
+        yaylanVeUyar(yon);
+      }
+      return;
+    }
+    sinirYonu = 0;
+    guncelle(hedefDy);
+  }
+
+  function surukleBitir() {
+    if (!surukleniyor) return;
+    surukleniyor = false;
+    haleGoster(false);
+    if (sinirYonu !== 0) {
+      sinirYonu = 0;
+      return;
+    }
+    EGITSEL.dontVer(kok, "dogru", "Kiriş uzunluğu konuma bağlıdır.");
+  }
 
   svgEl.addEventListener("pointerdown", function (e) {
     e.preventDefault();
-    var rect = svgEl.getBoundingClientRect();
-    var svgY = ((e.clientY - rect.top) / rect.height) * 520;
-    var hedefDy = svgY - Oy;
+    var pt = ekranToSvg(e.clientX, e.clientY);
+    if (!pt) return;
+    // Tutamaçtan basış: kiriş yerinde kalır, aradaki fark saklanır. Boş sahneye basış: kiriş imlece gelir.
+    tutmaOfseti = tutusGrup.contains(e.target) ? pt.y - Oy - guncelDy : 0;
+    var hedefDy = pt.y - Oy - tutmaOfseti;
     if (Math.abs(hedefDy) > 165) {
       yaylanVeUyar(hedefDy > 0 ? 1 : -1);
       return;
     }
     surukleniyor = true;
-    baslaY = svgY;
+    sinirYonu = 0;
     haleGoster(true);
     guncelle(hedefDy);
   });
 
   window.addEventListener("pointermove", function (e) {
-    if (!surukleniyor) return;
-    var rect = svgEl.getBoundingClientRect();
-    var svgY = ((e.clientY - rect.top) / rect.height) * 520;
-    var hedefDy = svgY - Oy;
-    if (Math.abs(hedefDy) > 165) {
-      surukleniyor = false;
-      haleGoster(false);
-      yaylanVeUyar(hedefDy > 0 ? 1 : -1);
-      return;
-    }
-    guncelle(hedefDy);
+    surukleHareket(e.clientX, e.clientY);
   });
 
-  window.addEventListener("pointerup", function () {
+  window.addEventListener("pointerup", surukleBitir);
+
+  window.addEventListener("pointercancel", function () {
     if (!surukleniyor) return;
     surukleniyor = false;
+    sinirYonu = 0;
     haleGoster(false);
-    EGITSEL.dontVer(kok, "dogru", "Kiriş uzunluğu konuma bağlıdır.");
   });
 
   if (typeof pdnd !== "undefined" && pdnd.draggable) {
@@ -1769,21 +1809,11 @@ window.SAYFA_INIT[1] = function (kok) {
       },
       onDrag: function (args) {
         if (args && args.location && args.location.current && args.location.current.input) {
-          var clientY = args.location.current.input.clientY;
-          var rect = svgEl.getBoundingClientRect();
-          var svgY = ((clientY - rect.top) / rect.height) * 520;
-          var hedefDy = svgY - Oy;
-          if (Math.abs(hedefDy) > 165) {
-            yaylanVeUyar(hedefDy > 0 ? 1 : -1);
-          } else {
-            guncelle(hedefDy);
-          }
+          var inp = args.location.current.input;
+          surukleHareket(inp.clientX, inp.clientY);
         }
       },
-      onDrop: function () {
-        haleGoster(false);
-        EGITSEL.dontVer(kok, "dogru", "Kiriş uzunluğu konuma bağlıdır.");
-      }
+      onDrop: surukleBitir
     });
   }
 
@@ -1826,6 +1856,9 @@ window.SAYFA_INIT[1] = function (kok) {
   });
 
   btnSifirla.addEventListener("click", function () {
+    surukleniyor = false;
+    tutmaOfseti = 0;
+    sinirYonu = 0;
     guncelle(0);
     EGITSEL.dontVer(kok, "dogru", "Kiriş uzunluğu konuma bağlıdır.");
   });

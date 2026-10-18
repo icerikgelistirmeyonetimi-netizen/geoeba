@@ -912,7 +912,7 @@ window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
 
 <link rel="stylesheet" href="ortak/def338eadce83375.css">
 <!-- URETIM BILGISI
-  montaj: 2026-10-18 06:22
+  montaj: 2026-10-18 14:47
   sayfa 1: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 12:55
   sayfa 2: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 12:58
   sayfa 3: motor=agy | model=Gemini 3.8 Flash (High) | islem=gorsel | zaman=2026-09-18 12:57
@@ -1515,6 +1515,10 @@ body #ekran-kapak .sk-harf { font-size: .95em; }
   #sayfa-1 .s1-surukle-tutmac:active {
     cursor: grabbing;
   }
+  /* pdnd-svg köprüsünün imleci izleyen kopyası (id'si silinir) gizli: asıl nokta zaten imleçle taşınıyor */
+  #sayfa-1 .s1-surukle-tutmac:not([id]) {
+    visibility: hidden !important;
+  }
   #sayfa-1 .s1-panel-kart {
     padding: 12px 14px;
     display: flex;
@@ -1771,12 +1775,25 @@ window.SAYFA_INIT[1] = function (kok) {
     updatePanel();
   }
 
+  // Ekran px -> SVG kullanıcı birimi (viewBox ölçeğini getScreenCTM ters çevirir)
+  function ekranToSvg(cx, cy) {
+    var ctm = svgEl && svgEl.getScreenCTM();
+    if (!ctm) return null;
+    var pt = svgEl.createSVGPoint();
+    pt.x = cx;
+    pt.y = cy;
+    return pt.matrixTransform(ctm.inverse());
+  }
+
   function animatePoint(fromPt, toPt, onUpdate, onComplete) {
     var startX = fromPt.x;
     var startY = fromPt.y;
     var startTime = performance.now();
     var duration = 280;
+    var kimlik = {};
+    fromPt.anim = kimlik; // sürükleme başlayınca iptal edilir (fromPt.anim = null)
     function step(now) {
+      if (fromPt.anim !== kimlik) return;
       var elapsed = now - startTime;
       var t = Math.min(1, elapsed / duration);
       var ease = 1 - Math.pow(1 - t, 3);
@@ -1864,29 +1881,48 @@ window.SAYFA_INIT[1] = function (kok) {
     });
   }
 
+  // Tutma ofseti: nokta tutulduğu yerden (merkezden uzak olabilir) imlece sıçramasın.
+  // Köprünün location.initial'ı pointerdown değil eşiği aşan ilk harekettir; ofset burada alınır.
+  // istenen = imleç - ofset (sınır kısıtından ÖNCE); bırakma kararı buna bakar, kısıt yalnız görünen konuma uygulanır.
+  var tutmaD = { dx: 0, dy: 0 };
+  var tutmaC = { dx: 0, dy: 0 };
+  var istenenD = { x: initD.x, y: initD.y };
+  var istenenC = { x: initC.x, y: initC.y };
+  function tutmaKur(nokta, simdiki, tutma, istenen) {
+    if (!nokta) return;
+    nokta.addEventListener("pointerdown", function (e) {
+      var p = ekranToSvg(e.clientX, e.clientY);
+      tutma.dx = p ? p.x - simdiki.x : 0;
+      tutma.dy = p ? p.y - simdiki.y : 0;
+      istenen.x = simdiki.x;
+      istenen.y = simdiki.y;
+    });
+  }
+  tutmaKur(noktaD, currentD, tutmaD, istenenD);
+  tutmaKur(noktaC, currentC, tutmaC, istenenC);
+
   // Pragmatic Drag and Drop entegrasyonu
   if (window.pdnd && noktaD && noktaC) {
     pdnd.draggable({
       element: noktaD,
       canDrag: function () { return etap === 1; },
+      onDragStart: function () {
+        currentD.anim = null; // süren geri dönüş/yakalama animasyonu sürüklemeyle çekişmesin
+      },
       onDrag: function (args) {
-        if (!svgEl) return;
-        var pt = svgEl.createSVGPoint();
-        pt.x = args.location.current.input.clientX;
-        pt.y = args.location.current.input.clientY;
-        var ctm = svgEl.getScreenCTM();
-        if (ctm) {
-          var svgP = pt.matrixTransform(ctm.inverse());
-          currentD.x = Math.max(120, Math.min(360, svgP.x));
-          currentD.y = Math.max(120, Math.min(320, svgP.y));
-          syncGeometry();
-        }
+        var p = ekranToSvg(args.location.current.input.clientX, args.location.current.input.clientY);
+        if (!p) return;
+        istenenD.x = p.x - tutmaD.dx;
+        istenenD.y = p.y - tutmaD.dy;
+        currentD.x = Math.max(120, Math.min(360, istenenD.x));
+        currentD.y = Math.max(120, Math.min(320, istenenD.y));
+        syncGeometry();
       },
       onDrop: function () {
-        if (Math.abs(currentD.y - targetD.y) <= 10) {
+        if (Math.abs(istenenD.y - targetD.y) <= 10) {
           onSnapD();
         } else {
-          onFailD(currentD.y);
+          onFailD(istenenD.y);
         }
       }
     });
@@ -1894,24 +1930,23 @@ window.SAYFA_INIT[1] = function (kok) {
     pdnd.draggable({
       element: noktaC,
       canDrag: function () { return etap === 2; },
+      onDragStart: function () {
+        currentC.anim = null;
+      },
       onDrag: function (args) {
-        if (!svgEl) return;
-        var pt = svgEl.createSVGPoint();
-        pt.x = args.location.current.input.clientX;
-        pt.y = args.location.current.input.clientY;
-        var ctm = svgEl.getScreenCTM();
-        if (ctm) {
-          var svgP = pt.matrixTransform(ctm.inverse());
-          currentC.x = Math.max(400, Math.min(720, svgP.x));
-          currentC.y = Math.max(120, Math.min(260, svgP.y));
-          syncGeometry();
-        }
+        var p = ekranToSvg(args.location.current.input.clientX, args.location.current.input.clientY);
+        if (!p) return;
+        istenenC.x = p.x - tutmaC.dx;
+        istenenC.y = p.y - tutmaC.dy;
+        currentC.x = Math.max(400, Math.min(720, istenenC.x));
+        currentC.y = Math.max(120, Math.min(260, istenenC.y));
+        syncGeometry();
       },
       onDrop: function () {
-        if (Math.abs(currentC.x - targetC.x) <= 10) {
+        if (Math.abs(istenenC.x - targetC.x) <= 10) {
           onSnapC();
         } else {
-          onFailC(currentC.x);
+          onFailC(istenenC.x);
         }
       }
     });
@@ -1921,10 +1956,17 @@ window.SAYFA_INIT[1] = function (kok) {
   if (sifirlaBtn) {
     sifirlaBtn.addEventListener("click", function () {
       etap = 1;
+      currentD.anim = null;
+      currentC.anim = null;
       currentD.x = initD.x;
       currentD.y = initD.y;
       currentC.x = initC.x;
       currentC.y = initC.y;
+      istenenD.x = initD.x;
+      istenenD.y = initD.y;
+      istenenC.x = initC.x;
+      istenenC.y = initC.y;
+      tutmaD.dx = tutmaD.dy = tutmaC.dx = tutmaC.dy = 0;
       var oklarTek = kok.querySelector("#s1-oklar-tek");
       if (oklarTek) oklarTek.setAttribute("opacity", "0");
       var oklarCift = kok.querySelector("#s1-oklar-cift");
