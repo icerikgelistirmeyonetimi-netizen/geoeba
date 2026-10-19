@@ -270,7 +270,7 @@ export function Header() {
           <button
             onClick={goHome}
             className="flex items-center rounded-xl transition-opacity hover:opacity-85 cursor-pointer"
-            aria-label="GeoEBA — Ana sayfaya dön"
+            aria-label="EBA Matematik — Ana sayfaya dön"
             title="Ana Sayfaya Dön"
           >
             <Brand />

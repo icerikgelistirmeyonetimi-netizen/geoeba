@@ -58,7 +58,7 @@ export function baglamKaybiniIzle(tuval: EventTarget | null | undefined, kayipla
     if (birakildi || zamanlayici !== null) return;
     const karar = kayipKarari(kayiplar, saat());
     console.warn(
-      `[GeoEBA] ${s.ad}: 3B sahnenin grafik bağlamı kayboldu; ${karar === 'vazgec' ? 'sık kaybolduğu için sade görünüme geçiliyor' : 'sahne yeniden kuruluyor'}.`
+      `[EBA Matematik] ${s.ad}: 3B sahnenin grafik bağlamı kayboldu; ${karar === 'vazgec' ? 'sık kaybolduğu için sade görünüme geçiliyor' : 'sahne yeniden kuruluyor'}.`
     );
     zamanlayici = setTimeout(() => {
       zamanlayici = null;

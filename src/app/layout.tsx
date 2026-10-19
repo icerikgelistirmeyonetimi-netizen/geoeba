@@ -8,7 +8,7 @@ import { yaziTipiKurallari } from './yaziTipleri';
 import { OturumProvider } from '@/state/OturumContext';
 
 export const metadata: Metadata = {
-  title: 'GeoEBA - Etkileşimli Matematik ve Geometri Platformu',
+  title: 'EBA Matematik - Etkileşimli Matematik ve Geometri Platformu',
   description:
     'İlkokul, ortaokul ve lise düzeyinde etkileşimli matematik, geometri ve 3D simülasyon platformu.',
 };

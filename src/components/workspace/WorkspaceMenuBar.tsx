@@ -303,7 +303,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
       alert('Dışa aktarılacak çizim alanı bulunamadı.');
       return;
     }
-    const title = 'GeoEBA Çizimi';
+    const title = 'EBA Matematik Çizimi';
     try {
       if (format === 'png') await exportPng(svg, title);
       else if (format === 'svg') exportSvg(svg, title);
@@ -1266,7 +1266,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                 >
                   <div className="flex items-center gap-2">
                     <Info className="w-3.5 h-3.5 text-ada-deniz" />
-                    <span>GeoEBA Hakkında</span>
+                    <span>EBA Matematik Hakkında</span>
                   </div>
                 </button>
               </div>
@@ -1314,7 +1314,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                 {infoModalType === 'guide' && <BookOpen className="w-5 h-5 text-ada-vurgu" />}
                 <h3 className="font-bold text-base text-foreground">
                   {infoModalType === 'shortcuts' && 'Klavye Kısayolları'}
-                  {infoModalType === 'about' && 'GeoEBA Hakkında'}
+                  {infoModalType === 'about' && 'EBA Matematik Hakkında'}
                   {infoModalType === 'guide' && 'Kullanım Kılavuzu'}
                 </h3>
               </div>
@@ -1365,7 +1365,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
             {infoModalType === 'about' && (
               <div className="space-y-3 text-xs text-muted-foreground leading-relaxed">
                 <p>
-                  <strong className="text-foreground">GeoEBA</strong>, Millî Eğitim Bakanlığı müfredatına tam uyumlu; ilkokul, ortaokul ve lise kademelerinde geometri, matematik ve 3D uzamsal düşünme becerilerini geliştirmek amacıyla tasarlanmış yeni nesil etkileşimli çalışma ortamıdır.
+                  <strong className="text-foreground">EBA Matematik</strong>, Millî Eğitim Bakanlığı müfredatına tam uyumlu; ilkokul, ortaokul ve lise kademelerinde geometri, matematik ve 3D uzamsal düşünme becerilerini geliştirmek amacıyla tasarlanmış yeni nesil etkileşimli çalışma ortamıdır.
                 </p>
                 <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 text-foreground font-medium">
                   Sürüm: 1.0.0 (Etkileşimli 2D + 3D Hibrit Çizim Stüdyosu)

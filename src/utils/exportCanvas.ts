@@ -167,7 +167,7 @@ export function printSvg(svg: SVGSVGElement): void {
     frame.contentWindow?.focus(); frame.contentWindow?.print();
   };
   doc.open();
-  doc.write(`<!doctype html><html lang="tr"><head><title>GeoEBA Çizimi</title><style>@page{size:A4 ${genislik > yukseklik ? 'landscape' : 'portrait'};margin:10mm}body{margin:0}svg{display:block;width:100%;height:auto;max-height:95vh;print-color-adjust:exact;-webkit-print-color-adjust:exact}</style></head><body>${xml}</body></html>`);
+  doc.write(`<!doctype html><html lang="tr"><head><title>EBA Matematik Çizimi</title><style>@page{size:A4 ${genislik > yukseklik ? 'landscape' : 'portrait'};margin:10mm}body{margin:0}svg{display:block;width:100%;height:auto;max-height:95vh;print-color-adjust:exact;-webkit-print-color-adjust:exact}</style></head><body>${xml}</body></html>`);
   doc.close();
   window.setTimeout(() => frame.remove(), 120_000);
 }
@@ -269,7 +269,7 @@ export async function exportWord(svg: SVGSVGElement, baslik = 'geoeba-cizim') {
           new Paragraph({ text: baslik, heading: HeadingLevel.HEADING_1 }),
           new Paragraph({
             children: [
-              new TextRun({ text: 'GeoEBA — Etkileşimli Çalışma Ortamı', size: 18, color: '666666' }),
+              new TextRun({ text: 'EBA Matematik — Etkileşimli Çalışma Ortamı', size: 18, color: '666666' }),
             ],
             spacing: { after: 240 },
           }),

@@ -204,7 +204,7 @@ export function PropertiesPanel({
     setDisaAktariliyor(bicim);
     setDisaAktarimHatasi(null);
     try {
-      const baslik = 'GeoEBA Çizimi';
+      const baslik = 'EBA Matematik Çizimi';
       if (bicim === 'png') await exportPng(svg, baslik);
       else if (bicim === 'svg') exportSvg(svg, baslik);
       else if (bicim === 'pdf') await exportPdf(svg, baslik);

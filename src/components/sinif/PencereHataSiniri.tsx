@@ -57,9 +57,9 @@ export class PencereHataSiniri extends React.Component<Props, State> {
   componentDidCatch(hata: Error, bilgi: React.ErrorInfo) {
     // Geliştiriciye iz: kullanıcıya pencere içi ileti gösterildi, sayfa düşmedi
     if (parcaYuklemeHatasiMi(hata)) {
-      console.error(`[GeoEBA] "${this.props.uygulamaId}" uygulamasının dosyası yüklenemedi (yeni yayın ya da ağ):`, hata.message);
+      console.error(`[EBA Matematik] "${this.props.uygulamaId}" uygulamasının dosyası yüklenemedi (yeni yayın ya da ağ):`, hata.message);
     } else {
-      console.error(`[GeoEBA] "${this.props.uygulamaId}" uygulaması hata verdi:`, hata, bilgi.componentStack);
+      console.error(`[EBA Matematik] "${this.props.uygulamaId}" uygulaması hata verdi:`, hata, bilgi.componentStack);
     }
   }
 

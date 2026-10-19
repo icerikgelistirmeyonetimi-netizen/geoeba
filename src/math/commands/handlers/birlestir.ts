@@ -1,7 +1,7 @@
 /**
  * NOKTA BİRLEŞTİRME KOMUTLARI.
  *
- * "A ve C noktalarını birleştir" cümlesi GeoEBA'da iki anlama gelebilir: iki noktayı doğru parçasıyla
+ * "A ve C noktalarını birleştir" cümlesi EBA Matematik'te iki anlama gelebilir: iki noktayı doğru parçasıyla
  * bağlamak (basic.segment) ya da ÜST ÜSTE gelmiş iki noktayı tek noktaya indirmek. Bu aile yalnızca
  * ikincisinin kesin olduğu durumları üstlenir:
  *   - noktalar zaten üst üsteyse (aralarına çizilecek parça sıfır uzunlukta olurdu), ya da
