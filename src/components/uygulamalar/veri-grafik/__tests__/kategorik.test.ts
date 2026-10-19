@@ -84,6 +84,29 @@ describe('kategorik yardımcılar', () => {
     expect(frekanslar([])).toEqual([]);
   });
 
+  it('büyük / küçük harf: "araba" yeni satır açmaz, "Araba"ya sayılır (Türkçe İ/ı dahil)', () => {
+    const t = tablo(
+      [['ad', 'etiket'], ['oyuncak', 'etiket']],
+      [['Ela', 'Araba'], ['Masal', 'Ayıcık'], ['Ahmet', 'araba'], ['Selin', ' ayıcık '], ['Toprak', 'ARABA'], ['İpek', 'ıspanak'], ['Irmak', 'Ispanak']],
+    );
+    const metinler = sutunMetinleri(t, 1);
+    expect(metinler.map((m) => m.deger)).toEqual(['Araba', 'Ayıcık', 'Araba', 'Ayıcık', 'Araba', 'Ispanak', 'Ispanak']);
+    expect(frekanslar(metinler.map((m) => m.deger))).toEqual([
+      { kategori: 'Araba', sayi: 3, oran: 3 / 7 },
+      { kategori: 'Ayıcık', sayi: 2, oran: 2 / 7 },
+      { kategori: 'Ispanak', sayi: 2, oran: 2 / 7 },
+    ]);
+    // Hücre olduğu gibi kalır; yalnız gruplama harf duyarsızdır
+    expect(t.satirlar[2].hucreler[1]).toBe('araba');
+    // Büyük harfli yazım yoksa ilk görülen yazım
+    expect(sutunMetinleri(tablo([['a', 'etiket'], ['b', 'etiket']], [['1', 'çilek'], ['2', 'çİLEK']]), 1).map((m) => m.deger)).toEqual(['çilek', 'çilek']);
+    expect(sutunMetinleri(tablo([['a', 'etiket'], ['b', 'etiket']], [['1', 'top'], ['2', 'Top']]), 1).map((m) => m.deger)).toEqual(['Top', 'Top']);
+    // Ham değerlerle de: sıradaki kategori tek kez, verideki yazımla; sayımlar birleşir
+    expect(kategoriler(['araba', 'Top'], ['Top', 'Araba'])).toEqual(['Top', 'araba']);
+    expect(frekanslar(['Top', 'top', 'TOP', 'Uçurtma'], ['Top', 'Uçurtma']).map((f) => f.sayi)).toEqual([3, 1]);
+    expect(mod(['Top', 'top', 'Uçurtma'])).toEqual(['Top']);
+  });
+
   it('mod: en sık kategori(ler), veri yoksa boş', () => {
     expect(mod(['A', 'B', 'B'])).toEqual(['B']);
     // Birden çok tepe değer: verilen sırayla

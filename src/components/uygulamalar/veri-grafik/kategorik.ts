@@ -80,14 +80,31 @@ export function rengeGoreMetin(renk: string): string {
   return parlaklik > 0.68 ? '#15302d' : '#ffffff';
 }
 
-/** Sütunun boş olmayan (kırpılmış) metinleri, satır indeksiyle */
+/** Kategori karşılaştırma anahtarı: büyük / küçük harf duyarsız (Türkçe i/İ, ı/I), kırpılmış ("araba" = "Araba") */
+export function kategoriAnahtari(deger: string): string {
+  return deger.trim().toLocaleLowerCase('tr');
+}
+
+const buyukHarfleBaslar = (m: string) => m[0] !== m[0].toLocaleLowerCase('tr');
+
+/**
+ * Sütunun boş olmayan (kırpılmış) metinleri, satır indeksiyle. Yalnız büyük / küçük harfi farklı yazımlar tek
+ * kategoridir: hepsi aynı yazımla döner — büyük harfle başlayan ilk yazım, yoksa ilk görülen ("Araba" varken
+ * sonradan yazılan "araba" da "Araba" sayılır, ayrı satır açmaz). Tablo hücresi olduğu gibi kalır.
+ */
 export function sutunMetinleri(tablo: VeriTablosu, sutun: number): { satir: number; deger: string }[] {
   if (sutun < 0 || sutun >= tablo.sutunlar.length) return [];
   const sonuc: { satir: number; deger: string }[] = [];
+  const yazim = new Map<string, string>();
   tablo.satirlar.forEach((r, i) => {
     const m = (r.hucreler[sutun] ?? '').trim();
-    if (m !== '') sonuc.push({ satir: i, deger: m });
+    if (m === '') return;
+    sonuc.push({ satir: i, deger: m });
+    const a = kategoriAnahtari(m);
+    const onceki = yazim.get(a);
+    if (onceki === undefined || (!buyukHarfleBaslar(onceki) && buyukHarfleBaslar(m))) yazim.set(a, m);
   });
+  for (const s of sonuc) s.deger = yazim.get(kategoriAnahtari(s.deger)) ?? s.deger;
   return sonuc;
 }
 
@@ -140,19 +157,25 @@ export function degiskenSutunlari(tablo: VeriTablosu): Sutun[] {
 
 /**
  * Kategoriler: önce verilen sıra (aygıttaki sırayla, verisi olmasa da), sonra verideki diğerleri
- * Türkçe alfabetik (sayı gibi okunanlar sayısal sırayla).
+ * Türkçe alfabetik (sayı gibi okunanlar sayısal sırayla). Büyük / küçük harf duyarsızdır; verideki bir
+ * kategori sırada da varsa verideki yazımıyla gelir (satırlar `m.deger === kategori` ile eşleşsin).
  */
 export function kategoriler(degerler: string[], sira?: string[]): string[] {
-  const kume = new Set(degerler.map((d) => d.trim()).filter((d) => d !== ''));
+  const veridekiYazim = new Map<string, string>();
+  for (const d of degerler) {
+    const t = d.trim();
+    if (t !== '' && !veridekiYazim.has(kategoriAnahtari(t))) veridekiYazim.set(kategoriAnahtari(t), t);
+  }
   const sonuc: string[] = [];
   const eklenen = new Set<string>();
   for (const k of sira ?? []) {
     const t = k.trim();
-    if (t === '' || eklenen.has(t)) continue;
-    sonuc.push(t);
-    eklenen.add(t);
+    const a = kategoriAnahtari(t);
+    if (t === '' || eklenen.has(a)) continue;
+    sonuc.push(veridekiYazim.get(a) ?? t);
+    eklenen.add(a);
   }
-  const kalan = [...kume].filter((k) => !eklenen.has(k));
+  const kalan = [...veridekiYazim].filter(([a]) => !eklenen.has(a)).map(([, k]) => k);
   kalan.sort((a, b) => {
     const na = Number(a.replace(',', '.'));
     const nb = Number(b.replace(',', '.'));
@@ -172,10 +195,10 @@ export interface Frekans {
 export function frekanslar(degerler: string[], sira?: string[]): Frekans[] {
   const temiz = degerler.map((d) => d.trim()).filter((d) => d !== '');
   const sayac = new Map<string, number>();
-  for (const d of temiz) sayac.set(d, (sayac.get(d) ?? 0) + 1);
+  for (const d of temiz) sayac.set(kategoriAnahtari(d), (sayac.get(kategoriAnahtari(d)) ?? 0) + 1);
   const n = temiz.length;
   return kategoriler(temiz, sira).map((k) => {
-    const sayi = sayac.get(k) ?? 0;
+    const sayi = sayac.get(kategoriAnahtari(k)) ?? 0;
     return { kategori: k, sayi, oran: n > 0 ? sayi / n : 0 };
   });
 }
