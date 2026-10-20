@@ -6,8 +6,9 @@
  * - Bağlı bir araştırma varsa en üstte "Şu anki araştırmamız" kartı ve [Toplamaya dön]; bağsız eski araştırma varsa
  *   "Son araştırma" kartı ve [Bu planla yeniden başla]. Son araştırma değiştirilmemiş bir hazır soruysa ayrı kart
  *   yinelenmez: o hazır kart "Son" işaretini taşır.
- * - 18 hazır soru, yönteme göre üç küçük grup başlığıyla (Anket · Ölçüm · Deney). Kartlar sıkıdır (simge + ad + sınıf;
- *   soru title'da) ve 300 px'ten geniş panelde iki sütundadır: 1366'da üç grubun çoğu kaydırmadan görünür. Grup
+ * - Hazır sorular, yönteme göre iki küçük grup başlığıyla (Anket · Ölçüm; deney soruları olasılık alıştırması olduğu için
+ *   Olasılık Laboratuvarı'nda: TEGM, 20.10.2026). Kartlar sıkıdır (simge + ad + sınıf; soru title'da) ve 300 px'ten
+ *   geniş panelde iki sütundadır. Grup
  *   başlıkları kayarken yapışkandır (hangi grupta olunduğu hep görünür); listenin altı daha kart varken hafifçe gölgelenir.
  *   Karta dokunmak planı varsayılanlarla uygular ve doğrudan Topla görünümüne geçer (3 dokunuş kuralı).
  * - En altta yapışkan tek satır: "Kendi sorunu yaz" (soru + yöntem + plan tek formda).
@@ -16,7 +17,7 @@
  * adıdır; 720 px ve üstü genişlikte kartlar üç sütundur (panel hiç bu kadar geniş olmaz).
  */
 import React from 'react';
-import { HAZIR_SORULAR, TOPLAMA_YONTEMLERI, YONTEM_BILGISI, type Arastirma } from '../arastirma';
+import { SUNULAN_HAZIR_SORULAR, SUNULAN_YONTEMLER, YONTEM_BILGISI, type Arastirma } from '../arastirma';
 import { DUGME_BIRINCIL } from '../ortak';
 import { HazirSoruKarti } from './HazirSoruKarti';
 import { KalemSimgesi, KapatSimgesi, SagOkSimgesi, SolOkSimgesi, VeriToplaSimgesi, YontemSimgesi } from './simgeler';
@@ -114,17 +115,17 @@ export function SoruAdimi({
             </button>
           </section>
         )}
-        {TOPLAMA_YONTEMLERI.map((y) => (
+        {SUNULAN_YONTEMLER.map((y) => (
           <section key={y} className="flex flex-col gap-1.5" aria-label={`${YONTEM_BILGISI[y].ad} soruları`} data-hazir-grubu={y}>
             {/* Yapışkan grup başlığı: kayarken hangi grupta olunduğu görünür (opak zemin) */}
             <h3 className="sticky top-0 z-[1] -mx-3 flex h-9 items-center gap-2 bg-background px-3 pt-1">
               <YontemSimgesi yontem={y} className="h-5 w-5 shrink-0 text-foreground/75" />
               <span className="text-[13.5px] font-extrabold">{YONTEM_BILGISI[y].ad}</span>
               <span className="text-[12.5px] font-semibold text-muted-foreground">{YONTEM_BILGISI[y].altSatir}</span>
-              <span className="ml-auto text-[12px] font-semibold tabular-nums text-muted-foreground">{HAZIR_SORULAR.filter((h) => h.yontem === y).length} soru</span>
+              <span className="ml-auto text-[12px] font-semibold tabular-nums text-muted-foreground">{SUNULAN_HAZIR_SORULAR.filter((h) => h.yontem === y).length} soru</span>
             </h3>
             <div className={`grid gap-1.5 ${tekSutun ? 'grid-cols-1' : ucSutun ? 'grid-cols-3' : 'grid-cols-2'}`}>
-              {HAZIR_SORULAR.filter((h) => h.yontem === y).map((h) => (
+              {SUNULAN_HAZIR_SORULAR.filter((h) => h.yontem === y).map((h) => (
                 <HazirSoruKarti
                   key={h.id}
                   id={h.id}

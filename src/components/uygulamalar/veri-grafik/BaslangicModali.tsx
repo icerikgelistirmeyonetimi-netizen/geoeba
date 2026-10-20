@@ -21,7 +21,7 @@
  * içeriği kadar yüksektir; öteki adımlar (kayan listeler) tam boydur.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { HAZIR_SORULAR, hazirSoruBul, hazirSoruUygula, planSorunu, toplananMetni, varsayilanArastirma, type Arastirma } from './arastirma';
+import { SUNULAN_HAZIR_SORULAR, hazirSoruBul, hazirSoruUygula, planSorunu, toplananMetni, varsayilanArastirma, type Arastirma } from './arastirma';
 import { OrnekGalerisi } from './OrnekGalerisi';
 import { DUGME } from './ortak';
 import { PlanAdimi } from './toplama/PlanAdimi';
@@ -63,7 +63,7 @@ export function baslangicSecenekleri(kademe: KademeDuzeyi = 'tum'): readonly Bas
             id: 'topla' as const,
             ad: 'Veri topla',
             aciklama: 'Anket, ölçüm ya da deneyle kendi verinizi toplayın; grafik toplarken çizilir.',
-            not: `${HAZIR_SORULAR.length} hazır soru · kendi sorunuz`,
+            not: `${SUNULAN_HAZIR_SORULAR.length} hazır soru · kendi sorunuz`,
           },
         ]),
     {

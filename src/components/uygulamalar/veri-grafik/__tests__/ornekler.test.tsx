@@ -335,8 +335,8 @@ describe('Keşif kartı (SSR)', () => {
     // İki bağlantılı kaynak: ikisi birlikte
     const iklim = kart(ornekBul('iklim')!, { ilkOgretmen: true });
     const iklimBag = [...iklim.matchAll(/<a href="([^"]*)"[^>]*data-kaynak-baglantisi[^>]*>([\s\S]*?)<\/a>/g)].map((x) => [x[1], metin(x[2])]);
-    expect(iklimBag.map((x) => x[1])).toEqual(['MGM: Erzurum', 'İzmir']);
-    expect(iklimBag[1][0]).toMatch(/m=IZMIR$/);
+    expect(iklimBag.map((x) => x[1])).toEqual(['MGM: Erzurum', 'Adana']);
+    expect(iklimBag[1][0]).toMatch(/m=ADANA$/);
     const boy = kart(ornekBul('boy')!, { ilkOgretmen: true });
     expect([...boy.matchAll(/data-kaynak-baglantisi[^>]*>([\s\S]*?)<\/a>/g)].map((x) => metin(x[1]))).toEqual(['WHO: erkek', 'kız']);
   });

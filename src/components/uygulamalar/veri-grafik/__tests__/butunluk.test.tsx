@@ -17,6 +17,7 @@ import { baslangicDurumu, ornegiYukle, SEKMELER, type Durum, type Sekme } from '
 import { ORNEK_VERILER, TUM_OZELLIKLER, type Ozellik } from '../veri';
 import {
   HAZIR_SORULAR,
+  SUNULAN_HAZIR_SORULAR,
   TOPLAMA_YONTEMLERI,
   anketSecenekleri,
   anketSatiri,
@@ -265,7 +266,7 @@ describe('bütünlük: 20 örnek × 7 sekme (uygulama kökü, sunucu çizimi)', 
 // ── Veri topla paneli ────────────────────────────────────────────────────────────────────────────────────────
 
 describe('bütünlük: "Veri topla" paneli (uygulama kökü, sunucu çizimi)', () => {
-  it('"Ne araştıralım?" başlangıç penceresinin Veri topla adımıdır: 18 hazır soru kartı, üç yöntem grubu; bağsız açık panel kapalı gelir; temiz', () => {
+  it('"Ne araştıralım?" başlangıç penceresinin Veri topla adımıdır: 11 hazır soru kartı, iki yöntem grubu (deney yok); bağsız açık panel kapalı gelir; temiz', () => {
     // Bağsız açık panel kaydı: panel kapalı, pencere seçim adımında (paneliDuzelt); kök temiz
     const kok = uygulamaCiz({ ...baslangicDurumu(), toplamaAcik: true });
     expect(kok).not.toContain('data-veri-topla-paneli');
@@ -292,7 +293,10 @@ describe('bütünlük: "Veri topla" paneli (uygulama kökü, sunucu çizimi)', (
       />,
     );
     expect(html).toContain('data-baslangic-modali="topla"');
-    expect(html.match(/data-hazir-soru="/g)).toHaveLength(HAZIR_SORULAR.length);
+    expect(html.match(/data-hazir-soru="/g)).toHaveLength(SUNULAN_HAZIR_SORULAR.length);
+    expect(SUNULAN_HAZIR_SORULAR).toHaveLength(11);
+    expect(html).not.toContain('data-hazir-grubu="deney"');
+    // Kayıtlı eski deney araştırmaları açılabilsin diye deney hazır soruları veride durur
     expect(HAZIR_SORULAR).toHaveLength(18);
     expect(html).not.toMatch(/data-adim-yolu|Soru · Plan · Topla/);
     expect(ihlaller(html, 'başlangıç')).toEqual([]);

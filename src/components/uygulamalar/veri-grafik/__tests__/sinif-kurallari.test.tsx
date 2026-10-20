@@ -182,22 +182,22 @@ describe('ikili gruplar: iki veri grubu tek grafikte (birinci grup, ikinci grup 
     expect(e.gruplar[1].cubuklar[1]).toBeNull();
   });
 
-  it('nokta grafiği için uzun tablo: satırlar ikişer (Erzurum, İzmir); değer sütunu ortak birimle; seri renkleri; satır karşılığı', () => {
+  it('nokta grafiği için uzun tablo: satırlar ikişer (Erzurum, Adana); değer sütunu ortak birimle; seri renkleri; satır karşılığı', () => {
     const iklim = ornekBul('iklim')!.olustur();
     const t = ikiSeriTablosu(iklim, 1, 2);
     expect(t.tablo.sutunlar.map((s) => [s.ad, s.tur])).toEqual([
       ['Ay', 'etiket'],
-      ['Erzurum ve İzmir (°C)', 'sayi'],
+      ['Erzurum ve Adana (°C)', 'sayi'],
       ['Değişken', 'etiket'],
     ]);
     expect(t.tablo.satirlar).toHaveLength(24);
     expect(t.tablo.satirlar.slice(0, 2).map((r) => r.hucreler)).toEqual([
       ['Ocak · Erzurum', '-9,1', 'Erzurum'],
-      ['Ocak · İzmir', '8,9', 'İzmir'],
+      ['Ocak · Adana', '9,6', 'Adana'],
     ]);
     expect(t.karsilik.slice(0, 6)).toEqual([0, 0, 1, 1, 2, 2]);
-    expect(t.eslem.kategoriler).toEqual(['Erzurum', 'İzmir']);
-    expect(t.eslem.renkler.get('İzmir')).toBe(seriRengi(1));
+    expect(t.eslem.kategoriler).toEqual(['Erzurum', 'Adana']);
+    expect(t.eslem.renkler.get('Adana')).toBe(seriRengi(1));
     const mac = ikiSeriTablosu(ornekBul('mac')!.olustur(), 1, 2);
     expect(mac.tablo.sutunlar[1].ad).toBe('Selma ve Yasemin');
     // Gruplu karşılaştırmanın eşlemesi: renk anahtarı gruplayan sütunsa kendisi
@@ -511,12 +511,12 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     expect(metin(ist)).toContain('Ort. mutlak sapma');
   });
 
-  it('[112] 8. sınıf Erzurum ve İzmir: sütunlar ay ay yan yana (Ocak: Erzurum, İzmir); nokta tek grafikte; standart sapma yok', () => {
+  it('[112] 8. sınıf Erzurum ve Adana: sütunlar ay ay yan yana (Ocak: Erzurum, Adana); nokta tek grafikte; standart sapma yok', () => {
     const iklim = yukle('iklim');
     const sutun = uygulamaCiz({ ...iklim, sekme: 'sutun' });
     expect(sutun).toContain('data-ikili');
     expect(sutun.match(/data-grup-etiketi/g)).toHaveLength(12);
-    expect(sutun.match(/data-cubuk="İzmir \(°C\)"/g)).toHaveLength(12);
+    expect(sutun.match(/data-cubuk="Adana \(°C\)"/g)).toHaveLength(12);
     const nokta = uygulamaCiz({ ...iklim, sekme: 'nokta' });
     expect(nokta).toContain('data-yan-yana-karsilastirma');
     expect(seritDugmeleri(nokta)).not.toContain('Standart sapma');

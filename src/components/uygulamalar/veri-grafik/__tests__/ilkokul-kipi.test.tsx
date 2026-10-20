@@ -393,7 +393,7 @@ describe('[181] galeri ve başlangıç penceresi kademeye göre', () => {
     expect(baslangicSecenekleri('ilkokul')[0].not).toBe('4 hazır tablo');
     expect(baslangicSecenekleri('ortaokul').map((s) => [s.id, s.not])).toEqual([
       ['hazir', '14 hazır tablo'],
-      ['topla', '18 hazır soru · kendi sorunuz'],
+      ['topla', '11 hazır soru · kendi sorunuz'],
       ['bos', 'Etiket · Değer'],
     ]);
     const d = baslangicDurumu('ilkokul');

@@ -233,7 +233,7 @@ const indeks = (t: VeriTablosu, ad: string) => t.sutunlar.findIndex((s) => s.ad 
 
 describe('Karşılaştır: aynı birimli sayısal değişkenler ve kategorik gruplar (M14)', () => {
   it('birim: aynı birim ya da ikisi de birimsiz uyumlu', () => {
-    expect(birimUyumlu('Erzurum (°C)', 'İzmir (°C)')).toBe(true);
+    expect(birimUyumlu('Erzurum (°C)', 'Adana (°C)')).toBe(true);
     expect(birimUyumlu('Selma', 'Yasemin')).toBe(true);
     expect(birimUyumlu('Boy (cm)', 'Boy ( CM )')).toBe(true);
     expect(birimUyumlu('Haftalık çalışma (saat)', 'Matematik puanı')).toBe(false);
@@ -274,12 +274,12 @@ describe('Karşılaştır: aynı birimli sayısal değişkenler ve kategorik gru
     const a = karsilastirmaAdaylari(atik, kimlik(atik, 'En çok çıkan atık'), 'nokta');
     expect(a.map((x) => [x.etiket, x.neden])).toEqual([['Sınıf (gruplara ayır)', null]]);
     const iklim = ornekVeriOlustur('iklim');
-    expect(karsilastirmaAdaylari(iklim, kimlik(iklim, 'Erzurum (°C)'), 'cizgi').map((x) => x.ad)).toEqual(['İzmir (°C)']);
+    expect(karsilastirmaAdaylari(iklim, kimlik(iklim, 'Erzurum (°C)'), 'cizgi').map((x) => x.ad)).toEqual(['Adana (°C)']);
     const sinav = ornekVeriOlustur('sinav');
     expect(karsilastirmaAdaylari(sinav, kimlik(sinav, 'Puan'), 'cizgi')).toEqual([]);
     expect(karsilastirmaAdaylari(sinav, kimlik(sinav, 'Puan'), 'istatistik')).toEqual([]);
     // Uzman 7. tur: Sütun'da karşılaştırma bütün düzeylerde (sınıfsız tablo dahil) tek grafikte, yan yana
-    expect(karsilastirmaAdaylari(iklim, kimlik(iklim, 'Erzurum (°C)'), 'sutun').map((x) => x.ad)).toEqual(['İzmir (°C)']);
+    expect(karsilastirmaAdaylari(iklim, kimlik(iklim, 'Erzurum (°C)'), 'sutun').map((x) => x.ad)).toEqual(['Adana (°C)']);
     for (const sekme of ['daire', 'sacilim'] as const) expect(karsilastirmaAdaylari(iklim, kimlik(iklim, 'Erzurum (°C)'), sekme)).toEqual([]);
     expect(karsilastirmaTuru(iklim, kimlik(iklim, 'Erzurum (°C)'), kimlik(iklim, 'Erzurum (°C)'), 'nokta')).toBeNull();
   });

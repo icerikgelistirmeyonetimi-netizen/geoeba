@@ -645,7 +645,7 @@ export function NoktaGrafigi({
       // Ayracın etiketi ölçü satırında: ortalama kutusunun sağında, sığmazsa solunda, o da olmazsa kendi satırında
       let omsX: number | null = null;
       if (omsAcik) {
-        if (!ortAcik) omsX = sinirla((mx + sagKenar) / 2 - omsG / 2, SOL, W - SAG - omsG);
+        if (!ortAcik) omsX = sinirla(mx - omsG / 2, SOL, W - SAG - omsG);
         else if (ortX + ortG + 10 + omsG <= W - SAG) omsX = ortX + ortG + 10;
         else if (ortX - 10 - omsG >= SOL) omsX = ortX - 10 - omsG;
       }
@@ -676,7 +676,7 @@ export function NoktaGrafigi({
       }
       let omsEtiketY: number | null = null;
       if (omsAcik && omsX === null) {
-        omsX = sinirla((mx + sagKenar) / 2 - omsG / 2, SOL, W - SAG - omsG);
+        omsX = sinirla(mx - omsG / 2, SOL, W - SAG - omsG);
         omsEtiketY = ustY + 13;
         ustY += 18;
       }
@@ -1296,8 +1296,8 @@ export function NoktaGrafigi({
               {secenekler.oms && ortX !== null && g.oms !== null && (
                 <g data-oms-bandi>
                   <rect x={olcek.ileri(g.ort! - g.oms)} y={UST - 6} width={Math.max(0, olcek.ileri(g.ort! + g.oms) - olcek.ileri(g.ort! - g.oms))} height={Math.max(0, taban - UST + 6)} fill={OMS_RENGI} fillOpacity={0.12} rx={3} />
-                  <line x1={olcek.ileri(g.ort! - g.oms)} x2={olcek.ileri(g.ort! - g.oms)} y1={UST - 6} y2={taban} stroke={OMS_RENGI} strokeWidth={1.5} strokeDasharray="4 4" />
-                  <line x1={olcek.ileri(g.ort! + g.oms)} x2={olcek.ileri(g.ort! + g.oms)} y1={UST - 6} y2={taban} stroke={OMS_RENGI} strokeWidth={1.5} strokeDasharray="4 4" />
+                  <line x1={olcek.ileri(g.ort! - g.oms)} x2={olcek.ileri(g.ort! - g.oms)} y1={UST - 6} y2={taban} stroke={OMS_RENGI} strokeWidth={2} />
+                  <line x1={olcek.ileri(g.ort! + g.oms)} x2={olcek.ileri(g.ort! + g.oms)} y1={UST - 6} y2={taban} stroke={OMS_RENGI} strokeWidth={2} />
                 </g>
               )}
               {secenekler.ortalama && ortX !== null && (
@@ -1361,12 +1361,13 @@ export function NoktaGrafigi({
           <rect key={`kutu-zemin-${k.kategori}`} x={k.x0 + 3} y={UST - 8} width={Math.max(0, k.x1 - k.x0 - 6)} height={taban - UST + 8} rx={8} fill={i % 2 === 0 ? RENK.izgara : 'transparent'} fillOpacity={0.35} />
         ))}
 
-      {/* Ortalama mutlak sapma bandı (altın; nokta renginden ayrı) */}
+      {/* Ortalama mutlak sapma bandı (altın; nokta renginden ayrı). TEGM: bant kenarları (ortalama − OMS, ortalama + OMS)
+          olduğu yerde eksene inen dikey çizgilerdir; ortalamadan tek yana uzanan yatay ayraç yoktur (7. sınıf ders kitabı) */}
       {c.omsGoster && (
         <g data-oms-bandi>
           <rect x={c.solKenar} y={c.ayracY} width={Math.max(0, c.sagKenar - c.solKenar)} height={Math.max(0, taban - c.ayracY)} fill={OMS_RENGI} fillOpacity={0.16} rx={3} />
-          <line x1={c.solKenar} x2={c.solKenar} y1={c.ayracY - 5} y2={taban} stroke={OMS_RENGI} strokeWidth={1.5} strokeDasharray="4 4" />
-          <line x1={c.sagKenar} x2={c.sagKenar} y1={c.ayracY - 5} y2={taban} stroke={OMS_RENGI} strokeWidth={1.5} strokeDasharray="4 4" />
+          <line x1={c.solKenar} x2={c.solKenar} y1={c.ayracY} y2={taban} stroke={OMS_RENGI} strokeWidth={2} data-oms-kenar="sol" />
+          <line x1={c.sagKenar} x2={c.sagKenar} y1={c.ayracY} y2={taban} stroke={OMS_RENGI} strokeWidth={2} data-oms-kenar="sag" />
         </g>
       )}
 
@@ -1726,12 +1727,9 @@ export function NoktaGrafigi({
         </g>
       )}
 
-      {/* Ortalama mutlak sapma: ortalamadan kenara uzanan ayraç, iki kenarın değerleri */}
+      {/* Ortalama mutlak sapma: etiket ve iki kenarın değerleri (kenar çizgileri bantta); yatay ayraç çizilmez */}
       {c.omsGoster && c.ort !== null && c.oms !== null && (
         <g data-oms-ayraci>
-          <line x1={c.mx} x2={c.sagKenar} y1={c.ayracY} y2={c.ayracY} stroke={OMS_RENGI} strokeWidth={2.5} />
-          <line x1={c.mx} x2={c.mx} y1={c.ayracY - 5} y2={c.ayracY + 5} stroke={OMS_RENGI} strokeWidth={2.5} />
-          <line x1={c.sagKenar} x2={c.sagKenar} y1={c.ayracY - 5} y2={c.ayracY + 5} stroke={OMS_RENGI} strokeWidth={2.5} />
           {c.omsX !== null && (
             <text
               x={c.omsX}

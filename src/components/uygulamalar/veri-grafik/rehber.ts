@@ -284,7 +284,7 @@ export function kaynakBaglantisi(ornek: OrnekVeri): { ad: string; url: string } 
 }
 
 /**
- * Kaynağın bütün bağlantıları kısa adlarıyla: iklim → "MGM: Erzurum", "İzmir"; boy → "WHO: erkek", "kız". Kısa ad
+ * Kaynağın bütün bağlantıları kısa adlarıyla: iklim → "MGM: Erzurum", "Adana"; boy → "WHO: erkek", "kız". Kısa ad
  * verilmemişse alan adı ("who.int"). Yalnız http(s) bağlantıları.
  */
 export function kaynakBaglantilari(ornek: OrnekVeri): { ad: string; url: string }[] {

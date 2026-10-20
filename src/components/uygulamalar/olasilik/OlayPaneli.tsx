@@ -1,12 +1,15 @@
 'use client';
 
 /**
- * Olay paneli: şablon ayarları (istenen durum, dilimler, bilyeler, kart koşulu) ve üç olasılık
- * kartı — ÖZNEL (kaydırıcı), TEORİK (formül), DENEYSEL (canlı sayaç).
+ * Olay paneli: şablon ayarları (istenen durum, dilimler, bilyeler, kart koşulu) ve olasılık kartları — ÖZNEL
+ * (kaydırıcı), TEORİK (formül), DENEYSEL (canlı sayaç). Sınıf ayarı (sinifAyarlari.ts) hangi kartların görüneceğini
+ * söyler (TEGM: 6. sınıf yalnız deneysel, 7. sınıf teorik ve tümleyen, 8. sınıf üçü birlikte); ortaokulda iki sayı küpü
+ * seçeneği yoktur, 8. sınıfın çark ayarında gerçek yaşam durumları (hazır çarklar) vardır.
  */
 import React from 'react';
 import { sekmeOkTusu } from '../sekmeler';
 import { useKapGenisligi } from './useKapGenisligi';
+import { HAZIR_CARKLAR, hazirCarkBul, hazirCarkSablonu, olayAdi, type SinifAyari } from './sinifAyarlari';
 import {
   CARK_EN_AZ_DILIM,
   CARK_EN_COK_DILIM,
@@ -32,6 +35,7 @@ import {
   type GaltonKosulu,
   type KartKosulu,
   type Sablon,
+  type TeorikOlasilik,
   type TorbaBilyesi,
   type ZarKosulu,
 } from './olasilik';
@@ -52,6 +56,20 @@ export interface OlayPaneliProps {
    * (sığmayınca alt alta) durur. Varsayılan: ikisi alt alta.
    */
   bolum?: 'hepsi' | 'ayarlar' | 'kartlar';
+  /** Sınıf ayarı; verilmezse üç kart ve bütün seçenekler */
+  ayar?: SinifAyari;
+}
+
+/** Ortaokul teorik formülü (yaklaşık sembolü yok; MAT.7.7.1 terimleri): "İstenen durum / Örnek uzay = 3 / 10" */
+export function ortaokulTeorikFormulu(t: TeorikOlasilik): string {
+  const sade = t.kesir.pay === t.istenen && t.kesir.payda === t.tum ? '' : t.kesir.payda === 1 ? ` = ${t.kesir.pay}` : ` = ${kesirMetni(t.kesir)}`;
+  return `İstenen durum / Örnek uzay = ${t.istenen} / ${t.tum}${sade}`;
+}
+
+/** Olayın tümleyeninin adı: "tura gelme" → "tura gelmeme", "okun mavi dilimde durma" → "okun mavi dilimde durmama" */
+export function tumleyenAdi(sablon: Sablon): string {
+  const ad = olayAdi(sablon);
+  return /me$/.test(ad) ? `${ad}me` : /ma$/.test(ad) ? `${ad}ma` : `${ad} dışındaki durumlar`;
 }
 
 const secimSinifi = (aktif: boolean) =>
@@ -86,11 +104,14 @@ function radyoOzellikleri(i: number, adet: number, secili: boolean, sec: (j: num
   };
 }
 
-export function OlayPaneli({ sablon, onSablon, oznel, oznelKilitli, onOznel, onKilit, deneme, gerceklesen, kilitli, bolum = 'hepsi' }: OlayPaneliProps) {
+export function OlayPaneli({ sablon, onSablon, oznel, oznelKilitli, onOznel, onKilit, deneme, gerceklesen, kilitli, bolum = 'hepsi', ayar }: OlayPaneliProps) {
   const teorik = teorikOlasilik(sablon);
   const deneysel = kesirSadelestir(gerceklesen, deneme);
   const deneyselOran = deneme > 0 ? gerceklesen / deneme : 0;
   const uyarilar = sablonUyarilari(sablon);
+  const kartlar = ayar?.kartlar ?? { oznel: true, deneysel: true, teorik: true };
+  const ortaokul = ayar?.kademe === 'ortaokul';
+  const tumleyen = teorik.tum > 0 ? kesirSadelestir(teorik.tum - teorik.istenen, teorik.tum) : null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -99,8 +120,8 @@ export function OlayPaneli({ sablon, onSablon, oznel, oznelKilitli, onOznel, onK
           <Baslik>Rastgele olay</Baslik>
           <div className="mt-3 flex flex-col gap-3">
             {sablon.tur === 'para' && <ParaAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
-            {sablon.tur === 'zar' && <ZarAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
-            {sablon.tur === 'cark' && <CarkAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
+            {sablon.tur === 'zar' && <ZarAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} ikiZarAcik={ayar?.ikiZar ?? true} />}
+            {sablon.tur === 'cark' && <CarkAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} hazirlar={ayar?.hazirCarklar ?? false} />}
             {sablon.tur === 'torba' && <TorbaAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
             {sablon.tur === 'kart' && <KartAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
             {sablon.tur === 'galton' && <GaltonAyari sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
@@ -127,7 +148,8 @@ export function OlayPaneli({ sablon, onSablon, oznel, oznelKilitli, onOznel, onK
           aria-label="Olasılık panelleri"
         >
           {/* ÖZNEL */}
-          <div className="rounded-[var(--radius)] border border-border bg-card p-4" style={{ borderTop: '4px solid #b9884a' }}>
+          {kartlar.oznel && (
+          <div className="rounded-[var(--radius)] border border-border bg-card p-4" style={{ borderTop: '4px solid #b9884a' }} data-olasilik-karti="oznel">
             <div className="flex items-center justify-between gap-2">
               <Baslik>Öznel olasılık</Baslik>
               <button
@@ -157,31 +179,52 @@ export function OlayPaneli({ sablon, onSablon, oznel, oznelKilitli, onOznel, onK
               {deneme === 0 && !oznelKilitli ? 'Deneye başlamadan önce tahminini seç.' : oznelKilitli ? 'Tahmin kilitli; deney sonuçlarıyla karşılaştır.' : 'Tahmini değiştirebilirsin.'}
             </p>
           </div>
+          )}
 
           {/* TEORİK */}
-          <div className="rounded-[var(--radius)] border border-border bg-card p-4" style={{ borderTop: '4px solid #2a9d94' }}>
+          {kartlar.teorik && (
+          <div className="rounded-[var(--radius)] border border-border bg-card p-4" style={{ borderTop: '4px solid #2a9d94' }} data-olasilik-karti="teorik">
             <Baslik>Teorik olasılık</Baslik>
             <p className="mt-2 text-lg font-bold text-foreground">
               <span className="text-[#1f7a72] dark:text-[#5cc4bb]">{yuzdeMetni(teorik.deger)}</span>{' '}
               <span className="text-sm font-semibold text-muted-foreground">({kesirMetni(teorik.kesir)})</span>
             </p>
             <p className="mt-1 break-words font-mono text-[13px] text-muted-foreground" data-teorik-formul>
-              {teorik.formul}
+              {ortaokul && sablon.tur !== 'galton' ? ortaokulTeorikFormulu(teorik) : teorik.formul}
             </p>
+            {ayar?.tumleyen && tumleyen && (
+              // MAT.7.7.1: olay ve tümleyeninin olasılıkları toplamı 1
+              <div className="mt-2 border-t border-border pt-2 text-[13px] text-foreground" data-tumleyen>
+                <p>
+                  <span className="font-semibold">Tümleyeni ({tumleyenAdi(sablon)}):</span>{' '}
+                  <span className="font-bold tabular-nums">{kesirMetni(tumleyen)}</span>
+                </p>
+                <p className="mt-0.5 font-mono tabular-nums text-muted-foreground">
+                  {kesirMetni(teorik.kesir)} + {kesirMetni(tumleyen)} = 1
+                </p>
+              </div>
+            )}
           </div>
+          )}
 
           {/* DENEYSEL */}
-          <div className="rounded-[var(--radius)] border border-border bg-card p-4" style={{ borderTop: '4px solid #216a78' }}>
+          {kartlar.deneysel && (
+          <div className="rounded-[var(--radius)] border border-border bg-card p-4" style={{ borderTop: '4px solid #216a78' }} data-olasilik-karti="deneysel">
             <Baslik>Deneysel olasılık</Baslik>
             <p className="mt-2 text-lg font-bold text-foreground" aria-live="polite" data-deneysel>
               <span className="text-ada-deniz dark:text-[#5cc4bb]">{deneme > 0 ? yuzdeMetni(deneyselOran) : '—'}</span>{' '}
               <span className="text-sm font-semibold text-muted-foreground">
                 ({gerceklesen} / {deneme}
-                {deneme > 0 ? ` = ${kesirMetni(deneysel)}` : ''})
+                {/* Sadeleşen kesir yalnız farklıysa yazılır ("9 / 20", "12 / 20 = 3/5") */}
+                {deneme > 0 && (deneysel.pay !== gerceklesen || deneysel.payda !== deneme) ? ` = ${kesirMetni(deneysel)}` : ''})
               </span>
             </p>
-            <p className="mt-1 text-[13px] text-muted-foreground">Gerçekleşen / toplam deneme</p>
+            {/* TEGM (MAT.6.6.1): olasılık değeri, olayın meydana gelme sayısının deneyin tekrar sayısına bölümüdür */}
+            <p className="mt-1 text-[13px] text-muted-foreground" data-deneysel-aciklama>
+              Olayın meydana gelme sayısı / deneyin tekrar sayısı{ayar?.sinif === 6 ? ' (göreli sıklık)' : ''}
+            </p>
           </div>
+          )}
         </section>
       )}
     </div>
@@ -210,7 +253,7 @@ function ParaAyari({ sablon, onSablon, kilitli }: { sablon: Extract<Sablon, { tu
   );
 }
 
-function ZarAyari({ sablon, onSablon, kilitli }: { sablon: Extract<Sablon, { tur: 'zar' }>; onSablon: (s: Sablon) => void; kilitli: boolean }) {
+function ZarAyari({ sablon, onSablon, kilitli, ikiZarAcik }: { sablon: Extract<Sablon, { tur: 'zar' }>; onSablon: (s: Sablon) => void; kilitli: boolean; ikiZarAcik: boolean }) {
   const enAz = sablon.ikiZar ? 2 : 1;
   const enCok = sablon.ikiZar ? 12 : 6;
   const kosul = sablon.istenen;
@@ -219,6 +262,8 @@ function ZarAyari({ sablon, onSablon, kilitli }: { sablon: Extract<Sablon, { tur
   const zarTipiSec = (tip: ZarKosulu['tip']) => ayarla(tip === 'cift' || tip === 'tek' ? { tip } : { tip, deger: Math.min(enCok, Math.max(enAz, degerli)) });
   return (
     <>
+      {/* İki sayı küpü bileşik olaydır: ortaokulda yok, lisede var (TEGM) */}
+      {ikiZarAcik && (
       <label className="flex min-h-[44px] items-center gap-2 text-sm text-foreground">
         <input
           type="checkbox"
@@ -234,6 +279,7 @@ function ZarAyari({ sablon, onSablon, kilitli }: { sablon: Extract<Sablon, { tur
         />
         İki sayı küpü (toplam)
       </label>
+      )}
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Koşul türü">
         {(
           [
@@ -296,14 +342,83 @@ function RenkSecici({ deger, onChange, kilitli, etiket }: { deger: string; onCha
   );
 }
 
-function CarkAyari({ sablon, onSablon, kilitli }: { sablon: Extract<Sablon, { tur: 'cark' }>; onSablon: (s: Sablon) => void; kilitli: boolean }) {
+/** 8. sınıf: gerçek yaşam durumlarını canlandıran hazır çarklar ve renklerle kurulan çark arasında seçim */
+function HazirCarkSecici({ sablon, onSablon, kilitli }: { sablon: Extract<Sablon, { tur: 'cark' }>; onSablon: (s: Sablon) => void; kilitli: boolean }) {
+  const secili = hazirCarkBul(sablon)?.id ?? null;
+  const secenekler = [{ id: null, ad: 'Renkli çark' }, ...HAZIR_CARKLAR.map((h) => ({ id: h.id, ad: h.ad }))];
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-[13px] font-semibold text-muted-foreground" id="hazir-cark-etiketi">
+        Durum
+      </span>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-labelledby="hazir-cark-etiketi">
+        {secenekler.map((s, i) => (
+          <button
+            key={s.id ?? 'renkli'}
+            type="button"
+            {...radyoOzellikleri(i, secenekler.length, secili === s.id, (j) => {
+              const h = HAZIR_CARKLAR.find((x) => x.id === secenekler[j].id);
+              onSablon(h ? hazirCarkSablonu(h) : varsayilanCark());
+            })}
+            disabled={kilitli}
+            className={secimSinifi(secili === s.id)}
+            onClick={() => {
+              const h = HAZIR_CARKLAR.find((x) => x.id === s.id);
+              onSablon(h ? hazirCarkSablonu(h) : varsayilanCark());
+            }}
+            data-hazir-cark={s.id ?? 'renkli'}
+          >
+            {s.ad}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Renklerle kurulan varsayılan çark (dört eş dilim) */
+function varsayilanCark(): Extract<Sablon, { tur: 'cark' }> {
+  return { tur: 'cark', dilimler: RENK_SECENEKLERI.slice(0, 4).map((r) => ({ ...r, genislik: 1 })), istenenRenk: RENK_SECENEKLERI[0].ad };
+}
+
+function CarkAyari({ sablon, onSablon, kilitli, hazirlar }: { sablon: Extract<Sablon, { tur: 'cark' }>; onSablon: (s: Sablon) => void; kilitli: boolean; hazirlar: boolean }) {
   const dilimGuncelle = (i: number, d: Partial<CarkDilimi>) => {
     const dilimler = sablon.dilimler.map((x, j) => (j === i ? { ...x, ...d } : x));
     onSablon({ ...sablon, dilimler });
   };
   const renkler = Array.from(new Set(sablon.dilimler.map((d) => d.ad)));
+  // Hazır durumun dilimleri renk değil sonuç adıdır ("Evet", "Gol"): düzenlenmez, yalnız istenen sonuç seçilir
+  const hazir = hazirlar ? hazirCarkBul(sablon) : undefined;
+  if (hazir)
+    return (
+      <>
+        <HazirCarkSecici sablon={sablon} onSablon={onSablon} kilitli={kilitli} />
+        <ul className="flex flex-col gap-1.5" aria-label="Çarkın dilimleri">
+          {sablon.dilimler.map((d) => (
+            <li key={d.ad} className="flex items-center gap-2 text-sm text-foreground">
+              <RenkNoktasi renk={d.renk} />
+              <span className="font-semibold">{d.ad}</span>
+              <span className="text-muted-foreground">
+                {d.genislik} / {sablon.dilimler.reduce((t, x) => t + x.genislik, 0)} genişlik
+              </span>
+            </li>
+          ))}
+        </ul>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          İstenen sonuç
+          <select className={girisSinifi} value={sablon.istenenRenk} disabled={kilitli} onChange={(e) => onSablon({ ...sablon, istenenRenk: e.target.value })} aria-label="İstenen sonuç">
+            {renkler.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </label>
+      </>
+    );
   return (
     <>
+      {hazirlar && <HazirCarkSecici sablon={sablon} onSablon={onSablon} kilitli={kilitli} />}
       {/* Sayaç satırı: etiket · − · sayı · + (sabit sütunlar; sayı değişince düğmeler kaymaz) */}
       <div className={SATIR_IZGARASI_SAYAC}>
         <span className="text-sm text-foreground" id="cark-dilim-etiketi">

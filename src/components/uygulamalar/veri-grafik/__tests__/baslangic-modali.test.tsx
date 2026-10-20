@@ -14,7 +14,7 @@ import {
   type BaslangicModaliProps,
 } from '../BaslangicModali';
 import { baslangicDurumu, bosTabloAc, tabloAdiBul, tabloDuzenle, type Durum } from '../durum';
-import { HAZIR_SORULAR, anketSatiri, arastirmaBagli, hazirSoruUygula } from '../arastirma';
+import { SUNULAN_HAZIR_SORULAR, anketSatiri, arastirmaBagli, hazirSoruUygula } from '../arastirma';
 import { planiUygula, toplamaVerisiYaz } from '../toplamaDurumu';
 import { ORNEK_VERILER, hucreYaz } from '../veri';
 import { SORU_UC_SUTUN, SoruAdimi } from '../toplama/SoruAdimi';
@@ -144,7 +144,7 @@ describe('başlangıç penceresi (SSR): adımlar', () => {
     expect(i('data-baslangic-secenek="topla"')).toBeLessThan(i('data-baslangic-secenek="bos"'));
     for (const ad of ['Örnek veri', 'Veri topla', 'Boş tablo']) expect(html).toContain(`>${ad}<`);
     expect(html).toContain(`${ORNEK_VERILER.length} hazır tablo`);
-    expect(html).toContain(`${HAZIR_SORULAR.length} hazır soru`);
+    expect(html).toContain(`${SUNULAN_HAZIR_SORULAR.length} hazır soru`);
     expect(html).toContain('Etiket · Değer');
     expect(html).toContain('data-baslangic-secenekler="yan-yana"');
     expect(html).toContain(`Şimdiki tablo: Boy (cm) · ${baslangicDurumu().tablo.satirlar.length} satır`);
@@ -177,14 +177,15 @@ describe('başlangıç penceresi (SSR): adımlar', () => {
     expect(onceki.match(/role="menuitem"/g)).toHaveLength(ORNEK_VERILER.length + 1);
   });
 
-  it('veri topla: "Ne araştıralım?" (18 hazır soru, üç grup, "Kendi sorunu yaz") ‹ ve × ile; genişte üç sütun; bağlı araştırma kartı', () => {
+  it('veri topla: "Ne araştıralım?" (11 hazır soru, Anket ve Ölçüm grupları, "Kendi sorunu yaz") ‹ ve × ile; genişte üç sütun; bağlı araştırma kartı', () => {
     const html = modal({ baslangic: 'topla' });
     expect(html).toContain('data-baslangic-modali="topla"');
     expect(html).toContain('aria-label="Veri topla: Ne araştıralım?"');
     expect(html).toContain('data-adim="soru"');
     expect(html).toContain('Ne araştıralım?');
-    expect(html.match(/data-hazir-soru=/g)).toHaveLength(HAZIR_SORULAR.length);
-    expect(html.match(/data-hazir-grubu=/g)).toHaveLength(3);
+    expect(html.match(/data-hazir-soru=/g)).toHaveLength(SUNULAN_HAZIR_SORULAR.length);
+    // TEGM (20.10.2026): deney soruları olasılık alıştırmasıdır, Olasılık Laboratuvarı'nda
+    expect(Array.from(html.matchAll(/data-hazir-grubu="([^"]+)"/g), (m) => m[1])).toEqual(['anket', 'olcum']);
     expect(html).toContain('data-kendi-sorun=""');
     expect(html).toContain('aria-label="Geri: Nasıl başlayalım?"');
     expect(html).toContain(`aria-label="${KAPAT_ETIKETI}"`);

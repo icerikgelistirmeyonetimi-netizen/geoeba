@@ -69,13 +69,17 @@ describe('Olasılık: ilkokulda «olay kartları»', () => {
     expect(ciz('ilkokul')).not.toContain('<text');
   });
 
-  it('ortaokul, lise ve Tüm araçlar: laboratuvar değişmeden (şablon sekmeleri, üç olasılık paneli, frekans tablosu)', () => {
+  it('ortaokul, lise ve Tüm araçlar: önce sınıf seçimi (TEGM 20.10.2026); kademenin sınıfları, Galton ve olay kartları yok', () => {
+    const beklenen = { ortaokul: ['5', '6', '7', '8'], lise: ['9', '10'], tum: ['5', '6', '7', '8', '9', '10'] } as const;
     for (const k of ['ortaokul', 'lise', 'tum'] as const) {
       const html = ciz(k);
-      expect(html).not.toContain('data-olasilik-kip');
+      expect(html).toContain('data-olasilik-kip="sinif-secimi"');
+      expect(Array.from(html.matchAll(/data-sinif-secenek="(\d+)"/g), (m) => m[1])).toEqual(beklenen[k]);
       const m = metin(html);
-      for (const ad of ['Madeni Para', 'Sayı Küpü', 'Renkli Çark', 'Torba', 'Galton Tahtası', 'Öznel olasılık', 'Teorik olasılık', 'Deneysel olasılık', 'Frekans tablosu', '1 Kez Dene']) expect(m).toContain(ad);
+      expect(m).toContain('Sınıfını seç');
       expect(m).not.toContain('Olay kartları');
+      // Laboratuvar sınıf seçilmeden açılmaz: şablon sekmesi, deney düğmesi, Galton yok
+      expect(m).not.toMatch(/Galton Tahtası|1 Kez Dene|Madeni Para/);
     }
   });
 });

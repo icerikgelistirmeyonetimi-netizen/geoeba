@@ -10,7 +10,7 @@ export const manifest = {
   id: 'olasilik',
   ad: 'Olasılık Laboratuvarı',
   kisaAd: 'Olasılık',
-  aciklama: 'Öznel, teorik ve deneysel olasılığı 3B deneylerle karşılaştır.',
+  aciklama: 'Sınıfını seç; olasılığı o sınıfın yaklaşımıyla (öznel, deneysel, teorik) 3B deneylerle incele.',
   renk: '#c99a52',
   // Sayı küpü: yüzünde nokta değil rakam (MEB "sayı küpü"; laboratuvardaki 3B küp de rakamlıdır)
   simge: (

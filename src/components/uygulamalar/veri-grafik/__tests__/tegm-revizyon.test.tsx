@@ -4,7 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { DaireGrafigi } from '../DaireGrafigi';
 import { KategorikIstatistik, KategorikSutunGrafigi } from '../KategorikGrafikler';
 import { NesneGrafigi } from '../NesneGrafigi';
-import { hazirSoruUygula, olcumGirisHatasi, olcumSatirlari } from '../arastirma';
+import { SUNULAN_HAZIR_SORULAR, SUNULAN_YONTEMLER, hazirSoruUygula, olcumGirisHatasi, olcumSatirlari } from '../arastirma';
+import { PlanAdimi } from '../toplama/PlanAdimi';
+import { veriGirisSiniri } from '../veriSinirlari';
 import { baslangicDurumu, durumKurallari, sekmeDuzelt, tabloDuzenle, tabloGirisHatasi } from '../durum';
 import { hucreYaz, kademeOrnekleri, ornekBul, tabloOlustur } from '../veri';
 import { sinifKurallari } from '../sinifKurallari';
@@ -85,5 +87,38 @@ describe('TEGM: gerçekçi ölçüm sınırları', () => {
     expect(tabloGirisHatasi(hatali)).toContain('0–24');
     expect(tabloDuzenle(d, hatali)).toBe(d);
     expect(tabloDuzenle(d, hucreYaz(tablo, 0, 1, '9')).tablo.satirlar[0].hucreler[1]).toBe('9');
+  });
+});
+
+describe('TEGM Ortaokul Komisyonu (20.10.2026): Veri ve Grafik', () => {
+  it('Erzurum ve Adana aynı ölçüm periyodunda (1929–2025); İzmir (1938–2025) yok', () => {
+    const iklim = ornekBul('iklim')!;
+    expect(iklim.ad).toBe('Erzurum ve Adana: aylık ortalama sıcaklık');
+    expect(iklim.hikaye.arastirmaSorusu).toContain('aynı dönemdeki (1929–2025)');
+    expect(iklim.hikaye.neZaman).toBe('İki istasyonda da aynı ölçüm periyodu: 1929–2025');
+    expect(JSON.stringify(iklim)).not.toMatch(/İzmir|IZMIR|1938/);
+    const t = iklim.olustur();
+    expect(t.sutunlar.map((s) => s.ad)).toEqual(['Ay', 'Erzurum (°C)', 'Adana (°C)']);
+    expect(t.satirlar.map((r) => r.hucreler[2])).toEqual(['9,6', '10,6', '13,5', '17,6', '21,9', '25,7', '28,3', '28,8', '26,2', '21,8', '16', '11,3']);
+  });
+
+  it('okula geliş süresi: araştırma sorusu düzeltildi; dakika yerine saat (0,5 saat), sürekli nicel veri; giriş sınırı 24 saat', () => {
+    const a = hazirSoruUygula('gelis')!;
+    expect(a.soru).toBe('Sınıfımızdaki öğrencilerin okula geliş sürelerinin saat cinsinden dağılımı nasıldır?');
+    expect(a.olcum).toMatchObject({ birim: 'saat', duyarlik: 0.1 });
+    expect(olcumGirisHatasi(a, 0.5)).toBeNull();
+    expect(olcumGirisHatasi(a, 30)).not.toBeNull();
+    expect(veriGirisSiniri('Geliş süresi (saat)')).toEqual([0, 24]);
+    expect(veriGirisSiniri('Geliş süresi (dakika)')).toEqual([0, 1440]);
+  });
+
+  it('deney soruları (madenî para, sayı küpü, torba, çark, iki sayı küpü) Veri ve Grafik’te sunulmaz: olasılık alıştırmasıdır', () => {
+    expect(SUNULAN_YONTEMLER).toEqual(['anket', 'olcum']);
+    expect(SUNULAN_HAZIR_SORULAR.some((h) => h.yontem === 'deney')).toBe(false);
+    const t = { ...hazirSoruUygula('meyve')!, adim: 'plan' as const };
+    const plan = renderToStaticMarkup(<PlanAdimi taslak={t} onTaslak={() => {}} onGeri={() => {}} onUygula={() => {}} devam={false} uyari={null} tablo={baslangicDurumu().tablo} bagliArastirma={null} genislik={410} />);
+    const yontemler = Array.from(plan.matchAll(/data-yontem="([a-z]+)"/g), (m) => m[1]);
+    expect(yontemler).toContain('olcum');
+    expect(yontemler).not.toContain('deney');
   });
 });

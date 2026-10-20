@@ -167,9 +167,11 @@ describe('lise hazır verileri: konular, kazanımlar, kurallar', () => {
         expect(o.kaynak.url, o.id).toBeUndefined();
       }
     }
-    // Isınma örneğinin değerleri uygulamadaki MGM örnekleriyle aynı (Ankara: sicaklik, İzmir: iklim)
+    // Isınma örneğinin Ankara değerleri uygulamadaki MGM örneğiyle aynı (sicaklik); iki şehrin ölçüm periyodu aynı (TEGM: farklı
+    // zaman dilimleri karşılaştırmayı bozar)
     expect(degerler('isinma', 'Ankara (°C)')).toEqual(degerler('sicaklik', 'Sıcaklık (°C)'));
-    expect(degerler('isinma', 'İzmir (°C)')).toEqual(degerler('iklim', 'İzmir (°C)'));
+    expect(degerler('isinma', 'Trabzon (°C)')).toEqual([7.6, 7.3, 8.5, 11.8, 15.9, 20.3, 23.1, 23.5, 20.5, 16.7, 13.1, 9.6]);
+    expect(ornekBul('isinma')!.hikaye.neZaman).toContain('aynı ölçüm periyodu: 1927–2025');
   });
 });
 
@@ -231,12 +233,12 @@ describe('lise hazır verileri: rehber sayıları veriyle tutarlı', () => {
     expect(y1.map((x, i) => [x, y2[i]]).filter(([x]) => x < 50)).toEqual([[35, 45], [42, 40], [45, 55], [48, 52]]);
   });
 
-  it('12. sınıf: ısıtma ayları Ankara 7, İzmir 5 (15 °C’ye uzaklık toplamları 62,5 ve 19,8); panel yalnız yazın tüketimi geçer', () => {
+  it('12. sınıf: ısıtma ayları Ankara 7, Trabzon 6 (15 °C’ye uzaklık toplamları 62,5 ve 32,1); panel yalnız yazın tüketimi geçer', () => {
     const fark = (v: number[]) => Math.round(v.filter((x) => x < 15).reduce((t, x) => t + 15 - x, 0) * 10) / 10;
     const ank = degerler('isinma', 'Ankara (°C)');
-    const izm = degerler('isinma', 'İzmir (°C)');
-    expect([ank.filter((x) => x < 15).length, izm.filter((x) => x < 15).length]).toEqual([7, 5]);
-    expect([fark(ank), fark(izm)]).toEqual([62.5, 19.8]);
+    const trb = degerler('isinma', 'Trabzon (°C)');
+    expect([ank.filter((x) => x < 15).length, trb.filter((x) => x < 15).length]).toEqual([7, 6]);
+    expect([fark(ank), fark(trb)]).toEqual([62.5, 32.1]);
     const t = ornekBul('elektrik')!.olustur();
     const tuk = degerler('elektrik', 'Tüketim (kWh)');
     const pan = degerler('elektrik', 'Panel üretimi (kWh)');

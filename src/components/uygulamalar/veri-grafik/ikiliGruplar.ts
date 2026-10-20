@@ -3,7 +3,7 @@
  *
  * Alan uzmanı (4. tur): iki grup karşılaştırılırken ikisi de aynı grafikte gösterilir ve "önce birinci grup, sonra
  * ikinci grup" sırası kullanılmaz; verilerden biri birinci, biri ikinci gruptan alınarak ikili gruplar kurulur.
- * - İki sayısal değişken (Selma | Yasemin, Erzurum | İzmir): her satır bir ikili grup (1. maç: Selma, Yasemin).
+ * - İki sayısal değişken (Selma | Yasemin, Erzurum | Adana): her satır bir ikili grup (1. maç: Selma, Yasemin).
  * - Bir sayısal değişken + kategorik değişkene göre gruplar (Puan, Sınıf): her grubun k. verisi k. ikili grupta
  *   (7A-01 ile 7B-01, 7A-02 ile 7B-02 …).
  * Sütun grafiği `sutunCiftleri` ile yan yana sütun çiftleri çizer. Nokta grafiği iki sayısal değişkeni `ikiSeriTablosu`
@@ -108,7 +108,7 @@ export interface IkiSeriTablosu {
   karsilik: number[];
 }
 
-/** "İzmir (°C)" → "İzmir"; birimi ortaksa ("°C") eksen adının sonuna bir kez yazılır */
+/** "Adana (°C)" → "Adana"; birimi ortaksa ("°C") eksen adının sonuna bir kez yazılır */
 function birimsiz(ad: string): string {
   return ad.replace(/\s*\([^()]*\)\s*$/, '').trim() || ad;
 }
@@ -119,7 +119,7 @@ function birimi(ad: string): string | null {
 
 /**
  * İki sayısal sütunu tek grafikte göstermek için uzun tablo: her asıl satır için iki satır (önce birinci, sonra ikinci
- * değişken; ikili gruplar). Değer sütununun adı iki değişkenin adı ve ortak birimi ("Erzurum ve İzmir (°C)").
+ * değişken; ikili gruplar). Değer sütununun adı iki değişkenin adı ve ortak birimi ("Erzurum ve Adana (°C)").
  */
 export function ikiSeriTablosu(tablo: VeriTablosu, a: number, b: number): IkiSeriTablosu {
   const adA = tablo.sutunlar[a]?.ad ?? '';

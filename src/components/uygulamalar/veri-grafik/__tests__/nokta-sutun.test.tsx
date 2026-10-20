@@ -372,7 +372,7 @@ describe('D1: nokta, sütun ve kategorik grafikler (kabul ölçütleri)', () => 
     expect(noktaCiz(kategorikTablo({ A: 2, B: 1 }), 1, { secenekler: { ortalama: true, oms: false, etiketler: false, ortanca: true } })).not.toContain('Ortanca');
   });
 
-  it('ortalama mutlak sapma: bant kenarlarında değerler, ayraçta "Ort. mutlak sapma"; nokta başı sapma çizgisi yok', () => {
+  it('ortalama mutlak sapma: bant kenarları eksene inen dikey çizgiler, iki yanda değerler; yatay ayraç ve nokta başı sapma çizgisi yok', () => {
     const html = noktaCiz(sabitMac(), 1, { secenekler: { ortalama: true, oms: true, etiketler: false } });
     expect(html).toContain('data-oms-bandi');
     expect(html).toContain('data-oms-ayraci');
@@ -380,6 +380,11 @@ describe('D1: nokta, sütun ve kategorik grafikler (kabul ölçütleri)', () => 
     expect(html).toContain('>23,4<');
     expect(html).toContain('Ort. mutlak sapma = 6,4');
     expect(html).not.toContain('sapma-0');
+    // TEGM: iki kenar da eksene inen dikey çizgi (x1 = x2); ayraç grubunda yatay çizgi yok
+    const kenarlar = Array.from(html.matchAll(/<line x1="([\d.]+)" x2="([\d.]+)"[^>]*data-oms-kenar="(sol|sag)"/g));
+    expect(kenarlar.map((m) => m[3])).toEqual(['sol', 'sag']);
+    for (const m of kenarlar) expect(m[1]).toBe(m[2]);
+    expect(/data-oms-ayraci="true">[\s\S]*?<\/g><\/g>/.exec(html)?.[0] ?? '').not.toContain('<line');
     // Bant altın: nokta renginden (birincil) ayrı
     expect(html).toMatch(/data-oms-bandi="true"><rect[^>]*fill="#b9884a"/);
   });

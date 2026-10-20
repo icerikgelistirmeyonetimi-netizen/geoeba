@@ -15,6 +15,8 @@ export interface KarsilastirmaGrafigiProps {
   deneme: number;
   /** Geniş yerleşimde sütunun kalan yüksekliğini doldurur (sütunlar uzar) */
   doldur?: boolean;
+  /** Sınıfta görünen yaklaşımlar (lise: deneysel ve teorik); verilmezse üçü */
+  goster?: { oznel: boolean; deneysel: boolean; teorik: boolean };
 }
 
 export const KARSILASTIRMA_RENKLERI = { oznel: '#b9884a', deneysel: '#216a78', teorik: '#2a9d94' } as const;
@@ -24,7 +26,7 @@ const GRAFIK_YUKSEKLIGI = 220;
 /** Dolduran yerleşimde en az yükseklik: uzun olay panelinin (iki sayı küpü, torba) altında sütunu taşırmasın */
 const DOLDURAN_EN_AZ = 160;
 
-export function KarsilastirmaGrafigi({ oznel, deneysel, teorik, deneme, doldur = false }: KarsilastirmaGrafigiProps) {
+export function KarsilastirmaGrafigi({ oznel, deneysel, teorik, deneme, doldur = false, goster }: KarsilastirmaGrafigiProps) {
   const [kapRef, genislik] = useKapGenisligi(320);
   const [cizimRef, yukseklik] = useKapYuksekligi<HTMLDivElement>(GRAFIK_YUKSEKLIGI);
   const W = Math.max(240, genislik);
@@ -35,19 +37,19 @@ export function KarsilastirmaGrafigi({ oznel, deneysel, teorik, deneme, doldur =
   const sag = 12;
   const icY = H - ust - alt;
   const sutunlar = [
-    { ad: 'Öznel Olasılık', deger: oznel, renk: KARSILASTIRMA_RENKLERI.oznel },
-    { ad: 'Deneysel Olasılık', deger: deneysel, renk: KARSILASTIRMA_RENKLERI.deneysel, yok: deneme === 0 },
-    { ad: 'Teorik Olasılık', deger: teorik, renk: KARSILASTIRMA_RENKLERI.teorik },
-  ];
+    { tur: 'oznel' as const, ad: 'Öznel Olasılık', deger: oznel, renk: KARSILASTIRMA_RENKLERI.oznel },
+    { tur: 'deneysel' as const, ad: 'Deneysel Olasılık', deger: deneysel, renk: KARSILASTIRMA_RENKLERI.deneysel, yok: deneme === 0 },
+    { tur: 'teorik' as const, ad: 'Teorik Olasılık', deger: teorik, renk: KARSILASTIRMA_RENKLERI.teorik },
+  ].filter((s) => !goster || goster[s.tur]);
   const aralik = (W - sol - sag) / sutunlar.length;
   const sutunGen = Math.min(88, aralik * 0.62);
 
   return (
     <section ref={kapRef} className={`${doldur ? 'flex flex-1 flex-col ' : ''}rounded-[var(--radius)] border border-border bg-card p-4 shadow-[0_18px_40px_-18px_rgba(6,40,45,.35)]`} aria-label="Karşılaştırma grafiği">
-      <h3 className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">Öznel · Deneysel · Teorik</h3>
+      <h3 className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">{sutunlar.map((s) => s.ad.split(' ')[0]).join(' · ')}</h3>
       {/* SVG mutlak konumlu: kap yüksekliği ölçülürken SVG'nin kendi yüksekliği geri beslenmez */}
       <div ref={cizimRef} className="relative mt-2 overflow-hidden" style={doldur ? { flex: '1 1 0%', minHeight: DOLDURAN_EN_AZ } : { height: GRAFIK_YUKSEKLIGI }}>
-        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="absolute inset-0 block" role="img" aria-label={`Öznel ${yuzdeMetni(oznel)}, deneysel ${deneme > 0 ? yuzdeMetni(deneysel) : 'yok'}, teorik ${yuzdeMetni(teorik)}`}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} className="absolute inset-0 block" role="img" aria-label={sutunlar.map((s) => `${s.ad.split(' ')[0]} ${s.yok ? 'yok' : yuzdeMetni(s.deger)}`).join(', ')}>
           {[0, 0.25, 0.5, 0.75, 1].map((k) => {
             const y = ust + icY * (1 - k);
             return (

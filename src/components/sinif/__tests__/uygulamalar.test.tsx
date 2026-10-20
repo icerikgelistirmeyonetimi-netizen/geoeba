@@ -115,7 +115,7 @@ describe('ilkokul kademesi (alan uzmanları, 2. ve 4. tur)', () => {
 
   it('ortaokul, lise ve "Tüm araçlar"da liste değişmez', () => {
     expect(kademeninUygulamalari(false)).toBe(UYGULAMALAR);
-    expect(uygulamaBul('olasilik')?.aciklama).toBe('Öznel, teorik ve deneysel olasılığı 3B deneylerle karşılaştır.');
+    expect(uygulamaBul('olasilik')?.aciklama).toBe('Sınıfını seç; olasılığı o sınıfın yaklaşımıyla (öznel, deneysel, teorik) 3B deneylerle incele.');
   });
 
   it('Olasılık simgesi sayı küpü: yüzünde nokta değil rakam (kullanıcı isteği 13.10)', () => {

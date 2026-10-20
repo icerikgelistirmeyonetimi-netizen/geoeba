@@ -175,6 +175,12 @@ export interface Arastirma {
 // ── Sabitler ve sınırlar ──────────────────────────────────────────────────────
 
 export const TOPLAMA_YONTEMLERI: readonly ToplamaYontemi[] = ['anket', 'olcum', 'deney'];
+/**
+ * Veri ve Grafik'in sunduğu yöntemler ("Ne araştıralım?" grupları ve "Kendi sorunu yaz" kartları). TEGM ortaokul
+ * komisyonu (20.10.2026): madenî para, sayı küpü, torba ve çark deneyleri olasılık alıştırmasıdır; Olasılık
+ * Laboratuvarı'na taşındı. Deney kodu ve deney hazır soruları kayıtlı eski araştırmalar açılabilsin diye durur.
+ */
+export const SUNULAN_YONTEMLER: readonly ToplamaYontemi[] = ['anket', 'olcum'];
 export const ARASTIRMA_ADIMLARI: readonly ArastirmaAdimi[] = ['soru', 'plan', 'topla', 'duzenle', 'yorum'];
 export const OLCME_DUYARLIKLARI: readonly OlcmeDuyarligi[] = [1, 0.5, 0.1];
 export const HIZ_SECIMLERI: readonly HizSecimi[] = ['oto', 0, 1, 2, 3];
@@ -670,11 +676,12 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
     id: 'gelis',
     yontem: 'olcum',
     ad: 'Okula geliş süresi',
-    soru: 'Okula kaç dakikada geliyoruz?',
+    // TEGM: dakika yerine saat (30 dakika yerine 0,5 saat) yazılınca veri sürekli nicel olur; dakikalar 6. sınıfa da uyan kesikli veridir
+    soru: 'Sınıfımızdaki öğrencilerin okula geliş sürelerinin saat cinsinden dağılımı nasıldır?',
     rozet: '8. sınıf · MAT.8.6.1',
     simge: 'saat',
     acilis: 'topla',
-    olcum: { degiskenAdi: 'Geliş süresi', birim: 'dakika', duyarlik: 1, beklenen: [0, 60] },
+    olcum: { degiskenAdi: 'Geliş süresi', birim: 'saat', duyarlik: 0.1, beklenen: [0, 1] },
   },
   {
     id: 'para',
@@ -830,6 +837,9 @@ export const HAZIR_SORULAR: readonly HazirSoru[] = [
     ],
   },
 ];
+
+/** "Ne araştıralım?"da görünen hazır sorular: yalnız sunulan yöntemlerinkiler (deney soruları Olasılık Laboratuvarı'nda) */
+export const SUNULAN_HAZIR_SORULAR: readonly HazirSoru[] = HAZIR_SORULAR.filter((h) => SUNULAN_YONTEMLER.includes(h.yontem));
 
 export function hazirSoruBul(id: string | null | undefined): HazirSoru | undefined {
   return id ? HAZIR_SORULAR.find((h) => h.id === id) : undefined;
@@ -1178,7 +1188,7 @@ export function olcumMetni(a: Arastirma, x: number, ondalik = 2): string {
  * "Bu değer beklenen aralığın dışında (60–120): doğru mu?". Aralık yoksa ya da değer içindeyse null.
  */
 export function olcumGirisHatasi(a: Arastirma, x: number): string | null {
-  return veriGirisHatasi(a.olcum.degiskenAdi, x) ?? veriGirisHatasi(a.olcum.degiskenAdi, olcumDegeri(x, a.olcum.duyarlik));
+  return veriGirisHatasi(a.olcum.degiskenAdi, x, a.olcum.birim) ?? veriGirisHatasi(a.olcum.degiskenAdi, olcumDegeri(x, a.olcum.duyarlik), a.olcum.birim);
 }
 
 export function beklenenUyarisi(a: Arastirma, x: number): string | null {

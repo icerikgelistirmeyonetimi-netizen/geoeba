@@ -21,6 +21,7 @@ import {
   type Sonuc,
 } from './olasilik';
 import { YakinsamaBirikeci, mulberry32, topluDeneme, yeniDeneyDurumu, type DeneyDurumu, type YakinsamaNoktasi } from './simulasyon';
+import { sablonuSinifaUydur, sinifAyari, sinifCoz, type OlasilikSinifi } from './sinifAyarlari';
 
 export const DEPO_ANAHTARI = 'geoeba_olasilik_v1';
 export const SON_LISTE_BOYU = 20;
@@ -38,6 +39,8 @@ export const SABLON_ADLARI: Record<SablonTuru, string> = {
 };
 
 export interface LabDurumu {
+  /** Seçili sınıf (TEGM: laboratuvar sınıf seçilmeden açılmaz); null: seçim ekranı */
+  sinif: OlasilikSinifi | null;
   sablonTuru: SablonTuru;
   /** Her şablonun kendi ayarı saklanır; sekme değişince kaybolmaz */
   sablonlar: Record<SablonTuru, Sablon>;
@@ -58,6 +61,7 @@ export interface LabDurumu {
 export function bosDurum(tur: SablonTuru = 'para'): LabDurumu {
   const sablonlar = Object.fromEntries(SABLON_TURLERI.map((t) => [t, varsayilanSablon(t)])) as Record<SablonTuru, Sablon>;
   return {
+    sinif: null,
     sablonTuru: tur,
     sablonlar,
     oznel: 50,
@@ -115,6 +119,19 @@ export function sifirla(d: LabDurumu): LabDurumu {
 export function sablonTuruSec(d: LabDurumu, tur: SablonTuru): LabDurumu {
   if (tur === d.sablonTuru) return d;
   return sifirla({ ...d, sablonTuru: tur });
+}
+
+/**
+ * Sınıf seçimi: sınıfın şablonu yoksa ilk şablonuna geçilir, şablonlar sınıfın kurallarına uydurulur (ortaokulda tek
+ * sayı küpü) ve sonuçlar sıfırlanır. 5. sınıf (spektrum) yalnız sınıfı yazar.
+ */
+export function sinifSec(d: LabDurumu, sinif: OlasilikSinifi | null): LabDurumu {
+  if (sinif === null) return { ...d, sinif: null };
+  const ayar = sinifAyari(sinif);
+  if (!ayar.sablonlar.length) return { ...d, sinif };
+  const sablonlar = Object.fromEntries(SABLON_TURLERI.map((t) => [t, sablonuSinifaUydur(d.sablonlar[t], ayar)])) as Record<SablonTuru, Sablon>;
+  const sablonTuru = ayar.sablonlar.includes(d.sablonTuru) ? d.sablonTuru : ayar.sablonlar[0];
+  return sifirla({ ...d, sinif, sablonlar, sablonTuru });
 }
 
 /** Aktif şablonun ayarını değiştirir (istenen durum, dilimler, adetler…); sonuçlar sıfırlanır. */
@@ -312,7 +329,8 @@ export function durumuCoz(metin: string | null | undefined): LabDurumu | null {
     torbaKalanHam && aktif.tur === 'torba' && torbaKalanHam.length === aktif.bilyeler.length
       ? { torbaKalan: torbaKalanHam.map((x) => Math.max(0, Math.trunc(sayi(x, 0)))) }
       : yeniDeneyDurumu(aktif);
-  return {
+  const cozulen: LabDurumu = {
+    sinif: null,
     sablonTuru: tur,
     sablonlar,
     oznel: Math.min(100, Math.max(0, Math.round(sayi(ham.oznel, 50)))),
@@ -325,4 +343,10 @@ export function durumuCoz(metin: string | null | undefined): LabDurumu | null {
     deneyDurumu,
     logOlcek: ham.logOlcek === true,
   };
+  // Sınıf: kayıtlı şablon sınıfa uymuyorsa (ör. ortaokulda Galton ya da iki sayı küpü) sınıf seçimi uygulanır (sıfırlar)
+  const sinif = sinifCoz(ham.sinif);
+  if (sinif === null) return cozulen;
+  const ayar = sinifAyari(sinif);
+  const uyar = ayar.sablonlar.length > 0 && (!ayar.sablonlar.includes(tur) || sablonuSinifaUydur(sablonlar[tur], ayar) !== sablonlar[tur]);
+  return uyar ? sinifSec(cozulen, sinif) : { ...cozulen, sinif };
 }

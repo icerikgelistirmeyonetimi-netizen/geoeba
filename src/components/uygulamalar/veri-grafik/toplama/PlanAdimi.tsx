@@ -2,11 +2,12 @@
 
 /**
  * "Kendi sorunu yaz" formu (§0: eski Soru + Plan adımları tek formda; VT §6.3–6.4, §12.4, §12.6).
- * - ARAŞTIRMA SORUMUZ (en çok 140 karakter; sayaç 120'den sonra), VERİYİ NASIL TOPLAYACAĞIZ? (Anket · Ölçüm · Deney).
+ * - ARAŞTIRMA SORUMUZ (en çok 140 karakter; sayaç 120'den sonra), VERİYİ NASIL TOPLAYACAĞIZ? (Anket · Ölçüm; deney
+ *   Olasılık Laboratuvarı'nda: TEGM, 20.10.2026).
  * - Anket: değişken adı, kime sorulduğu, 2–12 seçenek (+ Seçenek, + “Diğer”), gruplar.
  * - Ölçüm: neyin ölçüldüğü, birim, ölçme duyarlığı, kimlerin ölçüldüğü, kaç kişi, "Adları da yaz", gruplar.
- * - Deney: nesne kartları (Madenî para · Sayı küpü · İki sayı küpü · Çark · Torba), çark / torba düzenleyici, neyin
- *   sayılacağı ve teorik olasılık.
+ * - Deney (yalnız kayıtlı eski bir deney araştırmasında): nesne kartları (Madenî para · Sayı küpü · İki sayı küpü · Çark ·
+ *   Torba), çark / torba düzenleyici, neyin sayılacağı ve teorik olasılık.
  * - Tablonun önizlemesi ("# | Meyve"), plan yeni tablo açacaksa uyarı ve yapışkan [Toplamaya başla ›].
  * Bağlı araştırmanın planı değişirken ("Planı değiştir") içinde cevap olan seçenek kaldırılamaz; adı değişirse aynı
  * hücreler de değişir (`onYenidenAdlandir`).
@@ -17,7 +18,7 @@ import {
   EN_COK_SECENEK,
   METIN_SINIRI,
   OLCME_DUYARLIKLARI,
-  TOPLAMA_YONTEMLERI,
+  SUNULAN_YONTEMLER,
   YONTEM_BILGISI,
   anketSayisalMi,
   planSorunu,
@@ -83,8 +84,8 @@ function Alan({ etiket, children, dar }: { etiket: string; children: React.React
 
 function YontemKartlari({ yontem, onYontem }: { yontem: ToplamaYontemi | null; onYontem: (y: ToplamaYontemi) => void }) {
   return (
-    <div role="radiogroup" aria-label="Veriyi nasıl toplayacağız?" className="grid grid-cols-3 gap-2">
-      {TOPLAMA_YONTEMLERI.map((y, i) => {
+    <div role="radiogroup" aria-label="Veriyi nasıl toplayacağız?" className="grid gap-2" style={{ gridTemplateColumns: `repeat(${SUNULAN_YONTEMLER.length}, minmax(0, 1fr))` }}>
+      {SUNULAN_YONTEMLER.map((y, i) => {
         const secili = y === yontem;
         return (
           <button
@@ -95,7 +96,7 @@ function YontemKartlari({ yontem, onYontem }: { yontem: ToplamaYontemi | null; o
             tabIndex={secili || (yontem === null && i === 0) ? 0 : -1}
             data-yontem={y}
             onClick={() => onYontem(y)}
-            onKeyDown={(e) => radyoTusu(e, i, TOPLAMA_YONTEMLERI.length, (j) => onYontem(TOPLAMA_YONTEMLERI[j]))}
+            onKeyDown={(e) => radyoTusu(e, i, SUNULAN_YONTEMLER.length, (j) => onYontem(SUNULAN_YONTEMLER[j]))}
             className={`flex min-h-[64px] min-w-0 flex-col items-start justify-center gap-0.5 rounded-[calc(var(--radius)-4px)] border px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               secili ? 'border-primary bg-accent shadow-[inset_0_0_0_1px_hsl(var(--primary))]' : 'border-border bg-card hover:bg-accent'
             }`}

@@ -1,7 +1,8 @@
 'use client';
 
 /**
- * Sonuçlar: son 20 denemenin listesi ve frekans tablosu (sayı, kesir, yüzde, sonuç çubukları).
+ * Sonuçlar: son 20 denemenin listesi ve sıklık tablosu (sayı, göreli sıklık, yüzde, sonuç çubukları). MEB terimleri:
+ * "frekans" yerine "sıklık", kesir sütunu "göreli sıklık" (olayın meydana gelme sayısı / deneyin tekrar sayısı).
  */
 import React from 'react';
 import { galtonTeorikOranlar, istenenMi, kesirMetni, sonucKisaEtiketi, yuzdeMetni, type Sablon, type Sonuc } from './olasilik';
@@ -42,13 +43,13 @@ export function SonucTablosu({ sablon, son, sayimlar, deneme }: SonucTablosuProp
         </ol>
       )}
 
-      <h3 className="mt-4 text-[13px] font-bold uppercase tracking-wide text-muted-foreground">Frekans tablosu</h3>
+      <h3 className="mt-4 text-[13px] font-bold uppercase tracking-wide text-muted-foreground">Sıklık tablosu</h3>
       <table className="mt-2 w-full border-collapse text-[13px]">
         <thead>
           <tr className="whitespace-nowrap text-left text-muted-foreground">
             <th className="py-1 pr-2 font-semibold">Sonuç</th>
             <th className="py-1 pr-2 text-right font-semibold">Sayı</th>
-            <th className="py-1 pr-2 text-right font-semibold">Kesir</th>
+            <th className="py-1 pr-2 text-right font-semibold">Göreli sıklık</th>
             <th className="py-1 pr-2 text-right font-semibold">Yüzde</th>
             {teorik && <th className="py-1 pr-2 text-right font-semibold">Teorik %</th>}
             <th className={`${teorik ? 'w-[30%] min-w-[64px]' : 'w-[38%]'} py-1 font-semibold`}>

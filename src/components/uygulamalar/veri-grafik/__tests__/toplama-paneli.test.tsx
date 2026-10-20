@@ -65,7 +65,7 @@ import * as Y from '../toplama/panelYardimcilari';
 import { rozetBasligi } from '../toplama/panelYardimcilari';
 import { planiUygula, toplamaVerisiYaz, type ToplamaVerisi } from '../toplamaDurumu';
 import { baslangicDurumu, type Durum } from '../durum';
-import { HAZIR_SORULAR, anketSatiri, arastirmaBagli, hazirSoruUygula, olcumSatirlari, varsayilanArastirma, type Arastirma } from '../arastirma';
+import { HAZIR_SORULAR, SUNULAN_HAZIR_SORULAR, anketSatiri, arastirmaBagli, hazirSoruUygula, olcumSatirlari, varsayilanArastirma, type Arastirma } from '../arastirma';
 import { mulberry32 } from '../rastgele';
 
 const bos = () => undefined;
@@ -1037,13 +1037,13 @@ describe('Deney çalıştırma motoru', () => {
 });
 
 describe('Veri topla paneli (SSR)', () => {
-  it('başlangıç: 18 hazır soru, üç grup, "Kendi sorunu yaz"; adım yolu yok', () => {
+  it('başlangıç: 11 hazır soru, Anket ve Ölçüm grupları (deney Olasılık Laboratuvarında), "Kendi sorunu yaz"; adım yolu yok', () => {
     const m = html(<VeriToplaPaneli {...panelProps(baslangicDurumu())} />);
     expect(m).toContain('data-veri-topla-paneli=""');
     expect(m).toContain('data-gorunum="baslangic"');
     expect(m).toContain('Ne araştıralım?');
-    expect(m.match(/data-hazir-soru=/g)?.length).toBe(HAZIR_SORULAR.length);
-    expect(m.match(/data-hazir-grubu=/g)?.length).toBe(3);
+    expect(m.match(/data-hazir-soru=/g)?.length).toBe(SUNULAN_HAZIR_SORULAR.length);
+    expect(Array.from(m.matchAll(/data-hazir-grubu="([^"]+)"/g), (x) => x[1])).toEqual(['anket', 'olcum']);
     expect(m).toContain('Kendi sorunu yaz');
     expect(m).toContain('aria-label="Veri toplama panelini kapat"');
     expect(m).not.toContain('Araştırma adımları');

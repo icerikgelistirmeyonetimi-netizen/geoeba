@@ -335,9 +335,9 @@ describe('rehber: künye, rozet, kaynak', () => {
     for (const o of ORNEK_VERILER.filter((x) => x.kaynak.tur === 'gercek')) expect(kaynakBaglantisi(o), o.id).not.toBeNull();
   });
 
-  it('bütün bağlantılar kısa adlarıyla: iklim Erzurum · İzmir, boy erkek · kız; bağlantısız örnekte boş', () => {
-    expect(kaynakBaglantilari(ornek('iklim')).map((b) => b.ad)).toEqual(['MGM: Erzurum', 'İzmir']);
-    expect(kaynakBaglantilari(ornek('iklim'))[1].url).toMatch(/m=IZMIR$/);
+  it('bütün bağlantılar kısa adlarıyla: iklim Erzurum · Adana, boy erkek · kız; bağlantısız örnekte boş', () => {
+    expect(kaynakBaglantilari(ornek('iklim')).map((b) => b.ad)).toEqual(['MGM: Erzurum', 'Adana']);
+    expect(kaynakBaglantilari(ornek('iklim'))[1].url).toMatch(/m=ADANA$/);
     expect(kaynakBaglantilari(ornek('boy')).map((b) => b.ad)).toEqual(['WHO: erkek', 'kız']);
     expect(kaynakBaglantilari(ornek('boy'))[1].url).toMatch(/girls/);
     expect(kaynakBaglantilari(ornek('sicaklik')).map((b) => b.ad)).toEqual(['MGM: Ankara']);

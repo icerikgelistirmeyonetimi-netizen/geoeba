@@ -95,14 +95,14 @@ describe('Uzman 7. tur: karşılaştırmalı veride çizgi ve sütun tek grafikt
   it('iklim (8. sınıf, iki sayısal değişken): çizgide tek grafikte iki seri ve lejant', () => {
     const h = ciz('iklim', { sekme: 'cizgi' });
     expect(h.match(/data-grafik="cizgi"/g)).toHaveLength(1);
-    expect(lejant(h)).toEqual(['Erzurum (°C)', 'İzmir (°C)']);
+    expect(lejant(h)).toEqual(['Erzurum (°C)', 'Adana (°C)']);
     expect(h).toContain('data-eksen-oku="dikey"');
   });
 
   it.each([
     ['mac', ['Selma', 'Yasemin'], 10],
     ['sinav', ['7-A', '7-B'], 30],
-    ['iklim', ['Erzurum (°C)', 'İzmir (°C)'], 24],
+    ['iklim', ['Erzurum (°C)', 'Adana (°C)'], 24],
     ['ekran', ['8-A', '8-B', '8-C', '8-D'], 40],
   ] as const)('%s: sütun grafiği tek; grupların sütunları kategori kategori yan yana, lejantla', (id, seriler, n) => {
     const h = ciz(id, { sekme: 'sutun' });

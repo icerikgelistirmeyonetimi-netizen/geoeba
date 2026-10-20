@@ -123,7 +123,7 @@ function tepeAciklamasi(ozet: Ozet): string {
   return ozet.tepe.length === 1 ? `en sık görülen değer (${ozet.tepeSayisi} kez)` : `en sık görülen değerler (her biri ${ozet.tepeSayisi} kez)`;
 }
 
-/** Cümle içinde değişken adı: sondaki birim ayracı atılır ("İzmir (°C)" → "İzmir") */
+/** Cümle içinde değişken adı: sondaki birim ayracı atılır ("Adana (°C)" → "Adana") */
 function cumleAdi(ad: string): string {
   return ad.replace(/\s*\([^()]*\)\s*$/, '').trim() || ad;
 }
