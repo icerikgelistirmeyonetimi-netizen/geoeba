@@ -12,6 +12,8 @@
  *   iki seri varsa seriler çizgi biçimiyle ayrılır: ilki düz ve dolu noktalı, ikincisi kesikli ve içi boş noktalı.
  *   `ikinciKesikli` bunu renk anahtarı olmadan da yapar (ör. teorik olasılık çizgisi).
  * - 40'tan çok satırda noktalar, değer etiketleri ve tutamaçlar gizlenir; satırlar arasında ok tuşlarıyla gezilir.
+ * - Gruplu karşılaştırma (GrupCizgiGrafikleri, alan uzmanı 7. tur): her grup kendi renginde bir seri (`seriRenkleri`),
+ *   bütün gruplar aynı eksenlerde altlı üstlü; lejant grupların adını, `eksenAdi` dikey eksenin adını yazar.
  */
 import { EksenOklari } from './EksenOklari';
 import React, { useMemo, useRef, useState } from 'react';
@@ -42,11 +44,16 @@ export interface CizgiGrafigiProps {
   degerleriGoster?: boolean;
   /** İkinci seri kesikli çizgi ve içi boş noktalarla (ör. Deney özetinde teorik olasılık) */
   ikinciKesikli?: boolean;
-  /** Alt alta karşılaştırma panellerinde ortak ölçek ve yatay sıra sayısı. */
-  ortakEksen?: Eksen;
-  enAzSatir?: number;
-  /** Tek grup panelinin seri rengi. */
-  seriRenk?: string;
+  /** Seri başına renk (gruplu karşılaştırmada grubun rengi); verilmeyen seride seri paleti */
+  seriRenkleri?: string[];
+  /** Seri başına kesikli çizgi ve içi boş nokta; verilirse renk anahtarı / `ikinciKesikli` kuralının yerine geçer */
+  kesikliSeriler?: boolean[];
+  /** Seri başına grubun adı (gruplu karşılaştırma): çizginin `data-cizgi-grubu` niteliği */
+  seriGruplari?: string[];
+  /** Dikey eksenin adı; verilirse çok seride de (lejantın altında) yazılır */
+  eksenAdi?: string;
+  /** Noktanın ekran okuyucu adı (gruplu karşılaştırmada asıl satırın adı: "7A-01"); verilmezse satırın etiketi */
+  noktaAdi?: (satir: number, seri: number) => string;
 }
 
 const SAG = 20;
@@ -170,9 +177,11 @@ export function CizgiGrafigi({
   yuzdeGoster,
   degerleriGoster = false,
   ikinciKesikli = false,
-  ortakEksen,
-  enAzSatir = 0,
-  seriRenk: panelRengi,
+  seriRenkleri,
+  kesikliSeriler,
+  seriGruplari,
+  eksenAdi,
+  noktaAdi,
 }: CizgiGrafigiProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [surukle, setSurukle] = useState<{ sutun: number; satir: number; eksen: Eksen } | null>(null);
@@ -182,7 +191,7 @@ export function CizgiGrafigi({
   const W = Math.max(genislik, 240);
   const H = Math.max(yukseklik, 200);
   const fs = yaziBoyu(W);
-  const n = Math.max(tablo.satirlar.length, enAzSatir, 1);
+  const n = Math.max(tablo.satirlar.length, 1);
   const cok = tablo.satirlar.length > CIZGI_COK_NOKTA;
   const sutunAnahtari = sutunlar?.join(',') ?? '';
   const seriler = useMemo(
@@ -197,6 +206,9 @@ export function CizgiGrafigi({
   const tek = seriler.length === 1;
   /** Renk anahtarı: kategorik sütun (seriler sayısal olduğundan hiçbir seriyle çakışmaz) */
   const anahtar = renkEslemi && renkEslemi.sutun >= 0 && renkEslemi.sutun < tablo.sutunlar.length ? renkEslemi : null;
+  /** Serinin rengi ve biçimi: önce seri başına verilen, yoksa seri paleti; ikincisi renk anahtarında / ikinciKesikli'de kesikli */
+  const seriRengiBul = (si: number) => seriRenkleri?.[si] ?? seriRengi(si);
+  const kesikliMi = (si: number) => (kesikliSeriler ? kesikliSeriler[si] === true : si > 0 && (anahtar !== null || ikinciKesikli));
   const tumDegerler = useMemo(() => {
     const d: number[] = [];
     for (const s of seriler)
@@ -229,16 +241,16 @@ export function CizgiGrafigi({
   const ustSatirSayisi = (tek ? 0 : 1) + (anahtar && !renkAyniSatirda ? 1 : 0);
   const satirTaban = (k: number) => 8 + fs + k * satirYuk;
   const renkLejantY = satirTaban(tek ? 0 : renkAyniSatirda ? 0 : 1);
-  const yEksenAdi = tek ? seriler[0].sutun.ad : null;
+  const yEksenAdi = eksenAdi ?? (tek ? seriler[0].sutun.ad : null);
   const UST = 8 + ustSatirSayisi * satirYuk + (yEksenAdi ? fs + 14 : 8) + 6;
 
   // ── Dikey eksen ─────────────────────────────────────────────────────────────
   const xAdi = tablo.sutunlar[0]?.tur === 'etiket' ? tablo.sutunlar[0].ad : 'Satır';
   // Önce alt bölüm tahmini (etiket kipi yatay genişliğe bağlı; sol boşluk eksen işaretlerine)
   const eksenIcin = (taban: number) =>
-    ortakEksen ?? (tumDegerler.length === 0
+    tumDegerler.length === 0
       ? payliEksen(0, 10, 5, true)
-      : payliEksen(Math.min(0, ...tumDegerler), Math.max(0, ...tumDegerler), Math.max(3, Math.floor((taban - UST) / 44)), tamSayili));
+      : payliEksen(Math.min(0, ...tumDegerler), Math.max(0, ...tumDegerler), Math.max(3, Math.floor((taban - UST) / 44)), tamSayili);
   const eksenOndaligi = (e: Eksen) => gosterimOndaligi(e.isaretler, 0, 4);
   const onEksen = eksenIcin(H - 64);
   const SOL = Math.max(48, Math.ceil(Math.max(...onEksen.isaretler.map((v) => metinGenisligi(sayiMetni(v, eksenOndaligi(onEksen)), fs))) + 16));
@@ -273,7 +285,7 @@ export function CizgiGrafigi({
   const taban = H - altBosluk;
   const ondalikAdim = adimOndalik(yuvarlamaAdimi);
 
-  const canliEksen = useMemo(() => eksenIcin(taban), [tumDegerler, taban, UST, tamSayili, ortakEksen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const canliEksen = useMemo(() => eksenIcin(taban), [tumDegerler, taban, UST, tamSayili]); // eslint-disable-line react-hooks/exhaustive-deps
   const eksen = surukle ? surukle.eksen : canliEksen;
   const isaretOndaligi = eksenOndaligi(eksen);
   const olcek = dogrusalOlcek(eksen.min, eksen.max, taban, UST);
@@ -359,7 +371,7 @@ export function CizgiGrafigi({
           anahtar,
           s.noktalar.map((p) => p.satir),
         ).map((g) => ({ renk: g.renk, noktalar: g.satirlar.map((satir) => noktaBul.get(satir)!) }))
-      : [{ renk: (panelRengi ?? seriRengi(s.si)), noktalar: s.noktalar }];
+      : [{ renk: seriRengiBul(s.si), noktalar: s.noktalar }];
     const grup = gruplar.find((g) => g.noktalar.some((p) => p.satir === vurgulu.satir));
     if (!grup) return;
     const k = grup.noktalar.findIndex((p) => p.satir === vurgulu.satir);
@@ -419,10 +431,10 @@ export function CizgiGrafigi({
       {/* Lejant (iki seride): renk anahtarı varken renksiz çizgi örneği (düz / kesikli), yoksa seri renginde */}
       {!tek &&
         seriNoktalari.map((s, si) => {
-          const kesik = si > 0 && (anahtar !== null || ikinciKesikli);
-          const renk = anahtar ? RENK.solukMetin : (panelRengi ?? seriRengi(si));
+          const kesik = kesikliMi(si);
+          const renk = anahtar ? RENK.solukMetin : seriRengiBul(si);
           return (
-            <g key={s.sutun.id} transform={`translate(${seriLejantlari[si]?.x ?? lejantBas}, ${satirTaban(0) - fs * 0.35})`}>
+            <g key={s.sutun.id} transform={`translate(${seriLejantlari[si]?.x ?? lejantBas}, ${satirTaban(0) - fs * 0.35})`} data-cizgi-seri={s.sutun.ad}>
               <g data-seri-ornegi>
                 <line x1={0} x2={24} y1={0} y2={0} stroke={renk} strokeWidth={2.5} strokeDasharray={kesik ? KESIK : undefined} />
                 <circle cx={12} cy={0} r={4.5} fill={kesik ? RENK.kart : renk} stroke={kesik ? renk : RENK.kart} strokeWidth={2} />
@@ -546,9 +558,9 @@ export function CizgiGrafigi({
 
       {/* Seriler: renk anahtarı varken her kategori ayrı çizgi (aynı kategorinin satırları sırayla birleşir) */}
       {seriNoktalari.map((s, si) => {
-        const seriRenk = (panelRengi ?? seriRengi(si));
-        const kesikSeri = si > 0 && (anahtar !== null || ikinciKesikli);
-        const bos = si > 0 && (anahtar !== null || ikinciKesikli);
+        const seriRenk = seriRengiBul(si);
+        const kesikSeri = kesikliMi(si);
+        const bos = kesikSeri;
         const noktaBul = new Map(s.noktalar.map((p) => [p.satir, p]));
         const gruplar = anahtar
           ? renkGruplari(
@@ -568,7 +580,7 @@ export function CizgiGrafigi({
                 strokeDasharray={kesikSeri ? KESIK : undefined}
                 strokeLinejoin="round"
                 style={{ transition: gecis }}
-                data-cizgi-grubu={anahtar ? g.ad : undefined}
+                data-cizgi-grubu={anahtar ? g.ad : seriGruplari?.[si]}
               />
             ))}
             {s.noktalar.map((p) => {
@@ -580,7 +592,7 @@ export function CizgiGrafigi({
                 if (!aktif && !secili) return null;
                 return <circle key={tablo.satirlar[p.satir]?.id ?? p.satir} cx={p.x} cy={p.y} r={6.5} fill={bos ? RENK.kart : renk} stroke={bos ? renk : RENK.metin} strokeWidth={2.5} />;
               }
-              const etiket = satirEtiketi(tablo, p.satir);
+              const etiket = noktaAdi?.(p.satir, si) ?? satirEtiketi(tablo, p.satir);
               const kategori = anahtar?.satirKategorisi.get(p.satir);
               // 1. seri dolu, 2. seri (renk anahtarında ya da ikinciKesikli'de) içi boş nokta; seçili nokta koyu halka alır
               const dolgu = anahtar ? (bos && !secili ? RENK.kart : renk) : bos ? (secili ? renk : RENK.kart) : secili ? RENK.mercan : renk;

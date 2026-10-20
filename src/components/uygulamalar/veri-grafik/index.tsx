@@ -46,7 +46,10 @@
  * (5. sınıf: Nokta, Sütun, Daire, İstatistik; 6. sınıf: Çizgi yerine Kök-yaprak, Saçılım yok), ölçüleri (seçenek
  * şeridi, İstatistik), daire ve sütundaki yüzde / açı yazılarını süzer. 5–8. sınıfta "Karşılaştır" iki veri grubunu
  * tek grafikte, ikili gruplar hâlinde gösterir: Nokta'da yan yana yığınlar, Sütun'da yan yana sütun çiftleri,
- * Kök-yaprak'ta sırt sırta gösterim (ikiliGruplar.ts). Sınıfsız tabloda bugünkü davranış (alt alta paneller) sürer.
+ * Kök-yaprak'ta sırt sırta gösterim (ikiliGruplar.ts). Sınıfsız tabloda Nokta'da bugünkü davranış (alt alta paneller)
+ * sürer. Alan uzmanı (7. tur): Sütun ve Çizgi'de karşılaştırma bütün düzeylerde (sınıfsız tablo dahil) tek grafiktedir:
+ * Sütun'da her kategoride grupların sütunları yan yana, Çizgi'de grupların çizgileri ortak eksenlerde altlı üstlü
+ * (GrupCizgiGrafikleri); ayrı paneller ve "önce birinci grup, sonra ikinci grup" sırası yoktur.
  *
  * Kademe (Çizim Stüdyosu'nun Kademe menüsü; hooks/useKademeDuzeyi): İlkokul seçiliyken uygulama 1. sınıf örneğiyle
  * açılır, galeride yalnız 1–4. sınıf örnekleri durur ve 1–4. sınıf örneğine bağlı olmayan her tablo ilkokulun ortak
@@ -77,6 +80,7 @@ import { KategorikIstatistik, KategorikSutunGrafigi, frekansTablosu, kategorikFr
 import { BosDurum, DaireBilgisi } from './BosDurum';
 import {
   CIZGI_SIRA_NOTU,
+  cizgiGruplanir,
   cizgiSiraNotuGerekli,
   daireGorunumu,
   degerSikligiTablosu,
@@ -957,11 +961,12 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
     [sekme, kurallar.cetele, etkinSutun, etkinKategorik, tablo],
   );
   /**
-   * Sütun, 5–8. sınıf, karşılaştırma: iki veri grubu yan yana sütun çiftleri (1. maç: Selma, Yasemin; 7A-01 ile 7B-01).
+   * Sütun, karşılaştırma (bütün düzeyler; alan uzmanı 7. tur): veri grupları tek grafikte yan yana sütunlar (1. maç:
+   * Selma, Yasemin; 7A-01 ile 7B-01).
    * Çok veride (değerlerin sıklığı çiziliyorsa) çift kurulmaz.
    */
   const sutunIkili = useMemo(() => {
-    if (!tekGrafik || sekme !== 'sutun' || etkinKategorik || etkinSutun < 0 || sutunSiklik || karsTuru === null || ikinciSutun < 0) return null;
+    if (sekme !== 'sutun' || etkinKategorik || etkinSutun < 0 || sutunSiklik || karsTuru === null || ikinciSutun < 0) return null;
     const ciftler = sutunCiftleri(
       tablo,
       etkinSutun,
@@ -969,7 +974,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
       renkEslemi,
     );
     return ciftler.gruplar.length > 0 && ciftler.seriler.length > 1 ? ciftler : null;
-  }, [tekGrafik, sekme, etkinKategorik, etkinSutun, sutunSiklik, karsTuru, ikinciSutun, tablo, kategoriSiralari, renkEslemi]);
+  }, [sekme, etkinKategorik, etkinSutun, sutunSiklik, karsTuru, ikinciSutun, tablo, kategoriSiralari, renkEslemi]);
   /** Sürükleme yuvarlaması: sütun, çizgi ve dilimleri sürüklenebilen daire (her satır bir dilim) */
   const yuvarlamaAyari =
     (sekme === 'sutun' && degiskenGecerli && !etkinKategorik && sutunSiklik === null) ||
@@ -1277,7 +1282,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
     // Karşılaştırılan (sayısal) değişkenin sekmesi: karşılaştırma silinmez, iki değişken yer değiştirir (paneller yer
     // değiştirir; ortak eksen ve gruplama aynı kalır). Gruplayan değişkenin sekmesi o değişkeni grafiğe getirir.
     if (
-      (sekme === 'nokta' || sekme === 'cizgi' || sekme === 'istatistik' || (tekGrafik && (sekme === 'sutun' || sekme === 'kokYaprak'))) &&
+      (sekme === 'nokta' || sekme === 'cizgi' || sekme === 'istatistik' || sekme === 'sutun' || (tekGrafik && sekme === 'kokYaprak')) &&
       ikinciSayisal &&
       id === durum.ikinciDegisken &&
       grafikSutunId &&
@@ -1385,13 +1390,17 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const cizgiSutunlari = grafikSutun >= 0 ? [grafikSutun, ...(ikinciSayisal && ikinciSutun !== grafikSutun ? [ikinciSutun] : [])] : [];
   /** Deney özetinde teorik olasılık serisi kesikli çizgiyle (deneysel olasılıkla karışmasın) */
   const cizgiIkinciKesikli = etkinKume === 'ozet' && cizgiSutunlari.length > 1 && tablo.sutunlar[cizgiSutunlari[1]]?.id === OZET_SUTUNU.teorik;
-  // Sınıf grupları ortak eksenli, alt alta panellerde aynı sırada karşılaştırılır.
+  /**
+   * Çizgi, gruplu karşılaştırma (alan uzmanı 7. tur; bütün düzeyler): renk anahtarının grupları (2–4) TEK grafikte,
+   * ortak eksenlerde altlı üstlü birer çizgi; her grubun k. satırı yatay eksende aynı yerde (GrupCizgiGrafikleri).
+   * Satırlar tek bir zaman dizisiyse (ayların mevsime göre renklenmesi) gruplanmaz (cizgiGruplanir).
+   */
   const cizgiGruplari = useMemo(() => {
-    if (sekme !== 'cizgi' || !tekGrafik || grafikSutun < 0 || !renkEslemi) return [];
+    if (sekme !== 'cizgi' || grafikSutun < 0 || !renkEslemi) return [];
     const g = grupPanelleri(tablo, grafikSutun, renkEslemi.sutun,
       kategoriSiralari.get(tablo.sutunlar[renkEslemi.sutun]?.id ?? ''));
-    return g.length >= 2 && g.length <= 4 ? g : [];
-  }, [sekme, tekGrafik, grafikSutun, renkEslemi, tablo, kategoriSiralari]);
+    return cizgiGruplanir(tablo, g) ? g : [];
+  }, [sekme, grafikSutun, renkEslemi, tablo, kategoriSiralari]);
 
 
   /**
@@ -1504,7 +1513,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   /** Seçenek şeridi yalnız o grafiğin seçeneği varsa çizilir */
   const seritVar =
     (sekme === 'nokta' && degiskenGecerli) ||
-    (sekme === 'sutun' && (sutunSiklik !== null || (tekGrafik && !etkinKategorik && karsAdaylari.length > 0)) && !bos) ||
+    (sekme === 'sutun' && (sutunSiklik !== null || (!etkinKategorik && karsAdaylari.length > 0)) && !bos) ||
     (sekme === 'kokYaprak' && grafikSutun >= 0 && karsAdaylari.length > 0 && !bos) ||
     (sekme === 'cizgi' && grafikSutun >= 0) ||
     (sekme === 'daire' && daireSayisal && !bos) ||
@@ -2365,6 +2374,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                     tablo={tablo}
                     sutunlar={cizgiSutunlari}
                     gruplar={cizgiGruplari}
+                    grupSutun={renkEslemi?.sutun ?? -1}
                     renkEslemi={renkEslemi}
                     yuzdeGoster={cizgiYuzdeleri}
                     degerleriGoster={durum.degerleriGoster}
@@ -2605,8 +2615,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
             })}
           </div>
         )}
-        {/* Sütun ve Kök-yaprak, 5–8. sınıf: iki grubu tek grafikte karşılaştırma (yan yana sütun çiftleri / sırt sırta) */}
-        {((sekme === 'sutun' && tekGrafik && !etkinKategorik && !sutunSiklik) || sekme === 'kokYaprak') &&
+        {/* Sütun (bütün düzeyler) ve Kök-yaprak: grupları tek grafikte karşılaştırma (yan yana sütunlar / sırt sırta) */}
+        {((sekme === 'sutun' && !etkinKategorik && !sutunSiklik) || sekme === 'kokYaprak') &&
           karsilastirSecimi(karsAdaylari, karsTuru !== null ? durum.ikinciDegisken ?? '' : '')}
         {/* Sütun, çok veride: değerlerin sıklığı çiziliyor (her satır bir sütun okunmaz) */}
         {sekme === 'sutun' && sutunSiklik && (

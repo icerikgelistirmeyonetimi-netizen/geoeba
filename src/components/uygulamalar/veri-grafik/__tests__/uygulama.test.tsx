@@ -278,7 +278,9 @@ describe('Karşılaştır: aynı birimli sayısal değişkenler ve kategorik gru
     const sinav = ornekVeriOlustur('sinav');
     expect(karsilastirmaAdaylari(sinav, kimlik(sinav, 'Puan'), 'cizgi')).toEqual([]);
     expect(karsilastirmaAdaylari(sinav, kimlik(sinav, 'Puan'), 'istatistik')).toEqual([]);
-    for (const sekme of ['sutun', 'daire', 'sacilim'] as const) expect(karsilastirmaAdaylari(iklim, kimlik(iklim, 'Erzurum (°C)'), sekme)).toEqual([]);
+    // Uzman 7. tur: Sütun'da karşılaştırma bütün düzeylerde (sınıfsız tablo dahil) tek grafikte, yan yana
+    expect(karsilastirmaAdaylari(iklim, kimlik(iklim, 'Erzurum (°C)'), 'sutun').map((x) => x.ad)).toEqual(['İzmir (°C)']);
+    for (const sekme of ['daire', 'sacilim'] as const) expect(karsilastirmaAdaylari(iklim, kimlik(iklim, 'Erzurum (°C)'), sekme)).toEqual([]);
     expect(karsilastirmaTuru(iklim, kimlik(iklim, 'Erzurum (°C)'), kimlik(iklim, 'Erzurum (°C)'), 'nokta')).toBeNull();
   });
 

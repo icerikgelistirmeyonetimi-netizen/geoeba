@@ -9,6 +9,8 @@
  * Sütun grafiği `sutunCiftleri` ile yan yana sütun çiftleri çizer. Nokta grafiği iki sayısal değişkeni `ikiSeriTablosu`
  * ile tek sayısal sütunlu bir tabloya açar (seriyi kategorik sütunda tutar) ve her değerde grupların yığınlarını yan
  * yana dizer (NoktaGrafigi: `yanYana`).
+ * Alan uzmanı (7. tur): Sütun ve Çizgi'de karşılaştırma bütün düzeylerde tek grafiktedir; çizgide `grupCizgiTablosu`
+ * her grubu bir seriye açar, grupların çizgileri ortak eksenlerde altlı üstlü durur (ayrı panel yok).
  */
 import { seriRengi } from './grafik';
 import { kategoriler, kategoriRengi, sutunMetinleri, type RenkEslemesi } from './kategorik';
@@ -174,5 +176,102 @@ export function grupEslemesi(tablo: VeriTablosu, grupSutun: number, sira: string
     kategoriler: kats,
     renkler: new Map(kats.map((k, i) => [k, renkler[i]])),
     satirKategorisi: new Map(metinler.map((m) => [m.satir, m.deger])),
+  };
+}
+
+// ── Çizgi: grupların çizgileri tek grafikte (altlı üstlü) ────────────────────
+
+/** Gruplu çizginin grubu: adı ve satırları (tablonun geneline göre, tablo sırasıyla; grafikKurallari: GrupPaneli) */
+export interface CizgiGrubu {
+  kategori: string;
+  satirlar: number[];
+}
+
+/**
+ * Grupların k. satırları aynı adı mı taşıyor ("1. hafta" A'da da B'de de): uzun biçimli zaman dizisi. Ortaksa yatay
+ * eksende o adlar, değilse grup içi sıra ("1.", "2." …) yazılır. En az bir sırada iki grubun satırı olmalı.
+ */
+export function grupEtiketleriOrtak(tablo: VeriTablosu, gruplar: readonly CizgiGrubu[]): boolean {
+  const n = gruplar.reduce((m, g) => Math.max(m, g.satirlar.length), 0);
+  let karsilasma = false;
+  for (let k = 0; k < n; k++) {
+    const adlar = gruplar.filter((g) => g.satirlar[k] !== undefined).map((g) => satirEtiketi(tablo, g.satirlar[k]).trim());
+    if (adlar.length > 1) karsilasma = true;
+    if (adlar.some((a) => a === '' || a !== adlar[0])) return false;
+  }
+  return karsilasma;
+}
+
+export interface GrupCizgiTablosu {
+  /** İlk sütun yatay eksenin adları (grup içi sıra ya da ortak satır adı), sonra her seri bir sayısal sütun */
+  tablo: VeriTablosu;
+  /** serilerin türetilmiş tablodaki sütunları (1, 2, …) */
+  sutunlar: number[];
+  /** seri sırasıyla: grubun rengi, grubun adı, kesikli mi (ikinci değişkenin serileri), asıl değişkenin sırası */
+  renkler: string[];
+  gruplar: string[];
+  kesikli: boolean[];
+  degiskenSirasi: number[];
+  /** seri → asıl tablodaki sütun */
+  asilSutunlar: number[];
+  /** [türetilmiş satır][seri] → asıl satır (o grupta o sırada satır yoksa −1) */
+  karsilik: number[][];
+  /** dikey eksenin adı (değişkenin adı: "Puan"); seri adları lejantta */
+  eksenAdi: string;
+}
+
+/**
+ * Alan uzmanı (7. tur): karşılaştırmalı veride bütün grupların çizgileri aynı grafikte, ortak eksenlerde altlı üstlü
+ * çizilir; ayrı paneller ve "önce birinci grup, sonra ikinci grup" sırası kullanılmaz. Her grubun k. satırı yatay
+ * eksende aynı yere düşer (7A-01 ile 7B-01 "1."de). Türetilmiş tabloda her (değişken, grup) çifti bir seridir:
+ * tek değişkende seri adı grubun adıdır ("7-A"), ikinci değişkende "7-A · Puan"; ikinci değişkenin serileri kesikli.
+ */
+export function grupCizgiTablosu(
+  tablo: VeriTablosu,
+  degiskenler: readonly number[],
+  gruplar: readonly CizgiGrubu[],
+  grupSutun: number,
+  renkEslemi?: RenkEslemesi | null,
+): GrupCizgiTablosu {
+  const ortak = grupEtiketleriOrtak(tablo, gruplar);
+  const n = gruplar.reduce((m, g) => Math.max(m, g.satirlar.length), 0);
+  const ilk = tablo.sutunlar[0];
+  const xAdi = ilk?.tur === 'etiket' ? (ortak ? ilk.ad : `${ilk.ad} sırası`) : 'Sıra';
+  const grupRenk = grupRenkleri(gruplar.map((g) => g.kategori), renkEslemi, grupSutun);
+  const seriler = degiskenler.flatMap((sutun, di) =>
+    gruplar.map((g, gi) => ({
+      sutun,
+      di,
+      gi,
+      ad: degiskenler.length > 1 ? `${g.kategori} · ${birimsiz(tablo.sutunlar[sutun]?.ad ?? '')}` : g.kategori,
+    })),
+  );
+  const karsilik = Array.from({ length: n }, (_, k) => seriler.map((s) => gruplar[s.gi].satirlar[k] ?? -1));
+  const satirAdi = (k: number) => {
+    if (!ortak) return `${k + 1}.`;
+    const g = gruplar.find((x) => x.satirlar[k] !== undefined);
+    return g ? satirEtiketi(tablo, g.satirlar[k]) : `${k + 1}.`;
+  };
+  const yeni: VeriTablosu = {
+    sutunlar: [
+      { id: `${ilk?.id ?? 'etiket'}~sira`, ad: xAdi, tur: 'etiket' },
+      ...seriler.map((s) => ({ id: `${tablo.sutunlar[s.sutun]?.id ?? 's'}~${s.gi}`, ad: s.ad, tur: 'sayi' as const })),
+    ],
+    satirlar: karsilik.map((satirlar, k) => ({
+      id: `sira-${k}`,
+      hucreler: [satirAdi(k), ...satirlar.map((satir, j) => (satir < 0 ? '' : tablo.satirlar[satir]?.hucreler[seriler[j].sutun] ?? ''))],
+    })),
+  };
+  const adlar = degiskenler.map((s) => tablo.sutunlar[s]?.ad ?? '');
+  return {
+    tablo: yeni,
+    sutunlar: seriler.map((_, j) => j + 1),
+    renkler: seriler.map((s) => grupRenk[s.gi]),
+    gruplar: seriler.map((s) => gruplar[s.gi].kategori),
+    kesikli: seriler.map((s) => s.di > 0),
+    degiskenSirasi: seriler.map((s) => s.di),
+    asilSutunlar: seriler.map((s) => s.sutun),
+    karsilik,
+    eksenAdi: adlar.join(' ve '),
   };
 }

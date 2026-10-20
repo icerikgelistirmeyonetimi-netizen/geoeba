@@ -35,16 +35,14 @@ describe('Uzman 6. tur: karşılaştırma ve grafik kontrolleri', () => {
     expect(h).toContain('en büyük değer − en küçük değer');
     expect(h).not.toContain('Sütunlara dönüştür');
   });
-  it('7-A ve 7-B aynı ekranda iki çizgi panelidir; 8. sınıf ekran süresi dört paneldir', () => {
+  // Uzman 7. tur bu kararı değiştirdi: iki ayrı panel yerine tek grafikte, ortak eksenlerde iki (dört) çizgi
+  // (ayrıntılı beklentiler: uzman7.test.tsx).
+  it('7-A ve 7-B tek çizgi grafiğinde iki çizgidir; 8. sınıf ekran süresi tek grafikte dört çizgidir', () => {
     for(const [id,n] of [['sinav',2],['ekran',4]] as const) {
       const h=ciz(id,{sekme:'cizgi'});
-      expect(h.match(/data-cizgi-grubu=/g),id).toHaveLength(n);
-      expect(h.match(/data-grafik="cizgi"/g),id).toHaveLength(n);
-      // Aynı puan/süre, her grup için aynı dikey piksel konumuna karşılık gelir.
-      const paneller=h.split('data-cizgi-grubu=').slice(1);
-      const eksenler=paneller.map(p=>Array.from(p.matchAll(/<line x1="[^"]+" x2="[^"]+" y1="([^"]+)" y2="\1" stroke="hsl\(var\(--grid-color\)\)"/g),m=>m[1]));
-      expect(eksenler[0].length).toBeGreaterThan(2);
-      for(const e of eksenler.slice(1)) expect(e).toEqual(eksenler[0]);
+      expect(h.match(/data-grafik="cizgi"/g),id).toHaveLength(1);
+      expect(h.match(/<path [^>]*data-cizgi-grubu=/g),id).toHaveLength(n);
+      expect(h.match(/data-cizgi-seri=/g),id).toHaveLength(n);
     }
   });
   it.each(['mac','sinav','ekran'])('%s Etiketler açıldığında nokta grafiğine görünür veri etiketi ekler', id => {

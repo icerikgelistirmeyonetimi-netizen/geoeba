@@ -1,39 +1,69 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { CizgiGrafigi, type CizgiGrafigiProps } from './CizgiGrafigi';
-import { payliEksen } from './SutunGrafigi';
-import { seriRengi, tamSayiliMi } from './grafik';
-import { satirRengi } from './kategorik';
-import { sayiOku } from './veri';
-import type { GrupPaneli } from './grafikKurallari';
+import { grupCizgiTablosu, type CizgiGrubu } from './ikiliGruplar';
+import { satirEtiketi } from './veri';
 
-/** Grupların sıra ve değer ölçekleri aynıdır; seçim/düzenleme asıl veri satırına döner. */
-export function GrupCizgiGrafikleri({ gruplar, ...p }: CizgiGrafigiProps & { gruplar: GrupPaneli[] }) {
-  const sutunlar = p.sutunlar ?? [];
-  const degerler = gruplar.flatMap((g) => g.satirlar.flatMap((i) =>
-    sutunlar.map((s) => sayiOku(p.tablo.satirlar[i].hucreler[s])).filter((v): v is number => v !== null)));
-  const eksen = payliEksen(Math.min(0, ...degerler), Math.max(1, ...degerler), 4, tamSayiliMi(degerler));
-  const n = Math.max(1, ...gruplar.map((g) => g.satirlar.length));
-  const h = Math.max(220, Math.floor(p.yukseklik / gruplar.length) - 32);
+/**
+ * Karşılaştırmalı çizgi grafiği (alan uzmanı 7. tur): bütün grupların çizgileri TEK grafikte, ortak eksenlerde altlı
+ * üstlü; her grup kendi renginde, lejantla. Ayrı paneller ve "önce birinci grup, sonra ikinci grup" sırası yoktur:
+ * her grubun k. satırı yatay eksende aynı yerdedir (ikiliGruplar.ts: grupCizgiTablosu). Seçim ve sürükleme asıl veri
+ * satırına döner.
+ */
+export function GrupCizgiGrafikleri({
+  gruplar,
+  grupSutun,
+  yuzdeGoster,
+  ...p
+}: CizgiGrafigiProps & { gruplar: CizgiGrubu[]; grupSutun: number }) {
+  const { tablo, sutunlar = [], renkEslemi, seciliSatir, onSatirSec, onDegerDegis } = p;
+  const sutunAnahtari = sutunlar.join(',');
+  const t = useMemo(
+    () => grupCizgiTablosu(tablo, sutunlar, gruplar, grupSutun, renkEslemi),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tablo, sutunAnahtari, gruplar, grupSutun, renkEslemi],
+  );
+  /** Asıl satırın türetilmiş tablodaki yeri (sıra, seri) */
+  const yeri = (satir: number | null): { k: number; j: number } | null => {
+    if (satir === null) return null;
+    for (let k = 0; k < t.karsilik.length; k++) {
+      const j = t.karsilik[k].indexOf(satir);
+      if (j >= 0) return { k, j };
+    }
+    return null;
+  };
+  const secili = yeri(seciliSatir);
   return (
-    <div className="h-full overflow-y-auto" data-cizgi-karsilastirma>
-      {gruplar.map((g, gi) => {
-        const renk = satirRengi(p.renkEslemi, g.satirlar[0]) ?? seriRengi(gi);
-        const secili = p.seciliSatir === null ? -1 : g.satirlar.indexOf(p.seciliSatir);
-        const tablo = { ...p.tablo, satirlar: g.satirlar.map((i) => p.tablo.satirlar[i]) };
-        return (
-          <section key={g.kategori} className="border-b border-border last:border-0" aria-label={g.kategori} data-cizgi-grubu={g.kategori}>
-            <h3 className="flex h-8 items-center gap-2 px-4 text-sm font-bold">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: renk }} />{g.kategori}
-            </h3>
-            <CizgiGrafigi {...p} tablo={tablo} renkEslemi={null} seriRenk={renk} ortakEksen={eksen} enAzSatir={n}
-              yukseklik={h} seciliSatir={secili < 0 ? null : secili}
-              onSatirSec={(i) => p.onSatirSec(i === null ? null : g.satirlar[i])}
-              onDegerDegis={(i, s, v, o) => p.onDegerDegis(g.satirlar[i], s, v, o)} />
-          </section>
-        );
-      })}
+    <div data-cizgi-karsilastirma={t.gruplar.length}>
+      <CizgiGrafigi
+        {...p}
+        tablo={t.tablo}
+        sutunlar={t.sutunlar}
+        renkEslemi={null}
+        seriRenkleri={t.renkler}
+        kesikliSeriler={t.kesikli}
+        seriGruplari={t.gruplar}
+        eksenAdi={t.eksenAdi}
+        yuzdeGoster={yuzdeGoster ? t.degiskenSirasi.map((d) => yuzdeGoster[d]) : undefined}
+        seciliSatir={secili ? secili.k : null}
+        onSatirSec={(k) => {
+          if (k === null) return onSatirSec(null);
+          // Aynı serinin satırı varsa o (seçim grupta kalır), yoksa o sıradaki ilk satır
+          const satirlar = t.karsilik[k] ?? [];
+          const satir = secili && satirlar[secili.j] >= 0 ? satirlar[secili.j] : satirlar.find((s) => s >= 0);
+          onSatirSec(satir ?? null);
+        }}
+        onDegerDegis={(k, s, v, o) => {
+          const j = t.sutunlar.indexOf(s);
+          const satir = j < 0 ? -1 : t.karsilik[k]?.[j] ?? -1;
+          if (satir >= 0) onDegerDegis(satir, t.asilSutunlar[j], v, o);
+        }}
+        noktaAdi={(k, j) => {
+          const satir = t.karsilik[k]?.[j] ?? -1;
+          return satir >= 0 ? satirEtiketi(tablo, satir) : t.tablo.satirlar[k]?.hucreler[0] ?? '';
+        }}
+      />
     </div>
   );
 }

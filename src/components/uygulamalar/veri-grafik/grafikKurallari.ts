@@ -2,7 +2,8 @@
  * Veri ve Grafik — grafiklerin bağlanma kuralları (saf, React'siz; index.tsx'ten ayrılmış kabuk mantığı).
  * - Karşılaştır: sayısal değişkenler yalnız aynı birimle; kategorik değişkenler "(gruplara ayır)" (en çok 4 grup).
  * - Gruplara ayırma: her kategori için bir nokta grafiği paneli (satır alt kümesi ve "7-A" başlığı); 5–8. sınıf
- *   örneklerinde gruplar tek grafikte yan yana (ikiliGruplar).
+ *   örneklerinde gruplar tek grafikte yan yana (ikiliGruplar). Sütun ve Çizgi'de gruplar bütün düzeylerde tek grafikte
+ *   (yan yana sütunlar; altlı üstlü çizgiler: cizgiGruplanir).
  * - Daire: sayısal değişkende her satır bir dilim, değerlerin sıklığı ya da "uygun değil" bilgi kutusu.
  * - Sütun: çok veride (n > 40, en çok 30 farklı değer) değerlerin sıklığı çizilir.
  * - Çizgi: satırlar bir sıra (ay, hafta, tarih, sayı …) gibi görünmüyorsa uyarı notu.
@@ -11,6 +12,7 @@
 import { sutunBirimi, type DaireModu, type Sekme } from './durum';
 import { degiskenSutunlari, kategoriler, sutunMetinleri } from './kategorik';
 import { gecerliDegerler, sayiOku, sayiYaz, type VeriTablosu } from './veri';
+import { grupEtiketleriOrtak } from './ikiliGruplar';
 
 // ── Karşılaştırma ────────────────────────────────────────────────────────────
 
@@ -54,14 +56,15 @@ export const KOK_YAPRAK_GRUP_EN_COK = 2;
  * - Nokta, sayısal ana değişken: aynı birimli sayısal değişkenler (ikinci panel) ve kategorik değişkenler (gruplar);
  * - Nokta, kategorik ana değişken: öteki kategorik değişkenler (gruplar);
  * - Çizgi ve İstatistik, sayısal ana değişken: aynı birimli sayısal değişkenler.
- * `tekGrafik` (5–8. sınıf örnekleri, sinifKurallari.ts): iki grup tek grafikte, ikili gruplar hâlinde karşılaştırılır;
- * Sütun'da da (yan yana sütun çiftleri) ve Kök-yaprak'ta (sırt sırta, en çok iki grup) seçenek vardır, gruplar
- * "(yan yana)" / "(sırt sırta)" adıyla listelenir.
+ * Sütun'da bütün düzeylerde (sınıfsız tablo dahil; alan uzmanı 7. tur) seçenek vardır: gruplar tek grafikte yan yana
+ * sütunlarla karşılaştırılır ("(yan yana)"). `tekGrafik` (5–8. sınıf örnekleri, sinifKurallari.ts): Nokta'da da iki
+ * grup tek grafikte, ikili gruplar hâlinde karşılaştırılır; Kök-yaprak'ta (sırt sırta, en çok iki grup) seçenek vardır,
+ * gruplar "(yan yana)" / "(sırt sırta)" adıyla listelenir.
  * Başka birimdeki sayısal değişken listede yoktur (ortak eksen yanıltır). 4'ten çok kategorili (ya da boş) kategorik
  * değişken listede pasiftir; nedeni `neden`de.
  */
 export function karsilastirmaAdaylari(tablo: VeriTablosu, anaId: string | null, sekme: Sekme, tekGrafik = false): KarsilastirmaAdayi[] {
-  const ekSekme = tekGrafik && (sekme === 'sutun' || sekme === 'kokYaprak');
+  const ekSekme = sekme === 'sutun' || (tekGrafik && sekme === 'kokYaprak');
   if (sekme !== 'nokta' && sekme !== 'cizgi' && sekme !== 'istatistik' && !ekSekme) return [];
   const degiskenler = degiskenSutunlari(tablo);
   const ana = degiskenler.find((s) => s.id === anaId);
@@ -69,7 +72,7 @@ export function karsilastirmaAdaylari(tablo: VeriTablosu, anaId: string | null, 
   if (ekSekme && ana.tur !== 'sayi') return [];
   const kokYaprak = sekme === 'kokYaprak';
   const enCok = kokYaprak ? KOK_YAPRAK_GRUP_EN_COK : GRUP_EN_COK;
-  const ek = kokYaprak ? 'sırt sırta' : tekGrafik ? 'yan yana' : 'gruplara ayır';
+  const ek = kokYaprak ? 'sırt sırta' : tekGrafik || sekme === 'sutun' ? 'yan yana' : 'gruplara ayır';
   const sonuc: KarsilastirmaAdayi[] = [];
   for (const s of degiskenler) {
     if (s.id === ana.id) continue;
@@ -217,6 +220,17 @@ export function cizgiSiraNotuGerekli(tablo: VeriTablosu): boolean {
   if (adlar.length < 2) return false;
   const sirali = adlar.filter(siraEtiketiMi).length;
   return sirali < adlar.length * 0.8;
+}
+
+/**
+ * Çizgi grafiği renk anahtarının gruplarını karşılaştırmalı mı çizsin (tek grafikte altlı üstlü, her grubun k. satırı
+ * aynı yerde): 2–4 grup ve satırlar tek bir zaman dizisi değil — ya grupların k. satırları aynı adı taşıyor (uzun
+ * biçimli dizi: "1. hafta" A'da da B'de de) ya da satırlar bağımsız birimler (öğrenci, katılımcı: sıra notu gerekir).
+ * Tek zaman dizisinin renklenmesi (ayları mevsime göre) gruplanmaz: çizgi satır sırasıyla, renkli parçalarla kalır.
+ */
+export function cizgiGruplanir(tablo: VeriTablosu, gruplar: readonly GrupPaneli[]): boolean {
+  if (gruplar.length < 2 || gruplar.length > GRUP_EN_COK) return false;
+  return cizgiSiraNotuGerekli(tablo) || grupEtiketleriOrtak(tablo, gruplar);
 }
 
 export const CIZGI_SIRA_NOTU = 'Çizgi grafiği zamanla değişimi gösterir; bu satırlar bir sıra değil. Sütun grafiğini deneyin.';

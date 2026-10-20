@@ -121,10 +121,11 @@ describe('sınıf kuralları: sekmeler ve ölçüler', () => {
     expect(sekmeDuzelt({ ...yukle('kitap'), ornekId: null, sekme: 'kokYaprak' }).sekme).toBe('nokta');
   });
 
-  it('Karşılaştır (5–8. sınıf): Sütun ve Kök-yaprak sekmesinde de; gruplar "(yan yana)" / "(sırt sırta)"; sınıfsızda bugünkü gibi', () => {
+  it('Karşılaştır (5–8. sınıf): Sütun ve Kök-yaprak sekmesinde de; gruplar "(yan yana)" / "(sırt sırta)"; sınıfsızda Nokta bugünkü gibi', () => {
     const sinav = ornekBul('sinav')!.olustur();
     const puan = sinav.sutunlar[2].id;
-    expect(karsilastirmaAdaylari(sinav, puan, 'sutun')).toEqual([]);
+    // Uzman 7. tur: Sütun'da karşılaştırma sınıfsız tabloda da tek grafikte, yan yana
+    expect(karsilastirmaAdaylari(sinav, puan, 'sutun').map((a) => [a.etiket, a.neden])).toEqual([['Sınıf (yan yana)', null]]);
     expect(karsilastirmaAdaylari(sinav, puan, 'nokta').map((a) => a.etiket)).toEqual(['Sınıf (gruplara ayır)']);
     expect(karsilastirmaAdaylari(sinav, puan, 'sutun', true).map((a) => [a.etiket, a.neden])).toEqual([['Sınıf (yan yana)', null]]);
     expect(karsilastirmaAdaylari(sinav, puan, 'nokta', true).map((a) => a.etiket)).toEqual(['Sınıf (yan yana)']);
@@ -540,15 +541,17 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     }
   });
 
-  it('sınıfsız tablo (kendi tablonuz): bugünkü davranış — 5 sekme, alt alta paneller, bütün ölçü düğmeleri, sütunda tek seri', () => {
+  it('sınıfsız tablo (kendi tablonuz): bugünkü davranış — 5 sekme, alt alta paneller, bütün ölçü düğmeleri; sütunda iki seri yan yana (7. tur)', () => {
     const kendi = { ...yukle('mac'), ornekId: null, tabloAdi: null };
     expect(grafikSekmeleri(uygulamaCiz(kendi))).toEqual(['Nokta', 'Sütun', 'Çizgi', 'Daire', 'İstatistik']);
     const nokta = uygulamaCiz({ ...kendi, sekme: 'nokta' });
     expect(nokta).toContain('data-karsilastirma-panelleri');
     expect(nokta).not.toContain('data-yan-yana-karsilastirma');
     expect(seritDugmeleri(nokta)).toEqual(['Aritmetik ortalama', 'Ortanca', 'Ortalama mutlak sapma', 'Standart sapma', 'Etiketler']);
+    // Uzman 7. tur: karşılaştırmalı veride sütun grafiği bütün düzeylerde (sınıfsız tablo dahil) tek grafikte, yan yana
     const sutun = uygulamaCiz({ ...kendi, sekme: 'sutun' });
-    expect(sutun).not.toContain('data-ikili');
+    expect(sutun).toContain('data-ikili');
+    expect(sutun.match(/data-grafik="sutun"/g)).toHaveLength(1);
     const ist = uygulamaCiz({ ...kendi, sekme: 'istatistik' });
     expect(ist).toContain('data-standart-sapma-satiri');
     // Sınıfsız örnek dışı tabloda istenmeyen sekme (kayıtta Kök-yaprak) Nokta'ya döner
