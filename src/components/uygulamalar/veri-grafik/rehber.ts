@@ -12,6 +12,7 @@ import {
   kimlikUret,
   sayiOku,
   sayiYaz,
+  sinifAdi,
   type GrafikTuru,
   type OrnekVeri,
   type Ozellik,
@@ -254,7 +255,7 @@ export function kunyeMetni(ornek: OrnekVeri): string {
  */
 export function rozetMetni(ornek: OrnekVeri): string {
   if (ornek.kazanim.length === 0) return 'Zenginleştirme';
-  return ornek.sinif !== null ? `${ornek.sinif}. sınıf` : 'Örnek veri';
+  return ornek.sinif !== null ? sinifAdi(ornek.sinif) : 'Örnek veri';
 }
 
 /**

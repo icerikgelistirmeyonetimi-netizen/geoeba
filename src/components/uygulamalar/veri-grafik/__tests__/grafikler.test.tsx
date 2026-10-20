@@ -78,8 +78,11 @@ describe('Veri ve Grafik uygulaması (sunucu tarafı akıllı çizim)', () => {
     const ortak = { seciliSatir: null, onSatirSec: bos, genislik: 640, yukseklik: 360, azaltilmisHareket: true };
     const html = renderToStaticMarkup(<SacilimGrafigi {...ortak} tablo={mac} xSutun={1} ySutun={2} />);
     expect(html).toContain('data-grafik="sacilim"');
-    expect(html).toContain('↑ Yasemin');
-    expect(html).toContain('Selma →');
+    // Eksen adları ve eksen uçlarında ok (eksen standardı; metin oku yerine)
+    expect(html).toMatch(/data-eksen="y"[^>]*>Yasemin</);
+    expect(html).toMatch(/data-eksen="x"[^>]*>Selma</);
+    expect(html).toContain('data-eksen-oku="dikey"');
+    expect(html).toContain('data-eksen-oku="yatay"');
     expect(html.match(/role="button"/g)).toHaveLength(5);
     expect(html).toContain('aria-label="1. maç: Selma 18, Yasemin 17"');
     expect(html).not.toMatch(/NaN|undefined|Infinity/);

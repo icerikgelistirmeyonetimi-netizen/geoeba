@@ -182,10 +182,12 @@ describe('[181] ilkokul kuralları (saf)', () => {
       if (o.sinif === 1 || o.sinif === 3) expect(o.renkDegisken, o.id).toBeUndefined();
     }
     expect(ORNEK_VERILER.filter((o) => ilkokulSinifi(o.sinif)).map((o) => o.id)).toEqual(['oyuncak', 'oyun', 'gelis', 'gezi']);
-    // Galeri kademeye göre: ilkokulda 1–4, ortaokulda 16 örnek (bugünkü), Tüm araçlar'da hepsi
+    // Galeri kademeye göre: ilkokulda 1–4, ortaokulda 5–8 (14 örnek), lisede hazırlık ve 9–12 (12 örnek), Tüm araçlar'da hepsi
     expect(kademeOrnekleri('ortaokul')).toHaveLength(14);
-    expect(kademeOrnekleri('lise')).toHaveLength(16);
-    expect(kademeOrnekleri('tum')).toHaveLength(20);
+    expect(kademeOrnekleri('lise')).toHaveLength(12);
+    expect(kademeOrnekleri('tum')).toHaveLength(32);
+    expect(ornekKademede(ornekBul('boy')!, 'lise')).toBe(false);
+    expect(ornekKademede(ornekBul('uyku')!, 'ortaokul')).toBe(false);
     expect(ornekKademede(ornekBul('boy')!, 'ilkokul')).toBe(false);
     expect(ornekKademede(ornekBul('oyuncak')!, 'ortaokul')).toBe(false);
     expect(ornekKademede(ornekBul('oyuncak')!, 'tum')).toBe(true);
@@ -235,7 +237,9 @@ describe('[181] açılış ve kademe değişimi', () => {
     const oyun = yukle('oyun');
     expect(kademeyeUyarla(oyun, 'ilkokul')).toBe(oyun);
     expect(kademeyeUyarla(oyun, 'ortaokul').ornekId).toBe('boy');
-    expect(kademeyeUyarla(oyun, 'lise').ornekId).toBe('boy');
+    // Lise galerisi 5–8. sınıf örneklerini göstermez: lisede açılış örneği 9. sınıfın uyku tablosu
+    expect(kademeyeUyarla(oyun, 'lise').ornekId).toBe('uyku');
+    expect(kademeyeUyarla(boy, 'lise').ornekId).toBe('uyku');
     expect(kademeyeUyarla(oyun, 'tum')).toBe(oyun);
     // Değiştirilmiş örnek ve kendi tablo korunur
     const t = boy.tablo;
@@ -369,17 +373,19 @@ describe('[181] galeri ve başlangıç penceresi kademeye göre', () => {
     return renderToStaticMarkup(<OrnekGalerisi yukluOrnekId={null} onceki={null} onYukle={bos} onOncekiTabloyaDon={bos} genislik={860} />);
   };
 
-  it('İlkokul: 4 örnek (1–4. sınıf); ortaokul ve lise: bugünkü 16 örnek; Tüm araçlar: 20', () => {
+  it('İlkokul: 4 örnek (1–4. sınıf); ortaokul: 14 örnek (5–8. sınıf); lise: 12 örnek (hazırlık, 9–12. sınıf); Tüm araçlar: 32', () => {
     const ilk = galeri('ilkokul');
     expect(Array.from(ilk.matchAll(/data-ornek="([^"]+)"/g), (m) => m[1])).toEqual(['oyuncak', 'oyun', 'gelis', 'gezi']);
     expect(metin(ilk)).toContain('1. sınıf · Nesne grafiği, çetele ve sıklık tablosu');
     expect(metin(ilk)).not.toContain('7-C');
     for (const k of ['ortaokul', 'lise'] as const) {
       const html = galeri(k);
-      expect(html.match(/data-ornek="/g), k).toHaveLength(k === 'ortaokul' ? 14 : 16);
+      expect(html.match(/data-ornek="/g), k).toHaveLength(k === 'ortaokul' ? 14 : 12);
       expect(html, k).not.toContain('data-ornek="oyuncak"');
     }
-    expect(galeri('tum').match(/data-ornek="/g)).toHaveLength(20);
+    expect(galeri('ortaokul')).not.toContain('data-ornek="uyku"');
+    expect(galeri('lise')).not.toContain('data-ornek="boy"');
+    expect(galeri('tum').match(/data-ornek="/g)).toHaveLength(32);
   });
 
   it('İlkokul\'da başlangıç penceresinde iki yol (Örnek veri · 4 hazır tablo, Boş tablo); Veri topla adımı istenirse seçim adımı', () => {

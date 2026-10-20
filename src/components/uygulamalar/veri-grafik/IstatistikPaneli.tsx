@@ -18,6 +18,7 @@
 import React, { useMemo } from 'react';
 import {
   adimGosterimi,
+  ceyrekler,
   gosterimMetni,
   hesaplamaAdimlari,
   kartGosterimi,
@@ -51,6 +52,8 @@ export interface IstatistikProps {
   ikinciSutun?: number | null;
   /** Sınıf düzeyinin ölçüleri (verilmezse hepsi) */
   olculer?: OlcuKumesi;
+  /** Lise 9–12 (MAT.9.6.1): yayılım ölçülerinde çeyrekler ve çeyrekler açıklığı; verilmezse yok */
+  ceyrekler?: boolean;
 }
 
 /** Karşılaştırmada iki değişkenin rengi (nokta grafiğindeki panellerle aynı: birincil, mercan) */
@@ -209,7 +212,7 @@ function AciklikIfadesi({ ozet, ondalik, kucukYazi }: { ozet: Ozet; ondalik: num
   );
 }
 
-function OlcuKartlari({ ozet, ondalik, olculer }: { ozet: Ozet; ondalik: number; olculer: OlcuKumesi }) {
+function OlcuKartlari({ ozet, ondalik, olculer, ceyrek = null }: { ozet: Ozet; ondalik: number; olculer: OlcuKumesi; ceyrek?: { q1: number; q3: number; aciklik: number } | null }) {
   const ort = ozetGosterim(ozet.ortalama, ondalik);
   const orn = ozetGosterim(ozet.medyan, ondalik);
   const oms = ozetGosterim(ozet.oms, ondalik);
@@ -250,6 +253,16 @@ function OlcuKartlari({ ozet, ondalik, olculer }: { ozet: Ozet; ondalik: number;
             veri="standartSapma"
           >
             {ss ? <Sayi g={ss} /> : '—'}
+          </Kart>
+        )}
+        {/* Lise 9. sınıf: çeyrekler açıklığı (alt ve üst yarının ortancaları; kutu grafiğinin kutusu) */}
+        {ceyrek && (
+          <Kart
+            baslik="Çeyrekler açıklığı"
+            aciklama={`3. çeyrek − 1. çeyrek (1. çeyrek ${gosterimMetni(kartGosterimi(ceyrek.q1, ondalik))}, 3. çeyrek ${gosterimMetni(kartGosterimi(ceyrek.q3, ondalik))})`}
+            veri="ceyreklerAcikligi"
+          >
+            <Sayi g={kartGosterimi(ceyrek.aciklik, ondalik)} />
           </Kart>
         )}
       </OlcuGrubu>
@@ -972,6 +985,7 @@ export function IstatistikPaneli({
   renkEslemi = null,
   ikinciSutun = null,
   olculer = TUM_OLCULER,
+  ceyrekler: ceyreklerVar = false,
 }: IstatistikProps) {
   /** Hiçbir ölçü yok (5. sınıf): kart, adım ve grup tablosu yerine veri sayısı ve toplam */
   const olcusuz = !olculer.merkezi && !olculer.aciklik && !olculer.oms && !olculer.standartSapma;
@@ -1130,7 +1144,7 @@ export function IstatistikPaneli({
       ) : ikinci !== null && ikinciOzet ? (
         <KarsilastirmaTablosu adlar={[sutunAdi, ikinciAdi]} ozetler={[ozet, ikinciOzet]} ondalik={ondalik} olculer={olculer} />
       ) : (
-        <OlcuKartlari ozet={ozet} ondalik={ondalik} olculer={olculer} />
+        <OlcuKartlari ozet={ozet} ondalik={ondalik} olculer={olculer} ceyrek={ceyreklerVar && olculer.aciklik ? ceyrekler(degerler) : null} />
       )}
 
       {!adimlar && grupBolumu}

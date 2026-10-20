@@ -21,8 +21,10 @@ function ciz(id: string, ek: Partial<Durum> = {}) {
   finally { if (eski === undefined) delete g.window; else g.window = eski; }
 }
 describe('Uzman 6. tur: karşılaştırma ve grafik kontrolleri', () => {
-  it('bütün sınıflarda ve sınıfsız kayıtta saçılım kapalı, eski seçim Nokta olarak açılır', () => {
-    for (const s of [1,2,3,4,5,6,7,8,null] as const) {
+  // Kullanıcı kararı (20.10): saçılım yalnız lise 11. ve 12. sınıfta açık (MAT.11.1.1); öteki bütün düzeylerde kapalı
+  it('11–12 dışındaki bütün sınıflarda ve sınıfsız kayıtta saçılım kapalı, eski seçim Nokta olarak açılır; 11–12. sınıfta açık', () => {
+    for (const s of [11, 12] as const) expect(sinifKurallari(s).sekmeler).toContain('sacilim');
+    for (const s of [1,2,3,4,5,6,7,8,'H',9,10,null] as const) {
       const k=sinifKurallari(s);
       expect(k.sekmeler).not.toContain('sacilim');
       expect(sinifSekmesi('sacilim',k)).toBe('nokta');

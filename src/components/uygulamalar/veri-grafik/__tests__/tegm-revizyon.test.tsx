@@ -20,13 +20,20 @@ describe('TEGM: grafik anlamı ve program kapsamı', () => {
     expect(sekmeDuzelt({...d, sekme: 'cizgi', tablo: numarali}).sekme).toBe('sutun');
   });
 
-  it('ortaokul örneği ve sınıfsız oturum saçılımı ve standart sapmayı açmaz; lise serbest kalır', () => {
+  it('ortaokul örneği ve sınıfsız oturum saçılımı ve standart sapmayı açmaz; lise örneklerinde standart sapma var, saçılım yalnız 11–12. sınıfta', () => {
     for (const sinif of [5, 6, 7, 8] as const) expect(sinifKurallari(sinif).sekmeler).not.toContain('sacilim');
     const orta = durumKurallari({ornekId: null, etkinKume: 'tablom'}, false, true);
     expect(orta.sekmeler).not.toContain('sacilim');
     expect(orta.olculer.standartSapma).toBe(false);
     expect(kademeOrnekleri('ortaokul').some(o => o.onerilenGrafik === 'sacilim')).toBe(false);
-    expect(kademeOrnekleri('lise').some(o => o.onerilenGrafik === 'sacilim')).toBe(true);
+    // Lise galerisi lise örnekleridir: standart sapma (lise ölçüsü) açık; saçılım yalnız 11. ve 12. sınıfta (kullanıcı, 20.10)
+    expect(kademeOrnekleri('lise').length).toBeGreaterThan(0);
+    for (const o of kademeOrnekleri('lise')) {
+      const iliskiSinifi = o.sinif === 11 || o.sinif === 12;
+      expect(sinifKurallari(o.sinif).olculer.standartSapma, o.id).toBe(true);
+      expect(sinifKurallari(o.sinif).sekmeler.includes('sacilim'), o.id).toBe(iliskiSinifi);
+      if (!iliskiSinifi) expect(o.onerilenGrafik, o.id).not.toBe('sacilim');
+    }
   });
 
   it('açısız dairede seçili dilim ve ipucu merkez açı veya yaklaşık simgesi içermez', () => {

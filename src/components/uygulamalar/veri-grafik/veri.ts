@@ -449,12 +449,30 @@ export function sonrakiHucre(konum: HucreKonumu, yon: GezintiYonu, satirSayisi: 
  */
 export type GrafikTuru = 'nokta' | 'sutun' | 'cizgi' | 'kokYaprak' | 'daire' | 'sacilim' | 'istatistik';
 
-/** Örneğin sınıf düzeyi: 1–4 ilkokul (yalnız İlkokul ve Tüm araçlar kademesinde görünür), 5–8 ortaokul */
-export type SinifDuzeyi = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+/**
+ * Örneğin sınıf düzeyi: 1–4 ilkokul (yalnız İlkokul ve Tüm araçlar kademesinde görünür), 5–8 ortaokul, 'H' (hazırlık)
+ * ve 9–12 lise (yalnız Lise ve Tüm araçlar kademesinde görünür)
+ */
+export type SinifDuzeyi = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 'H' | 9 | 10 | 11 | 12;
 
 /** İlkokul sınıf düzeyi mi (1–4) */
 export function ilkokulSinifi(sinif: SinifDuzeyi | null | undefined): boolean {
   return sinif === 1 || sinif === 2 || sinif === 3 || sinif === 4;
+}
+
+/** Ortaokul sınıf düzeyi mi (5–8) */
+export function ortaokulSinifi(sinif: SinifDuzeyi | null | undefined): boolean {
+  return sinif === 5 || sinif === 6 || sinif === 7 || sinif === 8;
+}
+
+/** Lise sınıf düzeyi mi (hazırlık ve 9–12) */
+export function liseSinifi(sinif: SinifDuzeyi | null | undefined): boolean {
+  return sinif === 'H' || sinif === 9 || sinif === 10 || sinif === 11 || sinif === 12;
+}
+
+/** Sınıf düzeyinin adı (rozet ve galeri): "7. sınıf", hazırlıkta "Hazırlık" */
+export function sinifAdi(sinif: SinifDuzeyi): string {
+  return sinif === 'H' ? 'Hazırlık' : `${sinif}. sınıf`;
 }
 
 /**
@@ -623,7 +641,9 @@ export interface OrnekVeri {
 /**
  * Örnek verilerin konu başlıkları: menüde bu sırayla kümelenir (sınıf düzeyine göre; öğretim programı sırası).
  * `kademe`: konunun görüneceği kademe (ornekKonulari): ilkokul konuları yalnız İlkokul ve Tüm araçlar kademesinde,
- * ortaokul konuları (zenginleştirme dahil) İlkokul dışındaki kademelerde görünür.
+ * ortaokul konuları Ortaokul ve Tüm araçlar kademesinde (zenginleştirme yalnız Tüm araçlar'da), lise konuları
+ * (hazırlık ve 9–12. sınıf; lise istatistik kazanımları) yalnız Lise ve Tüm araçlar kademesinde. Kademeler birikimli
+ * değildir: Lise galerisi 5–8. sınıf örneklerini göstermez (her kademe kendi programının örneklerini listeler).
  */
 export const ORNEK_KONULARI = [
   { id: 'sinif1', ad: '1. sınıf · Nesne grafiği, çetele ve sıklık tablosu', kisaAd: '1. sınıf', kademe: 'ilkokul' },
@@ -635,6 +655,11 @@ export const ORNEK_KONULARI = [
   { id: 'sinif7', ad: '7. sınıf · Açıklık, ortalama mutlak sapma, çizgi grafiği', kisaAd: '7. sınıf', kademe: 'ortaokul' },
   { id: 'sinif8', ad: '8. sınıf · Gerçek veri, evren ve örneklem', kisaAd: '8. sınıf', kademe: 'ortaokul' },
   { id: 'zenginlestirme', ad: 'Zenginleştirme (programda yok) · İki değişkenin ilişkisi', kisaAd: 'Zenginleştirme', kademe: 'ortaokul' },
+  { id: 'sinifH', ad: 'Hazırlık · İstatistiksel sonuç ve yorumları tartışma', kisaAd: 'Hazırlık', kademe: 'lise' },
+  { id: 'sinif9', ad: '9. sınıf · Tek nicel değişken: dağılım, merkezî eğilim ve yayılım', kisaAd: '9. sınıf', kademe: 'lise' },
+  { id: 'sinif10', ad: '10. sınıf · İki kategorik değişken: göreli sıklık ve ilişkililik', kisaAd: '10. sınıf', kademe: 'lise' },
+  { id: 'sinif11', ad: '11. sınıf · İki nicel değişken: birlikte değişme ve ilişkililik', kisaAd: '11. sınıf', kademe: 'lise' },
+  { id: 'sinif12', ad: '12. sınıf · Hazır verilerle çalışma ve karar verme', kisaAd: '12. sınıf', kademe: 'lise' },
 ] as const;
 
 export const ORNEK_VERILER: OrnekVeri[] = [
@@ -2086,18 +2111,897 @@ export const ORNEK_VERILER: OrnekVeri[] = [
         ['etiket', 'etiket', 'etiket'],
       ),
   },
+  // ── Lise (hazırlık, 9–12. sınıf): yalnız Lise ve Tüm araçlar kademesinde galeride (ornekKonulari) ──────────────
+  // Lise istatistik kazanımları (güncel kodlar, içerik paketlerinin kazanım kodları: public/kazanim-icerikleri/liste.json):
+  // MAT.H.5.1, MAT.9.6.1–9.6.2, MAT.10.2.1–10.2.2, MAT.11.1.1–11.1.2, MAT.12.5.1. Saçılım yalnız 11. ve 12. sınıfta açıktır;
+  // 9–12. sınıfta histogram ve kutu grafiği, 10–12. sınıfta koşullu göreli sıklıklar (sinifKurallari.ts).
+  // ── Hazırlık · İstatistiksel sonuç ve yorumları tartışma ───────────────────────────────────────────────────
+  {
+    id: 'kahvalti',
+    ad: 'Okul gazetesinin kahvaltı haberi',
+    konu: 'sinifH',
+    sinif: 'H',
+    kazanim: ['MAT.H.5.1'],
+    aciklama: 'Gazetenin başlığı: "Öğrencilerin çoğu kahvaltı yapmadan okula geliyor." Veri bu başlığı destekliyor mu?',
+    onerilenGrafik: 'sutun',
+    varsayilanDegisken: 'Kahvaltı',
+    renkDegisken: 'Sınıf',
+    kategoriSirasi: { Kahvaltı: ['Her gün', 'Haftada birkaç gün', 'Hiç'] },
+    daire: 'siklik',
+    hassas: true,
+    acilis: { sekme: 'sutun' },
+    hikaye: {
+      arastirmaSorusu: 'Hazırlık sınıfı öğrencilerinin okul günlerinde kahvaltı yapma sıklığı nasıl dağılmaktadır?',
+      kim: "Hazırlık-A ve Hazırlık-B'den 20'şer öğrenci (40 kişi)",
+      neZaman: 'Ekim 2025, okul gazetesi anketi',
+      nasil: 'Gazete kulübü "Okul günlerinde kahvaltı yapar mısın?" sorusunu üç seçenekle sordu; anket anonimdi.',
+      n: 40,
+      cumle: "Okul gazetesi kulübü Ekim 2025'te iki hazırlık sınıfından 40 öğrenciye okul günlerinde kahvaltı yapıp yapmadığını anonim olarak sordu.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal okul verisi (gazete kulübü anketi)', not: 'Haber başlığı ile anket sorusu aynı şeyi ölçmüyor; tartışmanın konusu budur.' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Başlığa göre öğrencilerin çoğu kahvaltı yapmıyor. Sence 40 öğrenciden kaçı hiç kahvaltı yapmıyor? Tahmin et.',
+        cevap: 'Başlığa bakınca 20’den fazla denebilir. Ankette yalnız 9 öğrenci "Hiç" dedi; 18 öğrenci her gün, 13 öğrenci haftada birkaç gün kahvaltı yapıyor.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Sütun grafiğinde en uzun sütunlar hangi seçenekte? İki sınıfın cevapları birbirine benziyor mu?',
+        cevap: '"Her gün": Hazırlık-A’dan 8, Hazırlık-B’den 10 öğrenci. İki sınıfın dağılımı benziyor; "Hiç" diyenler 5 ve 4 öğrenci.',
+        eylem: null,
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: "İstatistik'teki sıklık tablosunda göreli sıklıklara bak. Hiç kahvaltı yapmayanlar ve her gün kahvaltı yapmayanlar yüzde kaç?",
+        cevap: 'Hiç yapmayanlar 9/40 = %22,5. "Haftada birkaç gün" ve "Hiç" birlikte 22/40 = %55: Öğrencilerin %55’i her gün kahvaltı yapmıyor.',
+        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Sıklık tablosunu aç' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Başlık veriye uyuyor mu? Veriye uyan bir başlık yaz.',
+        cevap: '"Kahvaltı yapmadan geliyor" demek için "Hiç" diyenlere bakmak gerekir; onlar yalnız %22,5. Veriye uyan bir başlık: "Öğrencilerin yarısından fazlası her gün kahvaltı yapmıyor." İki sınıftan 40 öğrenci de bütün okulu temsil etmeyebilir.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      nokta: 'Her nokta bir öğrencinin cevabı; renkler sınıfı gösterir. Sayıları sütun grafiğinde karşılaştırın.',
+      daire: 'İç daire kahvaltı cevapları, dış halka her dilimde Hazırlık-A ve Hazırlık-B payı.',
+      istatistik: "Göreli sıklık sütunu her cevabın yüzdesini verir; Sınıf'a göre tabloda iki sınıfı karşılaştırın.",
+    },
+    ogretmenNotu: 'Başkasının vardığı sonucu veriyle sınama: Başlıktaki "çoğu" ve "kahvaltı yapmadan" sözcükleri anket sorusuyla aynı şeyi söylemiyor. "Hiç" diyenler %22,5, "her gün değil" diyenler %55. Tartışma: Haftada birkaç gün kahvaltı yapan biri anket günü kahvaltı yapmış olabilir mi? İki sınıftan 40 kişi bütün okulu temsil eder mi? Başlığı yazan kişi hangi iki seçeneği birleştirmiş olabilir?',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Sınıf', 'Kahvaltı'],
+        [
+          ['H01', 'Hazırlık-A', 'Hiç'], ['H02', 'Hazırlık-A', 'Hiç'], ['H03', 'Hazırlık-A', 'Haftada birkaç gün'], ['H04', 'Hazırlık-A', 'Hiç'],
+          ['H05', 'Hazırlık-A', 'Her gün'], ['H06', 'Hazırlık-A', 'Her gün'], ['H07', 'Hazırlık-A', 'Hiç'], ['H08', 'Hazırlık-A', 'Her gün'],
+          ['H09', 'Hazırlık-A', 'Haftada birkaç gün'], ['H10', 'Hazırlık-A', 'Her gün'], ['H11', 'Hazırlık-A', 'Haftada birkaç gün'], ['H12', 'Hazırlık-A', 'Her gün'],
+          ['H13', 'Hazırlık-A', 'Hiç'], ['H14', 'Hazırlık-A', 'Haftada birkaç gün'], ['H15', 'Hazırlık-A', 'Haftada birkaç gün'], ['H16', 'Hazırlık-A', 'Her gün'],
+          ['H17', 'Hazırlık-A', 'Her gün'], ['H18', 'Hazırlık-A', 'Haftada birkaç gün'], ['H19', 'Hazırlık-A', 'Her gün'], ['H20', 'Hazırlık-A', 'Haftada birkaç gün'],
+          ['H21', 'Hazırlık-B', 'Her gün'], ['H22', 'Hazırlık-B', 'Hiç'], ['H23', 'Hazırlık-B', 'Haftada birkaç gün'], ['H24', 'Hazırlık-B', 'Her gün'],
+          ['H25', 'Hazırlık-B', 'Her gün'], ['H26', 'Hazırlık-B', 'Her gün'], ['H27', 'Hazırlık-B', 'Hiç'], ['H28', 'Hazırlık-B', 'Haftada birkaç gün'],
+          ['H29', 'Hazırlık-B', 'Her gün'], ['H30', 'Hazırlık-B', 'Haftada birkaç gün'], ['H31', 'Hazırlık-B', 'Her gün'], ['H32', 'Hazırlık-B', 'Her gün'],
+          ['H33', 'Hazırlık-B', 'Hiç'], ['H34', 'Hazırlık-B', 'Haftada birkaç gün'], ['H35', 'Hazırlık-B', 'Haftada birkaç gün'], ['H36', 'Hazırlık-B', 'Her gün'],
+          ['H37', 'Hazırlık-B', 'Her gün'], ['H38', 'Hazırlık-B', 'Haftada birkaç gün'], ['H39', 'Hazırlık-B', 'Hiç'], ['H40', 'Hazırlık-B', 'Her gün'],
+        ],
+        ['etiket', 'etiket', 'etiket'],
+      ),
+  },
+  {
+    id: 'harclik',
+    ad: 'Kantin harcaması: Ortalama neyi anlatıyor?',
+    konu: 'sinifH',
+    sinif: 'H',
+    kazanim: ['MAT.H.5.1'],
+    aciklama: 'Haberde "Öğrenciler kantinde günde ortalama 130 TL harcıyor" yazıyor. Noktalara bakın: Tipik öğrenci bu mu?',
+    onerilenGrafik: 'nokta',
+    varsayilanDegisken: 'Harcama (TL)',
+    daire: 'uygunDegil',
+    hassas: true,
+    acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false } },
+    hikaye: {
+      arastirmaSorusu: 'Hazırlık sınıfı öğrencilerinin bir okul gününde kantinde yaptıkları harcamaların dağılımı nasıldır?',
+      kim: 'Hazırlık sınıflarından kurayla seçilen 20 öğrenci',
+      neZaman: 'Kasım 2025, bir salı günü',
+      nasil: 'Öğrenciler o gün kantinde harcadıkları tutarı anonim olarak yazdı; tutarlar 10 TL’ye yuvarlandı.',
+      n: 20,
+      cumle: "Hazırlık sınıflarından kurayla seçilen 20 öğrenci Kasım 2025'te bir salı günü kantinde harcadığı tutarı anonim yazdı; tutarlar 10 TL'ye yuvarlandı.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal okul verisi (öz bildirim)', not: 'Haber, bu tablonun aritmetik ortalamasını yazmış.' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Haber "günde ortalama 130 TL" diyor. Sence öğrencilerin çoğu 130 TL’ye yakın mı harcıyor? Tahmin et.',
+        cevap: 'Hayır: 20 öğrenciden 18’i 130 TL ya da daha az harcadı; 16’sı 50 ile 120 TL arasında. İki öğrencinin 450 ve 650 TL’lik harcaması ortalamayı yukarı çekiyor.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Noktalardan hangileri ötekilerden çok ayrılıyor?',
+        cevap: '450 ve 650 TL: Öteki 18 öğrencinin hepsi 40 ile 130 TL arasında.',
+        eylem: null,
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: 'Aritmetik ortalama ve Ortanca düğmelerini aç. İkisi arasında ne kadar fark var?',
+        cevap: 'Aritmetik ortalama 130 TL, ortanca 85 TL: Fark 45 TL. Öğrencilerin yarısı 85 TL’den az harcadı.',
+        eylem: { tur: 'secenek', ac: ['ortalama', 'ortanca'], etiket: 'Aritmetik ortalama ve ortancayı aç', gerektirir: 'ortanca' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: '"Öğrenciler günde ortalama 130 TL harcıyor" cümlesi yanlış mı? Haber hangi ölçüyü de vermeliydi?',
+        cevap: 'Hesap doğru ama yanıltıcı: 20 öğrenciden 18’i 130 TL ya da daha az harcadı. Tipik öğrenciyi ortanca (85 TL) daha iyi anlatır; haber ortancayı ve iki büyük harcamanın etkisini de yazmalıydı.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      sutun: 'Her sütun bir öğrenci: 450 ve 650 TL’lik iki sütun ötekilerin yanında çok uzun.',
+      cizgi: '',
+      daire: 'Harcamalar paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
+      istatistik: 'Hesaplama adımlarında 450 ve 650 TL’nin toplamı nasıl büyüttüğüne bakın; standart sapma da bu yüzden büyük.',
+    },
+    ogretmenNotu: 'İki büyük harcama çıkarılınca aritmetik ortalama 130 TL’den yaklaşık 83 TL’ye, ortanca 85 TL’den 80 TL’ye iner: Ortanca bu iki değerden çok az etkilenir. Standart sapma yaklaşık 149 TL; iki değer çıkınca yaklaşık 26 TL. Tartışma: Haberi yazan kişi hangi ölçüyü seçerek neyi vurgulamış? İki büyük harcamanın nedeni (arkadaşlara ikram) sorulmadan değer silinmeli mi? Harcama hassas bir bilgidir: Tabloda kod var.',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Harcama (TL)'],
+        [
+          ['H01', 80], ['H02', 60], ['H03', 120], ['H04', 40], ['H05', 90], ['H06', 450], ['H07', 70], ['H08', 50], ['H09', 100], ['H10', 80],
+          ['H11', 130], ['H12', 60], ['H13', 110], ['H14', 50], ['H15', 650], ['H16', 90], ['H17', 70], ['H18', 120], ['H19', 80], ['H20', 100],
+        ],
+      ),
+  },
+  // ── 9. sınıf · Tek nicel değişken: dağılım, merkezî eğilim ve yayılım ───────────────────────────────────────
+  {
+    id: 'uyku',
+    ad: '9-A öğrencilerinin okul gecesi uyku süresi',
+    konu: 'sinif9',
+    sinif: 9,
+    kazanim: ['MAT.9.6.1'],
+    aciklama: 'Rehberlik servisi okul gecelerinde en az 8 saat uyku öneriyor. Sınıfın uyku süreleri nasıl dağılmış?',
+    onerilenGrafik: 'nokta',
+    varsayilanDegisken: 'Uyku (saat)',
+    daire: 'uygunDegil',
+    hassas: true,
+    acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false, standartSapma: false }, aralik: 0.5 },
+    hikaye: {
+      arastirmaSorusu: '9-A sınıfı öğrencilerinin okul gecelerinde uyudukları sürelerin dağılımı nasıldır?',
+      kim: "9-A'daki 30 öğrenci",
+      neZaman: 'Aralık 2025, bir okul haftası',
+      nasil: 'Her öğrenci beş okul gecesinde yattığı ve kalktığı saati uyku günlüğüne yazdı; beş gecenin ortalaması yarım saate yuvarlandı.',
+      n: 30,
+      cumle: "9-A'daki 30 öğrenci Aralık 2025'te beş okul gecesi boyunca yatma ve kalkma saatlerini yazdı; her öğrencinin ortalama uyku süresi yarım saate yuvarlandı.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal sınıf verisi (uyku günlüğü)' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Sınıfta okul gecelerinde en az 8 saat uyuyan kaç öğrenci vardır? Tahmin et.',
+        cevap: '30 öğrenciden yalnız 6’sı 8 saat ya da daha fazla uyuyor: Sınıfın beşte biri. Öğrencilerin çoğu 6 ile 7,5 saat arasında uyuyor.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Noktalar en çok hangi değerde yığılmış? En kısa ve en uzun uyku kaç saat?',
+        cevap: '7 saatte (8 öğrenci). En kısa uyku 5, en uzun 9 saat; açıklık 4 saat.',
+        eylem: null,
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: 'Aritmetik ortalama, Ortanca ve Standart sapma düğmelerini aç. Uyku süreleri ortalamanın çevresinde ne kadar yayılmış?',
+        cevap: 'Aritmetik ortalama da ortanca da 7 saat; standart sapma yaklaşık 0,9 saat. 30 öğrenciden 26’sı ortalamaya en çok 1 saat uzaklıkta, 6 ile 8 saat arasında.',
+        eylem: { tur: 'secenek', ac: ['ortalama', 'ortanca', 'standartSapma'], etiket: 'Ortalama, ortanca ve standart sapmayı aç', gerektirir: 'ortanca' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Bir öğretmen "Sınıfın ortalaması 7 saat, uyku sorunu yok" diyor. Bu karara katılır mısın?',
+        cevap: 'Katılmam: Öneri en az 8 saat ve 30 öğrenciden 24’ü bunun altında uyuyor. Ortalama tek başına kaç öğrencinin öneriyi karşılamadığını göstermez; dağılıma bakmak gerekir.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      sutun: 'Histogram düğmesine basın: Uyku süreleri eşit genişlikli sınıflarda. En çok veri hangi sınıfta?',
+      cizgi: '',
+      daire: 'Uyku süreleri paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
+      istatistik: 'Çeyrekler açıklığı ve standart sapma yayılımı iki farklı yoldan ölçer; hesaplama adımlarında standart sapmanın bulunuşunu izleyin.',
+    },
+    ogretmenNotu: 'Aritmetik ortalama, ortanca ve tepe değer 7 saat: Dağılım simetriğe yakın. Standart sapma (örneklem, veri sayısı − 1) yaklaşık 0,89 saat; ortalama mutlak sapma yaklaşık 0,67 saat. Karar sorusu: "Ortalama 7 saat" bilgisi, en az 8 saat uyuyanların oranını (%20) söylemez. Uyku süresi öz bildirimdir; öğrenciler yatma saatini olduğundan erken yazabilir. Uyku hassas bir bilgidir: Tabloda kod var.',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Uyku (saat)'],
+        [
+          ['9A-01', 6], ['9A-02', 7], ['9A-03', 7.5], ['9A-04', 6.5], ['9A-05', 8], ['9A-06', 5.5], ['9A-07', 7], ['9A-08', 7], ['9A-09', 6.5], ['9A-10', 8.5],
+          ['9A-11', 7], ['9A-12', 6], ['9A-13', 7.5], ['9A-14', 9], ['9A-15', 6.5], ['9A-16', 7], ['9A-17', 5], ['9A-18', 7.5], ['9A-19', 8], ['9A-20', 6.5],
+          ['9A-21', 7], ['9A-22', 6], ['9A-23', 7.5], ['9A-24', 8], ['9A-25', 6.5], ['9A-26', 7], ['9A-27', 8], ['9A-28', 6], ['9A-29', 7], ['9A-30', 7.5],
+        ],
+      ),
+  },
+  {
+    id: 'sarkac',
+    ad: 'Fizik laboratuvarı: Sarkacın 10 salınım süresi',
+    konu: 'sinif9',
+    sinif: 9,
+    kazanim: ['MAT.9.6.1', 'MAT.9.6.2'],
+    aciklama: 'Aynı sarkacın 10 salınımı 20 kez ölçüldü. Ölçümlerden biri ötekilerden çok ayrılıyor: Hangi değer raporlanmalı?',
+    onerilenGrafik: 'nokta',
+    varsayilanDegisken: 'Süre (s)',
+    daire: 'uygunDegil',
+    acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false }, aralik: 0.1 },
+    hikaye: {
+      arastirmaSorusu: 'Aynı sarkacın 10 salınımı için ölçülen sürelerin dağılımı nasıldır ve sarkacın periyodu için hangi değer raporlanmalıdır?',
+      kim: "9-B'deki beş laboratuvar grubu (20 ölçüm)",
+      neZaman: 'Şubat 2026, fizik laboratuvarı',
+      nasil: 'Her grup sarkacı aynı açıdan bıraktı ve 10 tam salınımın süresini kronometreyle dört kez ölçtü; süreler saniyenin onda birine yuvarlandı.',
+      n: 20,
+      cumle: "9-B'deki beş grup Şubat 2026'da aynı sarkacın 10 salınımının süresini kronometreyle dörder kez ölçtü; süreler saniyenin onda birine yuvarlandı.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal laboratuvar verisi' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Aynı sarkaç, aynı ölçme: Bütün ölçümler aynı mı çıkar? Ölçümler ne kadar farklı olabilir? Tahmin et.',
+        cevap: 'Aynı çıkmaz: Kronometreye basma anı her seferinde biraz değişir. Ölçümlerin 19’u 14,1 ile 14,6 saniye arasında; biri 15,7 saniye.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Ötekilerden çok ayrılan ölçüm hangisi? Ne olmuş olabilir?',
+        cevap: '10. ölçüm: 15,7 s. Öteki ölçümlerden yaklaşık 1,4 s fazla; bu da yaklaşık bir salınımın süresi. Grup büyük olasılıkla 11 salınım saydı.',
+        eylem: { tur: 'satirVurgula', satir: '10. ölçüm', etiket: '10. ölçümü göster' },
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: 'Aritmetik ortalama ve Ortanca düğmelerini aç. 10. ölçüm olmasaydı hangisi değişirdi?',
+        cevap: 'Bütün ölçümlerle aritmetik ortalama 14,37 s, ortanca 14,3 s. 10. ölçüm çıkarılınca ortalama 14,3 s’ye iner, ortanca 14,3 s kalır: Ortanca bu ölçümden etkilenmez.',
+        eylem: { tur: 'secenek', ac: ['ortalama', 'ortanca'], etiket: 'Aritmetik ortalama ve ortancayı aç', gerektirir: 'ortanca' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Bir grup "Sarkacın periyodu 1,437 s" yazdı. Bu sonuca katılır mısın? Sen hangi değeri raporlardın?',
+        cevap: '1,437 s, hatalı ölçümü de içeren ortalamanın onda biri. Hatalı ölçüm çıkarılınca 10 salınım 14,3 s, yani periyot yaklaşık 1,43 s. Ölçümler saniyenin onda birine yuvarlandığı için üç ondalık basamak yazmak da yanıltıcı bir kesinlik verir.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      sutun: 'Her sütun bir ölçüm; 10. ölçümün sütunu ötekilerden belirgin biçimde uzun.',
+      cizgi: 'Ölçüm sırasıyla süreler: Çizgi 10. ölçümde sıçrıyor, sonra eski düzeyine dönüyor.',
+      daire: 'Süreler paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
+      istatistik: 'Standart sapma bütün ölçümlerle yaklaşık 0,33 s; 10. ölçüm silinince yaklaşık 0,12 s olur.',
+    },
+    ogretmenNotu: 'Başka bir grubun sonucu ("1,437 s") veriyle tartışılır (MAT.9.6.2). 10 salınım ölçmek, tek salınımdaki tepki süresi hatasını 10’a böler. Bir ölçümü atmak için gerekçe gerekir (burada sayım hatası); "işimize gelmeyen değeri silmek" ile karıştırılmamalı. 10. ölçüm silinince standart sapma yaklaşık 0,33 s’den 0,12 s’ye, açıklık 1,6 s’den 0,5 s’ye iner.',
+    olustur: () =>
+      tabloOlustur(
+        ['Ölçüm', 'Süre (s)'],
+        [
+          ['1. ölçüm', 14.2], ['2. ölçüm', 14.4], ['3. ölçüm', 14.3], ['4. ölçüm', 14.3], ['5. ölçüm', 14.2], ['6. ölçüm', 14.5], ['7. ölçüm', 14.2],
+          ['8. ölçüm', 14.3], ['9. ölçüm', 14.2], ['10. ölçüm', 15.7], ['11. ölçüm', 14.4], ['12. ölçüm', 14.3], ['13. ölçüm', 14.3], ['14. ölçüm', 14.2],
+          ['15. ölçüm', 14.6], ['16. ölçüm', 14.3], ['17. ölçüm', 14.1], ['18. ölçüm', 14.2], ['19. ölçüm', 14.4], ['20. ölçüm', 14.3],
+        ],
+      ),
+  },
+  {
+    id: 'mekik',
+    ad: '9-A ve 9-B: 20 metre mekik koşusu',
+    konu: 'sinif9',
+    sinif: 9,
+    kazanim: ['MAT.9.6.1', 'MAT.9.6.2'],
+    aciklama: 'İki sınıfın tur sayılarını tek grafikte karşılaştırın: Hangi sınıfın sonuçları birbirine daha yakın?',
+    onerilenGrafik: 'nokta',
+    varsayilanDegisken: 'Tur sayısı',
+    renkDegisken: 'Sınıf',
+    grupla: 'Sınıf',
+    daire: 'uygunDegil',
+    hassas: true,
+    acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false } },
+    hikaye: {
+      arastirmaSorusu: '9-A ve 9-B öğrencilerinin 20 metre mekik koşusunda tamamladıkları tur sayılarının dağılımları nasıldır?',
+      kim: "9-A ve 9-B'den 15'er öğrenci (30 kişi)",
+      neZaman: 'Ekim 2025, beden eğitimi dersi',
+      nasil: 'Öğrenciler sinyal sesleri arasında 20 metrelik yolu koştu, sese yetişemeyince bıraktı; tamamlanan tur sayısı yazıldı.',
+      n: 30,
+      cumle: "9-A ve 9-B'den 30 öğrenci Ekim 2025'te beden eğitimi dersinde 20 metre mekik koşusu yaptı; her öğrencinin tamamladığı tur sayısı yazıldı.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal sınıf verisi' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Hangi sınıfın ortalaması daha yüksektir? Hangi sınıfın sonuçları daha çok yayılmıştır? Tahmin et.',
+        cevap: '9-B’nin ortalaması biraz daha yüksek: 44’e karşı 42 tur. Asıl fark yayılımda; 9-A’da 22 tur koşan da 64 tur koşan da var.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Tek grafikte iki sınıfın noktalarına bak: Hangi sınıfın noktaları daha geniş bir aralığa yayılmış?',
+        cevap: '9-A: 22 ile 64 tur arası, açıklık 42. 9-B: 37 ile 52 tur arası, açıklık 15.',
+        eylem: null,
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: "Nokta grafiğinde Kutu grafiği düğmesine bas, sonra İstatistik'te Gruplara göre (Sınıf) tabloya bak. İki sınıfın yayılımı nasıl?",
+        cevap: '9-A’nın kutusu 33 ile 52 tur arasında (çeyrekler açıklığı 19), 9-B’ninki 41 ile 47 tur arasında (6). Standart sapmalar yaklaşık 12 ve 4,1 tur: 9-B’nin sonuçları ortalamaya çok daha yakın.',
+        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Gruplara göre tabloyu aç' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Bir öğrenci "9-A daha iyi koşuyor, en yüksek tur onlarda" diyor. Bu yoruma katılır mısın?',
+        cevap: 'Katılmam: Tek bir öğrencinin 64 turu sınıfı anlatmaz. 9-A’da hem çok iyi koşan hem çok zorlanan öğrenciler var; 9-B daha dengeli ve ortalaması daha yüksek. 45 tur ve üzerini iki sınıfta da 6’şar öğrenci koştu.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      sutun: 'Histogram düğmesine basın: İki sınıfın sütunları her sınıf aralığında yan yana. 9-A’nın sonuçları daha çok aralığa dağılmış.',
+      cizgi: '',
+      daire: 'Tur sayıları paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
+      istatistik: 'Gruplara göre (Sınıf) tabloda iki sınıfın ortalaması, açıklığı ve standart sapması yan yana.',
+    },
+    ogretmenNotu: 'Ortalamalar yakın (42 ve 44 tur), yayılımlar çok farklı: Standart sapma yaklaşık 12 ve 4,1 tur, açıklık 42 ve 15 tur. Ortancalar 40 ve 44 tur. Tartışma: "En yüksek değer kimde?" sorusu bir dağılımı anlatmaya yetmez (MAT.9.6.2). Okul takımı için bireyler mi seçilecek, bütün grup mu değerlendirilecek? Karar sorusu ölçünün seçimini değiştirir.',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Sınıf', 'Tur sayısı'],
+        [
+          ['9A-01', '9-A', 28], ['9A-02', '9-A', 52], ['9A-03', '9-A', 35], ['9A-04', '9-A', 64], ['9A-05', '9-A', 40],
+          ['9A-06', '9-A', 33], ['9A-07', '9-A', 47], ['9A-08', '9-A', 22], ['9A-09', '9-A', 55], ['9A-10', '9-A', 38],
+          ['9A-11', '9-A', 44], ['9A-12', '9-A', 30], ['9A-13', '9-A', 58], ['9A-14', '9-A', 36], ['9A-15', '9-A', 48],
+          ['9B-01', '9-B', 42], ['9B-02', '9-B', 46], ['9B-03', '9-B', 39], ['9B-04', '9-B', 48], ['9B-05', '9-B', 44],
+          ['9B-06', '9-B', 41], ['9B-07', '9-B', 50], ['9B-08', '9-B', 43], ['9B-09', '9-B', 37], ['9B-10', '9-B', 45],
+          ['9B-11', '9-B', 47], ['9B-12', '9-B', 40], ['9B-13', '9-B', 52], ['9B-14', '9-B', 44], ['9B-15', '9-B', 42],
+        ],
+        ['etiket', 'etiket', 'sayi'],
+      ),
+  },
+  // ── 10. sınıf · İki kategorik değişken: göreli sıklık ve ilişkililik ──────────────────────────────────────
+  {
+    id: 'okulyolu',
+    ad: 'Ev-okul uzaklığı ve okula geliş biçimi',
+    konu: 'sinif10',
+    sinif: 10,
+    kazanim: ['MAT.10.2.1'],
+    aciklama: 'İki kategorik değişken: Okula yakın oturanlar ile uzak oturanlar okula aynı biçimde mi geliyor?',
+    onerilenGrafik: 'sutun',
+    varsayilanDegisken: 'Geliş biçimi',
+    renkDegisken: 'Uzaklık',
+    kategoriSirasi: { 'Geliş biçimi': ['Yürüyerek', 'Toplu taşımayla', 'Servisle'], Uzaklık: ["2 km'ye kadar", "2 km'den fazla"] },
+    daire: 'siklik',
+    hassas: true,
+    acilis: { sekme: 'sutun' },
+    hikaye: {
+      arastirmaSorusu: '10-A ve 10-B öğrencilerinin evlerinin okula uzaklığı ile okula geliş biçimleri arasında bir ilişki var mıdır?',
+      kim: "10-A ve 10-B'den 20'şer öğrenci (40 kişi)",
+      neZaman: 'Eylül 2025',
+      nasil: 'Öğrenciler evlerinin okula uzaklığını harita uygulamasıyla ölçüp iki gruptan birini, okula en sık geliş biçimini de üç seçenekten birini işaretledi.',
+      n: 40,
+      cumle: "10-A ve 10-B'den 40 öğrenci Eylül 2025'te evlerinin okula uzaklığını ve okula en sık nasıl geldiklerini ankette işaretledi.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal okul verisi', not: 'İki uzaklık grubu farklı büyüklükte (16 ve 24 öğrenci); karşılaştırma oranlarla yapılır.' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Okula 2 km’den uzak oturanlar ile yakın oturanlar okula aynı biçimde mi gelir? Tahmin et.',
+        cevap: 'Hayır: Yakın oturan 16 öğrenciden 11’i yürüyor, uzak oturan 24 öğrenciden 22’si toplu taşımayla ya da servisle geliyor.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Sütun grafiğinde her geliş biçiminde iki uzaklık grubunun sütunları yan yana. Yürüyerek gelenlerde hangi grup çoğunlukta?',
+        cevap: 'Yürüyerek gelen 13 öğrencinin 11’i 2 km’ye kadar uzaklıkta oturuyor. Toplu taşımayla ve servisle gelenlerin çoğu uzak oturuyor.',
+        eylem: null,
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: "İstatistik'te Koşullu göreli sıklıklar tablosuna bak (her Uzaklık grubunda). Her grupta yürüyerek gelenlerin yüzdesi kaç?",
+        cevap: 'Yakın oturanlarda 11/16, yani %68,8; uzak oturanlarda 2/24, yani %8,3. Gruplar farklı büyüklükte (16 ve 24) olduğu için sayıları değil grup içindeki yüzdeleri karşılaştırmak gerekir.',
+        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Sıklık tablosunu aç' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Uzaklık ile geliş biçimi arasında ilişki var mı? Okul servisi için bir öneri yaz.',
+        cevap: 'Var: Uzaklık grubu değişince geliş biçimlerinin koşullu göreli sıklıkları çok değişiyor (yürüyenler %68,8’den %8,3’e düşüyor). Uzak oturanların yaklaşık %91,7’si toplu taşıma ya da servis kullanıyor; servis güzergâhı uzak mahallelere göre planlanabilir. Yine de 40 öğrenci yalnız iki şubeyi anlatır.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      nokta: 'Her nokta bir öğrencinin cevabı; renkler uzaklık grubunu gösterir.',
+      daire: 'İç daire geliş biçimleri, dış halka her dilimdeki uzaklık gruplarının payı.',
+      istatistik: 'Koşullu göreli sıklıklar tablosunda her uzaklık grubunun sütunu %100: Geliş biçimlerini grup içindeki yüzdelerle karşılaştırın.',
+
+    },
+    ogretmenNotu: 'İki kategorik değişkenin ilişkisi göreli sıklıklarla incelenir (MAT.10.2.1). Gruplar farklı büyüklükte olduğu için sayılar yanıltabilir: Toplu taşımayla gelenler uzak oturanlarda 12, yakın oturanlarda 3 kişi; oranlar %50 ve %18,75. Tabloyu yüzdeye çevirmeyi tahtada birlikte yapın. Tartışma: Uzaklık geliş biçimini etkiler mi, yoksa başka bir değişken (ailenin aracı, otobüs güzergâhı) da rol oynar mı?',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Uzaklık', 'Geliş biçimi'],
+        [
+          ['10A-01', "2 km'ye kadar", 'Toplu taşımayla'], ['10A-02', "2 km'ye kadar", 'Yürüyerek'], ['10A-03', "2 km'den fazla", 'Toplu taşımayla'], ['10A-04', "2 km'ye kadar", 'Toplu taşımayla'],
+          ['10A-05', "2 km'ye kadar", 'Yürüyerek'], ['10A-06', "2 km'ye kadar", 'Yürüyerek'], ['10A-07', "2 km'den fazla", 'Servisle'], ['10A-08', "2 km'ye kadar", 'Yürüyerek'],
+          ['10A-09', "2 km'den fazla", 'Toplu taşımayla'], ['10A-10', "2 km'ye kadar", 'Yürüyerek'], ['10A-11', "2 km'ye kadar", 'Yürüyerek'], ['10A-12', "2 km'den fazla", 'Toplu taşımayla'],
+          ['10A-13', "2 km'den fazla", 'Toplu taşımayla'], ['10A-14', "2 km'den fazla", 'Servisle'], ['10A-15', "2 km'ye kadar", 'Toplu taşımayla'], ['10A-16', "2 km'den fazla", 'Toplu taşımayla'],
+          ['10A-17', "2 km'den fazla", 'Toplu taşımayla'], ['10A-18', "2 km'ye kadar", 'Yürüyerek'], ['10A-19', "2 km'den fazla", 'Yürüyerek'], ['10A-20', "2 km'ye kadar", 'Yürüyerek'],
+          ['10B-01', "2 km'den fazla", 'Servisle'], ['10B-02', "2 km'ye kadar", 'Servisle'], ['10B-03', "2 km'den fazla", 'Servisle'], ['10B-04', "2 km'den fazla", 'Toplu taşımayla'],
+          ['10B-05', "2 km'den fazla", 'Servisle'], ['10B-06', "2 km'den fazla", 'Toplu taşımayla'], ['10B-07', "2 km'den fazla", 'Yürüyerek'], ['10B-08', "2 km'den fazla", 'Servisle'],
+          ['10B-09', "2 km'den fazla", 'Servisle'], ['10B-10', "2 km'den fazla", 'Toplu taşımayla'], ['10B-11', "2 km'den fazla", 'Toplu taşımayla'], ['10B-12', "2 km'ye kadar", 'Yürüyerek'],
+          ['10B-13', "2 km'den fazla", 'Servisle'], ['10B-14', "2 km'den fazla", 'Toplu taşımayla'], ['10B-15', "2 km'ye kadar", 'Yürüyerek'], ['10B-16', "2 km'den fazla", 'Toplu taşımayla'],
+          ['10B-17', "2 km'ye kadar", 'Servisle'], ['10B-18', "2 km'den fazla", 'Servisle'], ['10B-19', "2 km'den fazla", 'Servisle'], ['10B-20', "2 km'ye kadar", 'Yürüyerek'],
+        ],
+        ['etiket', 'etiket', 'etiket'],
+      ),
+  },
+  {
+    id: 'telefon',
+    ad: 'Ders çalışırken telefon ve ödevi zamanında bitirme',
+    konu: 'sinif10',
+    sinif: 10,
+    kazanim: ['MAT.10.2.1', 'MAT.10.2.2'],
+    aciklama: 'Telefonu başka odada bırakanlar ödevini daha mı sık zamanında bitiriyor? Grupların büyüklüğüne dikkat edin.',
+    onerilenGrafik: 'sutun',
+    varsayilanDegisken: 'Ödev zamanında bitti',
+    renkDegisken: 'Telefonun yeri',
+    kategoriSirasi: { 'Ödev zamanında bitti': ['Evet', 'Hayır'], 'Telefonun yeri': ['Masada', 'Başka odada'] },
+    daire: 'siklik',
+    hassas: true,
+    acilis: { sekme: 'sutun' },
+    hikaye: {
+      arastirmaSorusu: '10. sınıf öğrencilerinin ders çalışırken telefonlarını nerede tuttukları ile ödevlerini zamanında bitirmeleri arasında bir ilişki var mıdır?',
+      kim: 'Dört 10. sınıf şubesinden gönüllü 50 öğrenci',
+      neZaman: 'Mart 2026, bir okul haftası',
+      nasil: 'Öğrenciler hafta boyunca ödev yaparken telefonun çoğunlukla nerede durduğunu ve haftanın ödevini zamanında bitirip bitirmediğini anonim ankete yazdı.',
+      n: 50,
+      cumle: "Dört 10. sınıf şubesinden 50 gönüllü öğrenci Mart 2026'da bir hafta boyunca ödev yaparken telefonun nerede durduğunu ve ödevi zamanında bitirip bitirmediğini anonim ankete yazdı.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal okul verisi (öz bildirim anketi)', not: 'Katılım gönüllü: Ankete katılanlar bütün öğrencileri temsil etmeyebilir.' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Ödevini zamanında bitirenlerin çoğunun telefonu masada mı, başka odada mı? Tahmin et.',
+        cevap: 'Zamanında bitiren 31 öğrencinin 15’inin telefonu masada, 16’sınınki başka odada: Sayılar neredeyse eşit. Ama telefonu masada olanlar daha kalabalık bir grup (30’a karşı 20).',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Sütun grafiğinde "Evet" ve "Hayır" için iki grubun sütunlarına bak. Ödevini bitiremeyenler en çok hangi grupta?',
+        cevap: 'Telefonu masada olanlarda: 15 öğrenci bitiremedi. Telefonu başka odada olanlarda yalnız 4 öğrenci bitiremedi. Grup içinde yüzde düğmesi gruplar farklı büyüklükteyken karşılaştırmayı adil yapar.',
+        eylem: null,
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: "İstatistik'te Koşullu göreli sıklıklar tablosuna bak (her telefon yeri grubunda). Ödevini zamanında bitirenler yüzde kaç?",
+        cevap: 'Telefonu masada olanlarda 15/30, yani %50; başka odada olanlarda 16/20, yani %80. Koşullu göreli sıklıklar arasında 30 puanlık fark var: İki değişken ilişkili görünüyor.',
+        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Koşullu göreli sıklıkları aç' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Okul gazetesi "Telefon ödevi bitirmeyi engelliyor" diye yazdı. Bu veri bu sonucu kanıtlar mı?',
+        cevap: 'Kanıtlamaz: Veri iki değişkenin ilişkili olduğunu gösteriyor, neden-sonuç ilişkisini değil. Düzenli çalışan öğrenciler telefonu zaten başka odaya koyuyor olabilir. Cevaplar öz bildirim ve katılımcılar gönüllü; neden-sonuç için deney gerekir.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      nokta: 'Her nokta bir öğrencinin cevabı; renkler telefonun nerede durduğunu gösterir.',
+      daire: 'İç daire "Evet" ve "Hayır", dış halka her dilimde telefonun yerine göre paylar.',
+      istatistik: 'Koşullu göreli sıklıklar tablosunda her telefon yeri grubunun sütunu %100; gruplar 30 ve 20 öğrenci.',
+    },
+    ogretmenNotu: 'Başkasının vardığı sonucu ("telefon engelliyor") veriyle tartışma (MAT.10.2.2). Sayılar (15 ve 16) neredeyse eşitken oranlar (%50 ve %80) çok farklı: Grup büyüklükleri farklıyken göreli sıklık gerekir. Tartışma: Üçüncü bir değişken (çalışma alışkanlığı) iki değişkeni birlikte etkiliyor olabilir mi? Bunu sınamak için nasıl bir deney tasarlanır?',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Telefonun yeri', 'Ödev zamanında bitti'],
+        [
+          ['T01', 'Başka odada', 'Evet'], ['T02', 'Masada', 'Evet'], ['T03', 'Masada', 'Evet'], ['T04', 'Masada', 'Evet'],
+          ['T05', 'Başka odada', 'Evet'], ['T06', 'Masada', 'Evet'], ['T07', 'Masada', 'Evet'], ['T08', 'Masada', 'Hayır'],
+          ['T09', 'Masada', 'Evet'], ['T10', 'Başka odada', 'Hayır'], ['T11', 'Başka odada', 'Evet'], ['T12', 'Başka odada', 'Evet'],
+          ['T13', 'Masada', 'Hayır'], ['T14', 'Masada', 'Evet'], ['T15', 'Masada', 'Hayır'], ['T16', 'Masada', 'Hayır'],
+          ['T17', 'Başka odada', 'Evet'], ['T18', 'Başka odada', 'Evet'], ['T19', 'Başka odada', 'Evet'], ['T20', 'Masada', 'Evet'],
+          ['T21', 'Masada', 'Hayır'], ['T22', 'Başka odada', 'Hayır'], ['T23', 'Masada', 'Hayır'], ['T24', 'Başka odada', 'Evet'],
+          ['T25', 'Masada', 'Hayır'], ['T26', 'Başka odada', 'Evet'], ['T27', 'Masada', 'Hayır'], ['T28', 'Masada', 'Hayır'],
+          ['T29', 'Başka odada', 'Evet'], ['T30', 'Masada', 'Evet'], ['T31', 'Masada', 'Evet'], ['T32', 'Masada', 'Evet'],
+          ['T33', 'Masada', 'Hayır'], ['T34', 'Masada', 'Hayır'], ['T35', 'Masada', 'Evet'], ['T36', 'Masada', 'Hayır'],
+          ['T37', 'Masada', 'Evet'], ['T38', 'Masada', 'Evet'], ['T39', 'Masada', 'Hayır'], ['T40', 'Başka odada', 'Evet'],
+          ['T41', 'Başka odada', 'Hayır'], ['T42', 'Başka odada', 'Evet'], ['T43', 'Masada', 'Hayır'], ['T44', 'Başka odada', 'Evet'],
+          ['T45', 'Başka odada', 'Hayır'], ['T46', 'Başka odada', 'Evet'], ['T47', 'Masada', 'Hayır'], ['T48', 'Başka odada', 'Evet'],
+          ['T49', 'Başka odada', 'Evet'], ['T50', 'Masada', 'Evet'],
+        ],
+        ['etiket', 'etiket', 'etiket'],
+      ),
+  },
+  // ── 11. sınıf · İki nicel değişken: birlikte değişme ve ilişkililik ───────────────────────────────────────
+  // Saçılım grafiği 11. ve 12. sınıfta açık (MAT.11.1.1 süreç bileşeni: tablo, saçılım grafiği, bölgelere göre sayım
+  // oranı, korelasyon katsayısı). Açılış sekmesi Saçılım; Ortalama çizgileri düğmesi dört bölgeyi sayar.
+  {
+    id: 'kulac',
+    ad: 'Boy ve kulaç uzunluğu',
+    konu: 'sinif11',
+    sinif: 11,
+    kazanim: ['MAT.11.1.1'],
+    aciklama: 'Boyu uzun olanın kulacı da mı uzun? Her nokta bir öğrenci: Noktaların nasıl dizildiğine bakın.',
+    onerilenGrafik: 'sacilim',
+    varsayilanDegisken: 'Boy (cm)',
+    daire: 'uygunDegil',
+    hassas: true,
+    acilis: { sekme: 'sacilim' },
+    hikaye: {
+      arastirmaSorusu: '11-A öğrencilerinin boy uzunlukları ile kulaç uzunlukları arasında nasıl bir ilişki vardır?',
+      kim: "11-A'daki 20 öğrenci",
+      neZaman: 'Ocak 2026, beden eğitimi dersi',
+      nasil: 'Boy duvar boy ölçerle, kulaç kollar yana açıkken iki orta parmak ucu arasından şerit metreyle ölçüldü; santimetreye yuvarlandı. Tablo boya göre sıralı.',
+      n: 20,
+      cumle: "11-A'daki 20 öğrencinin boyu ve kulacı Ocak 2026'da beden eğitimi dersinde ölçüldü ve santimetreye yuvarlandı; tablo boya göre sıralı.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal sınıf verisi' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Kulaç uzunluğu boydan uzun mu, kısa mı, yoksa yaklaşık eşit mi? Tahmin et.',
+        cevap: 'Yaklaşık eşit: 20 öğrencinin hepsinde fark en çok 4 cm. 12 öğrencinin kulacı boyundan biraz uzun, 6’sınınki biraz kısa, 2’sinde ikisi eşit.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Saçılım grafiğinde noktalar nasıl diziliyor?',
+        cevap: 'Sol alttan sağ üste, neredeyse bir doğru boyunca: Boy uzadıkça kulaç da uzuyor. Noktalar bu doğruya çok yakın olduğu için ilişki çok güçlü.',
+        eylem: null,
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: 'Ortalama çizgileri düğmesine bas. Dört bölgede kaçar nokta var? Korelasyon katsayısı kaç?',
+        cevap: 'Sağ üstte 9, sol altta 10 nokta; öteki iki bölge boş, bir nokta çizginin üstünde. Korelasyon katsayısı r = 0,98: Güçlü, pozitif bir ilişki.',
+        eylem: { tur: 'yok', etiket: 'Ortalama çizgilerini aç' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Bir öğrencinin kulacı 172 cm. Boyunu tahmin edebilir misin? Tahminin ne kadar güvenilir?',
+        cevap: 'Kulaç ile boy çok sıkı ilişkili: Tahmin 172 cm civarı olur. Bu sınıfta kulaç ile boy arasındaki fark en çok 4 cm olduğu için tahmin birkaç santimetre şaşabilir; başka yaş gruplarında ilişki farklı olabilir.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      nokta: 'Nokta grafiği tek değişkene bakar; boy ile kulacın ilişkisi için Saçılım grafiğine dönün.',
+      sutun: 'Her sütun bir öğrencinin boyu; öğrenciler boya göre sıralı. Karşılaştır ile kulacı yan yana ekleyin.',
+      cizgi: '',
+      daire: 'Boy ve kulaç paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
+      istatistik: 'Boy ve Kulaç sekmelerinde ölçüleri karşılaştırın: Aritmetik ortalamalar 173 ve yaklaşık 174 cm.',
+    },
+    ogretmenNotu: 'Saçılım grafiği, bölgelere göre sayım ve korelasyon katsayısı birlikte kullanılır (MAT.11.1.1). Ortalama çizgileriyle dört bölge: Sağ üst 9, sol alt 10, öteki ikisi boş; boyu ortalamaya eşit bir öğrenci (173 cm) çizginin üstünde. r yaklaşık 0,98. Standart sapmalar yaklaşık 8,8 ve 9,7 cm. Ölçümü kendi sınıfınızda yapacaksanız izin alın: Tabloda kod var.',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Boy (cm)', 'Kulaç (cm)'],
+        [
+          ['11A-01', 158, 156], ['11A-02', 160, 162], ['11A-03', 163, 160], ['11A-04', 164, 167], ['11A-05', 165, 165],
+          ['11A-06', 167, 171], ['11A-07', 168, 167], ['11A-08', 170, 171], ['11A-09', 171, 173], ['11A-10', 172, 170],
+          ['11A-11', 173, 176], ['11A-12', 175, 176], ['11A-13', 176, 175], ['11A-14', 177, 181], ['11A-15', 179, 179],
+          ['11A-16', 180, 182], ['11A-17', 182, 180], ['11A-18', 184, 187], ['11A-19', 186, 187], ['11A-20', 190, 194],
+        ],
+      ),
+  },
+  {
+    id: 'yazili',
+    ad: '1. ve 2. yazılı puanları',
+    konu: 'sinif11',
+    sinif: 11,
+    kazanim: ['MAT.11.1.1', 'MAT.11.1.2'],
+    aciklama: '1. yazılıda yüksek puan alan 2. yazılıda da yüksek mi alıyor? Noktalara ve ötekilerden ayrılan noktaya bakın.',
+    onerilenGrafik: 'sacilim',
+    varsayilanDegisken: '1. yazılı',
+    daire: 'uygunDegil',
+    hassas: true,
+    acilis: { sekme: 'sacilim' },
+    hikaye: {
+      arastirmaSorusu: '11-B öğrencilerinin matematik dersi 1. yazılı puanları ile 2. yazılı puanları arasında nasıl bir ilişki vardır?',
+      kim: "11-B'deki 24 öğrenci",
+      neZaman: '2025-2026 öğretim yılı 1. dönem',
+      nasil: 'Puanlar matematik öğretmeninin not çizelgesinden alındı. Tablo 1. yazılı puanına göre sıralı.',
+      n: 24,
+      cumle: "11-B'deki 24 öğrencinin 1. dönem matematik 1. ve 2. yazılı puanları öğretmenin not çizelgesinden alındı; tablo 1. yazılıya göre sıralı.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal sınıf verisi' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: '1. yazılıda yüksek puan alanlar 2. yazılıda da yüksek mi alır? Tahmin et.',
+        cevap: 'Genellikle evet: 1. yazılı puanı arttıkça 2. yazılı puanı da genel olarak artıyor. Ama herkes için değil; bazı öğrencilerin puanı epey düşmüş ya da yükselmiş.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Saçılım grafiğinde ötekilerin dizilişinden en çok ayrılan noktayı bul.',
+        cevap: '11B-19: 1. yazılıda 80, 2. yazılıda 62 aldı; 18 puan düşüş. Bu nokta, sol alttan sağ üste uzanan dizilişin belirgin biçimde altında.',
+        eylem: { tur: 'satirVurgula', satir: '11B-19', etiket: '11B-19’u göster' },
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: 'Ortalama çizgileri düğmesine bas. Dört bölgede kaçar nokta var? Korelasyon katsayısı kaç?',
+        cevap: 'Sağ üstte 10, sol altta 10, sol üstte 2, sağ altta 2 nokta: 24 noktadan 20’si artan yöndeki iki bölgede. Korelasyon katsayısı r = 0,92: Güçlü, pozitif bir ilişki.',
+        eylem: { tur: 'yok', etiket: 'Ortalama çizgilerini aç' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Bir öğrenci "1. yazılıda 50’nin altında alan 2. yazılıda da 50’nin altında kalır" diyor. Veri bu yorumu destekliyor mu?',
+        cevap: 'Tam desteklemiyor: 1. yazılıda 50’nin altında 4 öğrenci var (35, 42, 45, 48). 2. yazılıda bunlardan ikisi 50’nin altında kaldı (45 ve 40), ikisi 55 ve 52 aldı. İki yazılı ilişkili ama bir öğrencinin puanı kesin olarak tahmin edilemez.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      nokta: 'Nokta grafiği tek değişkene bakar; iki yazılının ilişkisi için Saçılım grafiğine dönün.',
+      sutun: 'Her sütun bir öğrencinin 1. yazılı puanı; Karşılaştır ile 2. yazılıyı yan yana ekleyin.',
+      cizgi: '',
+      daire: 'Puanlar paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
+      istatistik: 'İki yazılının ölçülerini sekmeler arasında karşılaştırın: Açıklıklar 60 ve 54 puan.',
+    },
+    ogretmenNotu: 'Bir öğrencinin genellemesi ("50’nin altında kalır") veriyle sınanır (MAT.11.1.2). İlişki güçlü ama kusursuz değil: r yaklaşık 0,92; bölgelere göre sayım 24 noktadan 20’si (%83) sağ üst ve sol altta. 11B-19 noktası korelasyonu düşürür; onu silip r’nin nasıl değiştiğine bakın. Puan hassas bir bilgidir: Tabloda kod var.',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', '1. yazılı', '2. yazılı'],
+        [
+          ['11B-01', 35, 45], ['11B-02', 42, 40], ['11B-03', 45, 55], ['11B-04', 48, 52], ['11B-05', 50, 58], ['11B-06', 52, 50],
+          ['11B-07', 55, 62], ['11B-08', 58, 48], ['11B-09', 60, 65], ['11B-10', 62, 60], ['11B-11', 64, 70], ['11B-12', 65, 68],
+          ['11B-13', 68, 66], ['11B-14', 70, 75], ['11B-15', 72, 70], ['11B-16', 74, 78], ['11B-17', 75, 72], ['11B-18', 78, 85],
+          ['11B-19', 80, 62], ['11B-20', 82, 88], ['11B-21', 85, 84], ['11B-22', 88, 90], ['11B-23', 90, 92], ['11B-24', 95, 94],
+        ],
+      ),
+  },
+  {
+    id: 'ekranuyku',
+    ad: 'Yatmadan önce ekran süresi ve uyku süresi',
+    konu: 'sinif11',
+    sinif: 11,
+    kazanim: ['MAT.11.1.1', 'MAT.11.1.2'],
+    aciklama: 'Farklı birimli iki değişken: Yatmadan önce ekrana bakılan süre uzadıkça uyku süresi nasıl değişiyor?',
+    onerilenGrafik: 'sacilim',
+    varsayilanDegisken: 'Ekran süresi (dakika)',
+    daire: 'uygunDegil',
+    hassas: true,
+    acilis: { sekme: 'sacilim' },
+    hikaye: {
+      arastirmaSorusu: '11-C öğrencilerinin yatmadan önceki ekran süreleri ile uyku süreleri arasında nasıl bir ilişki vardır?',
+      kim: "11-C'deki 24 öğrenci",
+      neZaman: 'Kasım 2025, bir okul haftası',
+      nasil: 'Öğrenciler beş okul gecesinde yatmadan önceki iki saatte ekrana baktıkları süreyi ve uyku sürelerini günlüğe yazdı; beş gecenin ortalaması alındı.',
+      n: 24,
+      cumle: "11-C'deki 24 öğrenci Kasım 2025'te beş okul gecesi boyunca yatmadan önceki ekran sürelerini ve uyku sürelerini günlüğe yazdı; tabloda beş gecenin ortalaması var.",
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal sınıf verisi (uyku günlüğü)' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Yatmadan önce ekrana daha uzun bakanlar daha mı az uyur? Tahmin et.',
+        cevap: 'Bu sınıfta genellikle evet: Ekran süresi 180 dakika ve üzeri olan 6 öğrencinin 5’i 6,5 saat ya da daha az uyuyor. Ama 200 dakika ekrana bakıp 7 saat uyuyan da var.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Saçılım grafiğinde noktalar nasıl diziliyor? Eksenlerin birimleri ne?',
+        cevap: 'Sol üstten sağ alta: Ekran süresi arttıkça uyku süresi genel olarak azalıyor. Yatay eksen dakika, dikey eksen saat; iki değişkenin birimi farklı.',
+        eylem: null,
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: 'Ortalama çizgileri düğmesine bas. Dört bölgede kaçar nokta var? Korelasyon katsayısı kaç?',
+        cevap: 'Sol üstte 10, sağ altta 8, sağ üstte 5, sol altta 1 nokta: 24 noktadan 18’i (%75) azalan yöndeki iki bölgede. Korelasyon katsayısı r = −0,75: Orta güçte, negatif bir ilişki.',
+        eylem: { tur: 'yok', etiket: 'Ortalama çizgilerini aç' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Okul gazetesi "Ekran uykuyu azaltıyor" diye yazdı. Bu veri bu sonucu kanıtlar mı?',
+        cevap: 'Kanıtlamaz: Veri iki değişkenin birlikte değiştiğini gösteriyor, neden-sonuç ilişkisini değil. Geç yatan öğrenci hem ekrana daha uzun bakıyor hem daha az uyuyor olabilir. Neden-sonuç için deney gerekir; öz bildirim de yanılabilir.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      nokta: 'Nokta grafiği tek değişkene bakar; ekran süresi ile uykunun ilişkisi için Saçılım grafiğine dönün.',
+      sutun: 'Her sütun bir öğrencinin ekran süresi; iki değişkenin birimi farklı olduğu için yan yana çizilemez.',
+      cizgi: '',
+      daire: 'Süreler paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
+      istatistik: 'Ekran süresi ve Uyku sekmelerinde ölçülere bakın: Aritmetik ortalamalar yaklaşık 118 dakika ve 7 saat.',
+    },
+    ogretmenNotu: 'Farklı birimli iki nicel değişken (dakika ve saat) saçılım grafiğinde birlikte çizilir; tek grafikte karşılaştırma ancak böyle olur (MAT.11.1.1). r yaklaşık −0,75; bölgelere göre sayım 24 noktadan 18’i sol üst ve sağ altta. Tartışma (MAT.11.1.2): Üçüncü bir değişken (yatma saati) iki değişkeni birlikte etkiliyor olabilir mi? Uyku hassas bir bilgidir: Tabloda kod var.',
+    olustur: () =>
+      tabloOlustur(
+        ['Öğrenci', 'Ekran süresi (dakika)', 'Uyku (saat)'],
+        [
+          ['11C-01', 15, 8.5], ['11C-02', 30, 8], ['11C-03', 45, 8], ['11C-04', 60, 7.5], ['11C-05', 60, 8], ['11C-06', 75, 7.5],
+          ['11C-07', 90, 7], ['11C-08', 90, 8], ['11C-09', 105, 7], ['11C-10', 120, 7], ['11C-11', 120, 6.5], ['11C-12', 135, 7],
+          ['11C-13', 150, 6.5], ['11C-14', 150, 7], ['11C-15', 165, 6], ['11C-16', 180, 6.5], ['11C-17', 180, 6], ['11C-18', 195, 6],
+          ['11C-19', 210, 5.5], ['11C-20', 240, 5.5], ['11C-21', 30, 7], ['11C-22', 120, 8], ['11C-23', 60, 6], ['11C-24', 200, 7],
+        ],
+      ),
+  },
+  // ── 12. sınıf · Hazır verilerle çalışma ve karar verme ──────────────────────────────────────────────────────
+  {
+    id: 'isinma',
+    ad: 'Ankara ve İzmir: Isınma ihtiyacı',
+    konu: 'sinif12',
+    sinif: 12,
+    kazanim: ['MAT.12.5.1'],
+    aciklama: 'Gerçek MGM verisi: Aylık ortalaması 15 °C’nin altındaki aylar ısıtma ayı sayılırsa iki şehir nasıl ayrışır?',
+    onerilenGrafik: 'cizgi',
+    varsayilanDegisken: 'Ankara (°C)',
+    karsilastir: 'İzmir (°C)',
+    daire: 'uygunDegil',
+    yuzdeDegisim: { 'Ankara (°C)': false, 'İzmir (°C)': false },
+    acilis: { sekme: 'cizgi' },
+    hikaye: {
+      arastirmaSorusu: "MGM'nin uzun yıllar ölçümlerine göre Ankara ve İzmir'de evleri ısıtma ihtiyacı yıl içinde nasıl farklılaşmaktadır?",
+      kim: 'MGM Ankara ve İzmir istasyonları',
+      neZaman: 'Ankara 1927–2025, İzmir 1938–2025 ölçüm periyotları',
+      nasil: 'Her ayın uzun yıllar ortalama sıcaklığı (°C); hazır veri MGM’nin il istatistikleri sayfasından alındı.',
+      n: 12,
+      cumle: "MGM'nin Ankara (1927–2025) ve İzmir (1938–2025) istasyonlarında ölçülen sıcaklıklardan her ayın uzun yıllar ortalaması.",
+    },
+    kaynak: {
+      tur: 'gercek',
+      ad: 'MGM, İllerimize Ait Genel İstatistik Veriler: Ankara ve İzmir, "Ortalama Sıcaklık (°C)" satırı',
+      url: 'https://www.mgm.gov.tr/veridegerlendirme/il-ve-ilceler-istatistik.aspx?k=A&m=ANKARA',
+      url2: 'https://www.mgm.gov.tr/veridegerlendirme/il-ve-ilceler-istatistik.aspx?k=A&m=IZMIR',
+      urlAd: 'MGM: Ankara',
+      url2Ad: 'İzmir',
+      erisim: '24 Eylül 2026',
+    },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Aylık ortalaması 15 °C’nin altındaki aylar "ısıtma ayı" sayılsın. Ankara’da ve İzmir’de kaçar ısıtma ayı vardır? Tahmin et.',
+        cevap: 'Ankara’da 7 ay (ocak, şubat, mart, nisan, ekim, kasım, aralık), İzmir’de 5 ay (ocak, şubat, mart, kasım, aralık).',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Çizgi grafiğinde iki şehir arasındaki fark hangi ayda en büyük, hangi ayda en küçük?',
+        cevap: 'En büyük fark ocakta: 8,9 − 0,4 = 8,5 °C. En küçük fark ağustosta: 27,7 − 23,6 = 4,1 °C.',
+        eylem: null,
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: 'Her ısıtma ayının 15 °C’den ne kadar aşağıda olduğunu bul ve topla. İki şehrin toplamlarını karşılaştır.',
+        cevap: 'Ankara: 14,6 + 13,2 + 9,2 + 3,7 + 1,8 + 7,6 + 12,4 = 62,5. İzmir: 6,1 + 5,4 + 3,3 + 0,6 + 4,4 = 19,8. Ankara’nın toplamı İzmir’inkinin yaklaşık 3 katı.',
+        eylem: { tur: 'yok', etiket: 'Isıtma aylarının farklarını topla' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Bir yakıt firması "Ankara’da bir ev, İzmir’dekinin 3 katı yakıt harcar" diyor. Bu hazır veriyle bu sonuca ne kadar güvenebilirsin?',
+        cevap: 'Veri kaba bir karşılaştırma için uygun: Ankara’nın ısıtma ihtiyacı belirgin biçimde daha büyük. Ama yakıt tüketimi evin yalıtımına, ısıtma türüne ve günlük sıcaklıklara da bağlı; aylık ortalamalar soğuk günleri ve geceleri gizler.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      nokta: 'Tek grafikte iki şehir: Ankara’nın noktaları daha geniş bir aralığa yayılmış.',
+      sutun: 'İki şehir ay ay yan yana: 15 °C düzeyinin altında kalan sütunları sayın.',
+      daire: 'Sıcaklıklar toplanıp paylaşılmaz; daire grafiği bu veri için uygun değil.',
+      istatistik: 'Yıllık ortalamalar yaklaşık 12,1 °C ve 18,0 °C; standart sapmalar yaklaşık 8,5 ve 7,1 °C.',
+      sacilim: 'Her nokta bir ay: İki şehir birlikte ısınıp soğuyor, noktalar neredeyse bir doğru üzerinde; korelasyon katsayısı 1’e çok yakın.',
+    },
+    ogretmenNotu: 'Gerçek MGM verisiyle karar verme (MAT.12.5.1). "15 °C altı ısıtma ayı" ölçütü bu etkinlik için seçilmiş basit bir kuraldır; mühendislikteki derece-gün hesabının aylık ve kaba bir benzeridir. Tartışma: Ölçüt 18 °C olunca ay sayıları ve oran nasıl değişir? Uzun yıllar ortalaması tek bir yılın gerçek kışını göstermez. Açıklıklar 23,2 ve 19,1 °C.',
+    olustur: () =>
+      tabloOlustur(
+        ['Ay', 'Ankara (°C)', 'İzmir (°C)'],
+        [
+          ['Ocak', 0.4, 8.9], ['Şubat', 1.8, 9.6], ['Mart', 5.8, 11.7], ['Nisan', 11.3, 15.9], ['Mayıs', 16.1, 20.8],
+          ['Haziran', 20.1, 25.4], ['Temmuz', 23.5, 28], ['Ağustos', 23.6, 27.7], ['Eylül', 19, 23.8], ['Ekim', 13.2, 19],
+          ['Kasım', 7.4, 14.4], ['Aralık', 2.6, 10.6],
+        ],
+      ),
+  },
+  {
+    id: 'elektrik',
+    ad: 'Okulun elektrik tüketimi ve güneş paneli',
+    konu: 'sinif12',
+    sinif: 12,
+    kazanim: ['MAT.12.5.1'],
+    aciklama: 'Okul idaresinin hazır tablosu: Çatıya kurulacak güneş paneli hangi aylarda okulun tüketimini karşılar?',
+    onerilenGrafik: 'cizgi',
+    varsayilanDegisken: 'Tüketim (kWh)',
+    karsilastir: 'Panel üretimi (kWh)',
+    daire: 'uygunDegil',
+    acilis: { sekme: 'cizgi' },
+    hikaye: {
+      arastirmaSorusu: 'Okulumuzun aylık elektrik tüketimi ile çatıya kurulması düşünülen güneş panelinin tahmini üretimi yıl içinde nasıl değişmektedir?',
+      kim: 'Okul idaresi: 2025 elektrik faturaları ve panel firmasının üretim tahmini',
+      neZaman: '2025 yılı, aylık',
+      nasil: 'Tüketim faturalardan, panel üretimi firmanın aylık tahmininden alındı; değerler 100 kWh’e yuvarlandı.',
+      n: 12,
+      cumle: 'Okul idaresinin hazırladığı tablo: 2025 faturalarındaki aylık elektrik tüketimi ve çatıya kurulması düşünülen güneş panelinin firma tahminine göre aylık üretimi.',
+    },
+    kaynak: { tur: 'kurgusal', ad: 'Kurgusal okul verisi (fatura ve üretim tahmini biçiminde)', not: 'Sayılar gerçek bir okula ait değildir; büyüklükleri gerçekçi aralıkta seçildi.' },
+    rehber: [
+      {
+        tur: 'tahmin',
+        baslik: 'Tahmin et',
+        soru: 'Güneş paneli en çok hangi aylarda üretir? Okul en çok hangi aylarda tüketir? Tahmin et.',
+        cevap: 'Panel yazın en çok üretir (temmuzda 7600 kWh). Okul ise kışın en çok tüketir (ocakta 9200 kWh): Isıtma ve aydınlatma artar, yazın okul kapalıdır.',
+        eylem: null,
+      },
+      {
+        tur: 'bak',
+        baslik: 'Grafikte bul',
+        soru: 'Çizgi grafiğinde panel çizgisi hangi aylarda tüketim çizgisinin üstünde?',
+        cevap: 'Haziran, temmuz ve ağustos: Bu üç ayda panelin üretimi tüketimden fazla. Öteki dokuz ayda tüketim daha büyük.',
+        eylem: null,
+      },
+      {
+        tur: 'olc',
+        baslik: 'Aç ve ölç',
+        soru: "İstatistik'te iki değişkenin aritmetik ortalamalarını karşılaştır. Panel yıllık tüketimin yaklaşık ne kadarını karşılar?",
+        cevap: 'Aylık ortalamalar yaklaşık 6692 ve 5075 kWh; yıllık toplamlar 80300 ve 60900 kWh. Panel yıllık tüketimin yaklaşık %76’sını karşılar.',
+        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'İstatistiği aç' },
+      },
+      {
+        tur: 'yorumla',
+        baslik: 'Yorumla',
+        soru: 'Firma "Panel elektrik ihtiyacınızın dörtte üçünü karşılar" diyor. Okul idaresi bu hazır veriye dayanarak nasıl bir karar vermeli?',
+        cevap: 'Yıllık toplamda iddia doğru (%76). Ama üretimin büyük kısmı okulun kapalı olduğu yaz aylarında: Temmuz ve ağustosta üretim tüketimin 3 katından fazla, ocakta tüketimin yalnız yaklaşık %28’i. Fazla elektrik şebekeye verilemiyorsa karar için aylık değerlere bakmak gerekir.',
+        eylem: null,
+      },
+    ],
+    sekmeIpucu: {
+      nokta: 'Tek grafikte iki değişken: Tüketim değerleri daha geniş bir aralığa yayılmış.',
+      sutun: 'Her ayda tüketim ve üretim yan yana: Hangi aylarda üretim sütunu daha uzun?',
+      daire: 'Aylık değerleri karşılaştırmak için Çizgi ya da Sütun grafiği daha uygun; daire iki değişkeni birlikte göstermez.',
+      istatistik: 'İki değişkenin ölçüleri yan yana: Tüketimin açıklığı 7200 kWh, üretiminki 5200 kWh.',
+      sacilim: 'Her nokta bir ay: Üretimin yüksek olduğu aylarda tüketim düşük; noktalar sol üstten sağ alta iniyor (r yaklaşık −0,86).',
+    },
+    ogretmenNotu: 'Kurgusal ama gerçekçi hazır veri: Kurumların hazırladığı tabloları okuma ve karar verme (MAT.12.5.1). Tartışma soruları: Fazla üretimin şebekeye verilmesi kararı nasıl değiştirir? Okul yaz kursu açarsa tablo nasıl değişir? Üretim tahmini satıcı firmanın hazırladığı bir veridir; neden temkinli okunmalı?',
+    olustur: () =>
+      tabloOlustur(
+        ['Ay', 'Tüketim (kWh)', 'Panel üretimi (kWh)'],
+        [
+          ['Ocak', 9200, 2600], ['Şubat', 8800, 3300], ['Mart', 8100, 4800], ['Nisan', 7200, 5600], ['Mayıs', 6900, 6600],
+          ['Haziran', 5200, 7200], ['Temmuz', 2100, 7600], ['Ağustos', 2000, 7100], ['Eylül', 6400, 6000], ['Ekim', 7300, 4600],
+          ['Kasım', 8200, 3100], ['Aralık', 8900, 2400],
+        ],
+      ),
+  },
 ];
 
 export type OrnekKonusu = (typeof ORNEK_KONULARI)[number]['id'];
 
 /**
- * Konu bu kademede görünür mü: Tüm araçlar'da bütün konular; İlkokul'da yalnız 1–4. sınıf konuları; ortaokul ve lisede
- * (bugünkü davranış) 5–8. sınıf ve zenginleştirme konuları.
+ * Konu bu kademede görünür mü: Tüm araçlar'da bütün konular; İlkokul'da yalnız 1–4. sınıf, Ortaokul'da 5–8. sınıf
+ * (zenginleştirme yok), Lise'de yalnız lise konuları (hazırlık ve 9–12. sınıf).
  */
 function konuKademede(k: (typeof ORNEK_KONULARI)[number], kademe: KademeDuzeyi): boolean {
   if (kademe === 'tum') return true;
   if (kademe === 'ortaokul' && k.id === 'zenginlestirme') return false;
-  return kademe === 'ilkokul' ? k.kademe === 'ilkokul' : k.kademe !== 'ilkokul';
+  return k.kademe === kademe;
 }
 
 /** Örnekler konu başlıklarına göre (menü sırası); `kademe` verilirse yalnız o kademenin konuları (varsayılan: hepsi) */
@@ -2115,11 +3019,10 @@ export function kademeOrnekleri(kademe: KademeDuzeyi): OrnekVeri[] {
   return ornekKonulari(kademe).flatMap((k) => k.ornekler);
 }
 
-/** Örnek bu kademenin galerisinde mi (ilkokul örneği ortaokulda / lisede, 5–8. sınıf örneği ilkokulda yok) */
+/** Örnek bu kademenin galerisinde mi (konusunun kademesi: ilkokul örneği ortaokulda, 5–8. sınıf örneği lisede yok) */
 export function ornekKademede(ornek: OrnekVeri, kademe: KademeDuzeyi): boolean {
-  if (kademe === 'tum') return true;
-  if (kademe === 'ortaokul' && ornek.konu === 'zenginlestirme') return false;
-  return kademe === 'ilkokul' ? ilkokulSinifi(ornek.sinif) : !ilkokulSinifi(ornek.sinif);
+  const konu = ORNEK_KONULARI.find((k) => k.id === ornek.konu);
+  return konu !== undefined && konuKademede(konu, kademe);
 }
 
 /** Kimliğe göre örnek; bilinmeyen ya da boş kimlikte undefined */

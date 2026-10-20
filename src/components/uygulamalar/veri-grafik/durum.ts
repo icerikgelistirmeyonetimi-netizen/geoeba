@@ -167,9 +167,12 @@ export const ACILIS_ORNEGI = 'boy';
  */
 export const ILKOKUL_ACILIS_ORNEGI = 'oyuncak';
 
-/** Kademenin açılış örneği: İlkokul'da 1. sınıf örneği, öteki kademelerde (Tüm araçlar dahil) bugünkü boy örneği */
+/** Lise kademesinin açılış örneği: Lise galerisi 5–8. sınıf örneklerini göstermez; 9. sınıfın uyku süresi tablosu */
+export const LISE_ACILIS_ORNEGI = 'uyku';
+
+/** Kademenin açılış örneği: İlkokul'da 1. sınıf, Lise'de 9. sınıf örneği; Ortaokul ve Tüm araçlar'da bugünkü boy örneği */
 export function acilisOrnegi(kademe: KademeDuzeyi = 'tum'): string {
-  return kademe === 'ilkokul' ? ILKOKUL_ACILIS_ORNEGI : ACILIS_ORNEGI;
+  return kademe === 'ilkokul' ? ILKOKUL_ACILIS_ORNEGI : kademe === 'lise' ? LISE_ACILIS_ORNEGI : ACILIS_ORNEGI;
 }
 
 /**
@@ -642,7 +645,7 @@ export function durumKurallari(d: Pick<Durum, 'ornekId' | 'etkinKume'>, ilkokul 
 
 /**
  * Kademe değişince (ve açılışta): Tablom değiştirilmemiş bir örnekse ve örnek bu kademenin galerisinde değilse
- * (İlkokul'da 5–8. sınıf örneği, ortaokul ve lisede 1–4. sınıf örneği) kademenin açılış örneği yüklenir. Kullanıcının
+ * (İlkokul'da 5–8. sınıf örneği, ortaokulda 1–4. sınıf ya da lise örneği, lisede lise dışı örnek) kademenin açılış örneği yüklenir. Kullanıcının
  * kendi tablosu, değiştirilmiş örnek, veri toplama ve Deney özeti olduğu gibi kalır (ilkokulda kuralları süzer). Tüm
  * araçlar'da hiçbir şey değişmez. Değişiklik yoksa aynı nesne döner.
  */

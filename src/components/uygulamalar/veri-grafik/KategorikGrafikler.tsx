@@ -14,7 +14,7 @@
  * çubuk yerine "Çetele" sütunu (sıklıktan önce), anahtara göre tabloda her hücrede çetele ve sayı.
  * Yazı ailesi uygulamanın geri kalanıyla aynı (Manrope); sayılar `sayiMetni` biçiminde.
  */
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   BOS_KATEGORI_RENGI,
   TEPE_DEGER_YOK,
@@ -81,14 +81,33 @@ export interface KategorikSutunProps {
   bosIpucu?: string;
   /** Sütun tepesinde yüzde yazılsın mı (5. sınıfta yalnız sıklık; verilmezse yazılır) */
   yuzdeGoster?: boolean;
+  /**
+   * Koşullu göreli sıklık (lise 10. sınıf ve üstü, MAT.10.2.1): renk anahtarı varken sütunların boyu sayı değil, anahtarın
+   * her grubunun içindeki yüzdedir (her grubun sütunları toplamı %100); dikey eksen 0–100.
+   */
+  kosulluYuzde?: boolean;
 }
+
+/** İki yönlü sayımda anahtarın her grubunun (sütununun) toplamı: koşullu göreli sıklığın paydası */
+export function grupToplamlari(capraz: readonly { sayilar: number[]; bos: number }[]): { sayilar: number[]; bos: number } {
+  const sayilar: number[] = [];
+  let bos = 0;
+  for (const c of capraz) {
+    c.sayilar.forEach((x, j) => (sayilar[j] = (sayilar[j] ?? 0) + x));
+    bos += c.bos;
+  }
+  return { sayilar, bos };
+}
+
+/** Yüzde ekseni (koşullu göreli sıklık): 0–100, 20'şer */
+const YUZDE_EKSENI = { min: 0, max: 100, adim: 20, isaretler: [0, 20, 40, 60, 80, 100] };
 
 const SOL = 56;
 const SAG = 16;
 const UST = 30;
 const ALT = 56;
 
-export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik, azaltilmisHareket, renkEslemi = null, yEnAz, bosIpucu, yuzdeGoster = true }: KategorikSutunProps) {
+export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik, azaltilmisHareket, renkEslemi = null, yEnAz, bosIpucu, yuzdeGoster = true, kosulluYuzde = false }: KategorikSutunProps) {
   // Gerçek piksel: viewBox kabın ölçüsüdür, küçültme yok
   const W = Math.max(0, genislik);
   const H = Math.max(0, yukseklik);
@@ -114,11 +133,20 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
   const altBosluk = egik ? Math.min(96, Math.max(ALT, 24 + Math.min(enUzunKategori, 12) * 7.4 * 0.58 + 10)) : ALT;
   const taban = Math.max(UST + 1, H - altBosluk);
   // Tam sayı çentikli sıklık ekseni; en yüksek sütunun üstünde sıklık ve yüzde etiketi için pay kalır
-  const eksen = siklikEkseni(enCok > 0 ? Math.ceil(enCok * 1.15) : 0, Math.max(3, Math.floor((taban - UST) / 44)), yEnAz ?? 0);
-  const olcek = dogrusalOlcek(0, eksen.max, taban, UST);
+  /** Koşullu göreli sıklık: anahtarın her grubunda yüzde (grubun toplamı payda); grup boşsa 0 */
+  const kosullu = kosulluYuzde && !!capraz;
+  const toplamlar = useMemo(() => (capraz ? grupToplamlari(capraz) : null), [capraz]);
+  const grupYuzdesi = (sayi: number, j: number, bosMu: boolean) => {
+    const payda = bosMu ? toplamlar?.bos ?? 0 : toplamlar?.sayilar[j] ?? 0;
+    return payda > 0 ? (sayi / payda) * 100 : 0;
+  };
+  const eksen = kosullu
+    ? YUZDE_EKSENI
+    : siklikEkseni(enCok > 0 ? Math.ceil(enCok * 1.15) : 0, Math.max(3, Math.floor((taban - UST) / 44)), yEnAz ?? 0);
+  const olcek = dogrusalOlcek(0, kosullu ? 112 : eksen.max, taban, UST);
   const { yuzdeler } = yuzdeVeAcilar(f.map((x) => x.sayi));
   // Eksen adının yanında veri sayısı yazılmaz (uzman incelemesi, 4. tur: eskiden "Aday · sıklık (20 veri)")
-  const baslik = `Sıklık`;
+  const baslik = kosullu ? `Grup içinde yüzde` : `Sıklık`;
   const yuzdeSigar = hucreG >= 44;
   const yuzdeli = yuzdeGoster && !anahtar;
 
@@ -126,7 +154,8 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
     <svg
       data-grafik="sutun"
       role="img"
-      aria-label={`${sutunAdi} kategori sıklıkları`}
+      aria-label={kosullu ? `${sutunAdi}: ${anahtar?.ad ?? ''} gruplarında koşullu göreli sıklıklar` : `${sutunAdi} kategori sıklıkları`}
+      data-kosullu-yuzde={kosullu ? '' : undefined}
       width={W}
       height={H}
       viewBox={`0 0 ${W} ${H}`}
@@ -137,7 +166,7 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
         <g key={v}>
           <line x1={SOL} x2={W - SAG} y1={olcek.ileri(v)} y2={olcek.ileri(v)} stroke={RENK.izgara} strokeWidth={1} />
           <text x={SOL - 8} y={olcek.ileri(v) + 4} fontSize={13} textAnchor="end" fill={RENK.metin}>
-            {sayiMetni(v)}
+            {kosullu ? `%${sayiMetni(v)}` : sayiMetni(v)}
           </text>
         </g>
       ))}
@@ -155,7 +184,7 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
         transform={`rotate(-90 15 ${(UST + taban) / 2})`}
         data-eksen-adi="dikey"
       >
-        Sıklık
+        {kosullu ? 'Yüzde' : 'Sıklık'}
       </text>
       <text x={SOL} y={16} fontSize={13} fontWeight={700} fill={RENK.metin}>
         {baslik}
@@ -180,13 +209,14 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
         const renk = kategoriRengi(x.kategori, i);
         // Karşılaştırma: anahtarın kategorileri yan yana birer sütun (anahtar sırasıyla; anahtarı boş satırlar en sağda gri)
         const satir = capraz?.find((c) => c.kategori === x.kategori);
-        const parcalar: { ad: string; sayi: number; renk: string; j: number }[] = [];
+        const parcalar: { ad: string; sayi: number; renk: string; j: number; deger: number }[] = [];
         if (anahtar && satir) {
           satir.sayilar.forEach((c, j) => {
             const ad = anahtar.kategoriler[j];
-            parcalar.push({ ad, sayi: c, renk: anahtar.renkler.get(ad) ?? BOS_KATEGORI_RENGI, j });
+            parcalar.push({ ad, sayi: c, renk: anahtar.renkler.get(ad) ?? BOS_KATEGORI_RENGI, j, deger: kosullu ? grupYuzdesi(c, j, false) : c });
           });
-          if (bosVar) parcalar.push({ ad: '(boş)', sayi: satir.bos, renk: BOS_KATEGORI_RENGI, j: anahtar.kategoriler.length });
+          if (bosVar)
+            parcalar.push({ ad: '(boş)', sayi: satir.bos, renk: BOS_KATEGORI_RENGI, j: anahtar.kategoriler.length, deger: kosullu ? grupYuzdesi(satir.bos, 0, true) : satir.bos });
         }
         const dokum = parcalar.length > 0 ? ` · ${parcalar.map((p) => `${p.ad} ${p.sayi}`).join(', ')}` : '';
         const yuzde = yuzdeler[i] ?? 0;
@@ -201,10 +231,11 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
             {anahtar ? (
               parcalar.map((p) => {
                 const px = yanBas + p.j * (yanG + 2);
-                const boy = Math.max(0.001, taban - olcek.ileri(p.sayi));
+                const boy = Math.max(0.001, taban - olcek.ileri(p.deger));
+                const yazi = kosullu ? `%${sayiMetni(p.deger, 1)}` : String(p.sayi);
                 return (
-                  <g key={p.ad} data-yan-sutun={p.ad} data-sayi={p.sayi}>
-                    <title>{`${x.kategori} · ${anahtar.ad} ${p.ad}: ${p.sayi}`}</title>
+                  <g key={p.ad} data-yan-sutun={p.ad} data-sayi={p.sayi} data-yuzde={kosullu ? sayiMetni(p.deger, 1) : undefined}>
+                    <title>{`${x.kategori} · ${anahtar.ad} ${p.ad}: ${p.sayi}${kosullu ? ` (${p.ad} grubunun %${sayiMetni(p.deger, 1)}’i)` : ''}`}</title>
                     <g style={{ transform: `translate(${px}px, ${taban}px) scaleY(${-boy})`, transition: gecis }}>
                       <rect
                         x={0}
@@ -217,7 +248,7 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
                         vectorEffect={kenarGerekir(p.renk) ? 'non-scaling-stroke' : undefined}
                       />
                     </g>
-                    {n > 0 && p.sayi > 0 && yanG >= 12 && (
+                    {n > 0 && p.sayi > 0 && yanG >= (kosullu ? 30 : 12) && (
                       <text
                         x={px + yanG / 2}
                         y={taban - boy - 6}
@@ -228,7 +259,7 @@ export function KategorikSutunGrafigi({ tablo, sutun, sira, genislik, yukseklik,
                         style={{ paintOrder: 'stroke', stroke: RENK.kart, strokeWidth: 3, strokeLinejoin: 'round' }}
                         data-yan-sutun-sayisi
                       >
-                        {p.sayi}
+                        {yazi}
                       </text>
                     )}
                   </g>
@@ -310,6 +341,21 @@ export interface KategorikIstatistikProps {
   cetele?: boolean;
   /** Başlıktaki değişken türü (sayısal değişkenin değerlerinin sıklığında "sayısal değişken"); verilmezse kategorik */
   turAdi?: string;
+  /**
+   * Koşullu göreli sıklıklar (lise 10. sınıf ve üstü, MAT.10.2.1): iki yönlü tablonun altında yüzdeli tablo; her sütunun
+   * (anahtarın grubunun) ya da her satırın toplamı %100. Hangi toplamın payda olacağı tablonun üstünden seçilir.
+   */
+  kosullu?: boolean;
+  /** Koşullu tablonun açılıştaki paydası: sütun toplamları (varsayılan) ya da satır toplamları */
+  kosulluPayda?: KosulluPayda;
+}
+
+/** Koşullu göreli sıklığın paydası: anahtarın grubu (sütun) ya da gösterilen değişkenin kategorisi (satır) */
+export type KosulluPayda = 'sutun' | 'satir';
+
+/** "%68,8" (payda 0 ise "—") */
+function kosulluMetin(sayi: number, payda: number): string {
+  return payda > 0 ? `%${sayiMetni((sayi / payda) * 100, 1)}` : '—';
 }
 
 /** Sıklık tablosundaki çetelenin satır yüksekliği (px) */
@@ -336,7 +382,10 @@ export function KategorikIstatistik({
   tekYonluIleBirlikte = true,
   cetele = false,
   turAdi = 'kategorik değişken',
+  kosullu = false,
+  kosulluPayda = 'sutun',
 }: KategorikIstatistikProps) {
+  const [payda, setPayda] = useState<KosulluPayda>(kosulluPayda);
   const metinler = useMemo(() => sutunMetinleri(tablo, sutun).map((m) => m.deger), [tablo, sutun]);
   const f = useMemo(() => frekanslar(metinler, sira), [metinler, sira]);
   const tepe = useMemo(() => mod(metinler, sira), [metinler, sira]);
@@ -517,6 +566,85 @@ export function KategorikIstatistik({
               </p>
             </section>
           )}
+          {!cetele && kosullu && anahtar && capraz && (() => {
+            const gt = grupToplamlari(capraz);
+            const sutunlar = [
+              ...anahtar.kategoriler.map((k, j) => ({ ad: k, renk: anahtar.renkler.get(k), deger: (c: (typeof capraz)[number]) => c.sayilar[j], toplam: gt.sayilar[j] ?? 0 })),
+              ...(bosVar ? [{ ad: '(boş)', renk: BOS_KATEGORI_RENGI, deger: (c: (typeof capraz)[number]) => c.bos, toplam: gt.bos }] : []),
+            ];
+            return (
+              <section className="mt-4 rounded-[calc(var(--radius)-4px)] border border-border bg-card p-4" data-kosullu-tablo={payda}>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-base font-bold text-foreground">Koşullu göreli sıklıklar</h3>
+                  <div role="radiogroup" aria-label="Yüzdenin paydası" className="inline-flex gap-1 rounded-[calc(var(--radius)-6px)] bg-muted p-0.5">
+                    {([['sutun', `Her ${anahtar.ad} grubunda`], ['satir', `Her ${sutunAdi} kategorisinde`]] as const).map(([d, ad]) => (
+                      <button
+                        key={d}
+                        type="button"
+                        role="radio"
+                        aria-checked={payda === d}
+                        className={`h-11 rounded-[calc(var(--radius)-8px)] px-3 text-[13px] font-bold ${payda === d ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'}`}
+                        onClick={() => setPayda(d)}
+                        data-kosullu-payda={d}
+                      >
+                        {ad}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-[360px] text-[13px] tabular-nums text-foreground">
+                    <thead>
+                      <tr className="text-left text-muted-foreground">
+                        <th className="h-9 pr-4 font-bold">{sutunAdi}</th>
+                        {sutunlar.map((k) => (
+                          <th key={k.ad} className="pr-4 text-right font-bold">
+                            <span className="inline-flex items-center gap-1.5">
+                              <RenkNoktasi renk={k.renk} />
+                              {k.ad}
+                            </span>
+                          </th>
+                        ))}
+                        <th className="text-right font-bold">Toplam</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {capraz.map((c, i) => (
+                        <tr key={c.kategori} className="border-t border-border">
+                          <td className="h-9 pr-4">
+                            <span className="inline-flex items-center gap-2 font-semibold">
+                              <RenkNoktasi renk={kategoriRengi(c.kategori, i)} />
+                              {c.kategori}
+                            </span>
+                          </td>
+                          {sutunlar.map((k) => (
+                            <td key={k.ad} className="pr-4 text-right" data-kosullu-hucre={`${c.kategori}|${k.ad}`}>
+                              {kosulluMetin(k.deger(c), payda === 'sutun' ? k.toplam : c.toplam)}
+                            </td>
+                          ))}
+                          <td className="text-right font-bold">{kosulluMetin(c.toplam, payda === 'sutun' ? n : c.toplam)}</td>
+                        </tr>
+                      ))}
+                      <tr className="border-t border-border font-bold">
+                        <td className="h-9 pr-4">Toplam</td>
+                        {sutunlar.map((k) => (
+                          <td key={k.ad} className="pr-4 text-right">
+                            {kosulluMetin(k.toplam, payda === 'sutun' ? k.toplam : n)}
+                          </td>
+                        ))}
+                        <td className="text-right">%100</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-3 text-[13px] text-muted-foreground" data-kosullu-notu>
+                  {payda === 'sutun'
+                    ? `Her sütunun toplamı %100: Bir ${anahtar.ad} grubundaki verilerin yüzde kaçının o ${sutunAdi} kategorisinde olduğu. Gruplar farklı büyüklükteyse karşılaştırma bu yüzdelerle yapılır.`
+                    : `Her satırın toplamı %100: Bir ${sutunAdi} kategorisindeki verilerin yüzde kaçının o ${anahtar.ad} grubunda olduğu.`}
+                </p>
+              </section>
+            );
+          })()}
         </>
       )}
     </div>

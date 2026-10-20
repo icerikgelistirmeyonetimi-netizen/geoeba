@@ -5,6 +5,9 @@
  * tablodaki satır seçilir (iki yönlü). İki değerden biri eksik satırlar çizilmez, sayısı köşeye not düşülür.
  * Eksenler veriye göre güzel adımlarla ve kenar payıyla kurulur (0'dan başlamak zorunda değildir).
  * Balon, noktanın adını ve iki değişkeni birimleriyle yazar: "Gizem · Haftalık çalışma: 7 saat · Matematik puanı: 78".
+ * Eksenlerin adları ve uçlarında ok vardır. `bolgeler` (lise 11. sınıf, MAT.11.1.1 "bölgelere göre sayım oranı"): iki
+ * değişkenin aritmetik ortalamalarından kesikli çizgiler çizilir, düzlem dört bölgeye ayrılır ve her bölgedeki nokta sayısı
+ * köşesine yazılır (bolgeSayilari).
  */
 import React, { useMemo, useState } from 'react';
 import { dogrusalOlcek, gosterimOndaligi, payliGuzelEksen, yaziBoyu } from './grafik';
@@ -13,6 +16,32 @@ import { sayiMetni } from './istatistik';
 import { GECIS, RENK, adVeBirim, birimli, metinGenisligi, metniSigdir } from './grafikOrtak';
 import { kenarGerekir, satirRengi, type RenkEslemesi } from './kategorik';
 import { RenkLejanti } from './RenkLejanti';
+import { EksenOklari } from './EksenOklari';
+
+/** Dört bölgedeki nokta sayıları (ortalama çizgilerine göre); çizginin tam üstündeki noktalar `cizgide` */
+export interface BolgeSayilari {
+  ortX: number;
+  ortY: number;
+  sagUst: number;
+  solUst: number;
+  solAlt: number;
+  sagAlt: number;
+  cizgide: number;
+}
+
+export function bolgeSayilari(noktalar: readonly { x: number; y: number }[]): BolgeSayilari | null {
+  if (noktalar.length === 0) return null;
+  const ortX = noktalar.reduce((t, n) => t + n.x, 0) / noktalar.length;
+  const ortY = noktalar.reduce((t, n) => t + n.y, 0) / noktalar.length;
+  const b: BolgeSayilari = { ortX, ortY, sagUst: 0, solUst: 0, solAlt: 0, sagAlt: 0, cizgide: 0 };
+  const esit = (a: number, c: number) => Math.abs(a - c) < 1e-9;
+  for (const n of noktalar) {
+    if (esit(n.x, ortX) || esit(n.y, ortY)) b.cizgide++;
+    else if (n.x > ortX) n.y > ortY ? b.sagUst++ : b.sagAlt++;
+    else n.y > ortY ? b.solUst++ : b.solAlt++;
+  }
+  return b;
+}
 
 export interface SacilimGrafigiProps {
   tablo: VeriTablosu;
@@ -27,6 +56,8 @@ export interface SacilimGrafigiProps {
   azaltilmisHareket: boolean;
   /** Renk anahtarı: noktalar kategorik bir değişkene göre renklenir (yoksa tek renk); gruplar tek grafikte, lejantla */
   renkEslemi?: RenkEslemesi | null;
+  /** Ortalama çizgileri ve dört bölgedeki nokta sayıları (lise 11. sınıf) */
+  bolgeler?: boolean;
 }
 
 const SAG = 28;
@@ -72,6 +103,7 @@ export function SacilimGrafigi({
   yukseklik,
   azaltilmisHareket,
   renkEslemi = null,
+  bolgeler = false,
 }: SacilimGrafigiProps) {
   const [ustunde, setUstunde] = useState<number | null>(null);
   const W = Math.max(genislik, 240);
@@ -193,6 +225,40 @@ export function SacilimGrafigi({
           ))}
           <line x1={SOL} x2={SOL} y1={UST} y2={taban} stroke={RENK.metin} strokeWidth={1.5} />
           <line x1={SOL} x2={W - SAG} y1={taban} y2={taban} stroke={RENK.metin} strokeWidth={1.5} />
+          <EksenOklari x={SOL} ustY={UST} y={taban} sagX={W - SAG} />
+          {/* Bölgeler: iki ortalamanın kesikli çizgileri ve her bölgedeki nokta sayısı */}
+          {bolgeler &&
+            (() => {
+              const b = bolgeSayilari(noktalar);
+              if (!b) return null;
+              const bx = xOlcek.ileri(b.ortX);
+              const by = yOlcek.ileri(b.ortY);
+              const kose = (ad: keyof BolgeSayilari, x: number, y: number, sag: boolean) => (
+                <text
+                  key={ad}
+                  x={x}
+                  y={y}
+                  fontSize={fs}
+                  fontWeight={800}
+                  textAnchor={sag ? 'end' : 'start'}
+                  fill={RENK.vurgu}
+                  style={{ paintOrder: 'stroke', stroke: RENK.kart, strokeWidth: 4, strokeLinejoin: 'round' }}
+                  data-bolge-sayisi={ad}
+                >
+                  {b[ad]} nokta
+                </text>
+              );
+              return (
+                <g data-sacilim-bolgeleri style={{ pointerEvents: 'none' }}>
+                  <line x1={bx} x2={bx} y1={UST} y2={taban} stroke={RENK.vurgu} strokeWidth={2} strokeDasharray="6 5" data-ortalama-cizgisi="x" />
+                  <line x1={SOL} x2={W - SAG} y1={by} y2={by} stroke={RENK.vurgu} strokeWidth={2} strokeDasharray="6 5" data-ortalama-cizgisi="y" />
+                  {kose('solUst', SOL + 8, UST + fs + 4, false)}
+                  {kose('sagUst', W - SAG - 8, UST + fs + 4, true)}
+                  {kose('solAlt', SOL + 8, taban - 8, false)}
+                  {kose('sagAlt', W - SAG - 8, taban - 8, true)}
+                </g>
+              );
+            })()}
           {/* Renk anahtarı lejantı: kategori, rengi ve çizilen nokta sayısı (gruplar tek grafikte ayırt edilsin) */}
           {renklendirme && (
             <RenkLejanti eslem={renklendirme} x={SOL} y={lejantY} sagSinir={W - SAG} />
@@ -200,10 +266,10 @@ export function SacilimGrafigi({
 
           {/* Eksen adları: hangisinin yatay, hangisinin dikey olduğu okunsun */}
           <text x={SOL} y={UST - 14} fontSize={fs} fontWeight={700} fill={RENK.metin} data-eksen="y">
-            ↑ {metniSigdir(yAd, fs, W - SOL - SAG - 20, true)}
+            {metniSigdir(yAd, fs, W - SOL - SAG - 20, true)}
           </text>
           <text x={W - SAG} y={taban + 2 * fs + 14} fontSize={fs} fontWeight={700} textAnchor="end" fill={RENK.metin} data-eksen="x">
-            {metniSigdir(xAd, fs, (W - SOL - SAG) * 0.6, true)} →
+            {metniSigdir(xAd, fs, (W - SOL - SAG) * 0.6, true)}
           </text>
 
           {/* Noktalar */}

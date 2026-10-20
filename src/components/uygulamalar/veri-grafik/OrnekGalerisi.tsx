@@ -7,8 +7,8 @@
  * öğeler çizilir.
  * - En üstte, önceki tablo saklıysa "Önceki tabloya dön" (`data-onceki-tablo`) ve bir ayraç.
  * - Grup başlıkları (`ORNEK_KONULARI.ad`) bütün satırı kaplar; öğeler geniş menüde iki, darda tek sütundur.
- * - Konular kademeye göre (Kademe menüsü): İlkokul'da yalnız 1–4. sınıf, ortaokul ve lisede 5–8. sınıf ve
- *   zenginleştirme, Tüm araçlar'da hepsi (veri.ts: ornekKonulari).
+ * - Konular kademeye göre (Kademe menüsü): İlkokul'da yalnız 1–4. sınıf, Ortaokul'da 5–8. sınıf, Lise'de hazırlık ve
+ *   9–12. sınıf, Tüm araçlar'da hepsi (zenginleştirme dahil; veri.ts: ornekKonulari).
  * - Her öğe (≥ 56 px): örneğin kendi verisinden çizilmiş küçük grafik (önerilen grafik türünde), ad (ilk `span`),
  *   kısa açıklama, sınıf rozeti; yüklü örnekte onay işareti ve `aria-current`.
  */
@@ -17,7 +17,7 @@ import React from 'react';
 import { degiskenSutunlari, kategoriler, kategoriRengi } from './kategorik';
 import { seriRengi } from './grafik';
 import { onerilenSekme } from './rehber';
-import { gecerliDegerler, ornekKonulari, type OrnekVeri, type VeriTablosu } from './veri';
+import { gecerliDegerler, ornekKonulari, sinifAdi, type OrnekVeri, type VeriTablosu } from './veri';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 
 export interface OrnekGalerisiProps {
@@ -325,7 +325,7 @@ function OrnekOgesi({ ornek, yuklu, onYukle }: { ornek: OrnekVeri; yuklu: boolea
         )}
         {ornek.sinif !== null && (
           <span className="shrink-0 rounded-full bg-muted px-1.5 text-[12px] font-semibold leading-[18px] text-muted-foreground" data-sinif-rozeti>
-            {ornek.sinif}. sınıf
+            {sinifAdi(ornek.sinif)}
           </span>
         )}
       </span>

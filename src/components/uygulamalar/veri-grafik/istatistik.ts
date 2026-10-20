@@ -447,3 +447,65 @@ export function guzelEksen(min: number, max: number, hedefIsaretSayisi = 6): Eks
   }
   return { min: eksenMin, max: eksenMax, adim, isaretler };
 }
+
+// ── Lise ölçüleri: çeyrekler, korelasyon, histogram sınıfları ─────────────────
+
+/**
+ * Çeyrekler (lise 9. sınıf, MAT.9.6.1): sıralı verinin alt yarısının ortancası 1. çeyrek, üst yarısınınki 3. çeyrek; veri
+ * sayısı tekse ortanca iki yarıya da girmez. Çeyrekler açıklığı = 3. çeyrek − 1. çeyrek. İkiden az veride null.
+ */
+export function ceyrekler(degerler: readonly number[]): { q1: number; q3: number; aciklik: number } | null {
+  if (degerler.length < 2) return null;
+  const s = [...degerler].sort((a, b) => a - b);
+  const yari = Math.floor(s.length / 2);
+  const q1 = medyan(s.slice(0, yari)) as number;
+  const q3 = medyan(s.slice(s.length - yari)) as number;
+  return { q1, q3, aciklik: tamToplam([q3, -q1]) };
+}
+
+/** Pearson korelasyon katsayısı r (lise 11. sınıf, MAT.11.1.1); ikiden az çiftte ya da sabit değişkende null */
+export function korelasyon(xs: readonly number[], ys: readonly number[]): number | null {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 2) return null;
+  const mx = xs.slice(0, n).reduce((t, x) => t + x, 0) / n;
+  const my = ys.slice(0, n).reduce((t, y) => t + y, 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    sxy += (xs[i] - mx) * (ys[i] - my);
+    sxx += (xs[i] - mx) ** 2;
+    syy += (ys[i] - my) ** 2;
+  }
+  if (sxx === 0 || syy === 0) return null;
+  return sxy / Math.sqrt(sxx * syy);
+}
+
+export interface HistogramSinifi {
+  /** sınıfın alt sınırı (dahil) */
+  alt: number;
+  /** üst sınırı (hariç; son sınıfta dahil) */
+  ust: number;
+  sayi: number;
+}
+
+/**
+ * Histogram sınıfları (lise 9. sınıf): eşit genişlikli, "güzel" genişlikte (1, 2, 5 × 10ⁿ) yaklaşık `hedef` sınıf; ilk
+ * sınıf en küçük değeri içeren genişlik katından başlar. Her değer [alt, üst) aralığına, en büyük değer son sınıfa girer.
+ */
+export function histogramSiniflari(degerler: readonly number[], hedef = 6, genislik?: number): { genislik: number; siniflar: HistogramSinifi[] } {
+  const gecerli = degerler.filter((d) => Number.isFinite(d));
+  if (gecerli.length === 0) return { genislik: genislik ?? 1, siniflar: [] };
+  const min = Math.min(...gecerli);
+  const max = Math.max(...gecerli);
+  const w = genislik && genislik > 0 ? genislik : guzelAdim(max - min || 1, hedef);
+  const bas = Math.floor(min / w + 1e-9) * w;
+  const sayi = Math.max(1, Math.floor((max - bas) / w + 1e-9) + 1);
+  const siniflar: HistogramSinifi[] = Array.from({ length: sayi }, (_, i) => ({
+    alt: tamToplam([bas, i * w]),
+    ust: tamToplam([bas, (i + 1) * w]),
+    sayi: 0,
+  }));
+  for (const d of gecerli) siniflar[Math.min(sayi - 1, Math.floor((d - bas) / w + 1e-9))].sayi++;
+  return { genislik: w, siniflar };
+}

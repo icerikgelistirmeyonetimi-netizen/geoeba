@@ -11,7 +11,12 @@
  * - 7. ve 8. sınıf: saçılım dışındaki grafikler; ortalama mutlak sapma var, standart sapma (lise ölçüsü) yok.
  * - 5–8. sınıf: iki veri grubu tek grafikte, ikili gruplar hâlinde karşılaştırılır (sütunlar ve nokta yığınları yan
  *   yana; "önce birinci grup, sonra ikinci grup" değil).
- * Saçılım sekmesi tüm düzeylerde kapalıdır. Nokta grafiğindeki sütun dönüşümü yerine ayrı Sütun sekmesi kullanılır.
+ * - Lise (hazırlık ve 9–12. sınıf; MAT.H.5.1, 9.6.1–9.6.2, 10.2.1–10.2.2, 11.1.1–11.1.2, 12.5.1): Kök-yaprak dışındaki
+ *   grafikler, bütün ölçüler (standart sapma dahil); iki grup tek grafikte karşılaştırılır. 9–12. sınıfta histogram, kutu
+ *   grafiği ve çeyrekler açıklığı (MAT.9.6.1); 10–12. sınıfta koşullu göreli sıklıklar (MAT.10.2.1); 11–12. sınıfta
+ *   saçılım grafiği, bölgelere göre sayım ve korelasyon katsayısı (MAT.11.1.1).
+ * Saçılım sekmesi 11. ve 12. sınıf dışındaki bütün düzeylerde ve sınıfsız tabloda kapalıdır (alan uzmanı, 6. tur; lise
+ * kararı: kullanıcı, 20.10). Nokta grafiğindeki sütun dönüşümü yerine ayrı Sütun sekmesi kullanılır.
  * Örneğe bağlı olmayan tabloda bütün sayısal ölçüler kullanılabilir.
  *
  * İlkokul (alan uzmanı incelemesi, 4. tur, satır 181; TYMM MAT.1.4.1, MAT.2.4.1, MAT.3.4.1, MAT.4.4.2): kategorik veri,
@@ -58,6 +63,10 @@ export interface SinifKurallari {
   cetele: boolean;
   /** Eski kayıt uyumluluğu: dönüşüm kapalı; sütun grafiği ayrı sekmede. */
   sutunaDonustur: boolean;
+  /** Lise 9–12: Sütun'da histogram, Nokta'da kutu grafiği, İstatistik'te çeyrekler açıklığı (MAT.9.6.1); verilmezse yok */
+  histogramVeKutu?: boolean;
+  /** Lise 10–12: iki kategorik değişkende koşullu göreli sıklıklar (tablo ve yüzdeli sütunlar; MAT.10.2.1); verilmezse yok */
+  kosulluGoreliSiklik?: boolean;
 }
 
 const TUM_SEKMELER: readonly GrafikTuru[] = ['nokta', 'sutun', 'cizgi', 'daire', 'istatistik'];
@@ -76,6 +85,22 @@ const ILKOKUL_ORTAK = {
   cetele: true,
 } as const;
 const SIKLIK_TABLOSU = 'Çetele ve sıklık tablosu';
+
+/** Hazırlık: saçılım ve kök-yaprak dışındaki grafikler, bütün ölçüler; iki grup tek grafikte */
+const HAZIRLIK: Omit<SinifKurallari, 'sinif'> = {
+  sekmeler: TUM_SEKMELER,
+  olculer: HEPSI,
+  yuzdeVeAci: true,
+  tekYonluTabloIleBirlikte: true,
+  tekGrafikteKarsilastir: true,
+  ...ORTAOKUL_TEMSILLERI,
+};
+/** 9. sınıf: hazırlığa ek olarak histogram, kutu grafiği ve çeyrekler açıklığı */
+const LISE_9: Omit<SinifKurallari, 'sinif'> = { ...HAZIRLIK, histogramVeKutu: true };
+/** 10. sınıf: 9. sınıfa ek olarak koşullu göreli sıklıklar */
+const LISE_10: Omit<SinifKurallari, 'sinif'> = { ...LISE_9, kosulluGoreliSiklik: true };
+/** 11. ve 12. sınıf: 10. sınıfa ek olarak saçılım grafiği (iki nicel değişkenin ilişkisi) */
+const LISE_11: Omit<SinifKurallari, 'sinif'> = { ...LISE_10, sekmeler: ['nokta', 'sutun', 'cizgi', 'daire', 'sacilim', 'istatistik'] };
 
 const KURALLAR: Record<SinifDuzeyi, Omit<SinifKurallari, 'sinif'>> = {
   1: {
@@ -138,6 +163,11 @@ const KURALLAR: Record<SinifDuzeyi, Omit<SinifKurallari, 'sinif'>> = {
     tekGrafikteKarsilastir: true,
     ...ORTAOKUL_TEMSILLERI,
   },
+  H: HAZIRLIK,
+  9: LISE_9,
+  10: LISE_10,
+  11: LISE_11,
+  12: LISE_11,
 };
 
 /** Sınıfı olmayan tablo: saçılım dışındaki grafikler ve bütün ölçüler. */

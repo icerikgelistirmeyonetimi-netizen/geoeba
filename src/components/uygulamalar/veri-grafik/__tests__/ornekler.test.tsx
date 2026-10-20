@@ -418,11 +418,11 @@ describe('Örnek galerisi (SSR)', () => {
   const galeri = (ek: Partial<React.ComponentProps<typeof OrnekGalerisi>> = {}) =>
     renderToStaticMarkup(<OrnekGalerisi yukluOrnekId={null} onceki={null} onYukle={bos} onOncekiTabloyaDon={bos} genislik={860} {...ek} />);
 
-  it('Tüm araçlar: 20 örnek (16 ortaokul + 4 ilkokul): 20 data-ornek ve 20 role="menuitem"; 9 konu; ilk span örneğin adı; mini grafik önerilen türde ve dolu', () => {
+  it('Tüm araçlar: 32 örnek (4 ilkokul + 16 ortaokul + 12 lise): 32 data-ornek ve 32 role="menuitem"; 14 konu; ilk span örneğin adı; mini grafik önerilen türde ve dolu', () => {
     const html = galeri();
-    expect(html.match(/data-ornek="/g)).toHaveLength(20);
-    expect(html.match(/role="menuitem"/g)).toHaveLength(20);
-    expect(html.match(/data-ornek-konusu="/g)).toHaveLength(9);
+    expect(html.match(/data-ornek="/g)).toHaveLength(32);
+    expect(html.match(/role="menuitem"/g)).toHaveLength(32);
+    expect(html.match(/data-ornek-konusu="/g)).toHaveLength(14);
     for (const k of ORNEK_KONULARI) expect(html).toContain(`aria-label="${k.ad}"`);
     expect(html).not.toMatch(BOZUK);
     expect(html).not.toContain('data-onceki-tablo');
@@ -435,7 +435,7 @@ describe('Örnek galerisi (SSR)', () => {
       expect(metin(ilkSpan.slice(0, ilkSpan.indexOf('</span></span>') + 14)), o.id).toBe(o.ad);
       expect(ic, o.id).toContain(`data-mini-grafik="${o.acilis?.sekme ?? o.onerilenGrafik}"`);
       expect(dugme, o.id).toContain('min-h-[56px]');
-      if (o.sinif !== null) expect(metin(ic), o.id).toContain(`${o.sinif}. sınıf`);
+      if (o.sinif !== null) expect(metin(ic), o.id).toContain(o.sinif === 'H' ? 'Hazırlık' : `${o.sinif}. sınıf`);
       // Mini grafik boş değil: çerçeveden başka şekiller var
       expect((ic.match(/<(circle|rect|path) /g) ?? []).length, o.id).toBeGreaterThan(3);
     }
@@ -452,9 +452,9 @@ describe('Örnek galerisi (SSR)', () => {
     expect(yuklu).toMatch(/<button[^>]*aria-current="true"[^>]*data-ornek="kitap"/);
   });
 
-  it('önceki tablo: en üstte "Önceki tabloya dön" (ad · satır sayısı) ve ayraç; 21 menuitem', () => {
+  it('önceki tablo: en üstte "Önceki tabloya dön" (ad · satır sayısı) ve ayraç; 33 menuitem', () => {
     const html = galeri({ onceki: { ad: 'Boy (cm)', satirSayisi: 24 } });
-    expect(html.match(/role="menuitem"/g)).toHaveLength(21);
+    expect(html.match(/role="menuitem"/g)).toHaveLength(ORNEK_VERILER.length + 1);
     expect(html.indexOf('data-onceki-tablo')).toBeLessThan(html.indexOf('data-ornek="'));
     const m = metin(html);
     expect(m).toContain('Önceki tabloya dön');
