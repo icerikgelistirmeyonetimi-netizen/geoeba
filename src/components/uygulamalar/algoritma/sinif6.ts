@@ -771,7 +771,7 @@ export const SINIF6: readonly Unite[] = [
         { ad: 'mod’u bölüm sanmak', metin: '"sıra mod 3" ifadesinin bölümü verdiğini sanmak; mod kalanı verir. Adım adım çalıştırınca karşılaştırmanın iki yanının değeri görünür.' },
       ],
       sorular: [
-        '0 neden 3’ün katıdır? Bu 4. görevde neye yol açtı?',
+        'Sayaç geç artınca 1. saksıda sıra 0 olur ve 0 mod 3 = 0 çıkar. Bu, 4. görevde neye yol açtı?',
         'Hem 2’nin hem 3’ün katı olan sayılar neden 6’nın katıdır?',
         '30 saksılık sırada kaç saksı 4’ün katıdır?',
         'Tek sayıları bulmak için hangi koşulu yazardınız?',

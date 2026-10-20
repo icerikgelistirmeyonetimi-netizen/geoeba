@@ -922,10 +922,12 @@ export function getSolidPropertyCounts(type: Solid3DType): { vertices: number; e
       return { vertices: 6, edges: 9, faces: 5, eulerValid: 6 - 9 + 5 === 2 };
     case 'pyramid':
       return { vertices: 5, edges: 8, faces: 5, eulerValid: 5 - 8 + 5 === 2 };
+    // Eğri yüzeyli cisimlerde köşe ve ayrıt sayılmaz (koninin tepe noktası köşe değildir); ilkokul şeridi bu
+    // sayıları gösterir ve MAT.3.3.1 içeriğindeki tabloyla (silindir ve koni: 0 köşe, 0 ayrıt) aynı olmalıdır.
     case 'cone':
-      return { vertices: 1, edges: 1, faces: 2, eulerValid: false };
+      return { vertices: 0, edges: 0, faces: 2, eulerValid: false };
     case 'cylinder':
-      return { vertices: 0, edges: 2, faces: 3, eulerValid: false };
+      return { vertices: 0, edges: 0, faces: 3, eulerValid: false };
     case 'sphere':
       return { vertices: 0, edges: 0, faces: 1, eulerValid: false };
     default:

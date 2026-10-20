@@ -1450,7 +1450,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       daire: 'Haftalık boylar paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
       istatistik: 'Hesaplama adımları boyların ortalamasını verir; fidenin haftadan haftaya nasıl uzadığını Çizgi grafiği gösterir.',
     },
-    ogretmenNotu: 'Boy oran ölçeğidir (0 cm gerçek bir sıfır): Yüzde artış anlamlıdır (1. → 2. hafta %150, 7. → 8. hafta yaklaşık %4,3). Bir noktaya dokununca değişim etiketi farkı ve yüzdeyi birlikte yazar: "3 cm artış (%150)". Sıcaklık örneğiyle karşılaştırın: Orada etiket yalnız farkı yazar, çünkü °C\'de yüzde anlamsızdır.',
+    ogretmenNotu: 'Boy oran ölçeğidir (0 cm gerçek bir sıfır): Yüzde artış anlamlıdır (1. → 2. hafta %120, 7. → 8. hafta yaklaşık %4,3). Bir noktaya dokununca değişim etiketi farkı ve yüzdeyi birlikte yazar: "3 cm artış (%120)". Sıcaklık örneğiyle karşılaştırın: Orada etiket yalnız farkı yazar, çünkü °C\'de yüzde anlamsızdır.',
     olustur: () =>
       tabloOlustur(
         ['Hafta', 'Boy (cm)'],
@@ -1775,7 +1775,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     yuzdeDegisim: { 'Sıcaklık (°C)': false, 'Satış (bardak)': true },
     acilis: { sekme: 'sacilim' },
     hikaye: {
-      arastirmaSorusu: 'Örnekteki okul kantininde ocak ayındaki günlük hava sıcaklığı ile satılan sıcak çikolata sayısı nasıl ilişkilidir?',
+      arastirmaSorusu: 'Örnekteki okul kantininde günlük hava sıcaklığı ile satılan sıcak çikolata sayısı nasıl ilişkilidir?',
       kim: 'Bir ortaokulun kantini',
       neZaman: 'Kasım 2025 – Mayıs 2026 arasında 12 pazartesi',
       nasil: 'Kantin görevlisi satılan sıcak çikolata bardağını ve öğle saatindeki hava sıcaklığını not etti.',
@@ -1985,7 +1985,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     daire: 'siklik',
     acilis: { sekme: 'nokta', secenekler: { ortalama: false, ortanca: false, oms: false, etiketler: false }, sutunModu: false },
     hikaye: {
-      arastirmaSorusu: '3-A sınıfındaki öğrencilerin okula geliş biçimlerinin dağılımı nasıldır?',
+      arastirmaSorusu: '3-B sınıfındaki öğrencilerin okula geliş biçimlerinin dağılımı nasıldır?',
       kim: '3-B sınıfındaki 18 öğrenci',
       neZaman: 'Şubat 2026, bir sabah',
       nasil: 'Sabah yoklamasında her öğrenci okula nasıl geldiğini söyledi; nöbetçi öğrenci çetele tuttu. Her satır bir öğrenci.',

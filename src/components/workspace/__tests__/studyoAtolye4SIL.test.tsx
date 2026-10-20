@@ -357,6 +357,9 @@ describe('[180] 3B ilkokul: eksen, koordinat, negatif sayı yok; cisim özellikl
     expect(ilkokulCisimOzellikleri(cisim('triangular_prism', 4, 3, 2))).toEqual({ yuz: 5, kose: 6, ayrit: 9, yuzler: '2 üçgen, 3 dikdörtgen' });
     expect(ilkokulCisimOzellikleri(cisim('cylinder', 2, 3, 2)).yuzler).toBe('2 daire, 1 eğri yüz');
     expect(ilkokulCisimOzellikleri(cisim('sphere', 2, 2, 2)).yuzler).toBe('1 eğri yüz');
+    // MAT.3.3.1 içeriğindeki tabloyla aynı: eğri yüzeyli cisimlerde köşe ve ayrıt sayılmaz
+    expect(ilkokulCisimOzellikleri(cisim('cylinder', 2, 3, 2))).toMatchObject({ yuz: 3, kose: 0, ayrit: 0 });
+    expect(ilkokulCisimOzellikleri(cisim('cone', 2, 3, 2))).toMatchObject({ yuz: 2, kose: 0, ayrit: 0 });
     const ozet = ilkokulOzellikMetni(cisim('cube', 3, 3, 3));
     expect(ozet).toBe('6 yüz (6 kare) · 8 köşe · 12 ayrıt');
     expect(ozet).not.toMatch(/br|V =|A =/);

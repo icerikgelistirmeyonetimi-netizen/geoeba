@@ -2163,7 +2163,7 @@ export const ilkokulLevel: Level = {
             },
             {
               "id": "topic-4-1-3-sayilarin-siralama",
-              "title": "Sayıların Sıralama",
+              "title": "Sayıları Sıralama",
               "code": "MAT.4.1.3",
               "category": "sayi",
               "badge": "Sayıların Sıral",
@@ -2360,7 +2360,7 @@ export const ilkokulLevel: Level = {
             },
             {
               "id": "topic-4-2-5-bir-coklugun-basit-kesir-kadar",
-              "title": "Bir Çokluğun Basit Kesir Kadarı ve Basit Kasir Kadarı Verilen Çokluk",
+              "title": "Bir Çokluğun Basit Kesir Kadarı ve Basit Kesir Kadarı Verilen Çokluk",
               "code": "MAT.4.2.5",
               "category": "sayi",
               "badge": "Bir Çokluğun Ba",
@@ -2557,7 +2557,7 @@ export const ilkokulLevel: Level = {
             },
             {
               "id": "topic-4-3-4-carpma-ve-bolme-tahmin",
-              "title": "Çarpma ve Bölme Tahmin",
+              "title": "Çarpma ve Bölme İşlemlerinde Tahmin",
               "code": "MAT.4.3.4",
               "category": "hepsi",
               "badge": "Çarpma ve Bölme",

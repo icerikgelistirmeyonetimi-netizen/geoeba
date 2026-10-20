@@ -210,6 +210,9 @@ function cozumle(verilen: OklidOlculeri): OklidCozumu {
   else if (v.c !== undefined && v.a !== undefined) {
     if (v.a <= v.c) fail(`Hipotenüs dik kenardan uzun olmalı (hipotenüs ${yazi(v.a)}, dik kenar ${yazi(v.c)}). Örnek: “hipotenüsü 10 ve bir dik kenarı 6 olan Öklid üçgeni çiz”.`);
     c = v.c; b = Math.sqrt(v.a * v.a - v.c * v.c);
+  } else if (v.b !== undefined && v.a !== undefined) {
+    if (v.a <= v.b) fail(`Hipotenüs dik kenardan uzun olmalı (hipotenüs ${yazi(v.a)}, dik kenar ${yazi(v.b)}). Örnek: “hipotenüsü 10 ve bir dik kenarı 6 olan Öklid üçgeni çiz”.`);
+    b = v.b; c = Math.sqrt(v.a * v.a - v.b * v.b);
   } else if (v.p !== undefined && v.k !== undefined) { p = v.p; k = v.k; }
   else if (v.h !== undefined && v.p !== undefined) { h = v.h; p = v.p; k = h * h / p; }
   else if (v.h !== undefined && v.k !== undefined) { h = v.h; k = v.k; p = h * h / k; }
@@ -231,15 +234,23 @@ function cozumle(verilen: OklidOlculeri): OklidCozumu {
   } else if (v.c !== undefined && v.h !== undefined) {
     if (v.h >= v.c) fail(`Yükseklik dik kenardan kısa olmalı (dik kenar ${yazi(v.c)}, yükseklik ${yazi(v.h)}). Örnek: “dik kenarı 5 ve yüksekliği 4 olan Öklid üçgeni çiz”.`);
     c = v.c; h = v.h; p = Math.sqrt(c * c - h * h); k = h * h / p;
+  } else if (v.b !== undefined && v.h !== undefined) {
+    // AHC dik üçgeninde b² = k² + h²
+    if (v.h >= v.b) fail(`Yükseklik dik kenardan kısa olmalı (dik kenar ${yazi(v.b)}, yükseklik ${yazi(v.h)}). Örnek: “dik kenarı 5 ve yüksekliği 4 olan Öklid üçgeni çiz”.`);
+    b = v.b; h = v.h; k = Math.sqrt(b * b - h * h); p = h * h / k;
   } else if (v.c !== undefined && v.b === undefined && (v.p !== undefined || v.k !== undefined)) {
     // c² = p·a ve a = p + k: tek dik kenarla p ya da k
     if (v.p !== undefined) { if (v.p >= v.c) fail(`p (|BH|) dik kenar |AB|'den kısa olmalı (|AB| = ${yazi(v.c)}, p = ${yazi(v.p)}). Örnek: “dik kenarı 5 ve p = 3 olan Öklid üçgeni çiz”.`); c = v.c; p = v.p; k = c * c / p - p; }
     else { c = v.c; k = v.k!; const a0 = (k + Math.sqrt(k * k + 4 * c * c)) / 2; p = a0 - k; }
+  } else if (v.b !== undefined && v.c === undefined && (v.p !== undefined || v.k !== undefined)) {
+    // b² = k·a ve a = p + k: tek dik kenar |AC| ile k ya da p
+    if (v.k !== undefined) { if (v.k >= v.b) fail(`k (|HC|) dik kenar |AC|'den kısa olmalı (|AC| = ${yazi(v.b)}, k = ${yazi(v.k)}). Örnek: “|AC| = 5 ve k = 3 olan Öklid üçgeni çiz”.`); b = v.b; k = v.k; p = b * b / k - k; }
+    else { b = v.b; p = v.p!; const a0 = (p + Math.sqrt(p * p + 4 * b * b)) / 2; k = a0 - p; }
   } else if (v.h !== undefined) {
     h = v.h; p = 0.75 * h; k = h * h / p;
     notlar.push('p = 0,75 × h alındı (3-4-5 üçgeni oranı).');
-  } else if (v.c !== undefined) {
-    fail(`Tek dik kenar yetmez; diğer dik kenarı ya da hipotenüsü de yazın (ör. “dik kenarları ${yazi(v.c)} ve 8 olan Öklid üçgeni çiz”).`);
+  } else if (v.c !== undefined || v.b !== undefined) {
+    fail(`Tek dik kenar yetmez; diğer dik kenarı ya da hipotenüsü de yazın (ör. “dik kenarları ${yazi((v.c ?? v.b)!)} ve 8 olan Öklid üçgeni çiz”).`);
   } else if (v.p !== undefined || v.k !== undefined) {
     const harf = v.p !== undefined ? 'p' : 'k';
     fail(`${harf} tek başına yetmez; yanına ${harf === 'p' ? 'k' : 'p'}, yüksekliği ya da hipotenüsü yazın (ör. “p = ${yazi(v.p ?? 4)} ve k = ${yazi(v.k ?? 9)} olan Öklid üçgeni çiz”).`);

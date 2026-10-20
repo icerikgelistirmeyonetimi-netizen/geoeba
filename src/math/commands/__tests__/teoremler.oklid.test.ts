@@ -245,6 +245,9 @@ describe('teoremler.oklidUcgeni', () => {
     ['hipotenüsü 10 ve yüksekliği 6 olan Öklid üçgeni çiz', /yarısını geçemez/],
     ['p = 4 olan Öklid üçgeni çiz', /tek başına yetmez/],
     ['dik kenarı 6 olan Öklid üçgeni çiz', /Tek dik kenar yetmez/],
+    ['|AC| = 12 olan Öklid üçgeni çiz', /Tek dik kenar yetmez/],
+    ['|AC| = 5 ve |HC| = 6 olan Öklid üçgeni çiz', /kısa olmalı/],
+    ['|AC| = 5 ve |AH| = 6 olan Öklid üçgeni çiz', /kısa olmalı/],
     ['1 2 3 4 Öklid üçgeni çiz', /hangi kenara/],
   ])('reddeder: %s', (text, re) => {
     const m = bad(text);
@@ -560,6 +563,12 @@ describe('teoremler.oklid: ölçü okuma (doğrulama)', () => {
     ['|BC| = 10 ve |AB| = 6 olan Öklid üçgeni çiz', { a: 10, c: 6, b: 8 }],
     ['|AH| = 6 ve |BH| = 4 olan Öklid üçgeni çiz', { h: 6, p: 4, k: 9 }],
     ['hipotenüsü 10 yüksekliği 5 olan Öklid üçgeni çiz', { a: 10, h: 5, p: 5, k: 5 }],
+    // |AC| (b) da |AB| (c) gibi tek başına diğer ölçülerle birlikte kullanılır
+    ['|AC| = 12 ve |BC| = 13 olan Öklid üçgeni çiz', { b: 12, a: 13, c: 5 }],
+    ['hipotenüsü 13 ve |AC| = 12 olan Öklid üçgeni çiz', { a: 13, b: 12, c: 5 }],
+    ['|AC| = 5 ve |AH| = 4 olan Öklid üçgeni çiz', { b: 5, h: 4, k: 3, p: 16 / 3 }],
+    ['|AC| = 5 ve |HC| = 3 olan Öklid üçgeni çiz', { b: 5, k: 3, a: 25 / 3, c: 20 / 3 }],
+    ['|AC| = 8 ve |BH| = 2 olan Öklid üçgeni çiz', { b: 8, p: 2, k: Math.sqrt(65) - 1 }],
   ])('ölçü: %s', (text, beklenen) => {
     const r = ok(text);
     const g = expectOklidGeometry(r.objects);
@@ -580,6 +589,11 @@ describe('teoremler.oklid: ölçü okuma (doğrulama)', () => {
     const r = ok('|AB| = 5 ve |AC| = 12 olan Pisagor şekli çiz');
     const { B, C } = expectPisagorGeometry(r.objects);
     expect(dist(B, C)).toBeCloseTo(13, 9);
+    // dik kenar |AC| ile hipotenüs de yeter
+    const r2 = ok('|AC| = 12 ve |BC| = 13 olan Pisagor şekli çiz');
+    const g2 = expectPisagorGeometry(r2.objects);
+    expect(dist(g2.B, g2.C)).toBeCloseTo(13, 9);
+    expect(dist(g2.A, g2.B)).toBeCloseTo(5, 9);
   });
 
   it('p ile k eşitken "küçük kök" notu düşülmez', () => {

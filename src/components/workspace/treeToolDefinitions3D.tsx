@@ -121,7 +121,7 @@ export const TREE_TOOL_GROUPS_3D: TreeTool3DGroup[] = [
     defaultExpanded: true,
     tools: [
       { id: 'create_cube', kind: 'solid', solidType: 'cube', name: 'Küp', description: 'Altı kare yüzü eşit olan prizma.', icon: <GeometryToolIcon kind="cube" />, iconColor: R.cember },
-      { id: 'create_sphere', kind: 'solid', solidType: 'sphere', name: 'Küre', description: 'Merkeze eşit uzaklıktaki noktaların oluşturduğu cisim.', icon: <GeometryToolIcon kind="sphere" />, iconColor: R.cember },
+      { id: 'create_sphere', kind: 'solid', solidType: 'sphere', name: 'Küre', description: 'Yüzeyindeki her nokta merkezine eşit uzaklıkta olan cisim.', icon: <GeometryToolIcon kind="sphere" />, iconColor: R.cember },
       { id: 'create_cylinder', kind: 'solid', solidType: 'cylinder', name: 'Silindir', description: 'İki daire taban ve kavisli yan yüzey.', icon: <GeometryToolIcon kind="cylinder" />, iconColor: R.cember },
       { id: 'create_prism', kind: 'solid', solidType: 'prism', name: 'Dikdörtgen Prizma', description: 'Karşılıklı yüzleri eş dikdörtgen olan prizma.', icon: <GeometryToolIcon kind="prism" />, iconColor: R.cember },
       { id: 'kare_prizma', kind: 'solid', solidType: 'prism', preset: { width: 3, depth: 3, height: 4 }, name: 'Kare Prizma', description: 'Tabanı kare olan dik prizma (3 × 3 taban, 4 br yükseklik).', icon: <GeometryToolIcon kind="squarePrism" />, iconColor: R.cember },
