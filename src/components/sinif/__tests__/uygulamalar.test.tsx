@@ -92,7 +92,7 @@ describe('ilkokul kademesi (alan uzmanları, 2. ve 4. tur)', () => {
     expect(o?.Bilesen).toBe(genel?.Bilesen);
     // Açıklamalar uyarlanırken gövde bileşenleri korunur.
     for (const u of kademeninUygulamalari(true)) expect(u.Bilesen).toBe(uygulamaBul(u.id)?.Bilesen);
-    expect(kademeninUygulamalari(true).find((u) => u.id === 'algoritma')?.ad).toBe('Adım Adım Matematik');
+    expect(kademeninUygulamalari(true).find((u) => u.id === 'algoritma')?.ad).toBe('Algoritma');
   });
 
   it('ilkokul açıklamaları çizim ve veri araçlarının bu oturumdaki kapsamını anlatır', () => {
@@ -105,7 +105,7 @@ describe('ilkokul kademesi (alan uzmanları, 2. ve 4. tur)', () => {
     const Bilesen = uygulamaBul('algoritma')!.Bilesen;
     try {
       vi.mocked(useIlkokulKipi).mockReturnValue(true);
-      expect(renderToStaticMarkup(<Bilesen />)).toContain('Adım Adım Matematik hazırlanıyor…');
+      expect(renderToStaticMarkup(<Bilesen />)).toContain('Algoritma hazırlanıyor…');
       vi.mocked(useIlkokulKipi).mockReturnValue(false);
       expect(renderToStaticMarkup(<Bilesen />)).toContain('Algoritma hazırlanıyor…');
     } finally {

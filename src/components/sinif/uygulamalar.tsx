@@ -156,7 +156,7 @@ const ILKOKUL_UYARLAMALARI: Readonly<Record<string, Partial<Pick<UygulamaManifes
   [CIZIM_KIMLIGI]: { aciklama: 'Şekilleri çiz, ölç ve geometrik cisimleri keşfet.' },
   [veriGrafikManifesti.id]: { aciklama: 'Nesne ve şekil grafikleri oluştur; çetele ve sıklık tablolarını incele.' },
   olasilik: olasilikIlkokulManifesti,
-  algoritma: { ad: 'Adım Adım Matematik', kisaAd: 'Adım Adım Matematik', aciklama: 'Adımları sırala, örüntüleri keşfet ve robotu hedefine ulaştır.' },
+  algoritma: { ad: 'Algoritma', kisaAd: 'Algoritma', aciklama: 'Adımları sırala, örüntüleri keşfet ve robotu hedefine ulaştır.' },
 };
 
 /** Masaüstü, görev çubuğu ve Başlat menüsünün kademeye göre listesi (sıra korunur) */

@@ -102,7 +102,7 @@ export function SiniflarSayfasi({ kayit, koyu, onSinif, devam, onDevam }: { kayi
       <div className="mx-auto flex max-w-[1180px] flex-col gap-5 px-5 py-5">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="font-baslik text-[30px] font-semibold leading-tight text-foreground">{oturumKademesi === 'ilkokul' ? 'Adım Adım Matematik' : 'Algoritma Laboratuvarı'}</h1>
+            <h1 className="font-baslik text-[30px] font-semibold leading-tight text-foreground">{oturumKademesi === 'ilkokul' ? 'Algoritma' : 'Algoritma Laboratuvarı'}</h1>
             <p className="mt-1 text-[15px] font-semibold text-muted-foreground">Robotla, dronla ve çizgi robotuyla matematiği adım adım keşfet.</p>
           </div>
           {devam && (
