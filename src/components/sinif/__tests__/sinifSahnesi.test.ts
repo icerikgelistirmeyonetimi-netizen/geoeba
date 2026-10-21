@@ -308,27 +308,26 @@ describe('posterNormali / posterGeometrisi', () => {
 describe('public/sinif/data/sinif.json posters sözleşmesi', () => {
   const kok = path.resolve(__dirname, '../../../../public/sinif');
   const veri = JSON.parse(readFileSync(path.join(kok, 'data/sinif.json'), 'utf8')) as import('../sinifSahnesi').SinifVerisi;
-  const ORAN = 1100 / 1496;
+  // Kullanıcının verdiği üçlü görsel (İstiklâl Marşı · portre · Gençliğe Hitabe), boyalı dış kenarı kırpılmış hâliyle
+  const ORAN = 1942 / 1044;
 
-  it('üç poster soldan sağa istiklal, portre, hitabe; hepsi geçerli ve dokuları diskte', () => {
-    expect(veri.posters?.map((p) => p.id)).toEqual(['istiklal', 'portre', 'hitabe']);
-    for (const p of veri.posters!) {
-      expect(modul.posterGecerli(p)).toBe(true);
-      expect(existsSync(path.join(kok, p.texture))).toBe(true);
-    }
-    // Soldan sağa: TL.x artan
-    const xler = veri.posters!.map((p) => p.corners[0][0]);
-    expect(xler[0]).toBeLessThan(xler[1]);
-    expect(xler[1]).toBeLessThan(xler[2]);
-    // Portre ortada (x = 0) ve diğerlerinden büyük
-    expect(veri.posters![1].corners[0][0] + veri.posters![1].corners[1][0]).toBeCloseTo(0, 6);
-    expect(veri.posters![1].width).toBeGreaterThan(veri.posters![0].width);
+  it('tahtanın üstünde TEK poster (üçlü tek çerçevede; kullanıcı isteği 2026-10-21): geçerli, dokusu diskte, ortada', () => {
+    expect(veri.posters?.map((p) => p.id)).toEqual(['ataturk-kosesi']);
+    const p = veri.posters![0];
+    expect(modul.posterGecerli(p)).toBe(true);
+    expect(p.texture).toBe('duvar/ataturk-kosesi.jpg');
+    expect(existsSync(path.join(kok, p.texture))).toBe(true);
+    // Ortada (x = 0) ve tahta gövdesinden dar: 0.62 m'lik çerçevede ≈ 1.05 m genişlikte kâğıt
+    expect(p.corners[0][0] + p.corners[1][0]).toBeCloseTo(0, 6);
+    expect(p.width).toBeGreaterThan(0.95);
+    expect(p.width).toBeLessThan(1.15);
+    // Tavana yapışık değil (kullanıcı, 2026-10-21): üst kenar tavanın (3.10 m) en az 15 cm altında
+    expect(p.corners[0][1]).toBeLessThan(3.1 - 0.15);
   });
 
-  it('köşeler düzlemsel, en-boy 1100:1496 (±%1), aynı yükseklikte, normal odaya (kameralara) bakar', () => {
+  it('köşeler düzlemsel, en-boy kaynak görselin oranı (±%1), normal odaya (kameralara) bakar', () => {
     const kamBas = new THREE.Vector3(...veri.camera.start.position);
     const ekranNormali = new THREE.Vector3(...veri.screen.normal);
-    const merkezler: number[] = [];
     for (const p of veri.posters!) {
       const [TL, TR, BR, BL] = p.corners.map((k) => new THREE.Vector3(...k));
       const n = modul.posterNormali(p.corners);
@@ -344,21 +343,17 @@ describe('public/sinif/data/sinif.json posters sözleşmesi', () => {
       expect(TL.x).toBeLessThan(TR.x);
       expect(n.dot(kamBas.clone().sub(TL))).toBeGreaterThan(0);
       expect(n.dot(ekranNormali)).toBeCloseTo(1, 6);
-      merkezler.push((TL.y + BL.y) / 2);
     }
-    expect(merkezler[0]).toBeCloseTo(merkezler[1], 6);
-    expect(merkezler[1]).toBeCloseTo(merkezler[2], 6);
     // Tahtanın üstünde: alt kenar ekranın üst kenarından yukarıda
     const ekranUst = Math.max(...veri.screen.corners.map((k) => k[1]));
     for (const p of veri.posters!) expect(p.corners[3][1]).toBeGreaterThan(ekranUst + 0.1);
   });
 
-  it('poster:* grupları GLB grup listesinde (kâğıt zemin) yer alır', () => {
-    for (const id of ['istiklal', 'portre', 'hitabe']) {
-      const g = veri.groups.find((x) => x.key === `poster:${id}`);
-      expect(g?.kind).toBe('poster');
-      expect(g?.triangles).toBe(2);
-    }
+  it('poster:ataturk-kosesi grubu GLB grup listesinde (kâğıt zemin); eski üç poster grubu yok', () => {
+    const g = veri.groups.find((x) => x.key === 'poster:ataturk-kosesi');
+    expect(g?.kind).toBe('poster');
+    expect(g?.triangles).toBe(2);
+    expect(veri.groups.filter((x) => x.kind === 'poster')).toHaveLength(1);
   });
 });
 
