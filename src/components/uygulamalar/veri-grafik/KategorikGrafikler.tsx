@@ -348,6 +348,10 @@ export interface KategorikIstatistikProps {
   kosullu?: boolean;
   /** Koşullu tablonun açılıştaki paydası: sütun toplamları (varsayılan) ya da satır toplamları */
   kosulluPayda?: KosulluPayda;
+  /** Başlık (gruplar ayrı gösterilirken "En çok çıkan atık · 5-A"); verilmezse değişkenin adı */
+  baslik?: string;
+  /** Gruplar alt alta: panel kendi boyunda, kendi içinde kaymaz (kaydırma dış kaptadır) */
+  gomulu?: boolean;
 }
 
 /** Koşullu göreli sıklığın paydası: anahtarın grubu (sütun) ya da gösterilen değişkenin kategorisi (satır) */
@@ -384,6 +388,8 @@ export function KategorikIstatistik({
   turAdi = 'kategorik değişken',
   kosullu = false,
   kosulluPayda = 'sutun',
+  baslik,
+  gomulu = false,
 }: KategorikIstatistikProps) {
   const [payda, setPayda] = useState<KosulluPayda>(kosulluPayda);
   const metinler = useMemo(() => sutunMetinleri(tablo, sutun).map((m) => m.deger), [tablo, sutun]);
@@ -400,9 +406,9 @@ export function KategorikIstatistik({
   const tekYonlu = !(anahtar && capraz) || tekYonluIleBirlikte;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-auto bg-background p-4" data-kategorik-istatistik>
+    <div className={gomulu ? 'flex flex-col bg-background p-4' : 'flex h-full min-h-0 flex-col overflow-auto bg-background p-4'} data-kategorik-istatistik data-grup-basligi={baslik}>
       <h2 className="mb-3 text-lg font-bold text-foreground">
-        {sutunAdi} <span className="text-muted-foreground">{`· ${turAdi} · Veri sayısı: ${n}`}</span>
+        {baslik ?? sutunAdi} <span className="text-muted-foreground">{`· ${turAdi} · Veri sayısı: ${n}`}</span>
       </h2>
       {n === 0 ? (
         <p className="rounded-[calc(var(--radius)-4px)] border border-border bg-card p-4 text-[13px] text-muted-foreground">Bu değişkende değer yok.</p>

@@ -54,6 +54,10 @@ export interface IstatistikProps {
   olculer?: OlcuKumesi;
   /** Lise 9–12 (MAT.9.6.1): yayılım ölçülerinde çeyrekler ve çeyrekler açıklığı; verilmezse yok */
   ceyrekler?: boolean;
+  /** Başlık (gruplar ayrı gösterilirken "Puan · 7-A"); verilmezse değişkenin adı */
+  baslik?: string;
+  /** Gruplar alt alta: panel kendi boyunda, kendi içinde kaymaz (kaydırma dış kaptadır) */
+  gomulu?: boolean;
 }
 
 /** Karşılaştırmada iki değişkenin rengi (nokta grafiğindeki panellerle aynı: birincil, mercan) */
@@ -986,6 +990,8 @@ export function IstatistikPaneli({
   ikinciSutun = null,
   olculer = TUM_OLCULER,
   ceyrekler: ceyreklerVar = false,
+  baslik,
+  gomulu = false,
 }: IstatistikProps) {
   /** Hiçbir ölçü yok (5. sınıf): kart, adım ve grup tablosu yerine veri sayısı ve toplam */
   const olcusuz = !olculer.merkezi && !olculer.aciklik && !olculer.oms && !olculer.standartSapma;
@@ -1119,9 +1125,9 @@ export function IstatistikPaneli({
     ) : null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-auto bg-background p-3 sm:p-4" data-istatistik-paneli>
+    <div className={gomulu ? 'flex flex-col bg-background p-3 sm:p-4' : 'flex h-full min-h-0 flex-col overflow-auto bg-background p-3 sm:p-4'} data-istatistik-paneli data-grup-basligi={baslik}>
       <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2 className="text-lg font-bold text-foreground">{ikinci === null ? sutunAdi : `${sutunAdi} ve ${ikinciAdi}`}</h2>
+        <h2 className="text-lg font-bold text-foreground">{baslik ?? (ikinci === null ? sutunAdi : `${sutunAdi} ve ${ikinciAdi}`)}</h2>
         {ikinci === null && (
           <span className="rounded-full bg-muted px-2.5 py-0.5 text-[12.5px] font-semibold tabular-nums text-muted-foreground" data-veri-sayisi>
             Veri sayısı: {ozet.n}

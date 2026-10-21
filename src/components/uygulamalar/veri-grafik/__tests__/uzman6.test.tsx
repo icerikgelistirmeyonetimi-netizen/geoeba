@@ -31,9 +31,11 @@ describe('Uzman 6. tur: karşılaştırma ve grafik kontrolleri', () => {
       expect(k.sutunaDonustur).toBe(false);
     }
   });
-  it.each(['mac','iklim'])('%s istatistikte iki grubu yalnız bir değişken sekmesinde karşılaştırır', (id) => {
+  // TEGM (21.10.2026): iki değişken birlikte gösterilirken ayrı değişken sekmeleri yok (başka değişken yoksa sekme satırı yok)
+  it.each(['mac','iklim'])('%s istatistikte iki değişkeni sekmesiz, tek gösterimde karşılaştırır', (id) => {
     const h=ciz(id,{sekme:'istatistik'});
-    expect(h.match(/data-degisken-turu=/g)).toHaveLength(1);
+    expect(h).not.toContain('data-degisken-sekmeleri');
+    expect(h).not.toContain('data-degisken-turu=');
     expect(h).toContain('en büyük değer − en küçük değer');
     expect(h).not.toContain('Sütunlara dönüştür');
   });

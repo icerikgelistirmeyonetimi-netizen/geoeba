@@ -813,7 +813,8 @@ describe('rehber eylemleri durum üzerinde (rehberEylemiUygula)', () => {
     expect(secenek.secenekler).toMatchObject({ ortalama: true, oms: true, etiketler: false });
     expect(secenek.tablo).toBe(boy.tablo);
     const baskan = yukle(kendiTablom(), 'baskan');
-    expect(rehberEylemiUygula(baskan, ornekBul('baskan')!.rehber[2].eylem!).durum.sutunModu).toBe(true);
+    // "Sütunlara dönüştür" kalktı (sütun grafiği ayrı sekme): baskan 3. adımı Sütun'a geçer
+    expect(rehberEylemiUygula(baskan, ornekBul('baskan')!.rehber[2].eylem!).durum.sekme).toBe('sutun');
     expect(rehberEylemiUygula(baskan, ornekBul('baskan')!.rehber[3].eylem!).durum.sekme).toBe('daire');
     const ekran = yukle(kendiTablom(), 'ekran');
     expect(rehberEylemiUygula({ ...ekran, aralik: null }, ornekBul('ekran')!.rehber[1].eylem!).durum.aralik).toBe(5);

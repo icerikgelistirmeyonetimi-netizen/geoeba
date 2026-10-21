@@ -670,7 +670,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     konu: 'sinif5',
     sinif: 5,
     kazanim: ['MAT.5.5.1'],
-    aciklama: 'Her satır bir oy: Noktaları sütunlara dönüştürün, sonra dairede kazananın oyların yarısını alıp almadığına bakın.',
+    aciklama: 'Her satır bir oy: Oyları nokta ve sütun grafiğinde sayın; dairede kazanan oyların yarısını almış mı, bakın.',
     onerilenGrafik: 'nokta',
     varsayilanDegisken: 'Aday',
     kategoriSirasi: { Aday: ['Elif', 'Kaan', 'Zeynep', 'Mert'] },
@@ -703,9 +703,9 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       {
         tur: 'olc',
         baslik: 'Aç ve ölç',
-        soru: '"Sütunlara dönüştür" düğmesine bas. Her sütunun yüksekliği, ilgili adayın nokta sayısıyla nasıl ilişkilidir?',
-        cevap: 'Her adayın noktaları üst üste bir sütun oldu. Sütunun boyu o adayın oy sayısıdır (sıklık).',
-        eylem: { tur: 'secenek', ac: ['sutunModu'], etiket: 'Sütunlara dönüştür' },
+        soru: 'Sütun grafiğine geç. Her sütunun yüksekliği, ilgili adayın nokta grafiğindeki nokta sayısıyla nasıl ilişkilidir?',
+        cevap: 'Her adayın sütunu, nokta grafiğindeki nokta yığınıyla aynı yükseklikte: Sütunun boyu o adayın oy sayısıdır (sıklık).',
+        eylem: { tur: 'sekme', sekme: 'sutun', etiket: 'Sütuna geç' },
       },
       {
         tur: 'yorumla',
@@ -774,7 +774,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       {
         tur: 'olc',
         baslik: 'Aç ve ölç',
-        soru: "İstatistik'te Sınıf'a göre sıklık tablosuna bak. 5-A ile 5-B arasında en büyük fark hangi atıkta?",
+        soru: "İstatistik'te 5-A ve 5-B'nin sıklık tablolarını karşılaştır. İki sınıf arasında en büyük fark hangi atıkta?",
         cevap: "Plastik: 5-A'da 6, 5-B'de 1 öğrenci; fark 5. 5-A'nın yarısı \"plastik\" dedi.",
         eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Sıklık tablosunu aç' },
       },
@@ -788,8 +788,8 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     ],
     sekmeIpucu: {
       nokta: 'Her nokta bir öğrencinin cevabı; renkler sınıfı gösterir.',
-      daire: 'İç daire atık türleri; dış halka her dilimin 5-A ve 5-B payı.',
-      istatistik: "Sınıf'a göre sıklık tablosu: satırlarda atık türleri, sütunlarda sınıflar. Metal satırında 5-B sütunu 0.",
+      daire: 'Her sınıfın dairesi ayrı: 5-A’da en büyük dilim plastik, 5-B’de yemek artığı. “Birleşik göster” iki sınıfı tek dairede gösterir.',
+      istatistik: "Her sınıfın sıklık tablosu ayrı: 5-B'nin tablosunda metal yok. “Birleşik göster” iki sınıfı tek tabloda gösterir.",
     },
     ogretmenNotu: "İki kategorik değişken; renk anahtarı \"Sınıf\". İki sınıfta da 12 öğrenci var, bu yüzden sayılar doğrudan karşılaştırılabilir (mevcutlar farklı olsaydı yüzdeyle karşılaştırmak gerekirdi; iyi bir genişletme sorusu). İstatistik'teki \"Sınıf'a göre sıklık tablosu\"nun matematikteki adı iki yönlü tablodur; bu ad 5. sınıf programında geçmez (programda çetele ve sıklık tablosu var, s.60-61), öğrencilere ekrandaki adıyla söyleyin. \"En çok çıkan\" sorusu ağırlığı değil gözlemi ölçer: MAT.5.5.2 kapsamında \"Bu anket neyi ölçemez?\" diye tartışılabilir.",
     olustur: () =>
@@ -1221,7 +1221,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     sekmeIpucu: {
       cizgi: "Maç sırasına göre iki oyuncu: Selma'nın çizgisi iniş çıkışlı, Yasemin'inki neredeyse düz.",
       sutun: 'Her maçta iki sütun yan yana: Selma ve Yasemin. Hangi oyuncunun sütunları maçtan maça daha çok değişiyor?',
-      kokYaprak: "Sırt sırta: Selma'nın yaprakları solda, Yasemin'inkiler sağda. Yasemin'in bütün sayıları 1 kökünde.",
+      kokYaprak: "Her oyuncunun kök-yaprak gösterimi ayrı: Yasemin'in bütün sayıları 1 kökünde. “Birleşik göster” ikisini sırt sırta gösterir.",
       sacilim: 'Burada her nokta bir maç: yatayda bir oyuncunun, dikeyde ötekinin sayısı. İstikrarı karşılaştırmak için Nokta grafiği daha uygun.',
       istatistik: 'Aritmetik ortalamalar eşit (17); açıklıklar 27 ve 4. Hesaplama adımlarını defterdeki hesabınla karşılaştır.',
       daire: 'Maç sayıları paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
@@ -1242,7 +1242,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     konu: 'sinif7',
     sinif: 7,
     kazanim: ['MAT.7.6.1'],
-    aciklama: "İki sınıfın ortalaması aynı; puanlar nasıl yayılmış? Renklere ve İstatistik'teki Gruplara göre (Sınıf) tabloya bakın.",
+    aciklama: "İki sınıfın ortalaması aynı; puanlar nasıl yayılmış? Renklere ve İstatistik'te iki sınıfın ölçülerine bakın.",
     aciklamaOzellikli: {
       metin: 'İki sınıfın ortalaması aynı. Puanlar ortalamanın çevresine nasıl yayılmış? Tek grafikte iki sınıfı karşılaştırın.',
       gerektirir: 'grupla',
@@ -1284,7 +1284,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
         soru: 'İki sınıfın aritmetik ortalamasını ve ortalama mutlak sapmasını karşılaştır.',
         cevap: "Aritmetik ortalamalar eşit: İkisi de 70 (1050 ÷ 15). Ortalama mutlak sapma 7-A'da 16, 7-B'de 6: 7-B'nin puanları ortalamaya çok daha yakın.",
         eylem: { tur: 'secenek', ac: ['ortalama', 'oms'], etiket: 'Aritmetik ortalama ve sapmayı aç', gerektirir: 'grupla' },
-        yedekEylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Gruplara göre tabloyu aç' },
+        yedekEylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'İki sınıfın ölçülerini aç' },
       },
       {
         tur: 'yorumla',
@@ -1295,12 +1295,12 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       },
     ],
     sekmeIpucu: {
-      istatistik: 'Gruplara göre (Sınıf) tabloda: İki sınıfın ortalaması aynı (70), ortalama mutlak sapmaları farklı (16 ve 6), ortancaları da farklı (75 ve 70).',
+      istatistik: 'Her sınıfın ölçüleri ayrı: İki sınıfın ortalaması aynı (70), ortalama mutlak sapmaları farklı (16 ve 6), ortancaları da farklı (75 ve 70).',
       sutun: 'Sütunlar ikişer ikişer: her çiftte bir 7-A, bir 7-B öğrencisi. Dağılımı karşılaştırmak için Nokta grafiği daha uygun.',
       cizgi: '',
       daire: 'Puanlar paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
     },
-    ogretmenNotu: "Ortancalar da farklı (75 ve 70): 7-A'nın çoğu 75 ve üstü aldı ama birkaç düşük puan ortalamayı aşağı çekiyor. Nokta grafiği iki sınıfı tek grafikte, her puanda yan yana yığınlarla gösterir; İstatistik'teki Gruplara göre (Sınıf) tablo ortalama, ortanca ve ortalama mutlak sapmayı yan yana verir. Puanlar hassas veridir: Adlar yerine kod var (D8 Mahremiyet); kendi sınıfınızın puanlarını adlarla yansıtmayın.",
+    ogretmenNotu: "Ortancalar da farklı (75 ve 70): 7-A'nın çoğu 75 ve üstü aldı ama birkaç düşük puan ortalamayı aşağı çekiyor. Nokta grafiği iki sınıfı tek grafikte, her puanda yan yana yığınlarla gösterir; İstatistik her sınıfın ortalama, ortanca ve ortalama mutlak sapmasını ayrı bölümde verir; “Birleşik göster” ile tek tabloda yan yana görülür. Puanlar hassas veridir: Adlar yerine kod var (D8 Mahremiyet); kendi sınıfınızın puanlarını adlarla yansıtmayın.",
     olustur: () =>
       tabloOlustur(
         ['Öğrenci', 'Sınıf', 'Puan'],
@@ -1666,7 +1666,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       },
     ],
     sekmeIpucu: {
-      istatistik: 'Gruplara göre (Şube) tabloda dört şubenin ortalamaları birbirine yakın (138–155 dakika). Örneklem her şubeden eşit alındı.',
+      istatistik: 'Her şubenin ölçüleri ayrı bölümde: Dört şubenin ortalamaları birbirine yakın (138–155 dakika). Örneklem her şubeden eşit alındı.',
       sutun: 'Her grupta dört şubeden birer öğrenci yan yana gösterilir. Renk anahtarından şubeleri izleyin.',
       cizgi: '',
       daire: 'Süreler paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
@@ -1742,7 +1742,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       },
     ],
     sekmeIpucu: {
-      istatistik: 'Matematik puanı sekmesine geç: Gruplara göre (Sınıf) tabloda iki sınıfın puan ortalaması yakın (71,2 ve 72,8).',
+      istatistik: 'Matematik puanı sekmesine geç: İki sınıfın ölçüleri ayrı bölümlerde; puan ortalamaları yakın (71,2 ve 72,8).',
       nokta: 'Nokta grafiği tek değişkene bakar; iki değişkenin ilişkisi için Saçılım.',
       sutun: 'Her sütun bir öğrencinin çalışma süresi; çalışma ile puanın ilişkisini Saçılım grafiği gösterir.',
       cizgi: '',
@@ -2093,10 +2093,10 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       },
     ],
     sekmeIpucu: {
-      nokta: 'Her nokta bir öğrenci; her gezi yerinde iki sınıfın noktaları yan yana. Sütunlara dönüştürüp sütun grafiğiyle karşılaştırın.',
+      nokta: 'Her nokta bir öğrenci; her gezi yerinde iki sınıfın noktaları yan yana. Sütun grafiği sekmesiyle karşılaştırın.',
       istatistik: "Sınıf'a göre sıklık tablosu: satırlarda gezi yerleri, sütunlarda sınıflar; her çizgi bir öğrenci.",
     },
-    ogretmenNotu: '4. sınıfta kategorik ve sayarak elde edilen veriyle en çok iki veri grubu üzerinde çalışılır. Sütun grafiğinde iki sınıfın sütunları her gezi yerinde yan yana durur; sütunun boyu o yeri seçen öğrenci sayısıdır. Nokta grafiğinde "Sütunlara dönüştür" ile noktaların sütuna nasıl dönüştüğünü gösterin. Tartışma: "Toplamda en çok seçilen yer, iki sınıfın da en çok istediği yer midir?"',
+    ogretmenNotu: '4. sınıfta kategorik ve sayarak elde edilen veriyle en çok iki veri grubu üzerinde çalışılır. Sütun grafiğinde iki sınıfın sütunları her gezi yerinde yan yana durur; sütunun boyu o yeri seçen öğrenci sayısıdır. Nokta grafiğini Sütun grafiğiyle karşılaştırın: Her yerdeki nokta sayısı sütunun boyuna eşittir. Tartışma: "Toplamda en çok seçilen yer, iki sınıfın da en çok istediği yer midir?"',
     olustur: () =>
       tabloOlustur(
         ['Öğrenci', 'Sınıf', 'Gezi yeri'],
@@ -2157,8 +2157,8 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       {
         tur: 'olc',
         baslik: 'Aç ve ölç',
-        soru: "İstatistik'teki sıklık tablosunda göreli sıklıklara bak. Hiç kahvaltı yapmayanlar ve her gün kahvaltı yapmayanlar yüzde kaç?",
-        cevap: 'Hiç yapmayanlar 9/40 = %22,5. "Haftada birkaç gün" ve "Hiç" birlikte 22/40 = %55: Öğrencilerin %55’i her gün kahvaltı yapmıyor.',
+        soru: "İstatistik'te iki sınıfın sıklık tablolarında göreli sıklıklara bak. Her sınıfta hiç kahvaltı yapmayanlar yüzde kaç? İki sınıf birlikte?",
+        cevap: 'Hiç yapmayanlar Hazırlık-A’da 5/20 = %25, Hazırlık-B’de 4/20 = %20; iki sınıf birlikte 9/40 = %22,5. "Haftada birkaç gün" ve "Hiç" birlikte 22/40 = %55: Öğrencilerin %55’i her gün kahvaltı yapmıyor.',
         eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Sıklık tablosunu aç' },
       },
       {
@@ -2171,8 +2171,8 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     ],
     sekmeIpucu: {
       nokta: 'Her nokta bir öğrencinin cevabı; renkler sınıfı gösterir. Sayıları sütun grafiğinde karşılaştırın.',
-      daire: 'İç daire kahvaltı cevapları, dış halka her dilimde Hazırlık-A ve Hazırlık-B payı.',
-      istatistik: "Göreli sıklık sütunu her cevabın yüzdesini verir; Sınıf'a göre tabloda iki sınıfı karşılaştırın.",
+      daire: 'Her sınıfın dairesi ayrı: İki sınıfta da en büyük dilim "Her gün". “Birleşik göster” iki sınıfı tek dairede gösterir.',
+      istatistik: 'Her sınıfın sıklık tablosu ayrı; göreli sıklık sütunu her cevabın sınıf içindeki yüzdesini verir. “Birleşik göster” iki sınıfı tek tabloda gösterir.',
     },
     ogretmenNotu: 'Başkasının vardığı sonucu veriyle sınama: Başlıktaki "çoğu" ve "kahvaltı yapmadan" sözcükleri anket sorusuyla aynı şeyi söylemiyor. "Hiç" diyenler %22,5, "her gün değil" diyenler %55. Tartışma: Haftada birkaç gün kahvaltı yapan biri anket günü kahvaltı yapmış olabilir mi? İki sınıftan 40 kişi bütün okulu temsil eder mi? Başlığı yazan kişi hangi iki seçeneği birleştirmiş olabilir?',
     olustur: () =>
@@ -2437,9 +2437,9 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       {
         tur: 'olc',
         baslik: 'Aç ve ölç',
-        soru: "Nokta grafiğinde Kutu grafiği düğmesine bas, sonra İstatistik'te Gruplara göre (Sınıf) tabloya bak. İki sınıfın yayılımı nasıl?",
+        soru: "Nokta grafiğinde Kutu grafiği düğmesine bas, sonra İstatistik'te iki sınıfın ölçülerine bak. İki sınıfın yayılımı nasıl?",
         cevap: '9-A’nın kutusu 33 ile 52 tur arasında (çeyrekler açıklığı 19), 9-B’ninki 41 ile 47 tur arasında (6). Standart sapmalar yaklaşık 12 ve 4,1 tur: 9-B’nin sonuçları ortalamaya çok daha yakın.',
-        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Gruplara göre tabloyu aç' },
+        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'İki sınıfın ölçülerini aç' },
       },
       {
         tur: 'yorumla',
@@ -2453,7 +2453,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       sutun: 'Histogram düğmesine basın: İki sınıfın sütunları her sınıf aralığında yan yana. 9-A’nın sonuçları daha çok aralığa dağılmış.',
       cizgi: '',
       daire: 'Tur sayıları paylaşılan bir bütün değil; daire grafiği bu veri için uygun değil.',
-      istatistik: 'Gruplara göre (Sınıf) tabloda iki sınıfın ortalaması, açıklığı ve standart sapması yan yana.',
+      istatistik: 'Her sınıfın ölçüleri ayrı bölümde: ortalama, açıklık ve standart sapma. “Birleşik göster” ikisini tek tabloda yan yana gösterir.',
     },
     ogretmenNotu: 'Ortalamalar yakın (42 ve 44 tur), yayılımlar çok farklı: Standart sapma yaklaşık 12 ve 4,1 tur, açıklık 42 ve 15 tur. Ortancalar 40 ve 44 tur. Tartışma: "En yüksek değer kimde?" sorusu bir dağılımı anlatmaya yetmez (MAT.9.6.2). Okul takımı için bireyler mi seçilecek, bütün grup mu değerlendirilecek? Karar sorusu ölçünün seçimini değiştirir.',
     olustur: () =>
@@ -2512,8 +2512,8 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       {
         tur: 'olc',
         baslik: 'Aç ve ölç',
-        soru: "İstatistik'te Koşullu göreli sıklıklar tablosuna bak (her Uzaklık grubunda). Her grupta yürüyerek gelenlerin yüzdesi kaç?",
-        cevap: 'Yakın oturanlarda 11/16, yani %68,8; uzak oturanlarda 2/24, yani %8,3. Gruplar farklı büyüklükte (16 ve 24) olduğu için sayıları değil grup içindeki yüzdeleri karşılaştırmak gerekir.',
+        soru: "İstatistik'te her uzaklık grubunun sıklık tablosuna bak: Her grupta yürüyerek gelenlerin göreli sıklığı (yüzdesi) kaç?",
+        cevap: 'Yakın oturanlarda 11/16, yani %68,8; uzak oturanlarda 2/24, yani %8,3. Bunlar koşullu göreli sıklıklardır: Gruplar farklı büyüklükte (16 ve 24) olduğu için sayıları değil grup içindeki yüzdeleri karşılaştırmak gerekir. “Birleşik göster” ikisini tek tabloda verir.',
         eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Sıklık tablosunu aç' },
       },
       {
@@ -2526,8 +2526,8 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     ],
     sekmeIpucu: {
       nokta: 'Her nokta bir öğrencinin cevabı; renkler uzaklık grubunu gösterir.',
-      daire: 'İç daire geliş biçimleri, dış halka her dilimdeki uzaklık gruplarının payı.',
-      istatistik: 'Koşullu göreli sıklıklar tablosunda her uzaklık grubunun sütunu %100: Geliş biçimlerini grup içindeki yüzdelerle karşılaştırın.',
+      daire: 'Her uzaklık grubunun dairesi ayrı: Yakın oturanlarda en büyük dilim yürüyerek. “Birleşik göster” iki grubu tek dairede gösterir.',
+      istatistik: 'Her uzaklık grubunun sıklık tablosu ayrı: Göreli sıklıklar grup içindeki yüzdelerdir (koşullu göreli sıklık). “Birleşik göster” ikisini tek tabloda verir.',
 
     },
     ogretmenNotu: 'İki kategorik değişkenin ilişkisi göreli sıklıklarla incelenir (MAT.10.2.1). Gruplar farklı büyüklükte olduğu için sayılar yanıltabilir: Toplu taşımayla gelenler uzak oturanlarda 12, yakın oturanlarda 3 kişi; oranlar %50 ve %18,75. Tabloyu yüzdeye çevirmeyi tahtada birlikte yapın. Tartışma: Uzaklık geliş biçimini etkiler mi, yoksa başka bir değişken (ailenin aracı, otobüs güzergâhı) da rol oynar mı?',
@@ -2590,9 +2590,9 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       {
         tur: 'olc',
         baslik: 'Aç ve ölç',
-        soru: "İstatistik'te Koşullu göreli sıklıklar tablosuna bak (her telefon yeri grubunda). Ödevini zamanında bitirenler yüzde kaç?",
+        soru: "İstatistik'te her telefon yeri grubunun sıklık tablosuna bak: Ödevini zamanında bitirenlerin göreli sıklığı (yüzdesi) kaç?",
         cevap: 'Telefonu masada olanlarda 15/30, yani %50; başka odada olanlarda 16/20, yani %80. Koşullu göreli sıklıklar arasında 30 puanlık fark var: İki değişken ilişkili görünüyor.',
-        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Koşullu göreli sıklıkları aç' },
+        eylem: { tur: 'sekme', sekme: 'istatistik', etiket: 'Sıklık tablolarını aç' },
       },
       {
         tur: 'yorumla',
@@ -2604,8 +2604,8 @@ export const ORNEK_VERILER: OrnekVeri[] = [
     ],
     sekmeIpucu: {
       nokta: 'Her nokta bir öğrencinin cevabı; renkler telefonun nerede durduğunu gösterir.',
-      daire: 'İç daire "Evet" ve "Hayır", dış halka her dilimde telefonun yerine göre paylar.',
-      istatistik: 'Koşullu göreli sıklıklar tablosunda her telefon yeri grubunun sütunu %100; gruplar 30 ve 20 öğrenci.',
+      daire: 'Her telefon yeri grubunun dairesi ayrı: Başka odada olanlarda "Evet" dilimi dairenin beşte dördü. “Birleşik göster” iki grubu tek dairede gösterir.',
+      istatistik: 'Her telefon yeri grubunun sıklık tablosu ayrı; gruplar 30 ve 20 öğrenci. Göreli sıklıklar grup içindeki yüzdelerdir; “Birleşik göster” ikisini tek tabloda verir.',
     },
     ogretmenNotu: 'Başkasının vardığı sonucu ("telefon engelliyor") veriyle tartışma (MAT.10.2.2). Sayılar (15 ve 16) neredeyse eşitken oranlar (%50 ve %80) çok farklı: Grup büyüklükleri farklıyken göreli sıklık gerekir. Tartışma: Üçüncü bir değişken (çalışma alışkanlığı) iki değişkeni birlikte etkiliyor olabilir mi? Bunu sınamak için nasıl bir deney tasarlanır?',
     olustur: () =>
@@ -2976,7 +2976,7 @@ export const ORNEK_VERILER: OrnekVeri[] = [
       nokta: 'Tek grafikte iki değişken: Tüketim değerleri daha geniş bir aralığa yayılmış.',
       sutun: 'Her ayda tüketim ve üretim yan yana: Hangi aylarda üretim sütunu daha uzun?',
       daire: 'Aylık değerleri karşılaştırmak için Çizgi ya da Sütun grafiği daha uygun; daire iki değişkeni birlikte göstermez.',
-      istatistik: 'İki değişkenin ölçüleri yan yana: Tüketimin açıklığı 7200 kWh, üretiminki 5200 kWh.',
+      istatistik: 'İki değişkenin ölçüleri ayrı bölümlerde: Tüketimin açıklığı 7200 kWh, üretiminki 5200 kWh.',
       sacilim: 'Her nokta bir ay: Üretimin yüksek olduğu aylarda tüketim düşük; noktalar sol üstten sağ alta iniyor (r yaklaşık −0,86).',
     },
     ogretmenNotu: 'Kurgusal ama gerçekçi hazır veri: Kurumların hazırladığı tabloları okuma ve karar verme (MAT.12.5.1). Tartışma soruları: Fazla üretimin şebekeye verilmesi kararı nasıl değiştirir? Okul yaz kursu açarsa tablo nasıl değişir? Üretim tahmini satıcı firmanın hazırladığı bir veridir; neden temkinli okunmalı?',

@@ -182,6 +182,12 @@ export const SERBEST_KURALLAR: SinifKurallari = {
 };
 
 /**
+ * "Zenginleştirme (programda yok) · İki değişkenin ilişkisi" örnekleri (yalnız Tüm araçlar galerisinde): sınıfsız
+ * tablonun kuralları ve saçılım sekmesi. Bu örnekler saçılım grafiğiyle açılır ve Keşif kartları saçılımı sorar.
+ */
+export const ZENGINLESTIRME_KURALLARI: SinifKurallari = { ...SERBEST_KURALLAR, sekmeler: ['nokta', 'sutun', 'cizgi', 'daire', 'sacilim', 'istatistik'] };
+
+/**
  * İlkokul kademesinde 1–4. sınıf örneğine bağlı olmayan tablo (kendi tablonuz, veri toplama, 5–8. sınıf örneği):
  * ilkokulun en geniş temsilleri (4. sınıf) — nokta grafiği, sütun grafiği, çetele ve sıklık tablosu; ölçü, yüzde, açı yok
  */

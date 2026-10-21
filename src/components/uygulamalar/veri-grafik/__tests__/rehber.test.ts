@@ -193,27 +193,27 @@ describe('rehber: adımlar', () => {
     }
   });
 
-  it('yedek eylem seçimi: sinav 3. adım grupla yokken "Gruplara göre tabloyu aç"; kitap 3. adım ortanca yokken düğmesiz', () => {
+  it('yedek eylem seçimi: sinav 3. adım grupla yokken "İki sınıfın ölçülerini aç"; kitap 3. adım ortanca yokken düğmesiz', () => {
     const sinav = ornek('sinav');
-    expect(rehberAdimlari(sinav, HICBIRI)[2].eylem).toEqual({ tur: 'sekme', sekme: 'istatistik', etiket: 'Gruplara göre tabloyu aç' });
+    expect(rehberAdimlari(sinav, HICBIRI)[2].eylem).toEqual({ tur: 'sekme', sekme: 'istatistik', etiket: 'İki sınıfın ölçülerini aç' });
     expect(rehberAdimlari(sinav, new Set<Ozellik>(['grupla']))[2].eylem).toMatchObject({ tur: 'secenek', ac: ['ortalama', 'oms'] });
     const kitap = ornek('kitap');
     expect(rehberAdimlari(kitap, HICBIRI)[2].eylem).toBeNull();
     expect(rehberAdimlari(kitap, new Set<Ozellik>(['ortanca']))[2].eylem).toMatchObject({ tur: 'secenek', ac: ['ortanca', 'ortalama'] });
     // boy: 3. adım özelliğe bağlı değil
     expect(rehberAdimlari(ornek('boy'), HICBIRI)[2].eylem).toMatchObject({ tur: 'secenek', ac: ['ortalama', 'oms'], etiket: 'Aritmetik ortalama ve sapmayı aç' });
-    // baskan: sayılar, sütunlara dönüştür, daireye geç
-    expect(rehberAdimlari(ornek('baskan'), HICBIRI).map((a) => a.eylem?.tur ?? null)).toEqual([null, 'secenek', 'secenek', 'sekme']);
+    // baskan: sayılar, sütuna geç ("Sütunlara dönüştür" kalktı), daireye geç
+    expect(rehberAdimlari(ornek('baskan'), HICBIRI).map((a) => a.eylem?.tur ?? null)).toEqual([null, 'secenek', 'sekme', 'sekme']);
   });
 });
 
 describe('rehber: eylem yaması', () => {
-  it('secenek: istenen ölçüleri açar (kapatmaz), ötekileri korur, nokta grafiğine geçer; sütunlara dönüştür', () => {
+  it('secenek: istenen ölçüleri açar (kapatmaz), ötekileri korur, nokta grafiğine geçer; baskan 3. adım Sütun sekmesi', () => {
     const boy = ornek('boy');
     const y = eylemYamasi(boy.rehber[2].eylem!, boy.olustur(), { secenekler: { ortalama: false, oms: false, etiketler: true }, sutunModu: false });
     expect(y).toEqual({ sekme: 'nokta', secenekler: { ortalama: true, oms: true, etiketler: true, ortanca: false } });
     const baskan = ornek('baskan');
-    expect(eylemYamasi(baskan.rehber[2].eylem!, baskan.olustur(), kapali)).toMatchObject({ sekme: 'nokta', sutunModu: true });
+    expect(eylemYamasi(baskan.rehber[2].eylem!, baskan.olustur(), kapali)).toEqual({ sekme: 'sutun' });
     expect(eylemYamasi(baskan.rehber[1].eylem!, baskan.olustur(), kapali).secenekler).toMatchObject({ etiketler: true, ortalama: false });
     expect(eylemYamasi(baskan.rehber[3].eylem!, baskan.olustur(), kapali)).toEqual({ sekme: 'daire' });
     expect(eylemYamasi({ tur: 'surukle', etiket: 'Uyku: 11, Diğer: 0 yaz' }, baskan.olustur(), kapali)).toEqual({});

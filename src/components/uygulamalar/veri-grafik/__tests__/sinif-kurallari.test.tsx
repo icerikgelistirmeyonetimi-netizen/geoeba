@@ -421,14 +421,21 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     expect(svgYazilari(grafik.slice(0, grafik.indexOf('</svg>')))).not.toMatch(/°|%/);
   });
 
-  it('[109] 5. sınıf atık: karşılaştırmalı sütunlar yan yana, yüzde yok; İstatistik yalnız iki yönlü tablo, tepe değer / göreli sıklık / merkez açı yok', () => {
+  it('[109] 5. sınıf atık: karşılaştırmalı sütunlar yan yana, yüzde yok; İstatistik her grup ayrı (birleşikte yalnız iki yönlü tablo), tepe değer / göreli sıklık / merkez açı yok', () => {
     const atik = yukle('atik');
     const sutun = uygulamaCiz({ ...atik, sekme: 'sutun' });
     expect(sutun).toContain('data-yan-sutun=');
     expect(sutun).not.toContain('data-yigin-parcasi');
     const svg = sutun.slice(sutun.indexOf('data-grafik="sutun"'));
     expect(svgYazilari(svg.slice(0, svg.indexOf('</svg>')))).not.toMatch(/%|\(\d+( veri)?\)/);
-    const ist = uygulamaCiz({ ...atik, sekme: 'istatistik' });
+    // TEGM (21.10.2026): İstatistik'te her grup ayrı (5-A, 5-B); "Birleşik göster" iki yönlü tabloyu açar
+    const ayri = uygulamaCiz({ ...atik, sekme: 'istatistik' });
+    expect(ayri).toContain('data-ayri-gruplar="istatistik"');
+    expect(Array.from(ayri.matchAll(/data-grup-gosterimi="([^"]+)"/g), (m) => m[1])).toEqual(['En çok çıkan atık · 5-A', 'En çok çıkan atık · 5-B']);
+    expect(ayri).not.toContain('data-capraz-tablo');
+    expect(ayri).toContain('data-grup-birlesik');
+    expect(metin(ayri)).not.toMatch(/Göreli sıklık|Merkez açı|Tepe değer/);
+    const ist = uygulamaCiz({ ...atik, sekme: 'istatistik', grupBirlesik: true });
     expect(ist).toContain('data-capraz-tablo');
     expect(ist).not.toContain('data-siklik-tablosu');
     expect(ist).not.toContain('data-tepe-deger');
@@ -475,7 +482,7 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     expect(kayitli).not.toContain('data-standart-sapma-bandi');
   });
 
-  it('[110] 6. sınıf basketbol: iki oyuncu aynı grafikte, ikili gruplar (Nokta yan yana, Sütun çiftleri, Kök-yaprak sırt sırta)', () => {
+  it('[110] 6. sınıf basketbol: Nokta ve Sütun tek grafikte ikili gruplar; Kök-yaprak her oyuncu ayrı, birleşikte sırt sırta', () => {
     const mac = yukle('mac');
     const nokta = uygulamaCiz({ ...mac, sekme: 'nokta' });
     expect(nokta).toContain('data-yan-yana-karsilastirma');
@@ -485,7 +492,11 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     expect(sutun).toContain('data-ikili');
     expect(sutun.match(/data-cubuk="Selma"/g)).toHaveLength(5);
     expect(sutun).toContain('aria-label="Karşılaştırma için ikinci değişken"');
-    const kok = uygulamaCiz({ ...mac, sekme: 'kokYaprak' });
+    const ayri = uygulamaCiz({ ...mac, sekme: 'kokYaprak' });
+    expect(ayri).toContain('data-ayri-gruplar="kok-yaprak"');
+    expect(ayri.match(/data-grafik="kok-yaprak"/g)).toHaveLength(2);
+    expect(ayri).not.toContain('data-seri-basligi="Yasemin"');
+    const kok = uygulamaCiz({ ...mac, sekme: 'kokYaprak', grupBirlesik: true });
     expect(kok).toContain('data-seri-basligi="Yasemin"');
   });
 
@@ -505,7 +516,11 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     expect(sutun).toContain('data-ikili');
     const etiketler = Array.from(sutun.matchAll(/data-tutamak-satir="(\d+)"/g), (m) => Number(m[1]));
     expect(etiketler.slice(0, 4)).toEqual([0, 15, 1, 16]);
-    const ist = uygulamaCiz({ ...sinav, sekme: 'istatistik' });
+    const ayri = uygulamaCiz({ ...sinav, sekme: 'istatistik' });
+    expect(Array.from(ayri.matchAll(/data-grup-gosterimi="([^"]+)"/g), (m) => m[1])).toEqual(['Puan · 7-A', 'Puan · 7-B']);
+    expect(ayri).not.toContain('data-grup-istatistikleri');
+    expect(metin(ayri)).not.toContain('Standart sapma');
+    const ist = uygulamaCiz({ ...sinav, sekme: 'istatistik', grupBirlesik: true });
     expect(ist).toContain('data-grup-istatistikleri');
     expect(metin(ist)).not.toContain('Standart sapma');
     expect(metin(ist)).toContain('Ort. mutlak sapma');
@@ -552,11 +567,70 @@ describe('uygulama: sınıf düzeyine göre ekran (satır 109–112)', () => {
     const sutun = uygulamaCiz({ ...kendi, sekme: 'sutun' });
     expect(sutun).toContain('data-ikili');
     expect(sutun.match(/data-grafik="sutun"/g)).toHaveLength(1);
-    const ist = uygulamaCiz({ ...kendi, sekme: 'istatistik' });
+    const ayri = uygulamaCiz({ ...kendi, sekme: 'istatistik' });
+    expect(Array.from(ayri.matchAll(/data-grup-gosterimi="([^"]+)"/g), (m) => m[1])).toEqual(['Selma', 'Yasemin']);
+    const ist = uygulamaCiz({ ...kendi, sekme: 'istatistik', grupBirlesik: true });
     expect(ist).toContain('data-standart-sapma-satiri');
     // Sınıfsız örnek dışı tabloda istenmeyen sekme (kayıtta Kök-yaprak) Nokta'ya döner
     const kayit = { ...kendi, sekme: 'kokYaprak' as Sekme };
     expect(uygulamaCiz(kayit)).toMatch(/role="tab" aria-selected="true"[^>]*>Nokta</);
     expect(sutunIndeksi(kendi.tablo, kendi.degisken)).toBeGreaterThan(0);
+  });
+});
+
+describe('TEGM (21.10.2026): nokta grafiği, ayrı grup gösterimleri ve açılış–soru uyumu', () => {
+  it('nokta grafiğinde düşey eksen yok, yatay eksenin iki ucu oklu; renk anahtarının grupları da yan yana sütunlar', () => {
+    for (const id of ['kitap', 'sinav', 'mac', 'ekran']) {
+      const h = uygulamaCiz({ ...yukle(id), sekme: 'nokta' });
+      expect(h, id).toContain('data-eksen-oku="sol"');
+      expect(h, id).toContain('data-eksen-oku="sag"');
+      expect(h, id).not.toContain('data-eksen-oku="dikey"');
+    }
+    // 5. sınıf atık: karşılaştırma seçilmemişken de 5-A ve 5-B her atıkta yan yana (sütun grafiği gibi)
+    const atik = uygulamaCiz({ ...yukle('atik'), sekme: 'nokta', ikinciDegisken: null });
+    expect(atik).toContain('data-yan-yana-karsilastirma');
+  });
+
+  it('iki değişken birlikte gösterilirken ayrı değişken sekmeleri yok (mac: Selma ve Yasemin)', () => {
+    for (const sekme of ['nokta', 'sutun', 'kokYaprak', 'istatistik'] as Sekme[]) {
+      expect(uygulamaCiz({ ...yukle('mac'), sekme }), sekme).not.toContain('data-degisken-sekmeleri');
+    }
+    // Karşılaştırma kaldırılınca iki sekme geri gelir
+    expect(uygulamaCiz({ ...yukle('mac'), sekme: 'nokta', ikinciDegisken: null })).toContain('data-degisken-sekmeleri');
+  });
+
+  it('daire: renk anahtarının her grubu ayrı daire, renkler ortak; birleşikte halkalı tek daire', () => {
+    const ayri = uygulamaCiz({ ...yukle('atik'), sekme: 'daire' });
+    expect(Array.from(ayri.matchAll(/data-grup-gosterimi="([^"]+)"/g), (m) => m[1])).toEqual(['5-A', '5-B']);
+    expect(ayri.match(/data-grafik="daire"/g)).toHaveLength(2);
+    expect(ayri).toContain('data-grup-birlesik');
+    const birlesik = uygulamaCiz({ ...yukle('atik'), sekme: 'daire', grupBirlesik: true });
+    expect(birlesik).not.toContain('data-ayri-gruplar');
+    expect(birlesik.match(/data-grafik="daire"/g)).toHaveLength(1);
+  });
+
+  it('her örnekte açılış grafiği ve Keşif kartındaki sekme eylemleri o sınıfta var; zenginleştirme örnekleri saçılımla açılır', () => {
+    for (const o of ORNEK_VERILER) {
+      const k = durumKurallari({ ornekId: o.id, etkinKume: 'tablom' });
+      const acilis = (o as { acilis?: { sekme?: Sekme } }).acilis?.sekme ?? o.onerilenGrafik;
+      if (acilis) expect(k.sekmeler, `${o.id} açılış ${acilis}`).toContain(acilis);
+      for (const r of o.rehber ?? []) {
+        for (const e of [r.eylem, (r as { yedekEylem?: typeof r.eylem }).yedekEylem]) {
+          if (e && e.tur === 'sekme') expect(k.sekmeler, `${o.id}: ${e.etiket}`).toContain(e.sekme);
+        }
+      }
+    }
+  });
+
+  it('örnek metinleri kaldırılan özelliklerden ya da birleşik gösterimden ayrı gösterim varmış gibi söz etmez', () => {
+    const yasak = /sütunlara dönüştür|dış halka|iç daire|gruplara göre \(|sırt sırta: |koşullu göreli sıklıklar tablosu/i;
+    for (const o of ORNEK_VERILER) {
+      const metinler = [
+        o.aciklama,
+        ...(o.rehber ?? []).flatMap((r) => [r.soru, r.cevap, r.eylem?.etiket ?? '', (r as { yedekEylem?: { etiket: string } }).yedekEylem?.etiket ?? '']),
+        ...Object.values((o as { sekmeIpucu?: Record<string, string> }).sekmeIpucu ?? {}),
+      ];
+      for (const m of metinler) expect(m, o.id).not.toMatch(yasak);
+    }
   });
 });

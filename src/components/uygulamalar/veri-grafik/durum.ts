@@ -32,7 +32,7 @@ import { acilisYamasi, eylemYamasi, type EylemYamasi } from './rehber';
 import { cizgiSiraNotuGerekli } from './grafikKurallari';
 import { veriGirisHatasi } from './veriSinirlari';
 import { sayiOku } from './veri';
-import { ORTAOKUL_KURALLARI, sinifKurallari, sinifSekmesi, type SinifKurallari } from './sinifKurallari';
+import { ORTAOKUL_KURALLARI, ZENGINLESTIRME_KURALLARI, sinifKurallari, sinifSekmesi, type SinifKurallari } from './sinifKurallari';
 
 export type Sekme = GrafikTuru;
 
@@ -146,6 +146,11 @@ export interface Durum {
   daireModu: DaireModu | null;
   /** Çizgi grafiğinde her noktanın değeri yazılsın mı ("Değerleri göster"; kalıcı) */
   degerleriGoster: boolean;
+  /**
+   * Kök-yaprak, Daire ve İstatistik'te veri grupları birleşik mi gösterilsin ("Birleşik göster"; kalıcı). Varsayılan:
+   * her grup ayrı (TEGM ortaokul/lise, 21.10.2026); düğmeyle sırt sırta kök-yaprak, halkalı daire, gruplar tablosu.
+   */
+  grupBirlesik?: boolean;
   /**
    * Veri topla paneli açıkken grafiğin altındaki tablo bandı açık mı (kalıcı; varsayılan kapalı: tek satırlık
    * "Tablo · 24 satır · son: Elma" özeti)
@@ -462,6 +467,7 @@ export function durumCoz(ham: unknown): Durum | null {
     ipucu: IPUCU_DURUMLARI.includes(nesne.ipucu as IpucuDurumu) ? (nesne.ipucu as IpucuDurumu) : ornekId ? 'serit' : 'kapali',
     // daireModu görünümle (`...gorunum`) gelir: kayıttaki küme başkaysa Tablom'un saklı seçimi, yoksa otomatik
     degerleriGoster: nesne.degerleriGoster === true,
+    grupBirlesik: nesne.grupBirlesik === true,
     tabloBandiAcik: nesne.tabloBandiAcik === true,
     toplamaOncesi: oncekiTabloDogrula(nesne.toplamaOncesi),
   };
@@ -640,6 +646,8 @@ export function sekmeDuzelt(d: Durum, ilkokul = false, ortaokul = false): Durum 
  */
 export function durumKurallari(d: Pick<Durum, 'ornekId' | 'etkinKume'>, ilkokul = false, ortaokul = false): SinifKurallari {
   if (ortaokul && (d.etkinKume !== 'tablom' || !bagliOrnek(d)?.sinif)) return ORTAOKUL_KURALLARI;
+  // Zenginleştirme örneği (Tüm araçlar): saçılımla açılır, Keşif kartı saçılımı sorar; sınıfsız kurallara saçılım eklenir
+  if (!ilkokul && d.etkinKume === 'tablom' && bagliOrnek(d)?.konu === 'zenginlestirme') return ZENGINLESTIRME_KURALLARI;
   return sinifKurallari(d.etkinKume === 'tablom' ? bagliOrnek(d)?.sinif ?? null : null, ilkokul);
 }
 

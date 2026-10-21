@@ -352,7 +352,7 @@ export function aracDuzeyiBul(kokGenislik: number, sekmelerGenislik: number): 0 
   return 4;
 }
 
-type SecenekSimgesiAdi = 'ortalama' | 'ortanca' | 'oms' | 'standartSapma' | 'etiketler' | 'sutunlar' | 'degerler' | 'dilimSatir' | 'dilimSiklik';
+type SecenekSimgesiAdi = 'ortalama' | 'ortanca' | 'oms' | 'standartSapma' | 'etiketler' | 'sutunlar' | 'degerler' | 'dilimSatir' | 'dilimSiklik' | 'birlesik';
 
 /**
  * Seçenek şeridi simgeleri: ortalama çizgisi, ortanca (ortadaki veri), sapma bandı, değer etiketi, sıklık sütunları,
@@ -388,6 +388,16 @@ function SecenekSimgesi({ ad }: { ad: SecenekSimgesiAdi }) {
         <svg {...ortak}>
           <circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" strokeWidth="1.4" />
           <path d="M8 8V1.8M8 8l5.4 3.1M8 8l-5.4 3.1M8 8l4-4.7M8 8 2.2 5.7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      );
+    case 'birlesik':
+      // İki grup tek gösterimde: iki çizgi bir noktada birleşip tek çizgi olarak sürer
+      return (
+        <svg {...ortak}>
+          <path d="M1.8 3.2C5.6 3.2 6.4 8 9.4 8M1.8 12.8C5.6 12.8 6.4 8 9.4 8H14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M11.6 5.6 14.2 8l-2.6 2.4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="1.8" cy="3.2" r="1.3" fill="currentColor" />
+          <circle cx="1.8" cy="12.8" r="1.3" fill="currentColor" />
         </svg>
       );
     case 'dilimSiklik':
@@ -729,6 +739,12 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
    */
   const kurallar = useMemo(() => durumKurallari({ ornekId: durum.ornekId, etkinKume }, ilkokul, kademe === 'ortaokul'), [durum.ornekId, etkinKume, ilkokul, kademe]);
   const tekGrafik = kurallar.tekGrafikteKarsilastir;
+  /**
+   * Kök-yaprak, Daire ve İstatistik'te veri grupları (TEGM, ortaokul ve lise, 21.10.2026): her grup ayrı gösterilir;
+   * seçenek şeridindeki "Birleşik göster" tek gösterimi açar (sırt sırta kök-yaprak, halkalı daire, gruplar tablosu).
+   * İlkokulda bugünkü gibi birleşik. Nokta ve Sütun grafiğinde gruplar hep tek grafikte, yan yanadır.
+   */
+  const grupBirlesik = ilkokul || durum.grupBirlesik === true;
   const gorunurSekmeler = useMemo(
     () => SEKMELER.filter((s) => kurallar.sekmeler.includes(s.id)).map((s) => ({ ...s, ad: sekmeAdi(s.id, s.ad, kurallar) })),
     [kurallar],
@@ -893,11 +909,16 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   const karsTuru = karsAdaylari.find((a) => a.id === durum.ikinciDegisken && a.neden === null)?.tur ?? null;
   /** İkinci sayısal değişken karşılaştırılıyor (iki panel, iki seri, iki sütunlu istatistik) */
   const ikinciSayisal = karsTuru === 'sayi' && ikinciSutun >= 0;
-  // Karşılaştırma aynı istatistik tablosunu iki değişken sekmesinde yinelemez.
-  const istatistikBirlesik = sekme === 'istatistik' && ikinciSayisal;
-  const sekmeDegiskenleri = istatistikBirlesik
+  /**
+   * İki sayısal değişken aynı gösterimde birlikteyse (Selma ve Yasemin tek nokta grafiğinde, yan yana sütunlarda, iki
+   * çizgide, iki kök-yaprakta, iki istatistik bölümünde) ikisi için ayrı değişken sekmesi gösterilmez: grafik ikisini de
+   * zaten çiziyor. Seçili değişkenin sekmesi "Selma ve Yasemin" olur; başka değişken yoksa sekme satırı çizilmez
+   * (karşılaştırma "yok" yapılınca sekmeler geri gelir).
+   */
+  const birlikteGosterim = ikinciSayisal && (sekme === 'nokta' || sekme === 'sutun' || sekme === 'cizgi' || sekme === 'kokYaprak' || sekme === 'istatistik');
+  const sekmeDegiskenleri = birlikteGosterim
     ? temelSekmeDegiskenleri.filter((s) => s.id !== durum.ikinciDegisken).map((s) =>
-        s.id === grafikSutunId ? { ...s, ad: `${s.ad} / ${tablo.sutunlar[ikinciSutun].ad}` } : s)
+        s.id === grafikSutunId ? { ...s, ad: `${s.ad} ve ${tablo.sutunlar[ikinciSutun].ad}` } : s)
     : temelSekmeDegiskenleri;
 
 
@@ -1357,14 +1378,20 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
    * sütunlu türetilmiş tabloya açılır (seri kategorik sütunda); gruplu karşılaştırmada grupların renk eşlemesi yığınları ayırır.
    */
   const yanYanaNokta = useMemo(() => {
-    if (!tekGrafik || sekme !== 'nokta' || !degiskenGecerli || karsTuru === null || ikinciSutun < 0) return null;
+    if (!tekGrafik || sekme !== 'nokta' || !degiskenGecerli) return null;
+    // Ortaokul ve lise (TEGM, 21.10.2026: "sütun grafiği gibi"): karşılaştırma seçilmemişken renk anahtarı başka bir
+    // kategorik değişkense (5-A / 5-B) onun grupları da her değerde yan yana sütunlardır, üst üste karışık yığın değil
+    if (karsTuru === null || ikinciSutun < 0) {
+      const anahtarGrubu = !ilkokul && renkEslemi && renkEslemi.sutun !== noktaSutun && renkEslemi.kategoriler.length >= 2 && renkEslemi.kategoriler.length <= 6;
+      return anahtarGrubu ? { tablo, sutun: noktaSutun, eslem: renkEslemi, karsilik: undefined as number[] | undefined } : null;
+    }
     if (karsTuru === 'sayi') {
       const t = ikiSeriTablosu(tablo, noktaSutun, ikinciSutun);
       return { tablo: t.tablo, sutun: 1, eslem: t.eslem, karsilik: t.karsilik as number[] | undefined };
     }
     const eslem = grupEslemesi(tablo, ikinciSutun, kategoriSiralari.get(tablo.sutunlar[ikinciSutun]?.id ?? ''), renkEslemi);
     return eslem ? { tablo, sutun: noktaSutun, eslem, karsilik: undefined } : null;
-  }, [tekGrafik, sekme, degiskenGecerli, karsTuru, ikinciSutun, tablo, noktaSutun, kategoriSiralari, renkEslemi]);
+  }, [tekGrafik, sekme, degiskenGecerli, karsTuru, ikinciSutun, tablo, noktaSutun, kategoriSiralari, renkEslemi, ilkokul]);
   /** Grup panelleri tek renkli mi: renk anahtarı yok ya da gruplayan değişkenin kendisi (lejant gereksiz) */
   const grupRenkli = !renkEslemi || renkEslemi.sutun === ikinciSutun;
   /**
@@ -1391,12 +1418,16 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
    * Kök-yaprak (6. sınıf): karşılaştırmada sırt sırta iki seri (ikinci sayısal değişken ya da iki gruplu kategorik
    * değişkenin grupları)
    */
-  const kokYaprakSerileri = useMemo(() => {
-    if (sekme !== 'kokYaprak' || grafikSutun < 0 || karsTuru === null || ikinciSutun < 0) return undefined;
+  const kokYaprakGruplari = useMemo(() => {
+    if (sekme !== 'kokYaprak' || grafikSutun < 0 || karsTuru === null || ikinciSutun < 0) return [];
     if (karsTuru === 'sayi') return [{ ad: tablo.sutunlar[grafikSutun].ad, sutun: grafikSutun }, { ad: tablo.sutunlar[ikinciSutun].ad, sutun: ikinciSutun }];
     const g = grupPanelleri(tablo, grafikSutun, ikinciSutun, kategoriSiralari.get(tablo.sutunlar[ikinciSutun]?.id ?? ''));
-    return g.length === 2 ? g.map((p) => ({ ad: p.kategori, satirlar: p.satirlar })) : undefined;
+    return g.map((p) => ({ ad: p.kategori, satirlar: p.satirlar }));
   }, [sekme, grafikSutun, karsTuru, ikinciSutun, tablo, kategoriSiralari]);
+  /** Birleşik (sırt sırta) gösterim yalnız iki grupta kurulur */
+  const kokYaprakSerileri = kokYaprakGruplari.length === 2 ? kokYaprakGruplari : undefined;
+  /** Ayrı gösterim: her grubun kendi kök-yaprak gösterimi (başlık "Puan · 7-A"; iki sayısal değişkende değişkenin adı) */
+  const kokYaprakAyri = !grupBirlesik && kokYaprakGruplari.length >= 2;
   /** Çizgi grafiğinin serileri: seçili değişken ve (varsa) karşılaştırılan aynı birimli sayısal değişken */
   const cizgiSutunlari = grafikSutun >= 0 ? [grafikSutun, ...(ikinciSayisal && ikinciSutun !== grafikSutun ? [ikinciSutun] : [])] : [];
   /** Deney özetinde teorik olasılık serisi kesikli çizgiyle (deneysel olasılıkla karışmasın) */
@@ -1590,6 +1621,60 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   );
 
   /** Seçenek şeridi yalnız o grafiğin seçeneği varsa çizilir */
+
+  /** Renk anahtarının grupları (başka bir kategorik değişken, 2–6 grup): satırları o gruba ait alt tablolar */
+  const anahtarGruplari = useMemo(() => {
+    if (!renkEslemi || renkEslemi.sutun === etkinSutun || renkEslemi.kategoriler.length < 2 || renkEslemi.kategoriler.length > 6) return [];
+    return renkEslemi.kategoriler
+      .map((g) => ({
+        ad: g,
+        renk: renkEslemi.renkler.get(g),
+        tablo: { ...tablo, satirlar: tablo.satirlar.filter((_, i) => renkEslemi.satirKategorisi.get(i) === g) },
+      }))
+      .filter((g) => g.tablo.satirlar.length > 0);
+  }, [renkEslemi, etkinSutun, tablo]);
+  /**
+   * Daire, ayrı gösterim: her grubun kendi dairesi (dilimler grubun içindeki sıklıklar). Bir kategorinin rengi bütün
+   * dairelerde aynıdır (birleşik dairedeki sırasıyla); grupta görülmeyen kategori o dairede dilim değildir.
+   */
+  const daireGruplari = useMemo(() => {
+    // kategorikDaire ile aynı koşul (o aşağıda hesaplanır): kategorik değişken ya da değerlerin sıklığı
+    if (sekme !== 'daire' || etkinSutun < 0 || (!etkinKategorik && !daireSiklik) || anahtarGruplari.length < 2) return [];
+    const kaynakTum = daireSiklik ?? { tablo, sira: kategoriSiralari.get(etkinSutunId ?? '') };
+    const fTum = kategorikFrekanslar(kaynakTum.tablo, etkinSutun, kaynakTum.sira).filter((x) => x.sayi > 0 || kaynakTum.sira !== undefined);
+    const renkOf = new Map(fTum.map((x, i) => [x.kategori, kategoriRengi(x.kategori, i)]));
+    return anahtarGruplari.map((g) => {
+      const kaynak = daireSiklik ? degerSikligiTablosu(g.tablo, etkinSutun).tablo : g.tablo;
+      const f = kategorikFrekanslar(kaynak, etkinSutun, kaynakTum.sira).filter((x) => x.sayi > 0);
+      return {
+        ad: g.ad,
+        renk: g.renk,
+        tablo: frekansTablosu(f, tablo.sutunlar[etkinSutun]?.ad ?? 'Sıklık'),
+        renkler: f.map((x, i) => renkOf.get(x.kategori) ?? kategoriRengi(x.kategori, i)),
+      };
+    });
+  }, [sekme, etkinKategorik, anahtarGruplari, daireSiklik, tablo, kategoriSiralari, etkinSutunId, etkinSutun]);
+  const daireAyri = !grupBirlesik && daireGruplari.length >= 2;
+  /**
+   * İstatistik, ayrı gösterim: her grubun ölçüleri ya da sıklık tablosu ayrı bölümde ("Puan · 7-A"); iki sayısal değişken
+   * karşılaştırılırken her değişken ayrı. Birleşik gösterimde bugünkü gibi tek panel ve gruplar tablosu.
+   */
+  const istatistikGruplari = useMemo(() => {
+    if (sekme !== 'istatistik' || etkinSutun < 0 || istatistikSiklik) return [];
+    const ad = tablo.sutunlar[etkinSutun]?.ad ?? '';
+    if (!etkinKategorik && ikinciSayisal && ikinciSutun >= 0 && ikinciSutun !== etkinSutun)
+      return [
+        { anahtar: `s-${etkinSutun}`, baslik: ad, tablo, sutun: etkinSutun, alt: false, renk: undefined as string | undefined },
+        { anahtar: `s-${ikinciSutun}`, baslik: tablo.sutunlar[ikinciSutun]?.ad ?? '', tablo, sutun: ikinciSutun, alt: false, renk: undefined as string | undefined },
+      ];
+    return anahtarGruplari.map((g) => ({ anahtar: `g-${g.ad}`, baslik: `${ad} · ${g.ad}`, tablo: g.tablo, sutun: etkinSutun, alt: true, renk: g.renk }));
+  }, [sekme, etkinSutun, istatistikSiklik, tablo, etkinKategorik, ikinciSayisal, ikinciSutun, anahtarGruplari]);
+  const istatistikAyri = !grupBirlesik && istatistikGruplari.length >= 2;
+  /** "Birleşik göster" düğmesi: bu sekmede birden çok grup varsa (kök-yaprakta birleşik gösterim iki grupla kurulur) */
+  const grupDugmesiVar =
+    !ilkokul &&
+    !bos &&
+    ((sekme === 'kokYaprak' && kokYaprakGruplari.length === 2) || (sekme === 'daire' && daireGruplari.length >= 2) || (sekme === 'istatistik' && istatistikGruplari.length >= 2));
   const seritVar =
     (sekme === 'nokta' && degiskenGecerli) ||
     (sekme === 'sutun' && (sutunSiklik !== null || (!etkinKategorik && karsAdaylari.length > 0) || histogramMumkun || kosulluMumkun) && !bos) ||
@@ -1597,7 +1682,8 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
     (sekme === 'cizgi' && grafikSutun >= 0) ||
     (sekme === 'daire' && daireSayisal && !bos) ||
     (sekme === 'sacilim' && sacilim !== null) ||
-    (sekme === 'istatistik' && etkinSutun >= 0 && !etkinKategorik && !istatistikSiklik && karsAdaylari.length > 0 && !bos);
+    (sekme === 'istatistik' && etkinSutun >= 0 && !etkinKategorik && !istatistikSiklik && karsAdaylari.length > 0 && !bos) ||
+    grupDugmesiVar;
 
   /**
    * Çizgi, satırlar bir sıra değilken (öğrenci adları, kodlar): grafiğin üstünde kapatılabilir tek satırlık not. Kapatılan
@@ -2138,9 +2224,9 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
         >
           {/* Değişken sekmeleri grafiğin üstünde (seçili sekme grafiğin gösterdiği değişken; renkli nokta ikinci değişken);
               tek değişkende satır çizilmez, adı zaten grafikte yazar */}
-          {(istatistikBirlesik || sekmeDegiskenleri.length > 1 || (bantVar && kumeSecici)) && (
+          {(sekmeDegiskenleri.length > 1 || (bantVar && kumeSecici)) && (
           <div className="flex shrink-0 items-end gap-2 border-b border-border bg-background px-2 pt-2">
-            {sekmeDegiskenleri.length <= 1 && !istatistikBirlesik ? (
+            {sekmeDegiskenleri.length <= 1 ? (
               // Tek değişken: sekme çizilmez (korunan karar 2); satırda yalnız veri kümesi seçici durur
               <div className="min-w-0 flex-1" />
             ) : (
@@ -2265,6 +2351,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                     <React.Fragment key={`${etkinKume}-g-${g.kategori}`}>
                     {gi > 0 && <PanelAyraci />}
                     <NoktaGrafigi
+                      eksenOklari={!ilkokul}
                       // Renk anahtarı gruplayan değişkense (ya da yoksa) her panel tek renk: grubun anahtar rengi
                       // (lejant panel başlığını yinelemez); başka bir kategorik değişkense noktalar ona göre renklenir
                       seriIndeksi={grupRenkli ? (renkEslemi ? Math.max(0, renkEslemi.kategoriler.indexOf(g.kategori)) : gi) : undefined}
@@ -2301,6 +2388,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                 // 5–8. sınıf: iki grup tek grafikte, her değerde yan yana yığınlar (ikili gruplar)
                 <div className="flex h-full w-full" data-yan-yana-karsilastirma="">
                   <NoktaGrafigi
+                    eksenOklari={!ilkokul}
                     key={`${etkinKume}-yan`}
                     akis={akis}
                     tablo={yanYanaNokta.tablo}
@@ -2336,6 +2424,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                   data-karsilastirma-panelleri={ikiPanel ? '' : undefined}
                 >
                   <NoktaGrafigi
+                    eksenOklari={!ilkokul}
                     key={`${etkinKume}-1`}
                     akis={akis}
                     tablo={tablo}
@@ -2368,6 +2457,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                   {ikiPanel && <PanelAyraci />}
                   {ikiPanel && (
                     <NoktaGrafigi
+                      eksenOklari={!ilkokul}
                       key={`${etkinKume}-2`}
                       akis={akis}
                       tablo={tablo}
@@ -2438,6 +2528,23 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                       {sekmeGerekceleri.kokYaprak}
                     </p>
                   </div>
+                ) : kokYaprakAyri ? (
+                  // Ayrı gösterim: her grup kendi kök-yaprak gösteriminde, yan yana
+                  <div className="grid h-full w-full" style={{ gridTemplateColumns: `repeat(${kokYaprakGruplari.length}, minmax(0, 1fr))` }} data-ayri-gruplar="kok-yaprak">
+                    {kokYaprakGruplari.map((s, i) => (
+                      <div key={s.ad} className={`min-w-0 ${i > 0 ? 'border-l border-border' : ''}`} data-grup-gosterimi={s.ad}>
+                        <KokYaprak
+                          tablo={tablo}
+                          sutun={grafikSutun}
+                          seriler={[{ ...s, ad: 'sutun' in s ? s.ad : `${tablo.sutunlar[grafikSutun]?.ad ?? ''} · ${s.ad}` }]}
+                          seciliSatir={seciliGecerli}
+                          onSatirSec={setSeciliSatir}
+                          genislik={Math.floor(grafikGenislik / kokYaprakGruplari.length) - (i > 0 ? 1 : 0)}
+                          yukseklik={grafikYukseklik}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 ) : (
                   <KokYaprak
                     tablo={tablo}
@@ -2498,6 +2605,42 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                     onSiklik={() => guncelle({ daireModu: 'siklik' })}
                     onSatir={() => guncelle({ daireModu: 'satir' })}
                   />
+                ) : kategorikDaire && daireAyri ? (
+                  // Ayrı gösterim: her grubun kendi dairesi (en çok üç yan yana; başlıkta grubun adı ve rengi)
+                  (() => {
+                    const sutunSayisi = Math.min(daireGruplari.length, 3);
+                    const satirSayisi = Math.ceil(daireGruplari.length / sutunSayisi);
+                    const hucreG = Math.floor(grafikGenislik / sutunSayisi);
+                    const hucreY = Math.floor(grafikYukseklik / satirSayisi);
+                    return (
+                      <div className="grid h-full w-full" style={{ gridTemplateColumns: `repeat(${sutunSayisi}, minmax(0, 1fr))` }} data-ayri-gruplar="daire">
+                        {daireGruplari.map((g, i) => (
+                          <div key={g.ad} className={`flex min-w-0 flex-col ${i % sutunSayisi > 0 ? 'border-l border-border' : ''}`} data-grup-gosterimi={g.ad}>
+                            <div className="flex h-8 shrink-0 items-center gap-2 px-3 text-[14px] font-bold text-foreground">
+                              <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ background: g.renk }} aria-hidden="true" />
+                              {g.ad}
+                            </div>
+                            <DaireGrafigi
+                              tablo={g.tablo}
+                              sutun={1}
+                              seciliSatir={null}
+                              onSatirSec={() => undefined}
+                              onDegerlerDegis={() => undefined}
+                              genislik={hucreG - (i % sutunSayisi > 0 ? 1 : 0)}
+                              yukseklik={Math.max(0, hucreY - 32)}
+                              azaltilmisHareket={azaltilmisHareket}
+                              surukleKapali
+                              renkler={g.renkler}
+                              halka={null}
+                              aciklama={kategorikDaire.aciklama}
+                              oransiz={!kurallar.yuzdeVeAci}
+                              acisiz={kurallar.sinif !== null || kademe === 'ortaokul' || ilkokul}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()
                 ) : kategorikDaire ? (
                   <DaireGrafigi
                     tablo={kategorikDaire.tablo}
@@ -2554,7 +2697,46 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                     </p>
                   </div>
                 ))}
-              {!bos && sekme === 'istatistik' &&
+              {!bos && sekme === 'istatistik' && istatistikAyri && (
+                // Ayrı gösterim: her grubun (ya da karşılaştırılan her değişkenin) ölçüleri kendi bölümünde, alt alta
+                <div className="flex h-full min-h-0 flex-col overflow-auto bg-background" data-ayri-gruplar="istatistik">
+                  {istatistikGruplari.map((g, i) => (
+                    <div key={g.anahtar} className={`shrink-0 ${i > 0 ? 'border-t border-border' : ''}`} data-grup-gosterimi={g.baslik} style={g.renk ? { boxShadow: `inset 4px 0 0 ${g.renk}` } : undefined}>
+                      {etkinKategorik ? (
+                        <KategorikIstatistik
+                          gomulu
+                          baslik={g.baslik}
+                          tablo={g.tablo}
+                          sutun={g.sutun}
+                          sira={siraBul(g.sutun)}
+                          renkEslemi={null}
+                          deneyVerisi={toplama.deneyVerisi}
+                          tepeDeger={kurallar.olculer.merkezi}
+                          oranlar={liseSinifi(kurallar.sinif)}
+                          tekYonluIleBirlikte={kurallar.tekYonluTabloIleBirlikte}
+                          cetele={kurallar.cetele}
+                          kosullu={false}
+                        />
+                      ) : (
+                        <IstatistikPaneli
+                          gomulu
+                          baslik={g.baslik}
+                          tablo={g.tablo}
+                          sutun={g.sutun}
+                          seciliSatir={g.alt ? null : seciliGecerli}
+                          onSatirSec={g.alt ? () => undefined : setSeciliSatir}
+                          adimlariGoster={adimlariGoster}
+                          onAdimlariGoster={(v) => guncelle({ adimlariGoster: v })}
+                          renkEslemi={null}
+                          olculer={kurallar.olculer}
+                          ceyrekler={kurallar.histogramVeKutu === true}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!bos && sekme === 'istatistik' && !istatistikAyri &&
                 (etkinKategorik || istatistikSiklik ? (
                   <KategorikIstatistik
                     tablo={istatistikSiklik ? istatistikSiklik.tablo : tablo}
@@ -2742,6 +2924,20 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
           !etkinKategorik &&
           !istatistikSiklik &&
           karsilastirSecimi(karsAdaylari, ikinciSayisal ? durum.ikinciDegisken ?? '' : '')}
+        {/* Kök-yaprak, Daire, İstatistik: gruplar ayrı gösterilir; düğme birleşik (tek) gösterimi açar (TEGM, 21.10.2026) */}
+        {grupDugmesiVar && (
+          <button
+            type="button"
+            aria-pressed={grupBirlesik}
+            title={seritDar ? 'Birleşik göster' : 'Grupları tek gösterimde birleştir'}
+            className={SECENEK_DUGMESI(grupBirlesik, seritDar)}
+            onClick={() => guncelle({ grupBirlesik: !grupBirlesik })}
+            data-grup-birlesik
+          >
+            <SecenekSimgesi ad="birlesik" />
+            <span className={seritDar ? 'sr-only' : undefined}>Birleşik göster</span>
+          </button>
+        )}
       </div>
       )}
         </main>

@@ -196,7 +196,9 @@ describe('lise araçları uygulamada: yalnız sınıf kuralı izin verince', () 
 
   it('10. sınıf: kategorik Sütun’da "Grup içinde yüzde", İstatistik’te koşullu göreli sıklıklar ve göreli sıklık sütunu', () => {
     expect(uygulamaCiz(yukle('okulyolu', { sekme: 'sutun' }), 'lise')).toContain('data-lise-gorunum="kosullu"');
-    const ist = uygulamaCiz(yukle('okulyolu', { sekme: 'istatistik' }), 'lise');
+    // Gruplar ayrı gösterilirken her grubun sıklık tablosu; koşullu tablo birleşik gösterimde
+    expect(uygulamaCiz(yukle('okulyolu', { sekme: 'istatistik', grupBirlesik: false }), 'lise')).toContain('data-ayri-gruplar="istatistik"');
+    const ist = uygulamaCiz(yukle('okulyolu', { sekme: 'istatistik', grupBirlesik: true }), 'lise');
     expect(ist).toContain('data-kosullu-tablo="sutun"');
     expect(ist).toContain('Göreli sıklık');
     // Hazırlık ve 9. sınıfta koşullu tablo yok

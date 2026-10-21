@@ -55,7 +55,7 @@ import {
 } from './kategorik';
 import { RenkLejanti, renkLejantiGenisligi } from './RenkLejanti';
 import { NesneGrafigi } from './NesneGrafigi';
-import { EksenOklari } from './EksenOklari';
+import { EksenOklari, YatayCiftOk } from './EksenOklari';
 import type { NoktaSekli, OlcuKumesi } from './sinifKurallari';
 import { KareIsareti } from './nesneSimgeleri';
 
@@ -147,6 +147,11 @@ export interface NoktaGrafigiProps {
   sekil?: NoktaSekli;
   /** Nesne / şekil grafiğinin anahtarı ("Her resim 1 öğrenciyi gösterir."): üst satırda; yalnız şekil ya da nesneyle */
   sekilAnahtari?: string;
+  /**
+   * Sayısal yatay eksen sayı doğrusu gibi iki ucu oklu çizilir (TEGM, ortaokul ve lise, 21.10.2026); düşey eksen
+   * yoktur. Verilmezse eksen düz çizgidir (ilkokul).
+   */
+  eksenOklari?: boolean;
 }
 
 /** Bu kadar noktadan sonra geçiş animasyonları kapanır (akıllı tahtada akıcılık) */
@@ -160,6 +165,13 @@ const COK_NOKTA = 400;
 const YARICAP_BASAMAKLARI = [18, 15, 12, 10, 9, 8, 6];
 /** Komşu yığınlar sıkışıkken bile noktaların inebileceği okunur yarıçap (hafif örtüşmeye izin verilir) */
 const OKUNUR_YARICAP = 9;
+/** İki ucu oklu eksende çizginin ölçeğin dışına taşan kısmı (ok başı için; SOL ve SAG en az 20 px) */
+const EKSEN_UC_PAYI = 12;
+/**
+ * Yan yana görünümde (gruplar her değerde kendi sütununda) noktanın en küçük yarıçapı: sık veride (ör. 1'er birim
+ * aralıklı 40 değer) noktalar okunmaz kadar küçülmez; bu sınırda komşu değerlerin sütunları birbirine değebilir.
+ */
+const YAN_EN_AZ_YARICAP = 4.5;
 const basamakla = (r: number) => YARICAP_BASAMAKLARI.find((b) => b <= r) ?? r;
 
 /** Yoğun yığın (yan yana sıralar ya da küçücük noktalar): tek tek etiket yerine yığın başına sayı yazılır */
@@ -457,6 +469,7 @@ export function NoktaGrafigi({
   yanYanaParcalar = false,
   sekil = 'nokta',
   sekilAnahtari,
+  eksenOklari = false,
 }: NoktaGrafigiProps) {
   /** Türetilmiş satırın asıl tablodaki satırı (karşılık yoksa kendisi) */
   const asil = (s: number) => (satirKarsiligi ? satirKarsiligi[s] ?? s : s);
@@ -736,12 +749,24 @@ export function NoktaGrafigi({
     // okunmaz kılar: o durumda yarıçap OKUNUR_YARICAP'a kadar büyür, komşu yığınlar en çok aralığın ~%24'ü kadar örtüşür.
     // Yan yana görünümde bu örtüşme payı yoktur: bir değerdeki grup yığınları komşu değerin yığınlarına binmez (dar
     // pencerede 75'in 7-B noktası 80'in 7-A noktasının üstüne düşmesin; ikili gruplar karışmasın).
+    // Yan yana (TEGM, 21.10.2026: "sütun grafiği gibi"): bir değerde yalnız verisi olan grupların sütunları yan yana durur
+    // ve ortaları değerin tam üstündedir (boş grubun yuvası ayrılmaz; tek grubun sütunu değerin üstündedir). Komşu iki
+    // değerin sütunları birbirine binmez: yarıçap, iki değerdeki sütun sayılarının toplamına bölünen aradan bulunur.
+    const yanDoluluk = yanAnahtar ? yiginlar.map((y) => grupla(y.ogeler.map((o) => o.satir)).filter((g) => g.length > 0).length) : [];
+    let yanRYatay = Infinity;
+    if (yanAnahtar && olcek) {
+      for (let i = 1; i < yiginlar.length; i++) {
+        const ara = olcek.ileri(yiginlar[i].merkez) - olcek.ileri(yiginlar[i - 1].merkez);
+        // Komşu değerlerin sütunları birbirine binmez (uzman 7. tur: ikili gruplar karışmasın)
+        yanRYatay = Math.min(yanRYatay, (ara - 2) / Math.max(1, yanDoluluk[i] + yanDoluluk[i - 1]) - 0.5);
+      }
+      if (yiginlar.length === 1) yanRYatay = alanG / 2 / Math.max(1, yanDoluluk[0]) - 0.5;
+    }
     const yanUzaklik = enKucukUzaklik / K;
-    const rYatay =
-      yiginlar.length > 1
-        ? yanAnahtar
-          ? Math.max(0.8, yanUzaklik / 2 - 0.5)
-          : Math.max(yanUzaklik / 2 - 0.5, Math.min(OKUNUR_YARICAP, yanUzaklik * 0.62))
+    const rYatay = yanAnahtar
+      ? Math.max(YAN_EN_AZ_YARICAP, Number.isFinite(yanRYatay) ? yanRYatay : alanG / 2 / K)
+      : yiginlar.length > 1
+        ? Math.max(yanUzaklik / 2 - 0.5, Math.min(OKUNUR_YARICAP, yanUzaklik * 0.62))
         : alanG / 2 / K;
     /** Verilen dikey alanda sayısal yığınların yarıçapı, adımı ve sıra genişliği */
     const yaricapBul = (dikeyAlan: number): { r: number; adim: number; yiginSutunu: number } => {
@@ -833,8 +858,11 @@ export function NoktaGrafigi({
           const enUzun = Math.max(...gruplar.map((g) => g.length));
           const ustGrup = gruplar.findIndex((g) => g.length === enUzun);
           const degerOf = new Map(y.ogeler.map((o) => [o.satir, o.deger]));
+          // Verisi olan grupların sırası: noktalar yalnız bu gruplar arasında ortalanır (sütun modunda yuvalar sabit)
+          const doluGruplar = gruplar.map((g, i) => (g.length > 0 ? i : -1)).filter((i) => i >= 0);
           gruplar.forEach((liste, gi) => {
-            const gx = x + (gi - (K - 1) / 2) * (sutunModu ? yanSutunG + 2 : yanAdim);
+            const j = doluGruplar.indexOf(gi);
+            const gx = sutunModu ? x + (gi - (K - 1) / 2) * (yanSutunG + 2) : x + (j - (doluGruplar.length - 1) / 2) * yanAdim;
             liste.forEach((satir, sira) => {
               const etiket = yiginSayisi ? undefined : gi === ustGrup && sira === liste.length - 1 ? 'ust' : undefined;
               const deger = degerOf.get(satir) ?? 0;
@@ -1482,10 +1510,11 @@ export function NoktaGrafigi({
         </g>
       )}
 
-      {/* Sayısal eksen */}
+      {/* Sayısal eksen (ortaokul ve lisede sayı doğrusu gibi iki ucu oklu: uçlar ölçeğin dışına 12 px taşar) */}
       {!kategorikKutulu && eksen && olcek && (
         <g>
-          <line x1={SOL} x2={W - SAG} y1={taban} y2={taban} stroke={RENK.metin} strokeWidth={1.5} />
+          <line x1={eksenOklari ? SOL - EKSEN_UC_PAYI : SOL} x2={eksenOklari ? W - SAG + EKSEN_UC_PAYI : W - SAG} y1={taban} y2={taban} stroke={RENK.metin} strokeWidth={1.5} />
+          {eksenOklari && <YatayCiftOk x0={SOL - EKSEN_UC_PAYI} x1={W - SAG + EKSEN_UC_PAYI} y={taban} />}
           {isaretler.map((v, i) => {
             const metin = sayiMetni(v, isaretOndaligi);
             // Uçtaki etiket ("40 000") grafiğin kenarından taşmaz: yarı genişliği kadar içeri kıstırılır

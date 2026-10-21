@@ -104,7 +104,10 @@ export function kokYaprakGosterimi(seriler: readonly KokYaprakSerisi[]): KokYapr
 export interface KokYaprakProps {
   tablo: VeriTablosu;
   sutun: number;
-  /** Sırt sırta: ikinci seri (ikinci sayısal değişken ya da ikinci grup) ve serilerin adları */
+  /**
+   * Seriler: iki seri sırt sırta (ikinci sayısal değişken ya da ikinci grup); tek seri o grubun ya da değişkenin
+   * kendi gösterimi (gruplar ayrı gösterilirken; başlık serinin adı). Verilmezse sütunun bütün değerleri.
+   */
   seriler?: { ad: string; satirlar?: number[]; sutun?: number }[];
   seciliSatir: number | null;
   onSatirSec: (satir: number | null) => void;
@@ -120,7 +123,7 @@ export function KokYaprak({ tablo, sutun, seriler, seciliSatir, onSatirSec, geni
   const sutunAdi = tablo.sutunlar[sutun]?.ad ?? '';
   // Seriler: verilmezse tek seri (sütunun bütün değerleri); verilirse her biri bir sütun ya da satır alt kümesi
   const seriVerisi = useMemo(() => {
-    const tanim = seriler && seriler.length === 2 ? seriler : [{ ad: sutunAdi }];
+    const tanim = seriler && (seriler.length === 1 || seriler.length === 2) ? seriler : [{ ad: sutunAdi }];
     return tanim.map((s) => {
       const kume = s.satirlar ? new Set(s.satirlar) : null;
       return { ad: s.ad, veri: gecerliDegerler(tablo, s.sutun ?? sutun).filter((n) => kume === null || kume.has(n.satir)) };
@@ -161,7 +164,7 @@ export function KokYaprak({ tablo, sutun, seriler, seciliSatir, onSatirSec, geni
       style={{ fontFamily: 'Manrope, sans-serif' }}
     >
       <text x={16} y={20} fontSize={13} fontWeight={700} fill={RENK.metin} data-kok-yaprak-basligi>
-        {sirtSirta ? `${seriVerisi[0].ad} ve ${seriVerisi[1].ad}` : sutunAdi}
+        {sirtSirta ? `${seriVerisi[0].ad} ve ${seriVerisi[1].ad}` : seriVerisi[0]?.ad ?? sutunAdi}
       </text>
       {veriSayisi === 0 ? (
         <text x={W / 2} y={H / 2} fontSize={13} fontWeight={700} textAnchor="middle" fill={RENK.solukMetin}>
