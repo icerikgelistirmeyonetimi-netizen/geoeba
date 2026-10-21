@@ -145,7 +145,7 @@ describe('çokgen en çok sekizgen (not 7)', () => {
 });
 
 describe('ilkokul görünümü (not 8, 11, 12, 13): nesne verisi değişmez, türetilmiş görünüm', () => {
-  it('kare: köşe noktaları harf adı göstermez, alan hesabı yazılmaz; gerçek nesnelere dokunulmaz', () => {
+  it('kare: köşe noktaları harf adı göstermez; istenmiş alan ve çevre ölçüleri ile gerçek veri korunur', () => {
     const kare = [
       nokta('e', 9, 9),
       nokta('a', 0, 0), nokta('b', 2, 0), nokta('c', 2, 2), nokta('d', 0, 2),
@@ -155,24 +155,33 @@ describe('ilkokul görünümü (not 8, 11, 12, 13): nesne verisi değişmez, tü
     const sonuc = ilkokulGorunumu(kare);
     for (const id of ['a', 'b', 'c', 'd', 'e']) expect(sonuc.find((o) => o.id === id)!.showLabel, id).toBe(false);
     const k = sonuc.find((o) => o.id === 'k') as MathObject & { showArea?: boolean; showPerimeter?: boolean };
-    expect(k.showArea).toBe(false);
+    expect(k.showArea).toBe(true);
     expect(k.showPerimeter).toBe(true);
-    // Gerçek veri olduğu gibi: başka kademeye geçince adlar ve alan geri gelir
+    // Görünüm yalnız nokta adlarını gizler; kaynak verideki adlar ve ölçüm tercihi değişmez.
     expect(JSON.stringify(kare)).toBe(kopya);
     expect(kare[1].showLabel).toBe(true);
   });
 
-  it('çember: merkezi ve yarıçap noktası gizli ve adsız; alan, çevre ve yarıçap yazısı yok', () => {
+  it.each([
+    { showRadius: undefined, beklenenYaricap: false },
+    { showRadius: false, beklenenYaricap: false },
+    { showRadius: true, beklenenYaricap: true },
+  ])('çember: alan ve çevre ölçüsü korunur; yarıçap tercihi $showRadius ise $beklenenYaricap olur', ({ showRadius, beklenenYaricap }) => {
     const merkez = nokta('o', 0, 0);
-    const sonuc = ilkokulGorunumu([
-      merkez,
-      { id: 'c', type: 'circle', label: 'O Merkezli Çember', showLabel: true, centerPointId: 'o', fixedRadius: 2, color: '#00f', visible: true, createdAt: 0, showArea: true, showPerimeter: true } as MathObject,
-    ]);
+    const yaricapNoktasi = nokta('r', 2, 0);
+    const kaynak = [
+      merkez, yaricapNoktasi,
+      { id: 'c', type: 'circle', label: 'O Merkezli Çember', showLabel: true, centerPointId: 'o', radiusPointId: 'r', color: '#00f', visible: true, createdAt: 0, showArea: true, showPerimeter: true, showRadius } as MathObject,
+    ];
+    const kopya = JSON.stringify(kaynak);
+    const sonuc = ilkokulGorunumu(kaynak);
     const o = sonuc.find((x) => x.id === 'o')!;
     expect(o.showLabel).toBe(false);
     expect(o.visible).toBe(false);
+    expect(sonuc.find((x) => x.id === 'r')).toMatchObject({ showLabel: false, visible: false });
     expect(merkez.visible).toBe(true);
-    expect(sonuc.find((x) => x.id === 'c')).toMatchObject({ showArea: false, showPerimeter: false, showRadius: false });
+    expect(sonuc.find((x) => x.id === 'c')).toMatchObject({ showArea: true, showPerimeter: true, showRadius: beklenenYaricap });
+    expect(JSON.stringify(kaynak)).toBe(kopya);
   });
 
   it('çemberin merkezi başka bir nesnenin de noktasıysa görünür kalır (yalnız adı gizlenir)', () => {
@@ -186,12 +195,12 @@ describe('ilkokul görünümü (not 8, 11, 12, 13): nesne verisi değişmez, tü
     expect(sonuc.find((x) => x.id === 's')).toBe(parca);
   });
 
-  it('açı: derece yazılmaz (açıölçerle ölçme yok)', () => {
+  it('açı: açıkça istenmiş derece gösterimi korunur', () => {
     const sonuc = ilkokulGorunumu([
       nokta('a', 1, 0), nokta('b', 0, 0), nokta('c', 0, 1),
       { id: 'ang', type: 'angle', label: '∠ABC', showLabel: true, point1Id: 'a', vertexPointId: 'b', point3Id: 'c', color: '#f90', visible: true, createdAt: 0, showValue: true } as MathObject,
     ]);
-    expect(sonuc.find((x) => x.id === 'ang')!).toMatchObject({ showValue: false });
+    expect(sonuc.find((x) => x.id === 'ang')!).toMatchObject({ showValue: true });
   });
 
   it("uzunluk yazımı: ilkokul görünümünde '2 br', gerçek nesnelerle '|AB| = 2 br' (kademe değişince ad geri gelir)", () => {

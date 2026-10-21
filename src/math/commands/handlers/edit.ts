@@ -1072,7 +1072,7 @@ const sizeHandler: CommandHandler = {
         const current = area ? calculatePolygonArea(v) : calculatePolygonPerimeter(v);
         if (!(current > 1e-12)) fail('Çokgenin alanı sıfır; önce köşeleri ayırın.');
         scalePolygon(s, target, area ? Math.sqrt(value / current) : value / current);
-        s.say(`${sentence(describe(target))}: ${area ? 'alan' : 'çevre'} ${trNum(value)} ${area ? 'br²' : 'br'} yapıldı (şekli korunarak ölçeklendi).`);
+        s.say(`${sentence(describe(target))}: ${area ? 'alan' : 'çevre'} ${trNum(value)} ${area ? 'birimkare' : 'br'} yapıldı (şekli korunarak ölçeklendi).`);
         return;
       }
       if (target.type === 'circle') {
@@ -1087,7 +1087,7 @@ const sizeHandler: CommandHandler = {
         s.resolve();
         reproject(s, before);
         s.setFocus([target.id]);
-        s.say(`${sentence(describe(target))}: alan ${trNum(value)} br² yapıldı.`);
+        s.say(`${sentence(describe(target))}: alan ${trNum(value)} birimkare yapıldı.`);
         return;
       }
       fail(`${sentence(describe(target))} için ${area ? 'alan' : 'çevre'} ayarlanamaz.`);

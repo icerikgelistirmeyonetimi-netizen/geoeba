@@ -254,9 +254,12 @@ export const CISIM_GEREKEN_ARACLAR: readonly Tool3DMode[] = ['rotate_3d', 'scale
 /** Cisim seçili değilken şeritte gösterilen açıklama. */
 export const ONCE_CISIM_SECIN = 'Önce bir cisim seçin';
 
-/** Seçili tek cisim için canlı "V = 27 br³ · A = 54 br²" */
-export function hacimAlanMetni(solid: Solid3DObject): string {
-  return `V = ${formatTurkishNumber(calculate3DVolume(solid), 1)} br³ · A = ${formatTurkishNumber(calculate3DSurfaceArea(solid), 1)} br²`;
+/** Yalnızca istenen sonuçlar hesaplanır; hazır örneklerde iki sonucu birlikte istemek mümkündür. */
+export function hacimAlanMetni(solid: Solid3DObject, istenen: { hacim?: boolean; alan?: boolean } = { hacim: true, alan: true }): string {
+  const sonuclar: string[] = [];
+  if (istenen.hacim) sonuclar.push(`V = ${formatTurkishNumber(calculate3DVolume(solid), 1)} br³`);
+  if (istenen.alan) sonuclar.push(`A = ${formatTurkishNumber(calculate3DSurfaceArea(solid), 1)} birimkare`);
+  return sonuclar.join(' · ');
 }
 
 /** Ayna düzlemi seçenekleri ve etiketleri: "xy düzlemi (z = 0)" */

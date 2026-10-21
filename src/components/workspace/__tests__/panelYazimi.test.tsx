@@ -71,7 +71,7 @@ describe('Açı yazımı ayarının önizlemesi', () => {
 
 describe('YazimKopyala', () => {
   it('iki düğme: Metni kopyala ve LaTeX olarak kopyala', () => {
-    const html = renderToStaticMarkup(<YazimKopyala metin="A(ABC) = 6 br²" />);
+    const html = renderToStaticMarkup(<YazimKopyala metin="A(ABC) = 6 birimkare" />);
     expect(html).toContain('aria-label="Metni kopyala"');
     expect(html).toContain('aria-label="LaTeX olarak kopyala"');
     expect(html).toContain('data-yazim-kopyala="1"');

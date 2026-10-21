@@ -12,11 +12,11 @@ const ISARET = { ...VARSAYILAN_YAZIM, aciYazimi: 'isaret' as const };
 export const YAZIM_ORNEKLERI = [
   '|AB| = 5 br',
   '|AB| ≈ 10,39 br. |CD| = 2 cm.',
-  'A(ABC) = 6 br², Ç(ABC) = 12 br.',
+  'A(ABC) = 6 birimkare, Ç(ABC) = 12 br.',
   'ABC açıları: m(∠CAB) = 90°, m(∠ABC) ≈ 36,87°, m(∠BCA) ≈ 53,13° (toplam 180°).',
   '|B͡C| ≈ 3,14 br. m(B͡C) = 90°.',
   '|A͡C͡B| ≈ 14,14 br',
-  'Ç(A, r): alan = πr² ≈ 28,27 br², çevre = 2πr ≈ 18,85 br.',
+  'Ç(A, r): alan = πr² ≈ 28,27 birimkare, çevre = 2πr ≈ 18,85 br.',
   'A merkezli çemberin yarıçapı 2,5 br.',
   'ABCD köşegenleri: |AC| ≈ 2,83 br, |BD| ≈ 2,83 br.',
   'sin B̂ = |AC|/|BC| = 3/5 = 0,6',
@@ -24,7 +24,7 @@ export const YAZIM_ORNEKLERI = [
   'r = |OA| = 3 br',
   'kiriş |BC| ≈ 2,83 br',
   'çap |BC| = 2r = 6 br',
-  'A(AOB dilimi) ≈ 4,71 br², Ç(AOB dilimi) ≈ 7,14 br.',
+  'A(AOB dilimi) ≈ 4,71 birimkare, Ç(AOB dilimi) ≈ 7,14 br.',
   'AB eğimi ≈ 1,3333',
   "A_1 ve B' noktaları: |A_1B'| = 2 br.",
   'y = 2x + 1: eğim = 2.',
@@ -38,7 +38,7 @@ export const YAZIM_ORNEKLERI = [
   'A(2; -3) noktası oluşturuldu.',
   '[OH] ⊥ d, AB ∥ CD.',
   'Ölçüler adıyla yazılıyor: |AB| = 5 br.',
-  'E Merkezli Elips: alan = πab ≈ 18,85 br², çevre ≈ 15,87 br.',
+  'E Merkezli Elips: alan = πab ≈ 18,85 birimkare, çevre ≈ 15,87 br.',
 ] as const;
 
 describe('LaTeX (düğüm yolundan)', () => {
@@ -47,11 +47,11 @@ describe('LaTeX (düğüm yolundan)', () => {
     [olcuLatex(aci(A, B, C, 60)), 'm(\\widehat{\\mathrm{A}\\mathrm{B}\\mathrm{C}}) = 60^\\circ'],
     [olcuLatex(aci(A, B, C, 60), ISARET), 'm(\\angle \\mathrm{A}\\mathrm{B}\\mathrm{C}) = 60^\\circ'],
     [olcuLatex(yayUzunlugu({ bas: A, son: B, buyuk: false }, 7.1239)), '|\\overset{\\frown}{\\mathrm{A}\\mathrm{B}}| \\approx 7{,}12\\ \\mathrm{br}'],
-    [olcuLatex(alan([A, B, C], 12)), '\\mathrm{A}(\\mathrm{A}\\mathrm{B}\\mathrm{C}) = 12\\ \\mathrm{br}^2'],
+    [olcuLatex(alan([A, B, C], 12)), '\\mathrm{A}(\\mathrm{A}\\mathrm{B}\\mathrm{C}) = 12\\ \\text{birimkare}'],
     [olcuLatex(cevre([A, B, C], 24)), '\\text{Ç}(\\mathrm{A}\\mathrm{B}\\mathrm{C}) = 24\\ \\mathrm{br}'],
-    [olcuLatex(daireAlani(9 * Math.PI)), '\\text{Alan} = \\pi r^2 \\approx 28{,}27\\ \\mathrm{br}^2'],
+    [olcuLatex(daireAlani(9 * Math.PI)), '\\text{Alan} = \\pi r^2 \\approx 28{,}27\\ \\text{birimkare}'],
     [olcuLatex(cemberCevresi(6 * Math.PI)), '\\text{Çevre} = 2\\pi r \\approx 18{,}85\\ \\mathrm{br}'],
-    [olcuLatex(dilimAlani(A, O, B, 4.712)), '\\mathrm{A}(\\mathrm{A}\\mathrm{O}\\mathrm{B}\\text{ dilimi}) \\approx 4{,}71\\ \\mathrm{br}^2'],
+    [olcuLatex(dilimAlani(A, O, B, 4.712)), '\\mathrm{A}(\\mathrm{A}\\mathrm{O}\\mathrm{B}\\text{ dilimi}) \\approx 4{,}71\\ \\text{birimkare}'],
     [olcuLatex(yaricap(O, A, 3)), 'r = |\\mathrm{O}\\mathrm{A}| = 3\\ \\mathrm{br}'],
     [olcuLatex(kiris(A, B, 6, true)), '\\text{çap }|\\mathrm{A}\\mathrm{B}| = 2r = 6\\ \\mathrm{br}'],
     [olcuLatex(uzunluk(P('A_1'), P("B'"), 2)), "|\\mathrm{A}_{1}\\mathrm{B}'| = 2\\ \\mathrm{br}"],
@@ -84,17 +84,17 @@ describe('LaTeX (düz metin yolundan)', () => {
   it.each([
     ["A_1 ve B' noktaları: |A_1B'| = 2 br.",
       "\\mathrm{A}_{1} \\text{ve }\\mathrm{B}' \\text{noktaları: }|\\mathrm{A}_{1}\\mathrm{B}'| = 2\\ \\mathrm{br}."],
-    ['A(ABC) = 6 br², Ç(ABC) = 12 br.',
-      '\\mathrm{A}(\\mathrm{A}\\mathrm{B}\\mathrm{C}) = 6\\ \\mathrm{br}^2, \\text{Ç}(\\mathrm{A}\\mathrm{B}\\mathrm{C}) = 12\\ \\mathrm{br}.'],
-    ['Ç(A, r): alan = πr² ≈ 28,27 br², çevre = 2πr ≈ 18,85 br.',
-      '\\text{Ç}(\\mathrm{A}, r): \\text{alan} = \\pi r^2 \\approx 28{,}27\\ \\mathrm{br}^2, \\text{çevre} = 2\\pi r \\approx 18{,}85\\ \\mathrm{br}.'],
+    ['A(ABC) = 6 birimkare, Ç(ABC) = 12 br.',
+      '\\mathrm{A}(\\mathrm{A}\\mathrm{B}\\mathrm{C}) = 6\\ \\text{birimkare}, \\text{Ç}(\\mathrm{A}\\mathrm{B}\\mathrm{C}) = 12\\ \\mathrm{br}.'],
+    ['Ç(A, r): alan = πr² ≈ 28,27 birimkare, çevre = 2πr ≈ 18,85 br.',
+      '\\text{Ç}(\\mathrm{A}, r): \\text{alan} = \\pi r^2 \\approx 28{,}27\\ \\text{birimkare}, \\text{çevre} = 2\\pi r \\approx 18{,}85\\ \\mathrm{br}.'],
     ['sin B̂ = |AC|/|BC| = 3/5 = 0,6',
       '\\sin \\widehat{\\mathrm{B}} = |\\mathrm{A}\\mathrm{C}|/|\\mathrm{B}\\mathrm{C}| = 3/5 = 0{,}6'],
     ['|A͡C͡B| ≈ 14,14 br', '|\\overset{\\frown}{\\mathrm{A}\\mathrm{C}\\mathrm{B}}| \\approx 14{,}14\\ \\mathrm{br}'],
     ['[OH] ⊥ d, AB ∥ CD.',
       '[\\mathrm{O}\\mathrm{H}] \\perp d, \\mathrm{A}\\mathrm{B} \\parallel \\mathrm{C}\\mathrm{D}.'],
     // 'πab' düğüm yolundaki elipsAlani ile AYNI LaTeX'i verir: değişkenler eğik ('\\text{ab}' değil).
-    ['alan = πab ≈ 18,85 br²', '\\text{alan} = \\pi ab \\approx 18{,}85\\ \\mathrm{br}^2'],
+    ['alan = πab ≈ 18,85 birimkare', '\\text{alan} = \\pi ab \\approx 18{,}85\\ \\text{birimkare}'],
   ])('%s', (metin, beklenen) => expect(latex(metniCozumle(metin))).toBe(beklenen));
 
   it('latexDenetle ondalık virgülü ve dengesiz parantezi yakalar', () => {

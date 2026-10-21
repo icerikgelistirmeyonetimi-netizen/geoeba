@@ -28,7 +28,7 @@ describe('yanıt yazımı: sesli okunuş', () => {
   });
 
   it.each([
-    ['A(ABC) = 6 br², Ç(ABC) = 12 br.', 'a be ce üçgeninin alanı altı birimkare, a be ce üçgeninin çevresi on iki birim.'],
+    ['A(ABC) = 6 birimkare, Ç(ABC) = 12 br.', 'a be ce üçgeninin alanı altı birimkare, a be ce üçgeninin çevresi on iki birim.'],
     ['|B͡C| ≈ 3,14 br. m(B͡C) = 90°.', 'be ce yayının uzunluğu yaklaşık üç virgül on dört birim. be ce yayının ölçüsü doksan derece.'],
     ['r = |OA| = 3 br', 'yarıçap, o a uzunluğu üç birim'],
     ['m(∠ABC) = 300° (dış açı)', 'a be ce açısının ölçüsü üç yüz derece (dış açı)'],

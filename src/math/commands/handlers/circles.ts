@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import type { PointObject } from '@/types/math';
 import { rotateAround, triangleCenterPoint } from '../../commandBindings';
 import type { CommandHandler } from '../types';
@@ -13,7 +14,7 @@ import {
 export const family = { id: 'circles', title: 'Çember, elips ve yaylar' };
 
 /** Pergel aracının renkleri (Canvas pergeliTamamla). */
-const PERGEL = '#8b5cf6';
+const PERGEL = NESNE_RENGI.mor;
 /** Eski davranış: yarıçap yazılmayan çember r = 2. */
 const DEFAULT_CIRCLE_RADIUS = 2;
 const DEFAULT_ARC_RADIUS = 3;
@@ -120,7 +121,7 @@ const equation: CommandHandler = {
 
 function addFixed(scene: CommandScene, center: PointObject, r: number, o: { disk: boolean; pergel: boolean; color?: string }) {
   if (o.pergel) return scene.addCircle({ centerId: center.id, radius: r }, { color: o.color ?? PERGEL, fillOpacity: 0, label: `${center.label} Merkezli Çember` });
-  if (o.disk) return scene.addCircle({ centerId: center.id, radius: r }, { color: o.color, fillOpacity: 0.12, showArea: true, label: `${center.label} Dairesi (r = ${trNum(r)})` });
+  if (o.disk) return scene.addCircle({ centerId: center.id, radius: r }, { color: o.color, fillOpacity: 0.12, showArea: scene.options.showMeasurementsOnCreate !== false, label: `${center.label} Dairesi (r = ${trNum(r)})` });
   return scene.addCircle({ centerId: center.id, radius: r }, { color: o.color });
 }
 
@@ -204,7 +205,7 @@ function runCircle(c: Clause, scene: CommandScene) {
       assertNotCollinear(pts);
       const labels = pts.map(p => p.label);
       scene.addCircle({ throughIds: [pts[0].id, pts[1].id, pts[2].id] }, disk
-        ? { color, fillOpacity: 0.12, showArea: true, label: `${labels.join('')} Dairesi` }
+        ? { color, fillOpacity: 0.12, showArea: scene.options.showMeasurementsOnCreate !== false, label: `${labels.join('')} Dairesi` }
         : { color });
       scene.say(`${joinTr(labels)} noktalarından geçen ${noun} çizildi.`);
       return;

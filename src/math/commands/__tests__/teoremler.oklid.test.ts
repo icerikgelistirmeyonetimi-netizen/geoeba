@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import { describe, expect, it } from 'vitest';
 import type { MathObject, PointObject, PolygonObject } from '@/types/math';
 import { resolveCommandBindings } from '@/math/commandBindings';
@@ -360,7 +361,7 @@ describe('teoremler.pisagorSekli', () => {
     expect(dist(A, C)).toBeCloseTo(4, 9);
     expect(dist(B, C)).toBeCloseTo(5, 9);
     expect(r.message).toContain('ABC dik üçgeni ve kenarları üzerine kareler çizildi.');
-    expect(r.message).toContain('|AB|² + |AC|² = |BC|²: 9 + 16 = 25 (karelerin alanları 9, 16 ve 25 br²)');
+    expect(r.message).toContain('|AB|² + |AC|² = |BC|²: 9 + 16 = 25 (karelerin alanları 9, 16 ve 25 birimkare)');
     expect(r.selectedIds).toHaveLength(4);
     seslendirmeTemiz(r.message);
   });
@@ -505,7 +506,7 @@ describe('teoremler.oklid: motor mesajları sembolsüz okunur', () => {
   it('kareler kare rengindedir ve alanları gösterir', () => {
     const r = ok('Pisagor şekli çiz');
     const kare: PolygonObject = squares(r.objects)[0];
-    expect(kare.color).toBe('#f43f5e');
+    expect(kare.color).toBe(NESNE_RENGI.pembe);
     expect(kare.showArea).toBe(true);
     expect(kare.showPerimeter).toBe(false);
   });

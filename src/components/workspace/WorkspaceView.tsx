@@ -61,6 +61,7 @@ import { syncUserFunctions } from '@/math/functionNames';
 import { createId } from '@/state/ids';
 import { validateProjectSolids } from '@/math/projectFile';
 import { VARSAYILAN_CISIM_OLCULERI, VARSAYILAN_KAMERA_3B, bosKonumBul } from './cisimYerlesimi';
+import { CISIM_RENKLERI } from './cisimRenkleri';
 
 const SCENE_STORAGE_KEY = 'matematik_3d_sahne_v1';
 const HISTORY_LIMIT = 80;
@@ -81,7 +82,7 @@ const SOLID_NAMES: Record<Solid3DType, string> = {
   pyramid: 'Kare Piramit',
 };
 
-const SOLID_COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4'];
+const SOLID_COLORS = CISIM_RENKLERI.map((renk) => renk.hex);
 
 /* ------------------------- 3D sahne geçmişi (undo/redo) ------------------------- */
 
@@ -768,6 +769,7 @@ export function WorkspaceView() {
         <div className="flex-1 relative min-w-0">
           <Canvas
             onSwitchTo3D={handleSwitchTo3D}
+            onEditFunction={fonksiyonPenceresiniAc}
             solids={solids}
             selectedSolidId={selectedSolidId}
             selectedSolidIds={selectedSolidIds}

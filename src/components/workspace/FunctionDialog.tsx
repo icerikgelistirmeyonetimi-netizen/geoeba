@@ -10,8 +10,10 @@ import { fonksiyonAdiYazimi } from '@/math/fonksiyonYazimi';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import type { FunctionObject, MathObject } from '@/types/math';
 import { Modal } from '@/components/ui/Modal';
-import { TrendingUp, X, Check, AlertCircle } from 'lucide-react';
+import { TrendingUp, X, Check, AlertCircle, Keyboard } from 'lucide-react';
 import { fonksiyonSablonlari, trigonometriIpucuGosterilir } from './fonksiyonSablonlari';
+import { FunctionExpressionEditor } from './FunctionExpressionEditor';
+import { ifadeyeSablonEkle, ifadeyeMetinEkle, ifadedenGeriSil, type IfadeDuzenleme } from './fonksiyonEditoru';
 
 interface FunctionDialogProps {
   isOpen: boolean;
@@ -62,6 +64,9 @@ export function FunctionDialog({ isOpen, onClose, duzenlenecekId = null }: Funct
   const { addFunction, updateFunction, objects } = useWorkspace();
   const [expression, setExpression] = useState(DEFAULT_EXPRESSION);
   const [label, setLabel] = useState('f(x)');
+  const [editorAcik, setEditorAcik] = useState(false);
+  const expressionInputRef = useRef<HTMLInputElement>(null);
+  const expressionSelectionRef = useRef({ bas: 0, son: 0 });
   // Hızlı şablonlar kademeye göre: ortaokulda yalnız doğrusal fonksiyon (fonksiyonSablonlari.ts).
   const [kademe] = useKademeDuzeyi();
   const sablonlar = fonksiyonSablonlari(kademe);
@@ -87,18 +92,50 @@ export function FunctionDialog({ isOpen, onClose, duzenlenecekId = null }: Funct
 
   useEffect(() => {
     if (!isOpen) return;
+    setEditorAcik(false);
     // Düzenlemede seçili fonksiyonun formülü ve adı yüklenir (eskiden varsayılan 2*x + 1 geliyordu)
     const fn = duzenlenecekId
       ? (objectsRef.current.find((o) => o.id === duzenlenecekId && o.type === 'function') as FunctionObject | undefined)
       : undefined;
     if (fn) {
       setExpression(fn.expression);
+      expressionSelectionRef.current = { bas: fn.expression.length, son: fn.expression.length };
       setLabel(duzenlemeAdi(fn, objectsRef.current));
       return;
     }
     setExpression(DEFAULT_EXPRESSION);
+    expressionSelectionRef.current = { bas: DEFAULT_EXPRESSION.length, son: DEFAULT_EXPRESSION.length };
     setLabel(`${nextFunctionName(objectsRef.current)}(x)`);
   }, [isOpen, duzenlenecekId]);
+
+  const secimiKaydet = () => {
+    const input = expressionInputRef.current;
+    if (input) expressionSelectionRef.current = { bas: input.selectionStart ?? expression.length, son: input.selectionEnd ?? expression.length };
+  };
+
+  const editorDegisikliginiUygula = (yeni: { ifade: string; bas: number; son: number }) => {
+    setExpression(yeni.ifade);
+    expressionSelectionRef.current = { bas: yeni.bas, son: yeni.son };
+    requestAnimationFrame(() => {
+      expressionInputRef.current?.focus();
+      expressionInputRef.current?.setSelectionRange(yeni.bas, yeni.son);
+    });
+  };
+
+  const editorSablonuEkle = (eylem: IfadeDuzenleme) => {
+    const { bas, son } = expressionSelectionRef.current;
+    editorDegisikliginiUygula(ifadeyeSablonEkle(expression, bas, son, eylem));
+  };
+
+  const editorMetniEkle = (metin: string) => {
+    const { bas, son } = expressionSelectionRef.current;
+    editorDegisikliginiUygula(ifadeyeMetinEkle(expression, bas, son, metin));
+  };
+
+  const editorGeriSil = () => {
+    const { bas, son } = expressionSelectionRef.current;
+    editorDegisikliginiUygula(ifadedenGeriSil(expression, bas, son));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -120,7 +157,7 @@ export function FunctionDialog({ isOpen, onClose, duzenlenecekId = null }: Funct
       onClose={onClose}
       labelledBy="function-dialog-title"
       overlayClassName="bg-ada-murekkep/60 backdrop-blur-sm"
-      className="bg-card border border-border w-full max-w-md rounded-2xl p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150"
+      className="bg-card border border-border w-full max-w-lg max-h-[calc(100dvh-8rem)] overflow-y-auto rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150"
     >
       <div className="flex items-center justify-between border-b border-border pb-3">
         <div className="flex items-center gap-2">
@@ -150,21 +187,44 @@ export function FunctionDialog({ isOpen, onClose, duzenlenecekId = null }: Funct
               type="text"
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              className="w-16 px-2 py-2 rounded-xl bg-input border border-border text-foreground font-mono text-xs font-bold focus:ring-2 focus:ring-primary outline-none text-center"
+              className="w-16 shrink-0 px-2 py-2 rounded-xl bg-input border border-border text-foreground font-mono text-xs font-bold focus:ring-2 focus:ring-primary outline-none text-center"
               aria-label="Fonksiyon adı"
             />
             <span className="font-mono text-xs font-bold text-muted-foreground">=</span>
             <input
               id="function-expression-input"
+              ref={expressionInputRef}
               type="text"
               value={expression}
-              onChange={(e) => setExpression(e.target.value)}
+              onChange={(e) => { setExpression(e.target.value); secimiKaydet(); }}
+              onSelect={secimiKaydet}
+              onBlur={secimiKaydet}
               placeholder="Örn: 2*x + 1 veya x^2 - 4"
-              className="w-full px-3 py-2 rounded-xl bg-input border border-border text-foreground font-mono text-sm focus:ring-2 focus:ring-primary outline-none"
+              className="min-w-0 flex-1 px-3 py-2 rounded-xl bg-input border border-border text-foreground font-mono text-sm focus:ring-2 focus:ring-primary outline-none"
               autoFocus
               aria-invalid={!validation.ok && expression.trim() !== ''}
             />
+            <button
+              type="button"
+              aria-label={editorAcik ? 'Matematik editörünü kapat' : 'Matematik editörünü aç'}
+              title={editorAcik ? 'Matematik editörünü kapat' : 'Matematik editörünü aç'}
+              aria-expanded={editorAcik}
+              aria-controls="function-expression-editor"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setEditorAcik((acik) => !acik)}
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${editorAcik ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card text-primary hover:bg-muted'}`}
+            >
+              <Keyboard className="h-4 w-4" aria-hidden="true" />
+              <span className="hidden sm:inline">Editör</span>
+            </button>
           </div>
+          {editorAcik && <FunctionExpressionEditor
+            onInsert={editorSablonuEkle}
+            onText={editorMetniEkle}
+            onBackspace={editorGeriSil}
+            onClear={() => editorDegisikliginiUygula({ ifade: '', bas: 0, son: 0 })}
+            ileriIslevler={trigonometriIpucuGosterilir(kademe)}
+          />}
           {!validation.ok && expression.trim() !== '' && (
             <div className="flex items-start gap-1 text-[11px] text-destructive pt-1" role="alert">
               <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
@@ -185,7 +245,7 @@ export function FunctionDialog({ isOpen, onClose, duzenlenecekId = null }: Funct
               </span>
             </div>
           )}
-          <p className="text-[11px] text-muted-foreground leading-snug pt-0.5">
+          {!editorAcik && <p className="text-[11px] text-muted-foreground leading-snug pt-0.5">
             {trigonometriIpucuGosterilir(kademe) ? (
               <>
                 İpuçları: <code className="font-mono">2x</code>, <code className="font-mono">x sin(x)</code> ve{' '}
@@ -200,27 +260,34 @@ export function FunctionDialog({ isOpen, onClose, duzenlenecekId = null }: Funct
             )}
             Mutlak değer: <code className="font-mono">|x-2|</code> veya <code className="font-mono">abs(x-2)</code>.
             Ondalık için <code className="font-mono">0,5</code> veya <code className="font-mono">0.5</code>.
-          </p>
+          </p>}
         </div>
 
         {/* Hızlı Şablonlar */}
-        <div className="space-y-1.5">
-          <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+        <details open={!editorAcik} className="space-y-1.5">
+          <summary className="cursor-pointer text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
             Hızlı Şablonlar
-          </div>
+          </summary>
           <div className="grid grid-cols-2 gap-2">
             {sablonlar.map((t) => (
               <button
                 type="button"
                 key={t.expr}
-                onClick={() => setExpression(t.expr)}
+                onClick={() => {
+                  setExpression(t.expr);
+                  expressionSelectionRef.current = { bas: t.expr.length, son: t.expr.length };
+                  requestAnimationFrame(() => {
+                    expressionInputRef.current?.focus();
+                    expressionInputRef.current?.setSelectionRange(t.expr.length, t.expr.length);
+                  });
+                }}
                 className="px-2.5 py-1.5 rounded-lg bg-muted/60 hover:bg-muted text-xs font-medium text-foreground text-left truncate transition-colors"
               >
                 {t.label}
               </button>
             ))}
           </div>
-        </div>
+        </details>
 
         <div className="pt-2 flex items-center justify-end gap-2 border-t border-border">
           <button

@@ -4,6 +4,7 @@ import { Solid3DObject, Point3D } from '@/types/workspace3d';
 import { worldToScreen, formatTurkishNumber } from '@/math/coordinates';
 import { generateSolidMesh, calculate3DVolume, calculate3DSurfaceArea, ucgenTepeX } from '@/math/geometry3d';
 import { labelZoomScale } from '@/math/labelViewport';
+import { NESNE_RENGI, NESNE_SECIM_RENGI } from '@/utils/nesneRenkleri';
 
 /** İzdüşüm açısı (55 derece, kavalier/aksonometrik bakış) */
 export const PROJECTION_ANGLE_RAD = (55 * Math.PI) / 180;
@@ -121,8 +122,8 @@ export function projectSolidFor2D(
    */
   payOlcegi?: number,
 ): ProjectedSolid2D {
-  const color = solid.color || '#3b82f6';
-  const strokeColor = isSelected ? '#ec4899' : color;
+  const color = solid.color || NESNE_RENGI.mavi;
+  const strokeColor = isSelected ? NESNE_SECIM_RENGI : color;
   const strokeWidth = isSelected ? 2.4 : 1.6;
   // Etiket boşlukları referans zoom 44'e aittir. Dünya noktası etrafında bu
   // ölçüleri ölçeklemek, referans yerleşimini gerçek görünüme projekte eder.
@@ -458,7 +459,7 @@ export function projectSolidFor2D(
       from: p1,
       to: p2,
       isHidden,
-      stroke: isHidden ? (isSelected ? '#ec4899' : '#94a3b8') : strokeColor,
+      stroke: isHidden ? (isSelected ? NESNE_SECIM_RENGI : '#94a3b8') : strokeColor,
       strokeWidth: isHidden ? 1.2 : strokeWidth,
     });
   });

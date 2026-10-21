@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import { describe, expect, it } from 'vitest';
 import type { ButtonObject, CheckboxObject, FunctionObject, InputBoxObject, MathObject, PointObject, SliderObject } from '@/types/math';
 import { compileMathExpression } from '@/math/parser';
@@ -135,7 +136,7 @@ describe('function definitions', () => {
   it('creates a function exactly like the Function dialog', () => {
     const r = ok('f(x) = 2x + 1');
     const [fn] = byType(r.objects, 'function');
-    expect(fn).toMatchObject({ expression: '2x + 1', label: 'f(x) = 2x + 1', color: '#2563eb', thickness: 2.5, visible: true, showLabel: true });
+    expect(fn).toMatchObject({ expression: '2x + 1', label: 'f(x) = 2x + 1', color: NESNE_RENGI.mavi, thickness: 2.5, visible: true, showLabel: true });
     expect(r.selectedIds).toEqual([fn.id]);
     expect(r.message).toContain('f(x) = 2x + 1');
     expect(fnValue(fn, 3)).toBeCloseTo(7, 9);
@@ -163,7 +164,7 @@ describe('function definitions', () => {
   it('auto-creates sliders for parameters (legacy y = a*x) and reuses existing ones', () => {
     const r = ok('y = a*x');
     const a = slider(r.objects, 'a');
-    expect(a).toMatchObject({ min: -5, max: 5, step: 0.1, value: 1, label: 'a Parametresi', color: '#8b5cf6' });
+    expect(a).toMatchObject({ min: -5, max: 5, step: 0.1, value: 1, label: 'a Parametresi', color: NESNE_RENGI.mor });
     expect(r.message).toContain('a için kaydırıcı');
     const again = ok('y = a*x^2', r.objects);
     expect(byType(again.objects, 'slider')).toHaveLength(1);
@@ -239,7 +240,7 @@ describe('polynomial fit', () => {
   it('fits a parabola through A, B, C despite the "2." split and removes the helper message', () => {
     const r = ok('A, B, C noktalarına 2. dereceden polinom uydur', fitScene());
     const [fn] = byType(r.objects, 'function');
-    expect(fn.color).toBe('#2563eb'); // fonksiyon rengi; seçim pembesiyle karışmaz
+    expect(fn.color).toBe(NESNE_RENGI.mavi); // fonksiyon rengi; seçim pembesiyle karışmaz
     expect(r.selectedIds).toEqual([fn.id]); // noktalar değil eğri seçili: Delete eğriyi siler
     expect(fn.thickness).toBe(2.5);
     expect(fn.label.startsWith('f(x) = ')).toBe(true);
@@ -347,7 +348,7 @@ describe('slider assignment', () => {
 describe('slider creation', () => {
   it('uses Slider dialog defaults and says which were applied', () => {
     const r = ok('a kaydırıcısı oluştur');
-    expect(slider(r.objects, 'a')).toMatchObject({ min: -5, max: 5, step: 0.5, value: 1, label: 'a Parametresi', color: '#8b5cf6', x: -8, y: 6, length: 4 });
+    expect(slider(r.objects, 'a')).toMatchObject({ min: -5, max: 5, step: 0.5, value: 1, label: 'a Parametresi', color: NESNE_RENGI.mor, x: -8, y: 6, length: 4 });
     expect(r.message).toContain('varsayılan');
     expect(r.selectedIds).toEqual([slider(r.objects, 'a').id]);
     expect(ranked('a kaydırıcısı oluştur')[0].score).toBe(50);
@@ -536,7 +537,7 @@ describe('fraction models', () => {
     ['payı 2 paydası 3 olan kesir modeli oluştur', 2, 3, 'pie'],
   ] as const)('%s → %i/%i %s', (text, numerator, denominator, modelType) => {
     const [f] = byType(ok(text).objects, 'fraction');
-    expect(f).toMatchObject({ numerator, denominator, modelType, radius: 2.5, color: '#8b5cf6', label: `${numerator}/${denominator} Kesir Modeli` });
+    expect(f).toMatchObject({ numerator, denominator, modelType, radius: 2.5, color: NESNE_RENGI.mor, label: `${numerator}/${denominator} Kesir Modeli` });
   });
   it('places the model at a coordinate or beside the drawing', () => {
     expect(byType(ok('(3, -2) noktasına 1/3 kesir modeli').objects, 'fraction')[0]).toMatchObject({ x: 3, y: -2 });
@@ -561,7 +562,7 @@ describe('checkboxes', () => {
     const r = ok('ABC için onay kutusu ekle', scene);
     const [box] = byType(r.objects, 'checkbox');
     const poly = byType(scene, 'polygon')[0];
-    expect(box).toMatchObject({ targetIds: [poly.id], checked: true, color: '#2563eb', label: '1 nesneyi göster', x: -8, y: 2.4 });
+    expect(box).toMatchObject({ targetIds: [poly.id], checked: true, color: NESNE_RENGI.mavi, label: '1 nesneyi göster', x: -8, y: 2.4 });
     expect(r.selectedIds).toEqual([box.id]);
     expect(collectDependentIds(r.objects, [poly.id]).has(box.id)).toBe(true);
   });
@@ -598,7 +599,7 @@ describe('buttons', () => {
   const a = slider(scene, 'a');
   const button = (text: string, selection: string[] = []) => byType(ok(text, scene, selection).objects, 'button')[0] as ButtonObject;
   it('creates animate, toggle and setSlider buttons', () => {
-    expect(button('a kaydırıcısını oynatan düğme ekle')).toMatchObject({ action: { kind: 'animate', sliderIds: [a.id] }, label: 'Oynat / Durdur', color: '#4f46e5' });
+    expect(button('a kaydırıcısını oynatan düğme ekle')).toMatchObject({ action: { kind: 'animate', sliderIds: [a.id] }, label: 'Oynat / Durdur', color: NESNE_RENGI.indigo });
     expect(button("c1'i gizleyen düğme")).toMatchObject({ action: { kind: 'toggle', targetIds: [idOf(scene, 'c1')] }, label: 'Göster / Gizle' });
     expect(button("a'yı 0 yapan düğme")).toMatchObject({ action: { kind: 'setSlider', sliderId: a.id, value: 0 }, label: 'a = 0' });
     expect(button("b'yi 2,5'e getiren düğme")).toMatchObject({ action: { kind: 'setSlider', sliderId: slider(scene, 'b').id, value: 2.5 } });
@@ -620,7 +621,7 @@ describe('input boxes', () => {
   const scene = rich();
   it('binds to sliders and functions like the Input Box tool', () => {
     const [sliderBox] = byType(ok('a için girdi kutusu ekle', scene).objects, 'input_box') as InputBoxObject[];
-    expect(sliderBox).toMatchObject({ targetId: slider(scene, 'a').id, field: 'value', label: 'a =', width: 90, color: '#0d9488' });
+    expect(sliderBox).toMatchObject({ targetId: slider(scene, 'a').id, field: 'value', label: 'a =', width: 90, color: NESNE_RENGI.zumrut });
     const [fnBox] = byType(ok('f fonksiyonu için girdi kutusu', scene).objects, 'input_box');
     expect(fnBox).toMatchObject({ targetId: idOf(scene, 'f(x) = x^2'), field: 'expression', label: 'f(x) =', width: 170 });
     expect(byType(ok('g(x) için giriş kutusu oluştur', scene).objects, 'input_box')[0].targetId).toBe(idOf(scene, 'g(x) = sin(x)'));

@@ -39,7 +39,6 @@ import {
   type PencereKonumu,
 } from "./akis";
 import { CIZIM_KIMLIGI, kademeninUygulamalari, uygulamaBul } from "./uygulamalar";
-import { useIlkokulKipi } from "@/hooks/useKademeDuzeyi";
 import { useOturum } from "@/state/OturumContext";
 import type { LevelId } from "@/types/curriculum";
 import { OturumEkrani } from "@/components/oturum/OturumEkrani";
@@ -171,10 +170,9 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
   const [secilenOturum, setSecilenOturum] = useState<LevelId | null>(null);
   const oturumKapaniyor = d.faz === "oturum" && !!kademe && secilenOturum !== null;
   // Kademeye göre masaüstü listesi (ilkokulda Olasılık «olay kartları» açıklaması ve simgesiyle; uygulamalar.tsx)
-  const ilkokul = useIlkokulKipi();
-  const gorunenUygulamalar = useMemo(() => kademeninUygulamalari(ilkokul), [ilkokul]);
+  const gorunenUygulamalar = useMemo(() => kademeninUygulamalari(kademe), [kademe]);
   useEffect(() => {
-    // İlkokula geçilince açık kalmış gizli uygulamanın penceresi kapanır
+    // Oturumda gösterilmeyen uygulamanın açık kalmış penceresi kapanır
     for (const p of d.pencereler) {
       if (!gorunenUygulamalar.some((u) => u.id === p.id)) gonder({ tur: "PENCERE_KAPAT", id: p.id });
     }
@@ -556,10 +554,11 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
 
   const kisaAd = useCallback((id: string) => (gorunenUygulamalar.find((u) => u.id === id) ?? uygulamaBul(id))?.kisaAd ?? id, [gorunenUygulamalar]);
   const uygulamaAc = useCallback((id: string) => {
+    if (!gorunenUygulamalar.some((u) => u.id === id)) return;
     gonder({ tur: "PENCERE_AC", id });
     // Pencere zaten açıksa da odak pencereye döner (Başlat menüsünden seçildiğinde menü sökülür)
     setPencereOdak((o) => ({ id, sayac: o.sayac + 1 }));
-  }, []);
+  }, [gorunenUygulamalar]);
   const pencereOdakla = useCallback(
     (id: string) => gonder({ tur: "PENCERE_ODAK", id }),
     [],
@@ -668,7 +667,7 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
               .sort((a, b) => a.sira - b.sira)
               .map((p) => {
                 // Başlık çubuğu simgesi masaüstündekiyle aynı olsun (kademe uyarlaması: uygulamalar.tsx)
-                const u = gorunenUygulamalar.find((x) => x.id === p.id) ?? uygulamaBul(p.id);
+                const u = gorunenUygulamalar.find((x) => x.id === p.id);
                 if (!u) return null;
                 const { Bilesen, MenuCubugu } = u;
                 return (

@@ -14,16 +14,49 @@ type Belirtec =
   | { t: 'sayi'; s: string }
   | { t: 'ad'; s: string }
   | { t: 'ust'; s: string } // çizilmiş üs: "²"
+  | { t: 'kok'; s: string; derece: string }
+  | { t: 'bilimselKatsayi'; s: string; us: string }
   | { t: 'op'; s: string };
 
 const SAYI = /^(?:\d+(?:[.,]\d+)?|[.,]\d+)/;
 const AD = /^[A-Za-zÇĞİÖŞÜçğıöşüπ_][A-Za-z0-9ÇĞİÖŞÜçğıöşü_]*/u;
 const HAZIR_UST = /^[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/u;
 
+/** root çağrısının kendi düzeyindeki ayırıcılar; iç gruplardaki virgüller korunur. */
+function dereceliKok(s: string): { ic: string; derece: string; uzunluk: number } | null {
+  const bas = /^root\(/i.exec(s);
+  if (!bas) return null;
+  let derinlik = 1;
+  const virgul: number[] = [], noktaliVirgul: number[] = [];
+  for (let i = bas[0].length; i < s.length; i++) {
+    const c = s[i];
+    if (c === '(') derinlik++;
+    else if (c === ')') {
+      if (--derinlik !== 0) continue;
+      // Ayrıştırıcıyla aynı kural: bu çağrıda ';' varsa ',' ondalık ayırıcıdır.
+      const ayiricilar = noktaliVirgul.length ? noktaliVirgul : virgul;
+      if (ayiricilar.length !== 1) return null;
+      const ayirici = ayiricilar[0];
+      const ic = s.slice(bas[0].length, ayirici), derece = s.slice(ayirici + 1, i);
+      return ic && derece ? { ic, derece, uzunluk: i + 1 } : null;
+    } else if (derinlik === 1 && c === ',') virgul.push(i);
+    else if (derinlik === 1 && c === ';') noktaliVirgul.push(i);
+  }
+  return null;
+}
+
 function belirtecler(ifade: string): Belirtec[] {
   const out: Belirtec[] = [];
   let s = ifade.replace(/\s+/g, '');
   while (s) {
+    const bilimsel = /^(\d+(?:[.,]\d+)?|[.,]\d+)[eE]([+-]?\d+)(?=(?:root|cbrt|kupkok)\()/i.exec(s);
+    if (bilimsel) {
+      out.push({ t: 'bilimselKatsayi', s: bilimsel[1], us: bilimsel[2].replace(/^\+/, '') });
+      s = s.slice(bilimsel[0].length);
+      continue;
+    }
+    const kok = dereceliKok(s);
+    if (kok) { out.push({ t: 'kok', s: kok.ic, derece: kok.derece }); s = s.slice(kok.uzunluk); continue; }
     const sayi = SAYI.exec(s);
     if (sayi) { out.push({ t: 'sayi', s: sayi[0] }); s = s.slice(sayi[0].length); continue; }
     const ad = AD.exec(s);
@@ -66,18 +99,41 @@ function yaz(b: readonly Belirtec[]): string {
 
   for (let i = 0; i < b.length; i++) {
     const x = b[i];
+    if (x.t === 'bilimselKatsayi') {
+      ekle(`${x.s.replace('.', ',')}·10${ustSimge(x.us)}`, x);
+      continue;
+    }
+    if (x.t === 'kok') {
+      if (degerBiter(sonBelirtec)) ekle('·', { t: 'op', s: '*' });
+      const ic = belirtecler(x.s), icMetin = yaz(ic), dereceMetni = yaz(belirtecler(x.derece));
+      const n = Number(x.derece);
+      if (/^\d+$/.test(x.derece) && Number.isSafeInteger(n) && n >= 1) {
+        const kokIsareti = `${n === 2 ? '' : ustSimge(String(n))}√`;
+        const metin = ic.length === 1 && (ic[0].t === 'sayi' || ic[0].t === 'ad')
+          ? `${kokIsareti}${icMetin}` : `${kokIsareti}(${icMetin})`;
+        ekle(b[i + 1]?.s === '^' ? `(${metin})` : metin, x);
+      } else {
+        // Negatif, değişken ya da bileşik dereceyi hesaplamadan olduğu gibi gösterir.
+        ekle(`root(${icMetin}; ${dereceMetni})`, x);
+      }
+      continue;
+    }
     if (x.t === 'sayi') { ekle(x.s.replace('.', ','), x); continue; }
     if (x.t === 'ust') { ekle(x.s, x); continue; }
     if (x.t === 'ad') {
       const ad = x.s.toLowerCase();
       const parantez = b[i + 1]?.t === 'op' && b[i + 1].s === '(';
-      if ((ad === 'sqrt' || ad === 'abs') && parantez) {
+      if (['sqrt', 'kok', 'cbrt', 'kupkok', 'abs'].includes(ad) && parantez) {
         const son = kapanis(b, i + 1);
         if (son > 0) {
           const ic = b.slice(i + 2, son);
           const icMetin = yaz(ic);
           if (ad === 'abs') ekle(`|${icMetin}|`, { t: 'op', s: ')' });
-          else ekle(ic.length === 1 && ic[0].t !== 'op' ? `√${icMetin}` : `√(${icMetin})`, { t: 'op', s: ')' });
+          else {
+            const kokIsareti = ad === 'cbrt' || ad === 'kupkok' ? '³√' : '√';
+            if (kokIsareti === '³√' && degerBiter(sonBelirtec)) ekle('·', { t: 'op', s: '*' });
+            ekle(ic.length === 1 && ic[0].t !== 'op' ? `${kokIsareti}${icMetin}` : `${kokIsareti}(${icMetin})`, { t: 'op', s: ')' });
+          }
           i = son;
           continue;
         }

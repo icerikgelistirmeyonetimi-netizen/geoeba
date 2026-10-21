@@ -545,7 +545,7 @@ export const heron: CommandHandler = {
     if (!(carpim > 0) || alan < 1e-12) fail('Köşeler aynı doğru üzerinde; alanı sıfır olan şekil için Heron formülü uygulanmaz.');
     if (tri.polygon) scene.update(tri.polygon.id, { showArea: true });
     scene.say(`Heron formülü (${tri.name}): u = (${uz(A, B)} + ${uz(B, C)} + ${uz(C, A)}) / 2 = (${sayi(cc)} + ${sayi(a)} + ${sayi(b)}) / 2 = ${sayi(u)}; `
-      + `A(${tri.name}) = karekök(u × (u − ${uz(A, B)}) × (u − ${uz(B, C)}) × (u − ${uz(C, A)})) = karekök(${sayi(u)} × ${sayi(u - cc)} × ${sayi(u - a)} × ${sayi(u - b)}) = karekök(${sayi(carpim)}) ${esitIsareti(alan)} ${sayi(alan)} br².`);
+      + `A(${tri.name}) = karekök(u × (u − ${uz(A, B)}) × (u − ${uz(B, C)}) × (u − ${uz(C, A)})) = karekök(${sayi(u)} × ${sayi(u - cc)} × ${sayi(u - a)} × ${sayi(u - b)}) = karekök(${sayi(carpim)}) ${esitIsareti(alan)} ${sayi(alan)} birimkare.`);
     cumleRengiUygula(c, scene);
     scene.setFocus(tri.polygon ? [tri.polygon.id] : tri.ids);
   },

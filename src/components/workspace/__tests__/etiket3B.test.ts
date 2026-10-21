@@ -91,10 +91,10 @@ describe('3B etiket: yazım (alt indis, kesme işareti, sayı, birim)', () => {
     expect(ayritOlcusuYazisi(Math.sqrt(12), ayar('ortaokul'), false).sesli).toBe('uzunluk yaklaşık üç virgül kırk altı birim');
   });
 
-  it('yüz alanı 2B adsız alan yazımıyla: "Alan = 12 br²", yuvarlanınca "Alan ≈ … br²"', () => {
-    expect(yuzAlaniYazisi(12, ayar('ortaokul')).metin).toBe('Alan = 12 br²');
-    expect(yuzAlaniYazisi(Math.PI * 1.5 * 1.5, ayar('ortaokul')).metin).toBe('Alan ≈ 7,07 br²');
-    expect(yuzAlaniYazisi(Math.PI * 1.5 * 1.5, ayar('lise')).metin).toBe('Alan = 7 br²');
+  it('yüz alanı 2B adsız alan yazımıyla: "Alan = 12 birimkare", yuvarlanınca "Alan ≈ … birimkare"', () => {
+    expect(yuzAlaniYazisi(12, ayar('ortaokul')).metin).toBe('Alan = 12 birimkare');
+    expect(yuzAlaniYazisi(Math.PI * 1.5 * 1.5, ayar('ortaokul')).metin).toBe('Alan ≈ 7,07 birimkare');
+    expect(yuzAlaniYazisi(Math.PI * 1.5 * 1.5, ayar('lise')).metin).toBe('Alan = 7 birimkare');
   });
 });
 

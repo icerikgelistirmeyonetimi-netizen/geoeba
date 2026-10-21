@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import type { AngleObject, FunctionObject, MathObject, MeasurementObject, ObjectType, PointObject, PolygonObject } from '@/types/math';
 import { calculateAngleDegrees, calculateLineEquation, calculatePolygonArea, calculatePolygonPerimeter, calculateSlope } from '../../../geometry';
 import { compileMathExpression } from '../../../parser';
@@ -136,7 +137,7 @@ function pointDistance(x: Ctx, a: PointObject, b: PointObject) {
   }
   if (x.it.showOrMeasure) {
     // "Uzunluk Ölç (br)" aracıyla aynı ölçüm parçası
-    const s = scene.addSegment(a.id, b.id, { label: `|${a.label}${b.label}|`, color: '#059669', thickness: 3, unit: 'br', showLength: true });
+    const s = scene.addSegment(a.id, b.id, { label: `|${a.label}${b.label}|`, color: NESNE_RENGI.zumrut, thickness: 3, unit: 'br', showLength: true });
     x.focus.push(s.id);
     x.out.push(`${metin}. Ölçüm doğru parçası çizildi.`);
     return;
@@ -627,7 +628,7 @@ function diagonalLength(x: Ctx, a: PointObject, b: PointObject): string {
   const segment = scene.shapesWithPoints([a.id, b.id], ['segment'])[0];
   if (segment) { setFlags(scene, segment, { showLength: true }); x.focus.push(segment.id); }
   else if (x.it.showOrMeasure) {
-    const s = scene.addSegment(a.id, b.id, { label: `|${a.label}${b.label}|`, color: '#059669', thickness: 3, unit: 'br', showLength: true });
+    const s = scene.addSegment(a.id, b.id, { label: `|${a.label}${b.label}|`, color: NESNE_RENGI.zumrut, thickness: 3, unit: 'br', showLength: true });
     x.focus.push(s.id);
   }
   return yaz(uzunluk(a, b, d));

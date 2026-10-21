@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  type Dugum, type YazimAyari, VARSAYILAN_YAZIM, duzMetin, metniCozumle, metniSeslendir, yazimImzasi,
+  type Dugum, type YazimAyari, VARSAYILAN_YAZIM, birimGosterimi, duzMetin, metniCozumle, metniSeslendir, yazimImzasi,
 } from '@/math/matematikYazimi';
 
 /**
@@ -84,7 +84,7 @@ function Dugumler({ d }: { d: Dugum[] }) {
           }
           case 'kelime': return <span key={i} style={x.soluk ? { opacity: 0.7 } : undefined}>{x.s}</span>;
           case 'sayi': return <React.Fragment key={i}>{x.s.replace('-', '−')}</React.Fragment>;
-          case 'birim': return <React.Fragment key={i}>{x.s === '°' ? '°' : ` ${x.s}`}</React.Fragment>;
+          case 'birim': return <React.Fragment key={i}>{x.s === '°' ? '°' : ` ${birimGosterimi(x.s)}`}</React.Fragment>;
           case 'kesir':
             return (
               <React.Fragment key={i}>
@@ -147,7 +147,7 @@ export interface MatematikMetniProps {
 
 function Metin({ metin, dugumler, sesli, ayar = VARSAYILAN_YAZIM, className, title, as = 'span' }: MatematikMetniProps) {
   const d = dugumler ?? metniCozumle(metin ?? '', ayar);
-  const duz = metin ?? duzMetin(d);
+  const duz = duzMetin(d);
   const Kap = as;
   return (
     <Kap className={className} data-duz={duz} title={title}>

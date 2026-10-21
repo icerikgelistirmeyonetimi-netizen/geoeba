@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import { describe, expect, it, vi } from 'vitest';
 import type { AngleObject, LineObject, MathObject, PointObject, PolygonObject, RayObject, SegmentObject, ViewportTransform } from '@/types/math';
 
@@ -98,7 +99,7 @@ describe('points', () => {
     const p = point(r.objects, 'P');
     expect(p.x).toBe(2.5);
     expect(p.y).toBe(-3.2);
-    expect(p).toMatchObject({ color: '#2563eb', isIndependent: true, showLabel: true, visible: true });
+    expect(p).toMatchObject({ color: NESNE_RENGI.mavi, isIndependent: true, showLabel: true, visible: true });
     expect(r.message).toContain('P(2,5; -3,2)');
     expect(r.selectedIds).toEqual([p.id]);
     expect(fails('P (1; 2) noktası oluştur', r.objects)).toContain('zaten var');
@@ -292,7 +293,7 @@ describe('segments', () => {
   it('legacy: AB doğru parçası çiz uses existing points with the tool literal', () => {
     const r = ok('AB doğru parçası çiz', pts());
     const [seg] = byType(r.objects, 'segment');
-    expect(seg).toMatchObject({ label: '[AB]', startPointId: point(r.objects, 'A').id, endPointId: point(r.objects, 'B').id, color: '#0284c7', showLength: true, thickness: 2.5, showLabel: true });
+    expect(seg).toMatchObject({ label: '[AB]', startPointId: point(r.objects, 'A').id, endPointId: point(r.objects, 'B').id, color: NESNE_RENGI.camgobegi, showLength: true, thickness: 2.5, showLabel: true });
     expect(r.selectedIds).toEqual([seg.id]);
     expect(r.objects).toHaveLength(5);
   });
@@ -351,7 +352,7 @@ describe('segments', () => {
     expect(end.x).toBeCloseTo(x, 6);
     expect(end.y).toBeCloseTo(y, 6);
     expect(seg.unit).toBe(unit);
-    expect(end.color).toBe('#0284c7');
+    expect(end.color).toBe(NESNE_RENGI.camgobegi);
     expect(r.message).toContain(unit);
   });
 
@@ -408,7 +409,7 @@ describe('lines', () => {
   it('legacy: AB doğru çiz', () => {
     const r = ok('AB doğru çiz', pts());
     const [l] = byType(r.objects, 'line');
-    expect(l).toMatchObject({ label: 'AB Doğrusu', point1Id: point(r.objects, 'A').id, point2Id: point(r.objects, 'B').id, showEquation: true, color: '#0284c7', thickness: 2 });
+    expect(l).toMatchObject({ label: 'AB Doğrusu', point1Id: point(r.objects, 'A').id, point2Id: point(r.objects, 'B').id, showEquation: true, color: NESNE_RENGI.camgobegi, thickness: 2 });
     expect(r.message).toContain('y = 0');
   });
 
@@ -500,7 +501,7 @@ describe('rays', () => {
   it('legacy: AB ışın çiz', () => {
     const r = ok('AB ışın çiz', pts());
     const [ray] = byType(r.objects, 'ray');
-    expect(ray).toMatchObject({ label: 'AB Işını', startPointId: point(r.objects, 'A').id, throughPointId: point(r.objects, 'B').id, color: '#0284c7', thickness: 2 });
+    expect(ray).toMatchObject({ label: 'AB Işını', startPointId: point(r.objects, 'A').id, throughPointId: point(r.objects, 'B').id, color: NESNE_RENGI.camgobegi, thickness: 2 });
   });
 
   it.each([
@@ -552,10 +553,10 @@ describe('angles', () => {
   it('ABC açısını çiz: angle tool literal with arms, no duplicates', () => {
     const r = ok('ABC açısını çiz', pts());
     const [angle] = byType(r.objects, 'angle');
-    expect(angle).toMatchObject({ label: '∠ABC', vertexPointId: point(r.objects, 'B').id, color: '#f59e0b', showValue: true });
+    expect(angle).toMatchObject({ label: '∠ABC', vertexPointId: point(r.objects, 'B').id, color: NESNE_RENGI.kehribar, showValue: true });
     const arms = byType(r.objects, 'segment');
     expect(arms.map(a => a.label)).toEqual(['[BA]', '[BC]']);
-    expect(arms.every(a => a.showLabel === false && a.thickness === 2 && a.color === '#f59e0b')).toBe(true);
+    expect(arms.every(a => a.showLabel === false && a.thickness === 2 && a.color === NESNE_RENGI.kehribar)).toBe(true);
     expect(r.selectedIds).toEqual([angle.id]);
     // Kolu silinen açı boşlukta asılı kalmaz (silme zinciri: kolu artık hiçbir şekil çizmiyor)
     expect(new CommandScene(r.objects).remove([arms[0].id])).toContain(angle.id);

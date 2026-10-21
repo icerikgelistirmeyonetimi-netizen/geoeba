@@ -52,7 +52,7 @@ describe('CanvasLayers', () => {
       <g key="card" data-canvas-label="" transform="translate(30 40)">
         <rect data-test="card-background" x={-40} y={-12} width={80} height={24} />
         <path data-test="card-underline" d="M-20 8H20" />
-        <text>Alan = 6 br²</text>
+        <text>Alan = 6 birimkare</text>
       </g>
     );
     const result = splitSvgTextLayers([card, <path key="edge" d="M0 0L100 50" />]);
@@ -61,7 +61,7 @@ describe('CanvasLayers', () => {
     expect(markup(result.geometry)).not.toContain('card-background');
     expect(markup(result.labels)).toContain('card-background');
     expect(markup(result.labels)).toContain('card-underline');
-    expect(markup(result.labels)).toContain('Alan = 6 br²');
+    expect(markup(result.labels)).toContain('Alan = 6 birimkare');
   });
 
   it('memo matematik etiketini bölmeden kutusu, açı şapkası ve uzunluk çubuklarıyla taşır', () => {

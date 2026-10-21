@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import { describe, expect, it } from 'vitest';
 import type { MathObject, Point2D, PointObject, PolygonObject, SliderObject, ViewportTransform } from '@/types/math';
 import { resolveCommandBindings } from '../../commandBindings';
@@ -45,7 +46,7 @@ describe('polygons: legacy behaviour', () => {
   it('"üçgen çiz" draws an equilateral triangle with side 4 styled like the triangle kind', () => {
     const { poly, pts } = shapeOf('üçgen çiz');
     sides(pts).forEach(s => close(s, 4));
-    expect(poly).toMatchObject({ color: '#10b981', fillOpacity: 0.15, showArea: false, showPerimeter: false });
+    expect(poly).toMatchObject({ color: NESNE_RENGI.zumrut, fillOpacity: 0.15, showArea: false, showPerimeter: false });
     expect(area(pts)).toBeGreaterThan(0);
   });
 
@@ -123,7 +124,7 @@ describe('polygons: legacy behaviour', () => {
   ])('supports %s', (text, count, kind) => {
     const { poly, pts } = shapeOf(text);
     expect(pts).toHaveLength(count);
-    const colors: Record<string, string> = { square: '#f43f5e', rectangle: '#f59e0b', regular: '#059669' };
+    const colors: Record<string, string> = { square: NESNE_RENGI.pembe, rectangle: NESNE_RENGI.kehribar, regular: NESNE_RENGI.zumrut };
     expect(poly.color).toBe(colors[kind]);
   });
 
@@ -131,7 +132,7 @@ describe('polygons: legacy behaviour', () => {
     const { pts } = shapeOf('3 5 dikdörtgen çiz');
     close(pts[1].x - pts[0].x, 3); close(pts[1].y - pts[0].y, 0);
     close(pts[2].y - pts[1].y, 5);
-    expect(pts[0].color).toBe('#3b82f6');
+    expect(pts[0].color).toBe(NESNE_RENGI.mavi);
   });
 
   it('"dik üçgen çiz" defaults to 3-4-5 with the right angle at B', () => {
@@ -342,7 +343,7 @@ describe('polygons: squares and rectangles', () => {
     sides(pts).forEach(s => close(s, side));
     close(dist(pts[0], pts[2]), side * Math.SQRT2);
     expect(area(pts)).toBeGreaterThan(0);
-    expect(poly).toMatchObject({ color: '#f43f5e', fillColor: '#f43f5e', fillOpacity: 0.18, showArea: true, showPerimeter: true });
+    expect(poly).toMatchObject({ color: NESNE_RENGI.pembe, fillColor: NESNE_RENGI.pembe, fillOpacity: 0.18, showArea: true, showPerimeter: true });
   });
 
   it('AB kenarlı kare is built counter-clockwise on existing A and B', () => {
@@ -361,7 +362,7 @@ describe('polygons: squares and rectangles', () => {
     const fresh = shapeOf('ABCD karesini çiz');
     expect(fresh.pts.map(p => p.label)).toEqual(['A', 'B', 'C', 'D']);
     const existing = pointsScene({ A: [0, 0], B: [2, 0], C: [2, 2], D: [0, 2] });
-    expect(shapeOf('ABCD karesi', existing).poly.color).toBe('#f43f5e');
+    expect(shapeOf('ABCD karesi', existing).poly.color).toBe(NESNE_RENGI.pembe);
     const skew = pointsScene({ A: [0, 0], B: [3, 0], C: [2, 2], D: [0, 2] });
     const warn = shapeOf('ABCD karesini çiz', skew);
     expect(warn.r.message).toContain('tam bir kare oluşturmuyor');
@@ -407,7 +408,7 @@ describe('polygons: squares and rectangles', () => {
     const { pts, poly } = shapeOf(text);
     close(dist(pts[0], pts[1]), w); close(dist(pts[1], pts[2]), h);
     close(pts[1].y, pts[0].y);
-    expect(poly.color).toBe('#f59e0b');
+    expect(poly.color).toBe(NESNE_RENGI.kehribar);
     expect(area(pts)).toBeGreaterThan(0);
   });
 
@@ -453,8 +454,8 @@ describe('polygons: regular polygons', () => {
   ])('%s', (text, n, radius) => {
     const { pts, poly } = shapeOf(text);
     regularCheck(pts, n, radius);
-    expect(poly).toMatchObject({ color: '#059669', fillColor: '#10b981', fillOpacity: 0.2 });
-    expect(pts[0].color).toBe('#10b981');
+    expect(poly).toMatchObject({ color: NESNE_RENGI.zumrut, fillColor: NESNE_RENGI.zumrut, fillOpacity: 0.2 });
+    expect(pts[0].color).toBe(NESNE_RENGI.zumrut);
   });
 
   it('side, perimeter and area specifications', () => {
@@ -504,7 +505,7 @@ describe('polygons: special quadrilaterals', () => {
     close(height.pts[3].y - height.pts[0].y, 3);
     const obtuse = shapeOf('kenarları 4 ve 2, açısı 120 derece olan paralelkenar');
     close(angleAt(obtuse.pts[3], obtuse.pts[0], obtuse.pts[1]), 120);
-    expect(def.poly).toMatchObject({ color: '#10b981', label: 'ABCD' });
+    expect(def.poly).toMatchObject({ color: NESNE_RENGI.zumrut, label: 'ABCD' });
   });
 
   it('rhombuses', () => {
@@ -558,7 +559,7 @@ describe('polygons: general polygons', () => {
   it('from coordinates, labels and selection', () => {
     const coords = shapeOf('(0; 0), (4; 0), (4; 3), (0; 3) köşeli çokgen çiz');
     expect(coords.pts.map(p => [p.label, p.x, p.y])).toEqual([['A', 0, 0], ['B', 4, 0], ['C', 4, 3], ['D', 0, 3]]);
-    expect(coords.poly).toMatchObject({ label: 'ABCD', color: '#10b981', fillOpacity: 0.15, showArea: true, showPerimeter: true });
+    expect(coords.poly).toMatchObject({ label: 'ABCD', color: NESNE_RENGI.zumrut, fillOpacity: 0.15, showArea: true, showPerimeter: true });
     const namedCoords = shapeOf('A(0; 0), B(5; 0), C(4; 3), D(1; 3) dörtgenini çiz');
     expect(namedCoords.pts.map(p => p.label)).toEqual(['A', 'B', 'C', 'D']);
     const mixed = shapeOf('köşeleri A(0;0), B(4;0), C(4;3) ve D(0;3) olan dörtgen');

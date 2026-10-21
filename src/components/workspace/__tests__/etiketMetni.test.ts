@@ -56,8 +56,8 @@ describe('etiketHedefiniBul', () => {
   }) as unknown as Element;
 
   it('etiket düğümünden sahip, anahtar ve ekrandaki metni okur', () => {
-    expect(etiketHedefiniBul(dugum({ 'data-label-kind': 'area', 'data-label-object': 'poly1', 'data-label-text': 'A(ABC) = 6 br²' })))
-      .toEqual({ objectId: 'poly1', kind: 'area', metin: 'A(ABC) = 6 br²' });
+    expect(etiketHedefiniBul(dugum({ 'data-label-kind': 'area', 'data-label-object': 'poly1', 'data-label-text': 'A(ABC) = 6 birimkare' })))
+      .toEqual({ objectId: 'poly1', kind: 'area', metin: 'A(ABC) = 6 birimkare' });
   });
 
   it('metin özniteliği yoksa boş metin; etiket değilse null', () => {

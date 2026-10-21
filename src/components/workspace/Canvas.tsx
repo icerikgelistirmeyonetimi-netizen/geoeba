@@ -163,6 +163,7 @@ import {
   Grid3x3,
   Magnet,
   SquareMousePointer,
+  Ruler,
 } from 'lucide-react';
 import { EksenSimgesi, IzgaraSimgesi } from './GrafikMenuSimgeleri';
 import { temaZemini, zeminTonu } from './zeminTonu';
@@ -172,13 +173,14 @@ import { fonksiyonParcalari, parcalardanYol } from '@/math/fonksiyonCizimi';
 import { fonksiyonEtiketiYazimi } from '@/math/fonksiyonYazimi';
 import { fonksiyonEtiketiEngelleri, fonksiyonEtiketYeri, type FonksiyonEtiketYeri } from './fonksiyonEtiketi';
 import { useTheme } from '@/state/ThemeContext';
+import { NESNE_RENGI, NESNE_SECIM_RENGI, NESNE_SECIM_RENGI_KOYU_TEMA } from '@/utils/nesneRenkleri';
 import { KayanCubuk, CubukMetni, CubukAyirici, CubukDugmesi } from './KayanCubuk';
 import { aracYonergesi } from './aracYonergeleri';
 import { useIlkokulKipi, useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { tamSayiOlcuEtkin, olcumBildirimi, uzunlukOlcBirimi } from './olcuYuvarlama';
 import {
-  ceyregeYuvarla, egikCevreUyarisi, ilkokulCevreGorunumu, ilkokulDonusAdi, ilkokulSimetriDogrusu, ilkokulUzunlukMetni,
-  kenarlarZemineParalelMi, type SimetriYonu,
+  ceyregeYuvarla, ilkokulDonusAdi, ilkokulSimetriDogrusu, ilkokulUzunlukMetni,
+  type SimetriYonu,
 } from './ilkokulKipi';
 import { SimetriSinamaCubugu, SimetriSinamaKatmani, useSimetriSinama } from './SimetriSinamaArayuzu';
 import { aciEtiketiUzakta, aciYayYaricapi, cizgiCercevesi, cizgiEtiketiUzakta, etiketAcisi, etiketDondurme, kenarEkseninden, kenarEksenine, koseAcilariniAyir, tabanaGoreDik, yayEtiketiYerlesimi, type KoseAcisi, type YayEtiketGeometrisi } from './olcuEtiketi';
@@ -325,6 +327,7 @@ const isObjectInMarquee = (
 
 interface CanvasProps {
   onSwitchTo3D?: () => void;
+  onEditFunction?: (id: string) => void;
   solids?: Solid3DObject[];
   selectedSolidId?: string | null;
   selectedSolidIds?: string[];
@@ -343,6 +346,7 @@ const BOS_CISIM_KIMLIKLERI: string[] = [];
 
 export function Canvas({
   onSwitchTo3D,
+  onEditFunction,
   solids: tumCisimler = BOS_CISIMLER,
   selectedSolidId: seciliCisimHam = null,
   selectedSolidIds: seciliCisimlerHam = BOS_CISIM_KIMLIKLERI,
@@ -459,6 +463,15 @@ export function Canvas({
 
   // 2B'de izdüşümü gösterilen 3B cisme sağ tıklanınca açılan menü
   const [cisimMenusu, setCisimMenusu] = useState<{ solidId: string; ad: string; x: number; y: number } | null>(null);
+  // İzdüşümün ölçüleri yalnız o cisim için açıkça istendiğinde görünür.
+  const [cisimIzdusumOlcumleri, setCisimIzdusumOlcumleri] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    setCisimIzdusumOlcumleri((prev) => {
+      const kalan = Object.fromEntries(Object.entries(prev).filter(([id]) => solids?.some((solid) => solid.id === id)));
+      return Object.keys(kalan).length === Object.keys(prev).length ? prev : kalan;
+    });
+    setCisimMenusu((prev) => prev && !solids?.some((solid) => solid.id === prev.solidId) ? null : prev);
+  }, [solids]);
 
   // Sağ tık bağlam menüsü hedefi (nesne + ekran konumu)
   const [contextTarget, setContextTarget] = useState<{
@@ -715,7 +728,7 @@ export function Canvas({
         showLabel: true,
         x: merkez.x,
         y: merkez.y,
-        color: '#8b5cf6',
+        color: NESNE_RENGI.mor,
         visible: true,
         isIndependent: true,
         createdAt: Date.now(),
@@ -727,7 +740,7 @@ export function Canvas({
         showLabel: true,
         centerPointId: merkezNokta.id,
         fixedRadius: yaricap,
-        color: '#8b5cf6',
+        color: NESNE_RENGI.mor,
         fillOpacity: 0,
         visible: true,
         createdAt: Date.now(),
@@ -745,7 +758,7 @@ export function Canvas({
       showLabel: true,
       x: Number(x.toFixed(4)),
       y: Number(y.toFixed(4)),
-      color: '#8b5cf6',
+      color: NESNE_RENGI.mor,
       visible: true,
       isIndependent: true,
       createdAt: Date.now(),
@@ -769,7 +782,7 @@ export function Canvas({
       startPointId: bas.id,
       directionPointId: bit.id,
       thickness: 3,
-      color: '#8b5cf6',
+      color: NESNE_RENGI.mor,
       showArcLength: true,
       visible: true,
       createdAt: Date.now(),
@@ -1145,7 +1158,7 @@ export function Canvas({
           const last = curList[curList.length - 1];
           if (!last || Math.hypot(last.x - pt.x, last.y - pt.y) > 0.02) {
             next[pt.id] = {
-              color: pt.color || '#2563eb',
+              color: pt.color || NESNE_RENGI.mavi,
               points: [...curList.slice(-600), { x: pt.x, y: pt.y }],
             };
             changed = true;
@@ -1691,7 +1704,7 @@ export function Canvas({
   // Ortaokulda varsayılan 2 ondalık (alan uzmanı, 4. tur): tamSayi kademenin kendi ayarından (olcuYuvarlama.ts)
   // İlkokulda yuvarlanan değer tuvalde de "yaklaşık" der (uzman 4. tur [176]; matematikYazimi.yaklasikSozcukle)
   const yazim = useMemo(
-    () => ({ ...yazimAyari(styleSettings), tamSayi: tamSayiOlcu, alanBirimiAcik: kademe === 'ortaokul', ...(ilkokul ? { yaklasikSozcukle: true } : {}) }),
+    () => ({ ...yazimAyari(styleSettings), tamSayi: tamSayiOlcu, ...(ilkokul ? { yaklasikSozcukle: true } : {}) }),
     [styleSettings, tamSayiOlcu, ilkokul, kademe],
   );
   /** Nokta arayıcı: yazım kuralları nesnenin .label'ını değil, GÖRÜNEN nokta adlarını kullanır. */
@@ -1752,14 +1765,9 @@ export function Canvas({
    * ÖLÇÜM KARTLARI (çokgen alan/çevre, çember, elips) tek yerden ölçülür: 4, 4.6 ve 5 katmanları
    * kartı buradan çizer, 6 (açı rozeti) ve 7.5 (yay rozeti) katmanları kutuları ENGEL olarak okur.
    */
-  // İlkokulda eğik kenarlı çokgenin çevre etiketi okuma değil yönlendirmedir ("Çevre: cetvelle ölç"; uzman 4. tur [176])
-  const kartNesneleri = useMemo(
-    () => (ilkokul ? ilkokulCevreGorunumu(objects, viewport.gridStyle) : objects),
-    [ilkokul, objects, viewport.gridStyle],
-  );
   const kartKutulari = useMemo(
-    () => (showDetails ? olcumKartKutulari({ objects: kartNesneleri, viewport, yazim, px: (t) => fs(t, 'measure'), yaziOlcegi }) : []),
-    [kartNesneleri, viewport, yazim, fs, showDetails, yaziOlcegi],
+    () => (showDetails ? olcumKartKutulari({ objects, viewport, yazim, px: (t) => fs(t, 'measure'), yaziOlcegi }) : []),
+    [objects, viewport, yazim, fs, showDetails, yaziOlcegi],
   );
   /**
    * Alanı Bul / Çevre Hesapla sonucu zaten etikette görünüyorsa o etiket 1,6 sn vurgulanır (kutusu kalın çizgiyle
@@ -1781,8 +1789,8 @@ export function Canvas({
   }, [kartKutulari]);
   const kartEngelleri = useMemo(() => showDetails
     // Yerleşim uzayındaki çakışma kutuları: alt sınırla büyüyen yazıyla örtüşsün diye yazı ölçeği = yerlesimOrani
-    ? olcumKartKutulari({ objects: kartNesneleri, viewport: etiketGorunumu, yazim, px: (t) => fs(t, 'measure'), yaziOlcegi: yerlesimOrani }).map(k => k.kutu) : [],
-  [kartNesneleri, etiketGorunumu, yazim, fs, showDetails, yerlesimOrani]);
+    ? olcumKartKutulari({ objects, viewport: etiketGorunumu, yazim, px: (t) => fs(t, 'measure'), yaziOlcegi: yerlesimOrani }).map(k => k.kutu) : [],
+  [objects, etiketGorunumu, yazim, fs, showDetails, yerlesimOrani]);
 
   /**
    * AÇI YAYI YARIÇAPI (etiket yerleşim pikseli; ekranda etiketOlcegi ile çarpılır). Dar açıda yay okunur
@@ -2384,7 +2392,7 @@ export function Canvas({
           y: worldPos.y,
           width,
           height,
-          color: '#3b82f6',
+          color: NESNE_RENGI.mavi,
           visible: true,
           createdAt: Date.now(),
         };
@@ -2595,7 +2603,7 @@ export function Canvas({
           showLabel: false,
           points: currentPenStroke,
           thickness: 3,
-          color: '#e11d48',
+          color: NESNE_RENGI.pembe,
           visible: true,
           createdAt: Date.now(),
         };
@@ -2623,7 +2631,7 @@ export function Canvas({
         if (activeTool === 'square') {
           const side = round1(Math.max(dx, dy));
           const [la, lb, lc, ld] = generateNextPointLabels(labels, 4);
-          const color = '#3b82f6';
+          const color = NESNE_RENGI.mavi;
           const pts = [
             makePoint(la, x1, y1, color),
             makePoint(lb, x1 + side, y1, color),
@@ -2637,12 +2645,12 @@ export function Canvas({
             label: 'Kare',
             showLabel: true,
             pointIds: pts.map((p) => p.id),
-            color: '#f43f5e',
-            fillColor: '#f43f5e',
+            color: NESNE_RENGI.pembe,
+            fillColor: NESNE_RENGI.pembe,
             fillOpacity: 0.18,
             visible: true,
-            showArea: true,
-            showPerimeter: true,
+            showArea: false,
+            showPerimeter: false,
             createdAt: Date.now(),
           };
 
@@ -2652,7 +2660,7 @@ export function Canvas({
           const rw = round1(dx);
           const rh = round1(dy);
           const [la, lb, lc, ld] = generateNextPointLabels(labels, 4);
-          const color = '#3b82f6';
+          const color = NESNE_RENGI.mavi;
           const pts = [
             makePoint(la, x1, y1, color),
             makePoint(lb, x1 + rw, y1, color),
@@ -2666,12 +2674,12 @@ export function Canvas({
             label: 'Dikdörtgen',
             showLabel: true,
             pointIds: pts.map((p) => p.id),
-            color: '#f59e0b',
-            fillColor: '#f59e0b',
+            color: NESNE_RENGI.kehribar,
+            fillColor: NESNE_RENGI.kehribar,
             fillOpacity: 0.18,
             visible: true,
-            showArea: true,
-            showPerimeter: true,
+            showArea: false,
+            showPerimeter: false,
             createdAt: Date.now(),
           };
 
@@ -2684,7 +2692,7 @@ export function Canvas({
           const ra = round1(dx / 2);
           const rb = round1(dy / 2);
           const [centerLabel] = generateNextPointLabels(labels, 1);
-          const merkez = makePoint(centerLabel, round1(x1 + dx / 2), round1(y1 + dy / 2), '#0ea5e9');
+          const merkez = makePoint(centerLabel, round1(x1 + dx / 2), round1(y1 + dy / 2), NESNE_RENGI.camgobegi);
           const elips: EllipseObject = {
             id: createId('elp'),
             type: 'ellipse',
@@ -2693,12 +2701,12 @@ export function Canvas({
             centerPointId: merkez.id,
             radiusX: ra,
             radiusY: rb,
-            color: '#0ea5e9',
-            fillColor: '#0ea5e9',
+            color: NESNE_RENGI.camgobegi,
+            fillColor: NESNE_RENGI.camgobegi,
             fillOpacity: 0.12,
             visible: true,
-            showArea: true,
-            showPerimeter: true,
+            showArea: false,
+            showPerimeter: false,
             createdAt: Date.now(),
           };
           addObjects(
@@ -2709,7 +2717,7 @@ export function Canvas({
           // Tam sayı ölçüde (ilkokul hep) yarıçap tam birim (en az 1): "r = 5,8 br" değil "r = 6 br" (alan uzmanı, 21.10.2026)
           const radius = tamSayiOlcu ? Math.max(1, Math.round(dist)) : round1(dist);
           const [centerLabel] = generateNextPointLabels(labels, 1);
-          const centerPt = makePoint(centerLabel, dragCreateStart.x, dragCreateStart.y, '#8b5cf6');
+          const centerPt = makePoint(centerLabel, dragCreateStart.x, dragCreateStart.y, NESNE_RENGI.mor);
           const circ: CircleObject = {
             id: createId('circ'),
             type: 'circle',
@@ -2717,7 +2725,7 @@ export function Canvas({
             showLabel: true,
             centerPointId: centerPt.id,
             fixedRadius: radius,
-            color: '#8b5cf6',
+            color: NESNE_RENGI.mor,
             visible: true,
             // Ölçüler hazır gelmez (kullanıcı isteği, 8 Ekim 2026): sağ tık menüsü ya da komutla açılır.
             fillOpacity: 0.1,
@@ -2737,8 +2745,8 @@ export function Canvas({
                   y: dragCreateStart.y + ((endWorld.y - dragCreateStart.y) / dist) * targetLen,
                 };
               })();
-          const p1 = makePoint(la, dragCreateStart.x, dragCreateStart.y, '#0284c7');
-          const p2 = makePoint(lb, endPos.x, endPos.y, '#0284c7');
+          const p1 = makePoint(la, dragCreateStart.x, dragCreateStart.y, NESNE_RENGI.camgobegi);
+          const p2 = makePoint(lb, endPos.x, endPos.y, NESNE_RENGI.camgobegi);
           const seg: SegmentObject = {
             id: createId('seg'),
             type: 'segment',
@@ -2746,9 +2754,9 @@ export function Canvas({
             showLabel: true,
             startPointId: p1.id,
             endPointId: p2.id,
-            color: '#0284c7',
+            color: NESNE_RENGI.camgobegi,
             visible: true,
-            showLength: true,
+            showLength: false,
             thickness: 2.5,
             createdAt: Date.now(),
           };
@@ -3130,6 +3138,15 @@ export function Canvas({
       } },
       pasteItem,
     ];
+    if (hedef.type === 'function' && onEditFunction) {
+      maddeler[0] = { ...maddeler[0], separatorBefore: true };
+      maddeler.unshift({
+        id: 'fonksiyonu-duzenle',
+        label: 'Fonksiyonu Düzenle',
+        icon: <PencilLine className="w-4 h-4" />,
+        onSelect: () => onEditFunction(hedef.id),
+      });
+    }
     // Sağ tıklanan bir ÖLÇÜ ETİKETİYSE (alan, çevre, yarıçap, uzunluk, kenar, açı, eğim): metni elle yazılır
     // ya da hesaplanan yazıya dönülür (etiketMetni.ts). Yazı notlarının kendi "Metni düzenle…" maddesi var.
     const etiket = contextTarget?.etiket;
@@ -3536,15 +3553,12 @@ export function Canvas({
       const merkez = pointsById.get(circ.centerPointId);
       const yariNokta = circ.radiusPointId ? pointsById.get(circ.radiusPointId) : undefined;
       const r = merkez && yariNokta ? calculateDistance(merkez, yariNokta) : circ.fixedRadius ?? 0;
-      // İlkokulda çemberin alan, çevre ve yarıçap yazısı gösterilmez (ilkokulGorunumu): maddeler sunulmaz, yoksa
-      // tıklama görünümde iz bırakmadan gerçek nesneye bayrak yazar ve liseye geçince beklenmedik etiket çıkar.
-      if (!ilkokul) {
-        maddeler.push({ id: 'olc-alan', label: 'Alanını ölç', onSelect: () => measureArea(circ.id) });
-        maddeler.push({ id: 'olc-cevre', label: 'Çevresini ölç', onSelect: () => measurePerimeter(circ.id) });
-        // Yarıçap etiketi ayrı bir etikettir: tıklayınca gizlenir, buradan geri açılır.
-        const yaricapAcik = cemberYaricapiGorunur(circ);
-        maddeler.push({ id: 'olc-yaricap', label: yaricapAcik ? 'Yarıçap uzunluğunu gizle' : 'Yarıçap uzunluğunu ölç', onSelect: () => updateObject(circ.id, { showRadius: !yaricapAcik } as Partial<MathObject>, true) });
-      }
+      // Ölçüm ancak kullanıcı bu menüden istediğinde açılır.
+      maddeler.push({ id: 'olc-alan', label: 'Alanını ölç', onSelect: () => measureArea(circ.id) });
+      maddeler.push({ id: 'olc-cevre', label: 'Çevresini ölç', onSelect: () => measurePerimeter(circ.id) });
+      // Yarıçap etiketi ayrı bir etikettir: tıklayınca gizlenir, buradan geri açılır.
+      const yaricapAcik = cemberYaricapiGorunur(circ);
+      maddeler.push({ id: 'olc-yaricap', label: yaricapAcik ? 'Yarıçap uzunluğunu gizle' : 'Yarıçap uzunluğunu ölç', onSelect: () => updateObject(circ.id, { showRadius: !yaricapAcik } as Partial<MathObject>, true) });
       const ustundeC = uzerindekiNoktalar(circ);
       if (ustundeC.length >= 2) {
         const secili = ustundeC.filter((o) => selectedObjectIds.includes(o.id));
@@ -3626,7 +3640,7 @@ export function Canvas({
           id: 'olc-kenar',
           label: acik
             ? `${ad} kenar uzunluğunu gizle`
-            : `${ad} kenarını ölç (${formatTurkishNumber(uzunluk)} br)`,
+            : ilkokul ? `${ad} kenarını ölç` : `${ad} kenarını ölç (${formatTurkishNumber(uzunluk)} br)`,
           onSelect: () => togglePolygonEdgeLabel(poly.id, kenarNo),
         });
       }
@@ -3662,8 +3676,7 @@ export function Canvas({
         label: hepsiAcik ? 'Kenar uzunluklarını gizle' : 'Tüm kenarları ölç',
         onSelect: () => setAllPolygonEdgeLabels(poly.id, !hepsiAcik),
       });
-      // İlkokulda çokgen alanı yazılmaz (alan birim karelerle bulunur; ilkokulGorunumu): madde sunulmaz
-      if (!ilkokul) maddeler.push({ id: 'olc-alan', label: 'Alanını ölç', separatorBefore: true, onSelect: () => measureArea(hedef.id) });
+      maddeler.push({ id: 'olc-alan', label: 'Alanını ölç', separatorBefore: true, onSelect: () => measureArea(hedef.id) });
       maddeler.push({ id: 'olc-cevre', label: 'Çevresini ölç', separatorBefore: ilkokul, onSelect: () => measurePerimeter(hedef.id) });
     } else if (hedef.type === 'arc' || hedef.type === 'sector') {
       // Yay / daire dilimi: merkez açı her ikisinde de anlamlıdır (yarım çemberde 180°)
@@ -3750,9 +3763,8 @@ export function Canvas({
 
       maddeler.push({ id: 'ic-dis-aci', label: 'İç açı / dış açı', onSelect: () => toggleAngleReflex(ang.id) });
       // Rozete tıklamak dışında garantili bir çıkış yolu: menüden de gizlenebilsin.
-      // İlkokulda açı değeri (derece) açılmaz: açıölçerle ölçme yok (TYMM)
-      if (!ilkokul || ang.showValue !== false) maddeler.push({
-        id: 'aci-deger-gorunurluk',
+      maddeler.push({
+        id: 'olc-aci-deger-gorunurluk',
         label: ang.showValue === false ? 'Açı değerini göster' : 'Açı değerini gizle',
         onSelect: () =>
           ang.showValue === false
@@ -3791,7 +3803,7 @@ export function Canvas({
         );
       }
     }
-    if (hedef.type === 'measurement' && hedef.kind !== 'arc') maddeler.push({ id: 'olcum-goster', label: hedef.showValue === false ? 'Ölçümü göster' : 'Ölçümü gizle', onSelect: () => updateObject(hedef.id, (hedef.showValue === false ? { showValue: true, hiddenRatios: undefined } : { showValue: false }) as Partial<MathObject>, true) });
+    if (hedef.type === 'measurement' && hedef.kind !== 'arc') maddeler.push({ id: 'olc-goster', label: hedef.showValue === false ? 'Ölçümü göster' : 'Ölçümü gizle', onSelect: () => updateObject(hedef.id, (hedef.showValue === false ? { showValue: true, hiddenRatios: undefined } : { showValue: false }) as Partial<MathObject>, true) });
     // Trig oranları ayrı etiketlerdir; tek tek gizlenenler buradan geri gelir
     if (hedef.type === 'measurement' && hedef.kind === 'trig' && hedef.showValue !== false && hedef.hiddenRatios?.length) {
       maddeler.push({ id: 'olcum-oranlar', label: 'Gizlenen oranları göster', onSelect: () => updateObject(hedef.id, { hiddenRatios: undefined } as Partial<MathObject>, true) });
@@ -3868,7 +3880,8 @@ export function Canvas({
       },
     } : item);
   }, [
-    objectClipboard, viewport, addObjects, setSelectedObjectIds, setActiveTool, activeTool, commit,
+    objectClipboard, viewport, addObjects, setSelectedObjectIds, setActiveTool, activeTool, commit, ilkokul,
+    onEditFunction,
     contextTarget,
     objects,
     pointsById,
@@ -4040,18 +4053,6 @@ export function Canvas({
         const poly = obj as PolygonObject;
         const polyPoints = poly.pointIds.map((id) => pointsById.get(id)).filter(Boolean) as PointObject[];
         const zaten = poly.showPerimeter === true;
-        // İlkokul, eğik kenarlı şekil: çevre okuması yerine "cetvelle ölç" yönlendirmesi; etiket de bunu yazar
-        // (uzman 4. tur [176]; ilkokulKipi.ilkokulCevreGorunumu)
-        if (ilkokul && !kenarlarZemineParalelMi(polyPoints, viewport.gridStyle)) {
-          if (!zaten) {
-            commit(
-              (prev) => prev.map((o) => (o.id === poly.id ? ({ ...o, showPerimeter: true } as MathObject) : o)),
-              'Çevre: cetvelle ölçülecek'
-            );
-          } else kartiVurgula(poly.id, 'perimeter');
-          setHintMessage(egikCevreUyarisi(viewport.gridStyle));
-          return;
-        }
         // Kartla AYNI sayı: tam sayı açıkken çevre görünen kenarların toplamıdır, ilkokulda gerçek kenarların
         // toplamının yuvarlanmışı (cokgenKartSatirlari)
         const [cevreOlcusu] = cokgenKartSatirlari(polyPoints, false, true, yazim.tamSayi, ilkokul).olculer;
@@ -4608,7 +4609,7 @@ export function Canvas({
     const adlar = goruntuNoktaAdlari(polyPoints.map((p) => p.label), existingPointLabels());
     const newPts: PointObject[] = polyPoints.map((p, i) => {
       const reflected = reflectPointAcrossLine({ x: p.x, y: p.y }, p1, p2);
-      return { ...makePoint(adlar[i], reflected.x, reflected.y, '#9333ea'), donusum: 'yansima' };
+      return { ...makePoint(adlar[i], reflected.x, reflected.y, NESNE_RENGI.mor), donusum: 'yansima' };
     });
 
     const symPoly: PolygonObject = {
@@ -4618,12 +4619,12 @@ export function Canvas({
       label: `${targetPoly.label || 'Çokgen'} Yansıması`,
       showLabel: true,
       pointIds: newPts.map((p) => p.id),
-      color: '#9333ea',
-      fillColor: '#9333ea',
+      color: NESNE_RENGI.mor,
+      fillColor: NESNE_RENGI.mor,
       fillOpacity: 0.2,
       visible: true,
-      showArea: true,
-      showPerimeter: true,
+      showArea: false,
+      showPerimeter: false,
       createdAt: Date.now(),
     };
 
@@ -4642,8 +4643,8 @@ export function Canvas({
     if (koseler.length < 3) return;
     const { p1, p2 } = ilkokulSimetriDogrusu(koseler, yon);
     const [la, lb] = generateNextPointLabels(existingPointLabels(), 2);
-    const uc1: PointObject = { ...makePoint(la, p1.x, p1.y, '#9333ea'), showLabel: false, visible: false };
-    const uc2: PointObject = { ...makePoint(lb, p2.x, p2.y, '#9333ea'), showLabel: false, visible: false };
+    const uc1: PointObject = { ...makePoint(la, p1.x, p1.y, NESNE_RENGI.mor), showLabel: false, visible: false };
+    const uc2: PointObject = { ...makePoint(lb, p2.x, p2.y, NESNE_RENGI.mor), showLabel: false, visible: false };
     const dogru: SegmentObject = {
       id: createId('seg'),
       type: 'segment',
@@ -4651,7 +4652,7 @@ export function Canvas({
       showLabel: false,
       startPointId: uc1.id,
       endPointId: uc2.id,
-      color: '#9333ea',
+      color: NESNE_RENGI.mor,
       style: 'dashed',
       thickness: 2,
       visible: true,
@@ -4748,6 +4749,7 @@ export function Canvas({
   // Özel zemin renginin tonu (koyu temada açık zemin → tuvalin içi açık temayla çizilir)
   // Temaya duyarlı zemin: koyu temada açık renk seçimi koyu bir tona dönüşür, koordinat sistemi koyu kalır
   const { isDark: koyuTema } = useTheme();
+  const secimRengi = koyuTema ? NESNE_SECIM_RENGI_KOYU_TEMA : NESNE_SECIM_RENGI;
   const tuvalZemini = useMemo(() => temaZemini(viewport.backgroundColor, koyuTema), [viewport.backgroundColor, koyuTema]);
   const zeminTonuDegeri = useMemo(() => zeminTonu(tuvalZemini), [tuvalZemini]);
 
@@ -5359,7 +5361,7 @@ export function Canvas({
                 className="pointer-events-none"
                 points={ptsStr}
                 fill="none"
-                stroke={trace.color || '#2563eb'}
+                stroke={trace.color || NESNE_RENGI.mavi}
                 strokeWidth={2}
                 strokeOpacity={0.65}
                 strokeLinecap="round"
@@ -5376,7 +5378,7 @@ export function Canvas({
                     cx={sp.x}
                     cy={sp.y}
                     r={2}
-                    fill={trace.color || '#2563eb'}
+                    fill={trace.color || NESNE_RENGI.mavi}
                     fillOpacity={0.7}
                   />
                 );
@@ -5403,7 +5405,7 @@ export function Canvas({
                 <path
                   d={pathD}
                   fill="none"
-                  stroke={isSelected ? '#ec4899' : fn.color || '#2563eb'}
+                  stroke={isSelected ? secimRengi : fn.color || NESNE_RENGI.mavi}
                   strokeWidth={isSelected ? (fn.thickness || 2.5) + 1.5 : fn.thickness || 2.5}
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -5416,7 +5418,7 @@ export function Canvas({
                     y={etiket.y}
                     textAnchor={etiket.anchor}
                     fontSize={etiket.px}
-                    fill={isSelected ? '#ec4899' : fn.color || '#2563eb'}
+                    fill={isSelected ? secimRengi : fn.color || NESNE_RENGI.mavi}
                     stroke={tuvalZemini || 'hsl(var(--background))'}
                     strokeWidth={3}
                     strokeLinejoin="round"
@@ -5465,9 +5467,9 @@ export function Canvas({
               >
                 <polygon
                   points={pointsAttr}
-                  fill={poly.fillColor || poly.color || '#10b981'}
+                  fill={poly.fillColor || poly.color || NESNE_RENGI.zumrut}
                   fillOpacity={styleSettings.hideFills ? 0 : poly.fillOpacity || 0.15}
-                  stroke={isSelected ? '#ec4899' : poly.color || '#10b981'}
+                  stroke={isSelected ? secimRengi : poly.color || NESNE_RENGI.zumrut}
                   strokeWidth={sw(isSelected ? 3 : 2)}
                   className="transition-colors"
                 />
@@ -5520,7 +5522,7 @@ export function Canvas({
                           y={ey}
                           px={fs(11, 'measure')}
                           renk="on"
-                          kutu={{ dolgu: '#ffffff', dolguOpakligi: 0.92, cizgi: poly.color || '#10b981', cizgiKalinligi: 1.2, sinif: 'dark:fill-card' }}
+                          kutu={{ dolgu: '#ffffff', dolguOpakligi: 0.92, cizgi: poly.color || NESNE_RENGI.zumrut, cizgiKalinligi: 1.2, sinif: 'dark:fill-card' }}
                           kutuGizli={!styleSettings.showLabelBoxes}
                           donmeAcisi={etiket.donmeAcisi}
                           olcu={etiket.olcu}
@@ -5551,7 +5553,7 @@ export function Canvas({
                       y={kart.merkez.y}
                       px={fs(11, 'measure')}
                       renk="on"
-                      kutu={{ dolgu: '#ffffff', dolguOpakligi: 0.92, cizgi: poly.color || '#10b981', cizgiKalinligi: kartVurguluMu(poly.id, kart.anahtar) ? 2.5 : 1.2, rx: 8, sinif: `shadow-sm dark:fill-card${kartVurguluMu(poly.id, kart.anahtar) ? ' animate-pulse' : ''}` }}
+                      kutu={{ dolgu: '#ffffff', dolguOpakligi: 0.92, cizgi: poly.color || NESNE_RENGI.zumrut, cizgiKalinligi: kartVurguluMu(poly.id, kart.anahtar) ? 2.5 : 1.2, rx: 8, sinif: `shadow-sm dark:fill-card${kartVurguluMu(poly.id, kart.anahtar) ? ' animate-pulse' : ''}` }}
                       kutuGizli={!styleSettings.showLabelBoxes && !kartVurguluMu(poly.id, kart.anahtar)}
                       olcu={kart.olcu}
                       sesli={kart.sesli}
@@ -5586,16 +5588,16 @@ export function Canvas({
             const isSelected = selectedSolidIds.includes(solid.id) || selectedSolidId === solid.id;
             return { solid, isSelected, proj: projectSolidFor2D(solid, viewport, isSelected, 'top', kutuOlcegi) };
           });
-          // İlkokulda yalnız cismin adı: taban alanı, hacim ve "a = 3 br" yok (uzman 4. tur [180])
+          // Başlangıçta yalnız ad. İlkokulda taban alanı, hacim ve harfli ölçüler açılmaz.
           const yalnizAd = cisimIzdusumuYalnizAd(kademe);
           const cisimYaziBoyu = fs(11, 'measure');
-          const satirlar = new Map(izdusumler.map(({ solid, proj }) => [solid.id, cisimBilgiEtiketi(cisimBilgiSatiri(proj, { yalnizAd }), cisimYaziBoyu)]));
+          const satirlar = new Map(izdusumler.map(({ solid, proj }) => [solid.id, cisimBilgiEtiketi(cisimBilgiSatiri(proj, { yalnizAd: yalnizAd || !cisimIzdusumOlcumleri[solid.id] }), cisimYaziBoyu)]));
           const satirYerleri = showDetails
             ? rozetleriYerlestir(
                 izdusumler.map(({ solid, proj }) => ({
                   id: solid.id,
                   govde: izdusumGovdesi(proj),
-                  kenarlar: yalnizAd ? [] : kenarEtiketKutulari(proj, yaziOlcegi, cisimYaziBoyu),
+                  kenarlar: yalnizAd || !cisimIzdusumOlcumleri[solid.id] ? [] : kenarEtiketKutulari(proj, yaziOlcegi, cisimYaziBoyu),
                   w: satirlar.get(solid.id)!.olcu.genislik * yaziOlcegi,
                   h: satirlar.get(solid.id)!.olcu.yukseklik * yaziOlcegi,
                 })),
@@ -5616,7 +5618,7 @@ export function Canvas({
                   data-solid-id={solid.id}
                   onPointerDown={(e) => handleSolidMouseDown(solid, e)}
                   onContextMenu={(e) => {
-                    // Boş alan menüsü yerine cismin kendi menüsü (en az "Sil")
+                    // Boş alan menüsü yerine cismin kendi ölçme / silme menüsü.
                     e.preventDefault();
                     e.stopPropagation();
                     setContextTarget(null);
@@ -5634,9 +5636,9 @@ export function Canvas({
                         <g>
                           <polygon
                             points={proj.topView.pointsAttr}
-                            fill={solid.color || '#3b82f6'}
+                            fill={solid.color || NESNE_RENGI.mavi}
                             fillOpacity={isSelected ? 0.35 : 0.20}
-                            stroke={isSelected ? '#ec4899' : solid.color || '#3b82f6'}
+                            stroke={isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi}
                             strokeWidth={isSelected ? 2.6 : 1.8}
                             strokeLinejoin="round"
                           />
@@ -5647,7 +5649,7 @@ export function Canvas({
                               cx={pt.x}
                               cy={pt.y}
                               r={isSelected ? 4 : 3}
-                              fill={isSelected ? '#ec4899' : solid.color || '#3b82f6'}
+                              fill={isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi}
                             />
                           ))}
                         </g>
@@ -5660,16 +5662,16 @@ export function Canvas({
                             cx={proj.topView.centerScreen.x}
                             cy={proj.topView.centerScreen.y}
                             r={proj.topView.radius}
-                            fill={solid.color || '#3b82f6'}
+                            fill={solid.color || NESNE_RENGI.mavi}
                             fillOpacity={isSelected ? 0.35 : 0.20}
-                            stroke={isSelected ? '#ec4899' : solid.color || '#3b82f6'}
+                            stroke={isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi}
                             strokeWidth={isSelected ? 2.6 : 1.8}
                           />
                           <circle
                             cx={proj.topView.centerScreen.x}
                             cy={proj.topView.centerScreen.y}
                             r={3}
-                            fill={isSelected ? '#ec4899' : solid.color || '#3b82f6'}
+                            fill={isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi}
                           />
                         </g>
                       )}
@@ -5681,9 +5683,9 @@ export function Canvas({
                             cx={proj.topView.centerScreen.x}
                             cy={proj.topView.centerScreen.y}
                             r={proj.topView.radius}
-                            fill={solid.color || '#3b82f6'}
+                            fill={solid.color || NESNE_RENGI.mavi}
                             fillOpacity={isSelected ? 0.35 : 0.20}
-                            stroke={isSelected ? '#ec4899' : solid.color || '#3b82f6'}
+                            stroke={isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi}
                             strokeWidth={isSelected ? 2.6 : 1.8}
                           />
                           <line
@@ -5691,7 +5693,7 @@ export function Canvas({
                             y1={proj.topView.centerScreen.y}
                             x2={proj.topView.centerScreen.x + 6}
                             y2={proj.topView.centerScreen.y}
-                            stroke={isSelected ? '#ec4899' : solid.color || '#3b82f6'}
+                            stroke={isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi}
                             strokeWidth={1.5}
                           />
                           <line
@@ -5699,14 +5701,14 @@ export function Canvas({
                             y1={proj.topView.centerScreen.y - 6}
                             x2={proj.topView.centerScreen.x}
                             y2={proj.topView.centerScreen.y + 6}
-                            stroke={isSelected ? '#ec4899' : solid.color || '#3b82f6'}
+                            stroke={isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi}
                             strokeWidth={1.5}
                           />
                           <circle
                             cx={proj.topView.centerScreen.x}
                             cy={proj.topView.centerScreen.y}
                             r={3}
-                            fill={isSelected ? '#ec4899' : solid.color || '#3b82f6'}
+                            fill={isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi}
                           />
                         </g>
                       )}
@@ -5716,9 +5718,9 @@ export function Canvas({
                         <g>
                           <polygon
                             points={proj.topView.pointsAttr}
-                            fill={solid.color || '#3b82f6'}
+                            fill={solid.color || NESNE_RENGI.mavi}
                             fillOpacity={isSelected ? 0.35 : 0.20}
-                            stroke={isSelected ? '#ec4899' : solid.color || '#3b82f6'}
+                            stroke={isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi}
                             strokeWidth={isSelected ? 2.6 : 1.8}
                             strokeLinejoin="round"
                           />
@@ -5729,7 +5731,7 @@ export function Canvas({
                               y1={diag.from.y}
                               x2={diag.to.x}
                               y2={diag.to.y}
-                              stroke={isSelected ? '#ec4899' : solid.color || '#3b82f6'}
+                              stroke={isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi}
                               strokeWidth={1.6}
                               strokeDasharray="4 3"
                             />
@@ -5738,7 +5740,7 @@ export function Canvas({
                             cx={proj.topView.centerScreen.x}
                             cy={proj.topView.centerScreen.y}
                             r={3.5}
-                            fill={isSelected ? '#ec4899' : solid.color || '#3b82f6'}
+                            fill={isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi}
                           />
                           {proj.topView.points?.map((pt, pti) => (
                             <circle
@@ -5746,14 +5748,14 @@ export function Canvas({
                               cx={pt.x}
                               cy={pt.y}
                               r={isSelected ? 4 : 3}
-                              fill={isSelected ? '#ec4899' : solid.color || '#3b82f6'}
+                              fill={isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi}
                             />
                           ))}
                         </g>
                       )}
 
                       {/* Kenar / Yarıçap Ölçü Etiketleri (ilkokulda yok: harfle kenar "a = 3 br" gösterilmez) */}
-                      {showDetails && !yalnizAd &&
+                      {showDetails && !yalnizAd && cisimIzdusumOlcumleri[solid.id] &&
                         proj.topView.dimensionLabels.map((lbl, li) => {
                           const etiket = cisimEtiketYazimi(lbl.text, cisimYaziBoyu);
                           return (
@@ -5780,7 +5782,7 @@ export function Canvas({
                   {showDetails && satirYerleri.has(solid.id) && (() => {
                     const yer = satirYerleri.get(solid.id)!;
                     const satir = satirlar.get(solid.id)!;
-                    const cerceve = isSelected ? '#ec4899' : solid.color || '#3b82f6';
+                    const cerceve = isSelected ? secimRengi : solid.color || NESNE_RENGI.mavi;
                     return (
                       <g
                         data-canvas-label=""
@@ -6037,6 +6039,7 @@ export function Canvas({
             const ortak = {
               ekran,
               secili: selectedObjectIds.includes(w.id),
+              secimRengi,
               onMouseDown: (e: React.MouseEvent) => handleObjectMouseDown(e, w),
               onContextMenu: (e: React.MouseEvent) => openContextMenu(e, w),
             };
@@ -6123,7 +6126,7 @@ export function Canvas({
             const oran = aralik > 0 ? (s.value - s.min) / aralik : 0;
             const tutamakX = sol.x + (sag.x - sol.x) * oran;
             const isSelected = selectedObjectIds.includes(s.id);
-            const renk = s.color || '#8b5cf6';
+            const renk = s.color || NESNE_RENGI.mor;
             const bagli = sliderIsBound(objects, s.id);
             const gosterim = sliderDisplay(objects, s, yazim);
             const baslikSatirlari = [gosterim.nodes];
@@ -6280,7 +6283,7 @@ export function Canvas({
                     cy={sol.y}
                     r={13}
                     fill="none"
-                    stroke="#ec4899"
+                    stroke={secimRengi}
                     strokeWidth={2}
                     className="pointer-events-none"
                   />
@@ -6320,7 +6323,7 @@ export function Canvas({
               : `M ${p0.x} ${p0.y} ${arcSeg}`;
 
             const isSelected = selectedObjectIds.includes(shape.id);
-            const stroke = isSelected ? '#ec4899' : shape.color || (isSector ? '#10b981' : '#0284c7');
+            const stroke = isSelected ? secimRengi : shape.color || (isSector ? NESNE_RENGI.zumrut : NESNE_RENGI.camgobegi);
             const derece = (geo.sweep * 180) / Math.PI;
 
             // Etiket: yayın orta noktasının biraz dışında
@@ -6399,7 +6402,7 @@ export function Canvas({
                 <path d={d} fill="none" stroke="transparent" strokeWidth={14} />
                 <path
                   d={d}
-                  fill={isSector ? (shape as SectorObject).fillColor || '#10b981' : 'none'}
+                  fill={isSector ? (shape as SectorObject).fillColor || NESNE_RENGI.zumrut : 'none'}
                   fillOpacity={styleSettings.hideFills ? 0 : isSector ? (shape as SectorObject).fillOpacity ?? 0.4 : 0}
                   stroke={stroke}
                   strokeWidth={sw(isSelected ? 4 : (shape as ArcObject).thickness ?? 3)}
@@ -6519,9 +6522,9 @@ export function Canvas({
                     cy={cS.y}
                     rx={rxPx}
                     ry={ryPx}
-                    fill={elp.fillColor || elp.color || '#0ea5e9'}
+                    fill={elp.fillColor || elp.color || NESNE_RENGI.camgobegi}
                     fillOpacity={styleSettings.hideFills ? 0 : elp.fillOpacity ?? 0.12}
-                    stroke={isSelected ? '#ec4899' : elp.color || '#0ea5e9'}
+                    stroke={isSelected ? secimRengi : elp.color || NESNE_RENGI.camgobegi}
                     strokeWidth={sw(isSelected ? 3 : 2)}
                   />
                   {/* 🔄 DÖNDÜRME PALETİ — elips kendi merkezi etrafında döner */}
@@ -6619,9 +6622,9 @@ export function Canvas({
                   cx={centerScreen.x}
                   cy={centerScreen.y}
                   r={pixelRadius}
-                  fill={circ.color || '#8b5cf6'}
+                  fill={circ.color || NESNE_RENGI.mor}
                   fillOpacity={styleSettings.hideFills ? 0 : circ.fillOpacity || 0.08}
-                  stroke={isSelected ? '#ec4899' : circ.color || '#8b5cf6'}
+                  stroke={isSelected ? secimRengi : circ.color || NESNE_RENGI.mor}
                   strokeWidth={sw(isSelected ? 3 : 2)}
                 />
                 {(kartHaritasi.get(circ.id) ?? []).map((kart) => {
@@ -6643,7 +6646,7 @@ export function Canvas({
                       y={kart.merkez.y}
                       px={fs(11, 'measure')}
                       renk="on"
-                      kutu={{ dolgu: '#ffffff', dolguOpakligi: 0.92, cizgi: circ.color || '#8b5cf6', cizgiKalinligi: kartVurguluMu(circ.id, kart.anahtar) ? 2.5 : 1.2, rx: 7, sinif: `shadow-sm dark:fill-card${kartVurguluMu(circ.id, kart.anahtar) ? ' animate-pulse' : ''}` }}
+                      kutu={{ dolgu: '#ffffff', dolguOpakligi: 0.92, cizgi: circ.color || NESNE_RENGI.mor, cizgiKalinligi: kartVurguluMu(circ.id, kart.anahtar) ? 2.5 : 1.2, rx: 7, sinif: `shadow-sm dark:fill-card${kartVurguluMu(circ.id, kart.anahtar) ? ' animate-pulse' : ''}` }}
                       kutuGizli={!styleSettings.showLabelBoxes && !kartVurguluMu(circ.id, kart.anahtar)}
                       olcu={kart.olcu}
                       sesli={kart.sesli}
@@ -6690,7 +6693,7 @@ export function Canvas({
                     y1={s1.y}
                     x2={s2.x}
                     y2={s2.y}
-                    stroke={isSelected ? '#ec4899' : seg.color || '#0284c7'}
+                    stroke={isSelected ? secimRengi : seg.color || NESNE_RENGI.camgobegi}
                     strokeWidth={sw(isSelected ? (seg.thickness || 2.5) + 1.5 : seg.thickness || 2.5)}
                     strokeDasharray={seg.style === 'dashed' ? '8 6' : seg.style === 'dotted' ? '2 5' : undefined}
                     strokeLinecap="round"
@@ -6795,7 +6798,7 @@ export function Canvas({
                     y1={s1.y}
                     x2={s2.x}
                     y2={s2.y}
-                    stroke={isSelected ? '#ec4899' : line.color || '#0284c7'}
+                    stroke={isSelected ? secimRengi : line.color || NESNE_RENGI.camgobegi}
                     strokeWidth={isSelected ? 3 : 2}
                   />
                   {line.showEquation && showDetails && (() => {
@@ -6903,7 +6906,7 @@ export function Canvas({
                     y1={s1.y}
                     x2={s2.x}
                     y2={s2.y}
-                    stroke={isSelected ? '#ec4899' : ray.color || '#0284c7'}
+                    stroke={isSelected ? secimRengi : ray.color || NESNE_RENGI.camgobegi}
                     strokeWidth={isSelected ? 3 : 2}
                   />
                   {ray.showLength && showDetails && (() => {
@@ -7193,6 +7196,7 @@ export function Canvas({
           isaretler={esitlik.isaretler.filter((m) => m.tur !== 'aci')}
           viewport={viewport}
           seciliIdler={selectedObjectIds}
+          secimRengi={secimRengi}
           cizgiOlcegi={styleSettings.strokeScale}
           noktalar={esitlikNoktalari}
           noktaYaricapi={styleSettings.pointRadius}
@@ -7277,7 +7281,7 @@ export function Canvas({
                   d={markerPath}
                   data-angle-marker={isRightAngle ? 'right' : 'arc'}
                   fill="none"
-                  stroke={isAngleSelected ? '#ec4899' : ang.color || '#f59e0b'}
+                  stroke={isAngleSelected ? secimRengi : ang.color || NESNE_RENGI.kehribar}
                   strokeWidth={isAngleSelected ? 3 : 2}
                   strokeLinecap="round"
                   strokeLinejoin="miter"
@@ -7319,6 +7323,7 @@ export function Canvas({
           isaretler={esitlik.isaretler.filter((m) => m.tur === 'aci')}
           viewport={viewport}
           seciliIdler={selectedObjectIds}
+          secimRengi={secimRengi}
           cizgiOlcegi={styleSettings.strokeScale}
           noktalar={esitlikNoktalari}
           noktaYaricapi={styleSettings.pointRadius}
@@ -7366,7 +7371,7 @@ export function Canvas({
                     cy={sPos.y}
                     r={12}
                     fill="none"
-                    stroke={isPending ? '#f59e0b' : '#ec4899'}
+                    stroke={isPending ? '#f59e0b' : secimRengi}
                     strokeWidth={2}
                     strokeDasharray={isPending ? '3,3' : undefined}
                     className="animate-pulse pointer-events-none"
@@ -7379,7 +7384,7 @@ export function Canvas({
                     cx={sPos.x}
                     cy={sPos.y}
                     r={(pt.size || styleSettings.pointRadius) + (isSelected ? 1.5 : 0)}
-                    fill={isPointLocked(pt, objects) ? '#94a3b8' : pt.color || '#2563eb'}
+                    fill={isPointLocked(pt, objects) ? '#94a3b8' : pt.color || NESNE_RENGI.mavi}
                     stroke="#ffffff"
                     strokeWidth={isSelected ? 3 : 2}
                     // Yalnızca boyut/renk yumuşak geçer. transition-all cx/cy'yi de (tarayıcıda CSS özelliği) 150 ms'de
@@ -7460,7 +7465,7 @@ export function Canvas({
                 <path
                   d={pathData}
                   fill="none"
-                  stroke={isSelected ? '#ec4899' : stroke.color || '#e11d48'}
+                  stroke={isSelected ? secimRengi : stroke.color || NESNE_RENGI.pembe}
                   strokeWidth={stroke.thickness || 3}
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -7493,7 +7498,7 @@ export function Canvas({
             const center = worldToScreen({ x: frac.x, y: frac.y }, viewport);
             const rPx = frac.radius * viewport.zoom;
             const isSelected = selectedObjectIds.includes(frac.id);
-            const fracColor = frac.color || '#8b5cf6';
+            const fracColor = frac.color || NESNE_RENGI.mor;
             // Geçersiz payda (0 veya negatif) -> 0/1 olarak göster
             const rawN = Number.isFinite(frac.numerator) ? Math.max(0, Math.round(frac.numerator)) : 0;
             const rawD = Number.isFinite(frac.denominator) ? Math.round(frac.denominator) : 0;
@@ -7522,7 +7527,7 @@ export function Canvas({
               const y0 = center.y;
               const kucuk = 7 * etiketOlcegi;
               const buyuk = 12 * etiketOlcegi;
-              const cizgiRengi = isSelected ? '#ec4899' : fracColor;
+              const cizgiRengi = isSelected ? secimRengi : fracColor;
               // Tutma alanı: ince doğruya dokunmak kolay olsun
               shapes.push(<rect key="tutamak" x={x0 - 6} y={y0 - totalHeightPx / 2} width={totalWidthPx + 12} height={totalHeightPx} fill="transparent" />);
               shapes.push(<line key="dogru" x1={x0} y1={y0} x2={x0 + totalWidthPx} y2={y0} stroke={cizgiRengi} strokeWidth={isSelected ? 3 : 2} />);
@@ -7584,7 +7589,7 @@ export function Canvas({
                     width={barW}
                     height={barH}
                     fill="none"
-                    stroke={isSelected ? '#ec4899' : fracColor}
+                    stroke={isSelected ? secimRengi : fracColor}
                     strokeWidth={isSelected ? 3 : 2}
                   />
                 );
@@ -7642,7 +7647,7 @@ export function Canvas({
                     cy={cy}
                     r={rPx}
                     fill="none"
-                    stroke={isSelected ? '#ec4899' : fracColor}
+                    stroke={isSelected ? secimRengi : fracColor}
                     strokeWidth={isSelected ? 3 : 2}
                   />
                 );
@@ -7708,8 +7713,8 @@ export function Canvas({
                   width={textWidth}
                   height={textHeight}
                   rx={8}
-                  fill={isSelected ? '#eff6ff' : '#ffffff'}
-                  stroke={isSelected ? '#2563eb' : '#cbd5e1'}
+                  fill={isSelected ? '#e4f3f0' : '#ffffff'}
+                  stroke={isSelected ? secimRengi : '#cbd5e1'}
                   strokeWidth={isSelected ? 2 : 1.2}
                   className="shadow-sm transition-colors group-hover/txt:stroke-primary dark:fill-card dark:stroke-border"
                 />
@@ -7781,7 +7786,7 @@ export function Canvas({
                     height={hPx + 6}
                     rx={4}
                     fill="none"
-                    stroke="#ec4899"
+                    stroke={secimRengi}
                     strokeWidth={2.5}
                     strokeDasharray="6,3"
                     className="pointer-events-none"
@@ -8404,12 +8409,12 @@ export function Canvas({
                     label: names ? `${names} Çokgeni` : 'Çokgen',
                     showLabel: true,
                     pointIds: [...pendingPointIds],
-                    color: '#10b981',
-                    fillColor: '#10b981',
+                    color: NESNE_RENGI.zumrut,
+                    fillColor: NESNE_RENGI.zumrut,
                     fillOpacity: 0.18,
                     visible: true,
-                    showArea: true,
-                    showPerimeter: true,
+                    showArea: false,
+                    showPerimeter: false,
                     createdAt: Date.now(),
                   };
                   addObject(newPolygon, `${newPolygon.label} oluşturuldu`);
@@ -8598,6 +8603,21 @@ export function Canvas({
         title={cisimMenusu?.ad || 'Cisim'}
         ariaLabel="Cisim"
         items={[
+          ...(!cisimIzdusumuYalnizAd(kademe) ? [{
+            id: 'cisim-olculeri',
+            label: cisimMenusu && cisimIzdusumOlcumleri[cisimMenusu.solidId] ? 'Ölçüleri gizle' : 'Ölçüleri göster',
+            icon: <Ruler className="w-4 h-4" />,
+            onSelect: () => {
+              if (!cisimMenusu) return;
+              const id = cisimMenusu.solidId;
+              const goster = !cisimIzdusumOlcumleri[id];
+              setCisimIzdusumOlcumleri((prev) => ({ ...prev, [id]: goster }));
+              if (goster) {
+                setViewport((prev) => prev.showMeasurements === false ? { ...prev, showMeasurements: true } : prev);
+                window.dispatchEvent(new Event('geoeba:show-measurements'));
+              }
+            },
+          }] : []),
           {
             id: 'cismi-sil',
             label: 'Sil',

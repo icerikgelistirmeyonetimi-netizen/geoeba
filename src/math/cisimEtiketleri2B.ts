@@ -3,7 +3,7 @@
  *
  * Alan uzmanı (4. tur, geoeba (3).xlsx [175]): 'Küp 1 (Kare)', 'Koni 1 (Daire (Koni))' başlıkları ve alt alta
  * dizilen hacim / taban alanı kutuları birbirinin üstüne biniyor, çizim alanını kalabalıklaştırıyordu. Artık her cisim
- * için tek bir satır vardır ("Küp 1 · Taban alanı = 9 br² · V = 27 br³"); satır cismin sağına konur, orada başka bir
+ * için tek bir satır vardır ("Küp 1 · Taban alanı = 9 birimkare · V = 27 br³"); satır cismin sağına konur, orada başka bir
  * cisim, ölçü etiketi ya da önceki bir satır varsa sola, üste, alta ve kaydırılmış konumlara bakılır (rozetleriYerlestir).
  * Taban biçiminin adı (Kare, Daire…) yazılmaz: çizimin kendisi gösteriyor.
  */
@@ -21,8 +21,8 @@ export interface EkranKutusu {
 }
 
 /**
- * Satırın iki parçası: kalın yazılan ad ve değerler ("Taban alanı = 9 br² · V = 27 br³"). `yalnizAd` (ilkokul, 4. tur
- * [180]): yalnız cismin adı — taban alanı, hacim, br² ve br³ ilkokul programının kapsamı dışındadır.
+ * Satırın iki parçası: kalın yazılan ad ve değerler ("Taban alanı = 9 birimkare · V = 27 br³"). `yalnizAd` (ilkokul, 4. tur
+ * [180]): yalnız cismin adı — bu kipte izdüşüm etiketinde taban alanı ve hacim değerleri gösterilmez.
  */
 export function cisimBilgiSatiri(
   proj: Pick<ProjectedSolid2D, 'name' | 'type' | 'topView' | 'badge'>,
@@ -32,7 +32,7 @@ export function cisimBilgiSatiri(
   const parcalar: string[] = [];
   if (!proj.topView) parcalar.push(...proj.badge.dimParts);
   // Kürenin tabanı yoktur: üstten görünüşü daire olsa da "taban alanı" yazılmaz
-  else if (proj.type !== 'sphere') parcalar.push(`Taban alanı = ${formatTurkishNumber(proj.topView.baseArea)} br²`);
+  else if (proj.type !== 'sphere') parcalar.push(`Taban alanı = ${formatTurkishNumber(proj.topView.baseArea)} birimkare`);
   parcalar.push(`V = ${formatTurkishNumber(proj.badge.volume)} br³`);
   return { ad: proj.name, degerler: parcalar.join(' · ') };
 }

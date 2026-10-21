@@ -271,7 +271,7 @@ function KaydiriciSatiri({
 function BaglamKarti({ baslik, simge, sag, children }: { baslik: string; simge?: React.ReactNode; sag?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="space-y-2.5 p-3 rounded-2xl bg-card border border-border/80">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-[13px] font-bold text-foreground flex items-center gap-1.5">
           {simge}
           <span>{baslik}</span>
@@ -749,7 +749,7 @@ export function Toolbar3D({
                                 isActive ? 'bg-accent text-foreground font-semibold shadow-xs ring-1 ring-primary/25' : 'text-foreground/80 hover:bg-muted/70 hover:text-foreground font-medium'
                               }`}
                             >
-                              <div className={`w-5 h-5 flex items-center justify-center shrink-0 [&>svg]:w-4 [&>svg]:h-4 ${tool.iconColor}`}>{tool.icon}</div>
+                              <div className={`w-5 h-5 flex items-center justify-center shrink-0 [&>svg[data-gorunum-simgesi]]:w-5 [&>svg[data-gorunum-simgesi]]:h-5 [&>svg]:w-4 [&>svg]:h-4 ${tool.iconColor}`}>{tool.icon}</div>
                               <span className="flex-1 truncate leading-tight">{tool.name}</span>
                               {tool.kind === 'toggle' && isActive && <Check className="w-4 h-4 text-primary shrink-0" aria-hidden="true" />}
                               {tool.kind === 'solid' && !tool.preset && (
@@ -1074,7 +1074,7 @@ export function Toolbar3D({
                       </div>
                       <div className="p-2 rounded-xl bg-card border border-border/80 text-center">
                         <span className="text-[11px] font-semibold text-muted-foreground block">Yüzey Alanı</span>
-                        <span className="font-mono font-bold text-ada-deniz-koyu dark:text-ada-lavanta text-[13px]">A = {formatTurkishNumber(olcumler.alan, 2)} {kademeDuzeyi === 'ortaokul' ? 'birimkare' : 'br²'}</span>
+                        <span className="font-mono font-bold text-ada-deniz-koyu dark:text-ada-lavanta text-[13px] break-words">A = {formatTurkishNumber(olcumler.alan, 2)} <span className="block">birimkare</span></span>
                       </div>
                     </div>
                     {olcumler.sayilar.eulerValid && (
@@ -1101,7 +1101,7 @@ export function Toolbar3D({
                     <BaglamKarti
                       baslik={`Seçili Yüz: ${yuz.label}`}
                       simge={<Paintbrush className="w-3.5 h-3.5 text-ada-altin dark:text-ada-fener" aria-hidden="true" />}
-                      sag={ilkokul ? undefined : <span className="font-mono text-[12px] text-muted-foreground">A = {formatTurkishNumber(yuz.area, 2)} br²</span>}
+                      sag={ilkokul ? undefined : <span className="font-mono text-[12px] text-muted-foreground">A = {formatTurkishNumber(yuz.area, 2)} birimkare</span>}
                     >
                       <div className="flex flex-wrap gap-1.5 items-center" role="group" aria-label="Yüz rengi">
                         {CISIM_RENKLERI.map((c) => (
@@ -1446,7 +1446,7 @@ export function Toolbar3D({
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-6 h-6 rounded-lg bg-muted flex items-center justify-center shrink-0 [&>svg]:w-3.5 [&>svg]:h-3.5 ${tool.iconColor}`}>{tool.icon}</div>
+                      <div className={`w-6 h-6 rounded-lg bg-muted flex items-center justify-center shrink-0 [&>svg[data-gorunum-simgesi]]:w-5 [&>svg[data-gorunum-simgesi]]:h-5 [&>svg]:w-3.5 [&>svg]:h-3.5 ${tool.iconColor}`}>{tool.icon}</div>
                       <div className="min-w-0">
                         <div className="truncate text-[13px] font-semibold">{tool.name}</div>
                         <div className="truncate text-[11px] text-muted-foreground">{tool.description}</div>

@@ -10,7 +10,7 @@ import {
 } from './shared';
 
 const HAS_QUOTE = /["“”«»„]/;
-const PARSER_FUNCTION_NAMES = /^(?:sin|cos|tan|asin|acos|atan|sind|cosd|tand|sqrt|kok|cbrt|abs|exp|ln|log|min|max|pow|x|pi|e)$/i;
+const PARSER_FUNCTION_NAMES = /^(?:sin|cos|tan|cot|asin|acos|atan|sind|cosd|tand|cotd|sqrt|kok|cbrt|root|abs|exp|ln|log|min|max|pow|x|pi|e)$/i;
 
 // ---------------------------------------------------------------------------
 // f(x) = …, g(x) = …, y = …
@@ -63,7 +63,7 @@ export const defineHandler: CommandHandler = {
 // ---------------------------------------------------------------------------
 
 const isPlain = (w: string) => /^[\p{L}'’′]+$/u.test(w);
-const LEADING_MATH = /^(?:x|iks|y|e|pi|sin|cos|tan|sqrt|abs|ln|log|exp|karekok|kupkok|kok|sinus|kosinus|cosinus|tanjant|mutlak|logaritma|sifir|bir|iki|uc|dort|bes|alti|yedi|sekiz|dokuz|on|yirmi|otuz|kirk|elli|yuz|yarim|eksi)$/;
+const LEADING_MATH = /^(?:x|iks|y|e|pi|sin|cos|tan|cot|cotd|sqrt|root|abs|ln|log|exp|karekok|kupkok|kok|sinus|kosinus|cosinus|tanjant|mutlak|logaritma|sifir|bir|iki|uc|dort|bes|alti|yedi|sekiz|dokuz|on|yirmi|otuz|kirk|elli|yuz|yarim|eksi)$/;
 /** "f fonksiyonu x kare olsun": addan sonra gelen yalın/belirtme hâlli fonksiyon sözcüğü. */
 const NAMED_FUNCTION_NOUN = /^(?:fonksiyon|fonksiyonu|fonksiyonunu|fonksiyonum)$/;
 const DEFINE_TAIL = /^(?:olsun|olarak|tanimla\w*|yap\w*|ciz\w*|degistir\w*|guncelle\w*|ayarla\w*|belirle\w*|lutfen|et|olur|olacak)$/;

@@ -197,14 +197,14 @@ export function fmt(value: number, digits = 2): string {
   return `${Math.abs(t - rounded) > 1e-9 ? '≈ ' : ''}${trNum(t, digits)}`;
 }
 export const br = (v: number) => `${fmt(v)} br`;
-export const br2 = (v: number) => `${fmt(v)} br²`;
+export const br2 = (v: number) => `${fmt(v)} birimkare`;
 export const deg = (v: number) => `${fmt(v)}°`;
 export const coord = (p: Point2D) => `(${trNum(p.x)}; ${trNum(p.y)})`;
 
 // ---------------------------------------------------------------------------------------------------------------- yazım
 
 /**
- * MEB yazımı (src/math/matematikYazimi.ts): yanıtlar |AB| = 5 br, m(∠ABC) = 60°, A(ABC) = 12 br²,
+ * MEB yazımı (src/math/matematikYazimi.ts): yanıtlar |AB| = 5 br, m(∠ABC) = 60°, A(ABC) = 12 birimkare,
  * Ç(ABC) = 24 br, r = |OA| = 3 br, |A͡B| ≈ 7,12 br biçiminde yazılır. Motor yanıtları HER ZAMAN tam
  * yazımı kullanır (Kısa yazım yalnızca tuval etiketlerinindir).
  */

@@ -1,6 +1,9 @@
 
 /* Sayfa modülü kayıt defterleri — parça script'lerinden ÖNCE tanımlı olmalı */
 window.SAYFA_INIT = {}; window.SAYFA_TAMAM = {};
+// 2026-10-12: «çözümü oynat» paketi geri alındı; bu kap yalnız o gün üretilmiş sayfaların
+// `window.SAYFA_COZUM[N] = …` satırı TypeError fırlatıp sahneyi boş bırakmasın diye duruyor.
+window.SAYFA_COZUM = window.SAYFA_COZUM || {};
 window.SAYFA_DURAKLAT = {}; window.SAYFA_DEVAM = {};
 /* JS ÇALIŞMA ZAMANI HATASI KAYDI (2026-09-06, konum-hataları teşhisi: FIZ.11.4 s22
    tanımsız değişkenle SAYFA_INIT yarıda kaldı, 3B tuval bembeyaz çıktı ve görsel tur
@@ -13,15 +16,28 @@ window.SAYFA_DURAKLAT = {}; window.SAYFA_DEVAM = {};
    köprü 7 sayfadaki «SAYFA_INIT scene is not defined @at gokKuresi» hatasını görsel
    prompta taşıdı, tur onardı (karne 2,4 → 4,9); HEAD'de köprü yoktu. */
 window.__JS_HATALAR__ = {};
+/* 2026-09-24 gece (Chrome/WebGL doğrulaması): (1) aynı hata NESNESİ aynı sayfaya
+   bir kez yazılır — köprü sayfa kusuru olan WebGL kurulum hatasını kendisi
+   kaydedip fırlatır, INIT catch'i onu yine yakalar (çift satır olmasın);
+   (2) her kayıt hazır denetimini uyandırır: INIT'i ya da her karesi hata atıp
+   hiç çizmeyen 3B sayfa, çizim beklenmeden hazır sayılır (HAZIR SİNYALİ). */
 window.JS_HATA_KAYDET = function (no, e, kaynak) {
   try {
     no = +no || 0;
+    if (e && typeof e === "object") {
+      if (e.__jsKayitNo === no) return;
+      try { e.__jsKayitNo = no; } catch (e3) {}
+    }
     var m = (e && (e.message || (e.reason && e.reason.message))) || String(e && e.reason || e || "hata");
     var yer = (e && e.stack && String(e.stack).split("\n").slice(1, 2)[0]) || "";
     if (e && e.lineno) yer = ":" + e.lineno + (e.colno ? ":" + e.colno : "");
-    var kayit = (kaynak ? kaynak + " " : "") + String(m).slice(0, 160) + (yer ? " @" + String(yer).trim().slice(0, 80) : "");
+    // 2026-09-25 (S1): köprünün yapılandırılmış WEBGL kaydı (tuval/yoklama/durum/hata
+    // alanları) 160'a sığmıyor — Chrome'un engel iletisi tek başına ~120 karakter.
+    var sinir = kaynak === "WEBGL" ? 360 : 160;
+    var kayit = (kaynak ? kaynak + " " : "") + String(m).slice(0, sinir) + (yer ? " @" + String(yer).trim().slice(0, 80) : "");
     var L = window.__JS_HATALAR__[no] || (window.__JS_HATALAR__[no] = []);
     if (L.indexOf(kayit) < 0 && L.length < 5) L.push(kayit);
+    if (typeof window.SABLON_HAZIR_DENETLE === "function") window.SABLON_HAZIR_DENETLE();
   } catch (e2) {}
 };
 (function () {
@@ -36,6 +52,241 @@ window.JS_HATA_KAYDET = function (no, e, kaynak) {
   window.addEventListener("unhandledrejection", function (ev) {
     window.JS_HATA_KAYDET(aktifNo(), ev, "promise");
   });
+})();
+/* HESAP DENETİMİ (2026-09-26, kullanıcı: «çok fazla hata da üretiyor, hesaplama hataları
+   vs de var»): sayfa kodu ÇALIŞIR ama ekrana «NaN m/s», «undefined», «[object Object]»
+   basar, SVG yolu «M NaN,NaN» olur, 3B nesnenin konumu NaN'a döner ve hiç çizilmez —
+   hiçbiri istisna atmaz, görsel denetim bunları görmüyordu. Kayıt «HESAP …» diye JS hata
+   defterine düşer (sayfa ve tür başına bir kez); denetim betiği (gorsel_denetim) onu
+   «JS ÇALIŞMA ZAMANI HATASI»ndan AYRI «HESAP HATASI» satırı olarak basar (kod durmadı).
+   Taranan: etkin sayfanın GÖRÜNÜR metni (kod örneği — code/pre/kbd/samp/textarea —
+   sayılmaz) ve SVG geometri öznitelikleri (HESAP_TARA: denetim betiği okumadan hemen önce
+   çağırır — o anki ekran ölçülür, geçici ara kare değil), 2B tuvale yazılan metin
+   (fillText/strokeText, çizildiği an) ve köprünün 1,5 sn ölçümünde 3B dönüşümler
+   (HESAP3B). Sayfanın kendi öz-denetimi de aynı kaynağı kullanır (sözleşme 26):
+   JS_HATA_KAYDET(N, new Error("hiz(100,20) = " + v + ", beklenen 5"), "HESAP").
+   İçerik davranışı DEĞİŞMEZ. */
+(function () {
+  var HARF = "0-9A-Za-zÇĞİÖŞÜçğıöşüÂâÎîÛû_$";
+  var GECERSIZ = new RegExp("(^|[^" + HARF + "])(NaN|undefined|-?Infinity|\\[object Object\\])(?![" + HARF + "])");
+  var GEOMETRI = ["d", "points", "x", "y", "x1", "y1", "x2", "y2", "cx", "cy", "r", "rx", "ry",
+                  "width", "height", "transform"];
+  var KOD = /^(CODE|PRE|KBD|SAMP|TEXTAREA|SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/;
+  var bildirilen = {};
+  function sayfaNo(el) {
+    var s = el && el.isConnected && el.closest ? el.closest(".sayfa") : null;
+    if (!s) s = document.querySelector(".sayfa.aktif");
+    return s ? (+String(s.id).replace("sayfa-", "") || 0) : 0;
+  }
+  function kaydet(no, tur, metin) {
+    if (bildirilen[no + ":" + tur]) return;
+    bildirilen[no + ":" + tur] = 1;
+    try { window.JS_HATA_KAYDET(no, { message: metin }, "HESAP"); } catch (e) {}
+  }
+  function kesit(s, i) {
+    var bas = Math.max(0, i - 24), son = Math.min(s.length, i + 28);
+    return (bas > 0 ? "…" : "") + s.slice(bas, son).replace(/\s+/g, " ").trim() + (son < s.length ? "…" : "");
+  }
+  function kodda(el) {
+    for (; el && el.nodeType === 1; el = el.parentNode) if (KOD.test(el.tagName)) return true;
+    return false;
+  }
+  window.HESAP_TARA = function () {
+    var n = 0;
+    try {
+      var kok = document.querySelector(".sayfa.aktif") || document.body;
+      if (!kok) return 0;
+      var no = sayfaNo(kok);
+      if (GECERSIZ.test(kok.textContent || "")) {
+        var w = document.createTreeWalker(kok, 4), t, m;          // 4 = NodeFilter.SHOW_TEXT
+        while ((t = w.nextNode())) {
+          m = GECERSIZ.exec(t.nodeValue || "");
+          if (!m || kodda(t.parentNode) || !t.parentNode.getClientRects().length) continue;
+          kaydet(no, "metin", "ekranda «" + m[2] + "»: «" + kesit(t.nodeValue, m.index + m[1].length) + "»");
+          n++;
+          break;
+        }
+      }
+      var els = kok.querySelectorAll("svg *");
+      dis: for (var i = 0; i < els.length && i < 4000; i++) {
+        for (var j = 0; j < GEOMETRI.length; j++) {
+          var a = els[i].getAttribute(GEOMETRI[j]);
+          if (a && /NaN|Infinity|undefined/.test(a) && els[i].getClientRects().length) {
+            kaydet(no, "svg", "SVG <" + String(els[i].tagName).toLowerCase() + " " + GEOMETRI[j] +
+              "=«" + a.slice(0, 40) + "»> geçersiz koordinat — şekil çizilmez");
+            n++;
+            break dis;
+          }
+        }
+      }
+    } catch (e) {}
+    return n;
+  };
+  // 3B: görünür nesnenin (ve kameranın) dünya matrisi ya da köşe konumları sonlu mu. Köprü ilk
+  // çizimden 1,5 sn sonra (KONUM3B ölçümüyle) bir kez çağırır; NaN konumlu nesne hiç çizilmez.
+  window.HESAP3B = function (sahne, no, kamera) {
+    var bulunan = null;
+    function sonlu(dizi, sinir) {
+      for (var i = 0, n = Math.min(dizi.length, sinir); i < n; i++) if (!isFinite(dizi[i])) return false;
+      return true;
+    }
+    try {
+      if (kamera && kamera.matrixWorld && !sonlu(kamera.matrixWorld.elements, 16)) bulunan = ["kamera", "konum/yön"];
+      if (!bulunan && sahne && sahne.traverseVisible) sahne.traverseVisible(function (o) {
+        if (bulunan || !(o.isMesh || o.isLine || o.isPoints || o.isSprite)) return;
+        var ad = o.name || (o.geometry && o.geometry.type) || o.type;
+        if (o.matrixWorld && !sonlu(o.matrixWorld.elements, 16)) { bulunan = [ad, "konum/dönüş/ölçek"]; return; }
+        if (o.isInstancedMesh && o.instanceMatrix && !sonlu(o.instanceMatrix.array, 16 * 256)) { bulunan = [ad, "örnek matrisi"]; return; }
+        var g = o.geometry, p = g && g.attributes && g.attributes.position;
+        if (p && p.array && !sonlu(p.array, 60000)) bulunan = [ad, "köşe konumları"];
+      });
+      if (bulunan) kaydet(+no || 0, "3b", "3B «" + String(bulunan[0]).slice(0, 40) + "» " + bulunan[1] +
+        " NaN/Infinity — nesne çizilmez");
+    } catch (e) {}
+    return bulunan ? 1 : 0;
+  };
+  // 2B tuval metni çizildiği an ölçülür (tuval sonradan okunamaz). Metin tuvalin sayfasına yazılır;
+  // DOM dışı doku tuvali etkin sayfaya.
+  try {
+    var C = window.CanvasRenderingContext2D && window.CanvasRenderingContext2D.prototype;
+    ["fillText", "strokeText"].forEach(function (ad) {
+      var asil = C && C[ad];
+      if (typeof asil !== "function") return;
+      C[ad] = function (metin) {
+        try {
+          var s = String(metin);
+          if (GECERSIZ.test(s)) kaydet(sayfaNo(this.canvas), "tuval", "tuval yazısı «" + s.slice(0, 48) + "»");
+        } catch (e) {}
+        return asil.apply(this, arguments);
+      };
+    });
+  } catch (e) {}
+})();
+/* DOKU TUVALLERİ CPU'DA (2026-09-24, Chrome/WebGL denetimi Y1): kullanıcının
+   Chrome 153'ünde GPU süreci Skia metin çiziminde çöküyor (29 döküm, hepsi
+   AtlasTextOp.cpp:574). Çökmede GPU'da tutulan 2B tuvallerin pikselleri SİLİNİR;
+   three bağlam geri gelince boş tuvali «geri yükler» ve prosedürel dokular
+   simsiyah kalır (FB.6.1-b s7: parlaklık 225 → 64, üç doku tuvalinin üçü sıfır).
+   DOM'a bağlı OLMAYAN tuval yalnız doku kaynağıdır: willReadFrequently onu CPU'da
+   tutar, çökme ona dokunamaz (ölçüldü, köprü onarımıyla birlikte: 225,3 → 225,3).
+   Ekrandaki tuvaller GPU'da kalır; sayfanın açıkça verdiği değer her zaman kazanır.
+   Parça betiklerinden (ve kütüphanelerden) ÖNCE kurulmalı — bu yüzden burada.
+   BOYUT SINIRI (2026-09-24 gece doğrulaması): CPU'daki tuvalin her yüklemesi
+   yazılım rasterı + CPU→GPU kopyasıdır; HER KAREDE needsUpdate alan büyük doku
+   yavaşlar. Ölçüldü (shell 149 GPU, serpiştirmeli 4 tur, ortanca fps GPU → CPU):
+   tek doku 1024²'ye dek fark yok; üç doku 512² 59,5 → 58,6, 1024×512 59,5 →
+   49,4, 1024² 59,4 → 28,4 (2048²: 6-8). Bugünkü parçalarda her karede
+   güncellenen 4 doku var, hepsi ≤256×128; açık boyutlu 562 doku tuvalinin
+   556'sı ≤1024×512 (egitsel3b etiketleri de en çok 1024×512), 6'sı 1024², üstü
+   yok. Karar: getContext anında width×height ≤ CPU_TUVAL_SINIR (1024×512
+   piksel) olan bağlı olmayan tuval CPU'da; üstü GPU'da kalır (çökmede içeriği
+   silinir — her karede çiziyorsa sayfa zaten yeniden çizer; 6 durağan 1024²
+   doku bu korumadan çıkar). Ölçü getContext ANINDADIR: önce getContext sonra
+   boyut veren tuval 300×150 sayılır. Bekçi: sablon_3b_dayaniklilik_testi.
+   WebGL bağlamı istenen tuvale oluşturma hatası dinleyicisi de takılır: Chrome'un
+   engel iletisi (statusMessage) three'nin «Error creating WebGL context»inden
+   fazlasını söyler; köprü bekçisi (gövde betiği) kayda bunu ekler.
+   TUVAL KANITI (2026-09-25, S1 — WebGL tasarımı P5): tuvalin İLK başarılı
+   getContext türü ve bağlamı WeakMap'te tutulur; bir tuvalin tek bağlam türü
+   olabildiği için bu onun kalıcı türüdür. Köprünün kurulum kaydı bunu taşır
+   («tuval=<tür>/<kayip|canli>»): önce 2d açılmış tuval sayfa kusurudur (R3),
+   kayıp webgl bağlamlı tuval kaybın ardılıdır (R3b) — «taze tuvalde kurulabiliyor
+   → sayfa kodu» yoklaması bu ikisini karıştırıyordu (S1: GPU geri gelince kayıp
+   tuvalli çökme «sayfa kusuru» yazılıyordu). OffscreenCanvas'a devredilen tuvalde
+   getContext hata fırlatır → «devredildi» (R2). Deneyde ölçüldü (shell 149 +
+   Chrome 153): 2d → 2d/canli, iki çökme → webgl/kayip, kayıpta kurulum →
+   webgl2/kayip, offscreen → hata. Sayfanın KENDİ WEBGL_lose_context.loseContext()
+   çağrısı da işaretlenir (S3): köprünün kayıp kaydı «kaynak=kendi» olur — Python
+   bunu kusur saymaz (R7c); işaret olay anında tüketilir. Menzil: çekim hattı
+   (panelin boş tuvalde 2d yoklaması hatta yok — tasarım §5.13). */
+(function () {
+  var G = HTMLCanvasElement.prototype.getContext;
+  if (typeof G !== "function") return;
+  var CPU_TUVAL_SINIR = 1024 * 512;
+  var KANIT = new WeakMap();
+  function kayipSar(ctx, tuval) {
+    var gE = ctx.getExtension;
+    if (typeof gE !== "function") return;
+    try {
+      ctx.getExtension = function (ad) {
+        var x = gE.apply(this, arguments);
+        if (x && !x.__kayipSarili && String(ad).toUpperCase() === "WEBGL_LOSE_CONTEXT") {
+          try {
+            var lc = x.loseContext;
+            x.loseContext = function () {
+              var k = KANIT.get(tuval);
+              if (k) k.kendi = true;
+              return lc.apply(this, arguments);
+            };
+            x.__kayipSarili = true;
+          } catch (e) {}
+        }
+        return x;
+      };
+    } catch (e) {}
+  }
+  HTMLCanvasElement.prototype.getContext = function (tip, secenek) {
+    if (tip === "2d" && !this.isConnected && this.width * this.height <= CPU_TUVAL_SINIR) {
+      secenek = Object.assign({willReadFrequently: true}, secenek || {});
+    } else if ((tip === "webgl2" || tip === "webgl" || tip === "experimental-webgl")
+               && !this.__glHataDinle) {
+      this.__glHataDinle = true;
+      this.addEventListener("webglcontextcreationerror", function (ev) {
+        window.__GL_OLUSTURMA_HATASI__ = String((ev && ev.statusMessage) || "ileti yok").slice(0, 160);
+      });
+    }
+    var r;
+    try {
+      r = secenek === undefined ? G.call(this, tip) : G.call(this, tip, secenek);
+    } catch (e) {
+      if (!KANIT.has(this) && /offscreen/i.test(String(e && e.message))) KANIT.set(this, {tur: "devredildi"});
+      throw e;
+    }
+    if (r && !KANIT.has(this)) {
+      KANIT.set(this, {tur: String(tip), ctx: r});
+      if (/webgl/.test(String(tip))) kayipSar(r, this);
+    }
+    return r;
+  };
+  // {tur: 2d|webgl|webgl2|…|devredildi|yok, kayip: true|false|null}
+  window.__TUVAL_KANITI__ = function (c) {
+    var k = c && KANIT.get(c);
+    if (!k) return {tur: "yok", kayip: null};
+    var kayip = null;
+    try {
+      if (k.ctx && typeof k.ctx.isContextLost === "function") kayip = !!k.ctx.isContextLost();
+    } catch (e) { kayip = null; }
+    return {tur: k.tur, kayip: kayip};
+  };
+  // Sayfanın kendi loseContext çağrısı bu tuvalde oldu mu (işaret tüketilir).
+  window.__TUVAL_KENDI_KAYIP__ = function (c) {
+    var k = c && KANIT.get(c);
+    var v = !!(k && k.kendi);
+    if (k) k.kendi = false;
+    return v;
+  };
+})();
+/* ERTELENMİŞ İŞ SAYACI — HAZIR SÖZLEŞMESİ (2026-09-24, Chrome/WebGL denetimi Y3):
+   ertelenmiş her iş (MALZEME3B_OTO ikinci geçişi, KONUM3B.olc, doku/GLB
+   yüklemeleri) başlarken window.__BEKLEYEN++, bitince window.__BEKLEYEN--.
+   Sayaç erişimcidir: 0'a inince gövdedeki hazır denetimi uyanır ve koşullar
+   tamamsa <html data-sahne-hazir="N"> yazılır (ayrıntı gövde betiğinde, HAZIR
+   SİNYALİ). Eksiye düşmez — fazladan bir -- sayacı bozamaz. */
+(function () {
+  var n = 0;
+  try {
+    Object.defineProperty(window, "__BEKLEYEN", {
+      configurable: true, enumerable: true,
+      get: function () { return n; },
+      set: function (v) {
+        v = +v || 0;
+        n = v > 0 ? v : 0;
+        if (n === 0 && typeof window.SABLON_HAZIR_DENETLE === "function") {
+          window.SABLON_HAZIR_DENETLE();
+        }
+      }
+    });
+  } catch (e) { window.__BEKLEYEN = 0; }
 })();
 /* Sesli içerik (2026-08-24): SAYFA_ANLATIM[n] = function(olay){...} — anlatım
    motoru her söylenen kelimede {kelime, indeks, t} ile çağırır; sayfa bununla
@@ -53,13 +304,6 @@ window.EGITSEL = {
      KALIR: 200+ mevcut parça dontVer(kok, ...) diye çağırıyor.
      tip: "dogru" | "yanlis" */
   dontVer: function (kok, tip, mesaj) {
-    /* Nötr tipler (2026-09-26, geoeba parti raporu 7.4.x): bazı sayfalar
-       yönlendirmeyi dontVer(kok, "uyari", …) diye veriyor; eskiden her
-       bilinmeyen tip «yanlis»a dönüp kırmızı + yanlış sesi basıyordu. */
-    if (tip === "uyari" || tip === "bilgi" || tip === "notr" || tip === "ipucu") {
-      if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj); }
-      return;
-    }
     tip = tip === "dogru" ? "dogru" : "yanlis";
     if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj, tip); }
     else { console.warn("EGITSEL.dontVer: SABLON_TOAST yok"); }
@@ -203,7 +447,10 @@ window.EGITSEL = {
       if (!ayar.sahneOnEki) { return; }
       for (var k = 1; k <= sorular.length; k++) {
         var g = kok.querySelector("#" + ayar.sahneOnEki + k);
-        if (g) { g.style.display = k === aktif + 1 ? "" : "none"; }
+        // "inline" AÇIKÇA yazılır (2026-10-11, FB.4.4.2 s7): ajan sayfa CSS'ine
+        // `.s7-soru-sahne{display:none}` + `#s7-soru-1{display:block}` yazmıştı; boş
+        // satır içi değer sınıf kuralına yenilir ve 2-5. soru sahneleri hiç açılmaz.
+        if (g) { g.style.display = k === aktif + 1 ? "inline" : "none"; }
       }
     }
     function ciz() {
@@ -254,10 +501,7 @@ window.EGITSEL = {
       if (d.sonuc === "dogru" || d.sonuc === "yanlis" || d.denenen.indexOf(asilNo) > -1) { return; }
       d.denenen.push(asilNo);
       var dogruMu = !!soru.siklar[asilNo].dogru;
-      // 3. tur (6. sınıf genel): iki seçenekli soruda bir yanlıştan sonra doğru cevap gösterilir —
-      // hak, yanlış şık sayısını aşmaz; soru başına `hak` verilebilir
-      var hak = soru.hak || Math.min(HAK, Math.max(1, soru.siklar.length - 1));
-      var kalan = hak - d.denenen.length;
+      var kalan = HAK - d.denenen.length;
       if (dogruMu) {
         d.sonuc = "dogru";
         window.EGITSEL.dontVer(kok, "dogru", soru.donut || "Doğru seçim.");
@@ -298,8 +542,8 @@ window.EGITSEL = {
       sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
       sayac.appendChild(el("span", "b", "Boş: " + s.bos));
       kutu.appendChild(sayac);
-      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
-        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kutu.appendChild(el("p", "", s.bos ? "Numaralarına dokunarak boş bıraktığımız sorulara dönebiliriz."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladık." : "Soru numaralarına dokunarak soruları yeniden inceleyebiliriz.")));
       kap.appendChild(kutu);
       govde.appendChild(kap);
       eylemKur([
@@ -360,6 +604,14 @@ window.EGITSEL = {
         window.EGITSEL._tuvalKur(tuval, ctx);
         tuval.dispatchEvent(new CustomEvent("yeniden-ciz"));
       });
+      // GPU ÇÖKMESİ (2026-09-24, Chrome/WebGL denetimi Y1): ekrandaki 2B tuvalin
+      // GPU'daki pikselleri silinir, tarayıcı bağlamı BOŞ ve dönüşümü sıfırlanmış
+      // geri verir (contextrestored). Ölçek değişimindeki gibi tampon yeniden
+      // kurulur ve sayfadan çizim istenir — olayla çizen sayfa boş kalmaz.
+      tuval.addEventListener("contextrestored", function () {
+        window.EGITSEL._tuvalKur(tuval, ctx);
+        tuval.dispatchEvent(new CustomEvent("yeniden-ciz"));
+      });
     }
     return ctx;
   },
@@ -411,15 +663,9 @@ window.EGITSEL = {
    Çözüm iki parçalı: (1) MathJax SVG'ye HİÇ girmez — yarım iş yapıp düğümü
    bozmasın; (2) aşağıdaki `svgLatexDuzelt` o metni Unicode'a çevirir
    (R₁, 45°, CO₂). SVG içinde tipografik matematik zaten MÜMKÜN DEĞİLDİR;
-   seçenek «düz okunur metin» ile «hiçbir şey» arasındadır.
-
-   KESİR TAM BOY (2026-09-16 kullanıcı bildirimi, MAT.4.1.7 s1): satır içi
-   \frac MathJax'ta küçültülmüş kipte çizilir, rakamlar gövde yazısının ~%70'i
-   kalıyordu. İlkokul (1-4) matematikte \frac = \dfrac (rakamlar gövde boyunda). */
+   seçenek «düz okunur metin» ile «hiçbir şey» arasındadır. */
 window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
-                          displayMath: [["\\[", "\\]"], ["$$", "$$"]],
-                          macros: /^MAT\.[1-4]\./.test("MAT.2.2.5")
-                                  ? { frac: ["\\dfrac{#1}{#2}", 2] } : {} },
+                          displayMath: [["\\[", "\\]"], ["$$", "$$"]] },
                    options: { skipHtmlTags: ["script", "noscript", "style",
                                              "textarea", "pre", "code",
                                              "annotation", "annotation-xml",

@@ -132,8 +132,18 @@ describe('olcekNotu ve ölçüm metinleri', () => {
     expect(olcekNotu(0.5)).toBe('Kenarlar 0,5 katına indi: hacim 0,125 kat, yüzey alanı 0,25 kat');
   });
   it('hacim/alan rozeti Türkçe sayıyla yazılır', () => {
-    expect(hacimAlanMetni(cisim('cube'))).toBe('V = 27 br³ · A = 54 br²');
-    expect(hacimAlanMetni(cisim('prism'))).toBe('V = 24 br³ · A = 52 br²');
+    expect(hacimAlanMetni(cisim('cube'))).toBe('V = 27 br³ · A = 54 birimkare');
+    expect(hacimAlanMetni(cisim('prism'))).toBe('V = 24 br³ · A = 52 birimkare');
+  });
+  it('yalnız istenen ölçümü gösterir ve cisim büyütülünce gerçek sonucu günceller', () => {
+    const prizma = cisim('prism');
+    expect(hacimAlanMetni(prizma, {})).toBe('');
+    expect(hacimAlanMetni(prizma, { hacim: true })).toBe('V = 24 br³');
+    expect(hacimAlanMetni(prizma, { alan: true })).toBe('A = 52 birimkare');
+    const buyuk = cismiOlcekle(prizma, 2, 'taban');
+    expect(hacimAlanMetni(buyuk, { hacim: true })).toBe('V = 192 br³');
+    expect(hacimAlanMetni(buyuk, { alan: true })).toBe('A = 208 birimkare');
+    expect(hacimAlanMetni(buyuk, { hacim: false, alan: false })).toBe('');
   });
   it('Euler okuması', () => {
     expect(eulerMetni({ x: 0, y: 0, z: 90 })).toBe('x: 0°, y: 0°, z: 90°');

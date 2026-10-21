@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import { describe, expect, it } from 'vitest';
 import type { ArcObject, CircleObject, EllipseObject, MathObject, Point2D, PointObject, SectorObject } from '@/types/math';
 import { collectDependentIds } from '@/state/WorkspaceContext';
@@ -7,7 +8,7 @@ import { CommandScene } from '../scene';
 import { parseClause } from '../text';
 import { build, byType, dist, expectFail, expectOk, point } from './helpers';
 
-const PERGEL = '#8b5cf6';
+const PERGEL = NESNE_RENGI.mor;
 
 /** A(0,0), B(3,0), C(0,3) */
 const S3 = () => build(s => {
@@ -62,7 +63,7 @@ describe('circles: legacy behaviour', () => {
     const a = point(r.objects, 'A');
     expect([a.x, a.y]).toEqual([0, 0]);
     const c = onlyOne(r.objects, 'circle');
-    expect(c).toMatchObject({ centerPointId: a.id, fixedRadius: 2, fillOpacity: 0, color: '#8b5cf6', label: 'A Çemberi (r = 2)' });
+    expect(c).toMatchObject({ centerPointId: a.id, fixedRadius: 2, fillOpacity: 0, color: NESNE_RENGI.mor, label: 'A Çemberi (r = 2)' });
     expect(c.radiusPointId).toBeUndefined();
     expect(c.throughPointIds).toBeUndefined();
     expect(r.selectedIds).toEqual([c.id]);
@@ -298,7 +299,7 @@ describe('circles: diameter', () => {
     const c = onlyOne(r.objects, 'circle');
     const m = pt(r.objects, c.centerPointId);
     expect(m.construction).toEqual({ kind: 'midpoint', pointIds: [point(scene, 'A').id, point(scene, 'B').id] });
-    expect(m).toMatchObject({ label: 'D', x: 1.5, y: 0, color: '#7c3aed' });
+    expect(m).toMatchObject({ label: 'D', x: 1.5, y: 0, color: NESNE_RENGI.mor });
     expect(c.radiusPointId).toBe(point(scene, 'A').id);
     expect(geometry(r.objects, c).radius).toBeCloseTo(1.5, 9);
     const moved = move(r.objects, 'B', 5, 0);
@@ -463,8 +464,8 @@ describe('circles: ellipse', () => {
     const r = ok('elips çiz');
     const e = onlyOne(r.objects, 'ellipse');
     const center = pt(r.objects, e.centerPointId);
-    expect(center).toMatchObject({ label: 'A', x: 0, y: 0, color: '#0ea5e9' });
-    expect(e).toMatchObject({ radiusX: 3, radiusY: 2, color: '#0ea5e9', fillColor: '#0ea5e9', fillOpacity: 0.12, showArea: true, showPerimeter: true, label: 'A Merkezli Elips' });
+    expect(center).toMatchObject({ label: 'A', x: 0, y: 0, color: NESNE_RENGI.camgobegi });
+    expect(e).toMatchObject({ radiusX: 3, radiusY: 2, color: NESNE_RENGI.camgobegi, fillColor: NESNE_RENGI.camgobegi, fillOpacity: 0.12, showArea: true, showPerimeter: true, label: 'A Merkezli Elips' });
     expect(e.rotation).toBeUndefined();
     expect(r.message).toContain('Yarıçaplar yazılmadığı için 3 ve 2 alındı');
   });
@@ -509,7 +510,7 @@ describe('circles: arcs', () => {
     const r = ok('yarıçapı 3 olan 90 derecelik yay çiz');
     const arc = onlyOne(r.objects, 'arc');
     const [a, b, c] = ['A', 'B', 'C'].map(l => point(r.objects, l));
-    expect(arc).toMatchObject({ centerPointId: a.id, startPointId: b.id, directionPointId: c.id, label: 'BC Yayı', color: '#0284c7', thickness: 3, showArcLength: true });
+    expect(arc).toMatchObject({ centerPointId: a.id, startPointId: b.id, directionPointId: c.id, label: 'BC Yayı', color: NESNE_RENGI.camgobegi, thickness: 3, showArcLength: true });
     near(a, { x: 0, y: 0 });
     near(b, { x: 3, y: 0 });
     near(c, { x: 0, y: 3 });
@@ -612,7 +613,7 @@ describe('circles: sectors', () => {
   it('60° sector matches the sector tool', () => {
     const r = ok('60 derecelik daire dilimi çiz');
     const sector = onlyOne(r.objects, 'sector');
-    expect(sector).toMatchObject({ color: '#10b981', fillColor: '#10b981', fillOpacity: 0.4, showArea: true, label: 'A Daire Dilimi' });
+    expect(sector).toMatchObject({ color: NESNE_RENGI.zumrut, fillColor: NESNE_RENGI.zumrut, fillOpacity: 0.4, showArea: true, label: 'A Daire Dilimi' });
     near(pt(r.objects, sector.startPointId), { x: 3, y: 0 });
     near(pt(r.objects, sector.directionPointId), { x: 1.5, y: 3 * Math.sin(Math.PI / 3) });
   });

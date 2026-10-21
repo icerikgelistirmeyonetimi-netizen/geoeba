@@ -98,8 +98,8 @@ describe('[149] aynı yerde ikinci nokta açılmaz; doğru denklemi nokta adına
 
 describe('[150] Alanı Bul / Çevre Hesapla her dokunuşta görünür sonuç verir', () => {
   it('sonuç zaten etikette ise bildirim bunu söyler; değilse etiketin taşınabildiği söylenir', () => {
-    expect(olcumBildirimi('A(ABC) = 13 br²', true)).toBe('A(ABC) = 13 br² (etikette gösteriliyor)');
-    expect(olcumBildirimi('A(ABC) = 13 br²', false)).toMatch(/sürükleyerek taşıyabilirsiniz/);
+    expect(olcumBildirimi('A(ABC) = 13 birimkare', true)).toBe('A(ABC) = 13 birimkare (etikette gösteriliyor)');
+    expect(olcumBildirimi('A(ABC) = 13 birimkare', false)).toMatch(/sürükleyerek taşıyabilirsiniz/);
   });
 
   it('Canvas: çokgen ve çemberde bildirim + zaten görünen etiketin vurgusu', () => {
@@ -125,10 +125,10 @@ describe('[151] / [152] ortaokulda 2 ondalık ve tek birim (br); çokgen kenarı
     expect(tamSayiAyarAnahtari('ilkokul')).toBe('tamSayiOlcu');
   });
 
-  it('r = 2 dairenin alanı ortaokulda 12,57 br² yazılır (tam sayıda 13)', () => {
+  it('r = 2 dairenin alanı ortaokulda 12,57 birimkare yazılır (tam sayıda 13)', () => {
     const A = 4 * Math.PI;
-    expect(olcuMetni({ tur: 'daireAlani', deger: A } as never, { olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: tamSayiOlcuEtkin(DEFAULT_STYLE_SETTINGS, 'ortaokul') })).toMatch(/12,57 br²/);
-    expect(olcuMetni({ tur: 'daireAlani', deger: A } as never, { olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: true })).toMatch(/13 br²/);
+    expect(olcuMetni({ tur: 'daireAlani', deger: A } as never, { olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: tamSayiOlcuEtkin(DEFAULT_STYLE_SETTINGS, 'ortaokul') })).toMatch(/12,57 birimkare/);
+    expect(olcuMetni({ tur: 'daireAlani', deger: A } as never, { olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: true })).toMatch(/13 birimkare/);
   });
 
   it('kenar ölçüsü ortaokulda 2 ondalık ve br: tuval, bildirim ve liste aynı sayıyı yazar', () => {

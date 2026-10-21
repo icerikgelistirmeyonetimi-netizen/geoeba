@@ -304,6 +304,13 @@ window.EGITSEL = {
      KALIR: 200+ mevcut parça dontVer(kok, ...) diye çağırıyor.
      tip: "dogru" | "yanlis" */
   dontVer: function (kok, tip, mesaj) {
+    /* Nötr tipler (2026-09-26 kök şablonda; 2026-10-12 esk'e taşındı, uzman 3. tur):
+       bazı sayfalar yönlendirmeyi dontVer(kok, "bilgi"/"uyari", …) diye veriyor;
+       eskiden her bilinmeyen tip «yanlis»a dönüp kırmızı + yanlış sesi basıyordu. */
+    if (tip === "uyari" || tip === "bilgi" || tip === "notr" || tip === "ipucu") {
+      if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj); }
+      return;
+    }
     tip = tip === "dogru" ? "dogru" : "yanlis";
     if (window.SABLON_TOAST) { window.SABLON_TOAST(mesaj, tip); }
     else { console.warn("EGITSEL.dontVer: SABLON_TOAST yok"); }
@@ -501,7 +508,10 @@ window.EGITSEL = {
       if (d.sonuc === "dogru" || d.sonuc === "yanlis" || d.denenen.indexOf(asilNo) > -1) { return; }
       d.denenen.push(asilNo);
       var dogruMu = !!soru.siklar[asilNo].dogru;
-      var kalan = HAK - d.denenen.length;
+      // 3. tur (6. sınıf genel): iki seçenekli soruda bir yanlıştan sonra doğru cevap gösterilir —
+      // hak, yanlış şık sayısını aşmaz; soru başına `hak` verilebilir
+      var hak = soru.hak || Math.min(HAK, Math.max(1, soru.siklar.length - 1));
+      var kalan = hak - d.denenen.length;
       if (dogruMu) {
         d.sonuc = "dogru";
         window.EGITSEL.dontVer(kok, "dogru", soru.donut || "Doğru seçim.");
@@ -542,8 +552,8 @@ window.EGITSEL = {
       sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
       sayac.appendChild(el("span", "b", "Boş: " + s.bos));
       kutu.appendChild(sayac);
-      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
-        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kutu.appendChild(el("p", "", s.bos ? "Numaralarına dokunarak boş bıraktığımız sorulara dönebiliriz."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladık." : "Soru numaralarına dokunarak soruları yeniden inceleyebiliriz.")));
       kap.appendChild(kutu);
       govde.appendChild(kap);
       eylemKur([

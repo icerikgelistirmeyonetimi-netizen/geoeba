@@ -1,4 +1,5 @@
 'use client';
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useWorkspace } from '@/state/WorkspaceContext';
@@ -371,10 +372,10 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
     });
 
     if (selectedTab === 'point') {
-      addObject(makePoint(x, y, trimmedName, '#2563eb'), `${trimmedName} noktası eklendi`);
+      addObject(makePoint(x, y, trimmedName, NESNE_RENGI.mavi), `${trimmedName} noktası eklendi`);
     } else if (selectedTab === 'segment') {
-      const a = makePoint(x, y, nextLabel(), '#2563eb');
-      const b = makePoint(x + w, y + h, nextLabel(), '#2563eb');
+      const a = makePoint(x, y, nextLabel(), NESNE_RENGI.mavi);
+      const b = makePoint(x + w, y + h, nextLabel(), NESNE_RENGI.mavi);
       const seg: SegmentObject = {
         id: createId('seg'),
         type: 'segment',
@@ -382,15 +383,15 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
         showLabel: true,
         startPointId: a.id,
         endPointId: b.id,
-        color: '#2563eb',
+        color: NESNE_RENGI.camgobegi,
         visible: true,
-        showLength: true,
+        showLength: false,
         createdAt: nextCreatedAt(),
       };
       addObjects([a, b, seg], `${trimmedName} doğru parçası eklendi`);
     } else if (selectedTab === 'disk' || selectedTab === 'circle') {
       // Girilen ad merkez noktasının adıdır (tuvalde görünür); şekil "M Merkezli Çember / Daire" adını alır
-      const center = makePoint(x, y, trimmedName, '#2563eb');
+      const center = makePoint(x, y, trimmedName, NESNE_RENGI.mavi);
       const circ: CircleObject = {
         id: createId('circ'),
         type: 'circle',
@@ -398,10 +399,10 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
         showLabel: true,
         centerPointId: center.id,
         fixedRadius: r,
-        color: '#8b5cf6',
+        color: NESNE_RENGI.mor,
         fillOpacity: selectedTab === 'disk' ? 0.12 : 0,
         visible: true,
-        showArea: selectedTab === 'disk',
+        showArea: false,
         createdAt: nextCreatedAt(),
       };
       addObjects([center, circ], `${circ.label} eklendi`);
@@ -420,28 +421,29 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
               [x + w, y + sideH],
               [x, y + sideH],
             ];
-      const pts = corners.map(([px, py]) => makePoint(px, py, nextLabel(), '#3b82f6'));
+      const pts = corners.map(([px, py]) => makePoint(px, py, nextLabel(), NESNE_RENGI.mavi));
+      const shapeColor = selectedTab === 'triangle' ? NESNE_RENGI.zumrut : selectedTab === 'square' ? NESNE_RENGI.pembe : NESNE_RENGI.kehribar;
       const poly: PolygonObject = {
         id: createId('poly'),
         type: 'polygon',
         label: trimmedName,
         showLabel: true,
         pointIds: pts.map((p) => p.id),
-        color: '#f59e0b',
-        fillColor: '#f59e0b',
+        color: shapeColor,
+        fillColor: shapeColor,
         fillOpacity: 0.15,
         visible: true,
-        showArea: true,
-        showPerimeter: true,
+        showArea: false,
+        showPerimeter: false,
         createdAt: nextCreatedAt(),
       };
       addObjects([...pts, poly], `${trimmedName} eklendi`);
     } else if (selectedTab === 'angle') {
       const arm = w;
       const rad = (ang * Math.PI) / 180;
-      const vertex = makePoint(x, y, nextLabel(), '#0ea5e9');
-      const p1 = makePoint(x + arm, y, nextLabel(), '#0ea5e9');
-      const p3 = makePoint(x + arm * Math.cos(rad), y + arm * Math.sin(rad), nextLabel(), '#0ea5e9');
+      const vertex = makePoint(x, y, nextLabel(), NESNE_RENGI.camgobegi);
+      const p1 = makePoint(x + arm, y, nextLabel(), NESNE_RENGI.camgobegi);
+      const p3 = makePoint(x + arm * Math.cos(rad), y + arm * Math.sin(rad), nextLabel(), NESNE_RENGI.camgobegi);
       const angle: AngleObject = {
         id: createId('ang'),
         type: 'angle',
@@ -450,8 +452,8 @@ export function AddObjectModal({ isOpen, onClose, is3D = false, onAddSolid3D }: 
         point1Id: p1.id,
         vertexPointId: vertex.id,
         point3Id: p3.id,
-        showValue: true,
-        color: '#0ea5e9',
+        showValue: false,
+        color: NESNE_RENGI.kehribar,
         visible: true,
         createdAt: nextCreatedAt(),
       };

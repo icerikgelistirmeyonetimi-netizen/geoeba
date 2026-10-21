@@ -30,7 +30,7 @@ function ilkokulYonergesi(arac: string, secilen: number): AracYonergesi | null {
     case 'unit_measure':
       return { baslik: 'Birimle Ölç (br)', aciklama: `Kareli zeminde iki köşeye ya da noktaya dokun; uzunluk kaç kare kenarı olduğu (birim) yazılır${sayac(secilen, 2)}.` };
     case 'measure_perimeter':
-      return { baslik: 'Çevre Hesapla', aciklama: 'Çevresini görmek istediğin şekle dokun. Kenarları kareli zemine paralel değilse çevresini cetvelle ölç.' };
+      return { baslik: 'Çevre Hesapla', aciklama: 'Çevresini ölçmek istediğimiz şekle dokunalım. Sonucu birim (br) olarak görelim.' };
     // 4. tur [178]: iki araç ayrı işler — Yansıt simetrik TAMAMLAMA, Simetri Keşfet simetri doğrusunu SINAMA
     case 'reflect':
       return {

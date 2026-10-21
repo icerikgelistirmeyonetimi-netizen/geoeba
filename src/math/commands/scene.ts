@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import type {
   AngleObject, ArcObject, ButtonObject, CheckboxObject, CircleObject, EllipseObject, FractionObject, FunctionObject, InputBoxObject,
   LineObject, MathObject, MeasurementObject, ObjectType, Point2D, PointObject, PolygonObject, RayObject, SectorObject, SegmentObject,
@@ -23,35 +24,35 @@ export function skip(reason = ''): never { throw new NotApplicable(reason); }
 
 /** Araçların kullandığı renkler (elle çizilenle yazıyla oluşturulan aynı görünsün). */
 export const COLORS = {
-  point: '#2563eb',
-  segment: '#0284c7',
-  line: '#0284c7',
-  ray: '#0284c7',
-  circle: '#8b5cf6',
-  ellipse: '#0ea5e9',
-  arc: '#0284c7',
-  sector: '#10b981',
-  angle: '#f59e0b',
-  polygon: '#10b981',
-  square: '#f43f5e',
-  rectangle: '#f59e0b',
-  regular: '#059669',
-  regularFill: '#10b981',
-  construction: '#7c3aed',
-  perpBisector: '#0f766e',
-  bisector: '#c2410c',
-  parallel: '#1d4ed8',
-  intersection: '#dc2626',
-  image: '#9333ea',
-  slider: '#8b5cf6',
-  function: '#2563eb',
+  point: NESNE_RENGI.mavi,
+  segment: NESNE_RENGI.camgobegi,
+  line: NESNE_RENGI.camgobegi,
+  ray: NESNE_RENGI.camgobegi,
+  circle: NESNE_RENGI.mor,
+  ellipse: NESNE_RENGI.camgobegi,
+  arc: NESNE_RENGI.camgobegi,
+  sector: NESNE_RENGI.zumrut,
+  angle: NESNE_RENGI.kehribar,
+  polygon: NESNE_RENGI.zumrut,
+  square: NESNE_RENGI.pembe,
+  rectangle: NESNE_RENGI.kehribar,
+  regular: NESNE_RENGI.zumrut,
+  regularFill: NESNE_RENGI.zumrut,
+  construction: NESNE_RENGI.mor,
+  perpBisector: NESNE_RENGI.zumrut,
+  bisector: NESNE_RENGI.kehribar,
+  parallel: NESNE_RENGI.mavi,
+  intersection: NESNE_RENGI.kirmizi,
+  image: NESNE_RENGI.mor,
+  slider: NESNE_RENGI.mor,
+  function: NESNE_RENGI.mavi,
   text: '#0f172a',
-  fraction: '#8b5cf6',
-  checkbox: '#2563eb',
-  button: '#4f46e5',
-  inputBox: '#0d9488',
-  slope: '#059669',
-  trig: '#7c3aed',
+  fraction: NESNE_RENGI.mor,
+  checkbox: NESNE_RENGI.mavi,
+  button: NESNE_RENGI.indigo,
+  inputBox: NESNE_RENGI.zumrut,
+  slope: NESNE_RENGI.zumrut,
+  trig: NESNE_RENGI.mor,
 } as const;
 
 /** Özellikler panelindeki renkler ve Türkçe adları. */
@@ -496,7 +497,7 @@ export class CommandScene {
     }
     return this.add({
       id: createId('seg'), type: 'segment', label: o.label ?? `[${a.label}${b.label}]`, showLabel: o.showLabel ?? true, startPointId: startId, endPointId: endId,
-      color: o.color ?? COLORS.segment, visible: true, showLength: o.showLength ?? true, thickness: o.thickness ?? 2.5, ...(o.unit ? { unit: o.unit } : {}), createdAt: Date.now(),
+      color: o.color ?? COLORS.segment, visible: true, showLength: o.showLength ?? this.options.showMeasurementsOnCreate ?? true, thickness: o.thickness ?? 2.5, ...(o.unit ? { unit: o.unit } : {}), createdAt: Date.now(),
     } as SegmentObject);
   }
   addLine(point1Id: string, point2Id: string, o: { label?: string; color?: string; showEquation?: boolean; reuse?: boolean } = {}): LineObject {
@@ -538,44 +539,45 @@ export class CommandScene {
     // Ölçüler istenmedikçe açılmaz (tuvaldeki çember aracıyla aynı): "alanını göster" komutu ayrıca açar.
     return this.add({ ...base, label: o.label ?? `${center.label} Merkezli Çember`, centerPointId: center.id, radiusPointId: spec.radiusPointId, fillOpacity: o.fillOpacity ?? 0.1 } as CircleObject);
   }
-  addEllipse(centerId: string, radiusX: number, radiusY: number, o: { label?: string; color?: string; rotation?: number } = {}): EllipseObject {
+  addEllipse(centerId: string, radiusX: number, radiusY: number, o: { label?: string; color?: string; rotation?: number; showArea?: boolean; showPerimeter?: boolean } = {}): EllipseObject {
     if (!(radiusX > 0 && radiusY > 0)) fail('Elipsin iki yarıçapı da 0’dan büyük olmalı.');
     const center = this.point(centerId), color = o.color ?? COLORS.ellipse;
     return this.add({
       id: createId('elp'), type: 'ellipse', label: o.label ?? `${center.label} Merkezli Elips`, showLabel: true, centerPointId: centerId, radiusX: tidy(radiusX), radiusY: tidy(radiusY),
-      ...(o.rotation ? { rotation: tidy(o.rotation) } : {}), color, fillColor: color, fillOpacity: 0.12, visible: true, showArea: true, showPerimeter: true, createdAt: Date.now(),
+      ...(o.rotation ? { rotation: tidy(o.rotation) } : {}), color, fillColor: color, fillOpacity: 0.12, visible: true, showArea: o.showArea ?? this.options.showMeasurementsOnCreate ?? true, showPerimeter: o.showPerimeter ?? this.options.showMeasurementsOnCreate ?? true, createdAt: Date.now(),
     } as EllipseObject);
   }
-  addArc(centerId: string, startId: string, directionId: string, o: { label?: string; color?: string } = {}): ArcObject {
+  addArc(centerId: string, startId: string, directionId: string, o: { label?: string; color?: string; showArcLength?: boolean; showCentralAngle?: boolean } = {}): ArcObject {
     const s = this.point(startId), d = this.point(directionId);
     if (new Set([centerId, startId, directionId]).size !== 3) fail('Yay için merkez, başlangıç ve bitiş farklı noktalar olmalı.');
     return this.add({
       id: createId('arc'), type: 'arc', label: o.label ?? `${s.label}${d.label} Yayı`, showLabel: true, centerPointId: centerId, startPointId: startId, directionPointId: directionId,
-      color: o.color ?? COLORS.arc, thickness: 3, showArcLength: true, visible: true, createdAt: Date.now(),
+      color: o.color ?? COLORS.arc, thickness: 3, showArcLength: o.showArcLength ?? this.options.showMeasurementsOnCreate ?? true, showCentralAngle: o.showCentralAngle ?? this.options.showMeasurementsOnCreate ?? true, visible: true, createdAt: Date.now(),
     } as ArcObject);
   }
-  addSector(centerId: string, startId: string, directionId: string, o: { label?: string; color?: string } = {}): SectorObject {
+  addSector(centerId: string, startId: string, directionId: string, o: { label?: string; color?: string; showArea?: boolean; showCentralAngle?: boolean } = {}): SectorObject {
     const c = this.point(centerId);
     if (new Set([centerId, startId, directionId]).size !== 3) fail('Daire dilimi için merkez, başlangıç ve bitiş farklı noktalar olmalı.');
     const color = o.color ?? COLORS.sector;
     return this.add({
       id: createId('sect'), type: 'sector', label: o.label ?? `${c.label} Daire Dilimi`, showLabel: true, centerPointId: centerId, startPointId: startId, directionPointId: directionId,
-      color, fillColor: color, fillOpacity: 0.4, showArea: true, visible: true, createdAt: Date.now(),
+      color, fillColor: color, fillOpacity: 0.4, showArea: o.showArea ?? this.options.showMeasurementsOnCreate ?? true, showCentralAngle: o.showCentralAngle ?? this.options.showMeasurementsOnCreate ?? true, visible: true, createdAt: Date.now(),
     } as SectorObject);
   }
   /**
    * Açı: varsa gösterilir (kopya oluşmaz). Köşe bir yay/dilim merkeziyse ve kollar onun noktalarıysa açı nesnesi yerine
    * şeklin merkez açısı gösterilir (kayıtlı çizim yeniden açılınca açı nesnesi silinmesin).
    */
-  addAngle(point1Id: string, vertexId: string, point3Id: string, o: { withArms?: boolean; color?: string; reflex?: boolean; label?: string } = {}): MathObject {
+  addAngle(point1Id: string, vertexId: string, point3Id: string, o: { withArms?: boolean; color?: string; reflex?: boolean; label?: string; showValue?: boolean } = {}): MathObject {
     if (new Set([point1Id, vertexId, point3Id]).size !== 3) fail('Açı için üç farklı nokta gerekir.');
     const p1 = this.point(point1Id), v = this.point(vertexId), p3 = this.point(point3Id);
-    const central = this.objects.find(s => (s.type === 'arc' || s.type === 'sector') && s.centerPointId === vertexId
+    const showValue = o.showValue ?? this.options.showMeasurementsOnCreate ?? true;
+    const central = this.objects.find((s): s is ArcObject | SectorObject => (s.type === 'arc' || s.type === 'sector') && s.centerPointId === vertexId
       && new Set([s.startPointId, s.directionPointId, point1Id, point3Id]).size === 2);
-    if (central) { this.update(central.id, { showCentralAngle: true }); return this.must(central.id); }
+    if (central) { this.update(central.id, { showCentralAngle: o.showValue ?? (showValue || central.showCentralAngle !== false) }); return this.must(central.id); }
     const existing = this.objects.find((a): a is AngleObject => a.type === 'angle' && a.vertexPointId === vertexId
       && ((a.point1Id === point1Id && a.point3Id === point3Id) || (a.point1Id === point3Id && a.point3Id === point1Id)));
-    if (existing) return this.update(existing.id, { showValue: true, visible: true, ...(o.reflex !== undefined ? { reflex: o.reflex } : {}) });
+    if (existing) return this.update(existing.id, { showValue: o.showValue ?? (showValue || existing.showValue !== false), visible: true, ...(o.reflex !== undefined ? { reflex: o.reflex } : {}) });
     // Kollar açının kimliğini taşır: açı silinince (başka nesne kullanmıyorsa) kolları da gider (collectDependentIds 4. kural)
     const angleId = createId('ang');
     if (o.withArms) {
@@ -586,7 +588,7 @@ export class CommandScene {
     }
     return this.add({
       id: angleId, type: 'angle', label: o.label ?? `∠${p1.label}${v.label}${p3.label}`, showLabel: true, point1Id, vertexPointId: vertexId, point3Id,
-      color: o.color ?? COLORS.angle, visible: true, showValue: true, ...(o.reflex ? { reflex: true } : {}), createdAt: Date.now(),
+      color: o.color ?? COLORS.angle, visible: true, showValue, ...(o.reflex ? { reflex: true } : {}), createdAt: Date.now(),
     } as AngleObject);
   }
   addPolygon(pointIds: string[], o: { kind?: 'polygon' | 'triangle' | 'square' | 'rectangle' | 'regular' | 'image'; label?: string; color?: string; fillColor?: string; fillOpacity?: number; showArea?: boolean; showPerimeter?: boolean; edgeLabels?: number[]; reuse?: boolean } = {}): PolygonObject {
@@ -609,7 +611,7 @@ export class CommandScene {
     return this.add({
       id: createId('poly'), type: 'polygon', label: o.label ?? names, showLabel: true, pointIds: [...pointIds],
       color: o.color ?? style.color, fillColor: o.fillColor ?? o.color ?? style.fillColor, fillOpacity: o.fillOpacity ?? style.fillOpacity,
-      showArea: o.showArea ?? style.showArea, showPerimeter: o.showPerimeter ?? style.showPerimeter, ...(o.edgeLabels ? { edgeLabels: o.edgeLabels } : {}),
+      showArea: o.showArea ?? (style.showArea && this.options.showMeasurementsOnCreate !== false), showPerimeter: o.showPerimeter ?? (style.showPerimeter && this.options.showMeasurementsOnCreate !== false), ...(o.edgeLabels ? { edgeLabels: o.edgeLabels } : {}),
       visible: true, createdAt: Date.now(),
     } as PolygonObject);
   }

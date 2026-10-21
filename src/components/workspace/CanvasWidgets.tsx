@@ -3,11 +3,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { CheckboxObject, ButtonObject, InputBoxObject, Point2D } from '@/types/math';
 import { formatTurkishNumber } from '@/math/coordinates';
+import { NESNE_RENGI, NESNE_SECIM_RENGI } from '@/utils/nesneRenkleri';
 
 interface OrtakProps {
   /** Nesnenin dünya konumunun EKRAN karşılığı */
   ekran: Point2D;
   secili: boolean;
+  secimRengi?: string;
   /** Aracın seçme/taşıma davranışı için: bileşene basıldığında çağrılır */
   onMouseDown: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
@@ -24,6 +26,7 @@ export function CanvasCheckbox({
   obj,
   ekran,
   secili,
+  secimRengi = NESNE_SECIM_RENGI,
   onToggle,
   onMouseDown,
   onContextMenu,
@@ -44,7 +47,7 @@ export function CanvasCheckbox({
         rx={8}
         className="fill-background/95 stroke-border"
         strokeWidth={secili ? 2 : 1}
-        stroke={secili ? '#ec4899' : undefined}
+        stroke={secili ? secimRengi : undefined}
       />
       {/* Kutu */}
       <rect
@@ -53,8 +56,8 @@ export function CanvasCheckbox({
         width={16}
         height={16}
         rx={4}
-        fill={obj.checked ? obj.color || '#2563eb' : 'transparent'}
-        stroke={obj.color || '#2563eb'}
+        fill={obj.checked ? obj.color || NESNE_RENGI.mavi : 'transparent'}
+        stroke={obj.color || NESNE_RENGI.mavi}
         strokeWidth={1.6}
         onClick={(e) => {
           e.stopPropagation();
@@ -93,6 +96,7 @@ export function CanvasButton({
   obj,
   ekran,
   secili,
+  secimRengi = NESNE_SECIM_RENGI,
   onRun,
   onMouseDown,
   onContextMenu,
@@ -111,8 +115,8 @@ export function CanvasButton({
         width={genislik}
         height={28}
         rx={9}
-        fill={obj.color || '#4f46e5'}
-        stroke={secili ? '#ec4899' : '#ffffff'}
+        fill={obj.color || NESNE_RENGI.indigo}
+        stroke={secili ? secimRengi : '#ffffff'}
         strokeWidth={secili ? 2.5 : 1.5}
         className="shadow-md group-hover/dugme:brightness-110 transition-all"
         onClick={(e) => {
@@ -144,6 +148,7 @@ export function CanvasInputBox({
   obj,
   ekran,
   secili,
+  secimRengi = NESNE_SECIM_RENGI,
   deger,
   onCommit,
   onMouseDown,
@@ -224,7 +229,7 @@ export function CanvasInputBox({
             boxSizing: 'border-box',
             padding: '2px 8px',
             borderRadius: '8px',
-            border: `1.5px solid ${hata ? '#dc2626' : secili ? '#ec4899' : '#cbd5e1'}`,
+            border: `1.5px solid ${hata ? '#dc2626' : secili ? secimRengi : '#cbd5e1'}`,
             background: '#ffffff',
             color: '#0f172a',
             font: '600 11px ui-monospace, monospace',

@@ -25,7 +25,7 @@ export const SLIDER_RESERVED = new Set(['x', 'pi', 'e', 'ln']);
 export const VARIABLE_NAME_RE = /^[a-zçğıöşü][a-zçğıöşü0-9]?$/;
 /** Fonksiyon penceresinin (FunctionDialog) ad sırası. */
 export const FUNCTION_NAMES = ['f', 'g', 'h', 'p', 'q', 'r', 's', 'u', 'v', 'w'];
-const PARSER_FUNCTIONS = new Set(['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sind', 'cosd', 'tand', 'sqrt', 'kok', 'cbrt', 'kupkok', 'abs', 'mutlak',
+const PARSER_FUNCTIONS = new Set(['sin', 'cos', 'tan', 'cot', 'asin', 'acos', 'atan', 'sind', 'cosd', 'tand', 'cotd', 'sqrt', 'kok', 'cbrt', 'kupkok', 'root', 'abs', 'mutlak',
   'exp', 'ln', 'log', 'floor', 'ceil', 'round', 'min', 'max', 'pow']);
 
 /** Sıfat-fiil ("gizleyen", "oynatan", "0 yapan") olarak geçen fiiller bir nesnenin görevini anlatır; emir değildir. */

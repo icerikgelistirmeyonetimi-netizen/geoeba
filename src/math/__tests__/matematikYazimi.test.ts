@@ -38,22 +38,22 @@ describe('düz metin (MEB yazımı)', () => {
     ['yarım çember, ara nokta yok', olcuMetni(yayOlcusu({ bas: A, son: B, buyuk: false, yarim: true }, 180)), 'm(A͡B) = 180° (yarım çember)'],
     ['yarım çember, ara nokta C', olcuMetni(yayOlcusu({ bas: A, son: B, ara: C, buyuk: false, yarim: true }, 180)), 'm(A͡C͡B) = 180°'],
     ['yay ucu yayın dışında → sözcük', olcuMetni(yayUzunlugu({ bas: A, son: null, buyuk: false }, 3.14159)), 'Yay uzunluğu ≈ 3,14 br'],
-    ['alan', olcuMetni(alan([A, B, C], 12)), 'A(ABC) = 12 br²'],
+    ['alan', olcuMetni(alan([A, B, C], 12)), 'A(ABC) = 12 birimkare'],
     ['çevre', olcuMetni(cevre([A, B, C, D], 24)), 'Ç(ABCD) = 24 br'],
-    ['alan kısa: sözcük kalır', olcuMetni(alan([A, B, C], 12), KISA), 'Alan = 12 br²'],
+    ['alan kısa: sözcük kalır', olcuMetni(alan([A, B, C], 12), KISA), 'Alan = 12 birimkare'],
     ['çevre kısa', olcuMetni(cevre([A, B, C], 16.3), KISA), 'Çevre = 16,3 br'],
     ['alan cm²', olcuMetni(alan([A, B, C], 12, { birim: 'cm' })), 'A(ABC) = 12 cm²'],
-    ['dilim alanı', olcuMetni(dilimAlani(A, O, B, 4.712)), 'A(AOB dilimi) ≈ 4,71 br²'],
+    ['dilim alanı', olcuMetni(dilimAlani(A, O, B, 4.712)), 'A(AOB dilimi) ≈ 4,71 birimkare'],
     ['dilim çevresi', olcuMetni(dilimCevresi(A, O, B, 7.1416)), 'Ç(AOB dilimi) ≈ 7,14 br'],
     ['yarıçap', olcuMetni(yaricap(O, A, 3)), 'r = |OA| = 3 br'],
     ['sabit yarıçap', olcuMetni(yaricap(O, null, 3)), 'r = 3 br'],
     ['kiriş', olcuMetni(kiris(A, B, 3 * Math.SQRT2, false)), 'kiriş |AB| ≈ 4,24 br'],
     ['çap', olcuMetni(kiris(A, B, 6, true)), 'çap |AB| = 2r = 6 br'],
-    ['çember kartı: Alan sözcüğü (A = ile nokta A çakışmasın)', olcuMetni(daireAlani(9 * Math.PI)), 'Alan = πr² ≈ 28,27 br²'],
+    ['çember kartı: Alan sözcüğü (A = ile nokta A çakışmasın)', olcuMetni(daireAlani(9 * Math.PI)), 'Alan = πr² ≈ 28,27 birimkare'],
     ['çember kartı: Çevre sözcüğü', olcuMetni(cemberCevresi(6 * Math.PI)), 'Çevre = 2πr ≈ 18,85 br'],
-    ['elips alanı', olcuMetni(elipsAlani(6 * Math.PI)), 'Alan = πab ≈ 18,85 br²'],
+    ['elips alanı', olcuMetni(elipsAlani(6 * Math.PI)), 'Alan = πab ≈ 18,85 birimkare'],
     ['elips çevresi her zaman ≈', olcuMetni(elipsCevresi(16)), 'Çevre ≈ 16 br'],
-    ['daire alanı kısa', olcuMetni(daireAlani(9 * Math.PI), KISA), 'Alan ≈ 28,27 br²'],
+    ['daire alanı kısa', olcuMetni(daireAlani(9 * Math.PI), KISA), 'Alan ≈ 28,27 birimkare'],
     ['eğim', olcuMetni(egim(A, B, 2)), 'AB eğimi = 2'],
     ['eğim tanımsız', olcuMetni(egim(A, B, null)), 'AB eğimi tanımsız'],
     ['eğim kısa', olcuMetni(egim(A, B, 2), KISA), 'Eğim = 2'],
@@ -65,10 +65,10 @@ describe('düz metin (MEB yazımı)', () => {
   ])('%s', (_, gercek, beklenen) => expect(gercek).toBe(beklenen));
 
   it('cümle içinde sözcük küçük harfle başlar, gösterim değişmez', () => {
-    expect(olcuMetni(daireAlani(9 * Math.PI), KISA, { cumleIci: true })).toBe('alan ≈ 28,27 br²');
-    expect(olcuMetni(daireAlani(9 * Math.PI), VARSAYILAN_YAZIM, { cumleIci: true })).toBe('alan = πr² ≈ 28,27 br²');
+    expect(olcuMetni(daireAlani(9 * Math.PI), KISA, { cumleIci: true })).toBe('alan ≈ 28,27 birimkare');
+    expect(olcuMetni(daireAlani(9 * Math.PI), VARSAYILAN_YAZIM, { cumleIci: true })).toBe('alan = πr² ≈ 28,27 birimkare');
     expect(olcuMetni(cemberCevresi(6 * Math.PI), VARSAYILAN_YAZIM, { cumleIci: true })).toBe('çevre = 2πr ≈ 18,85 br');
-    expect(olcuMetni(alan([A, B, C], 6), VARSAYILAN_YAZIM, { cumleIci: true })).toBe('A(ABC) = 6 br²');
+    expect(olcuMetni(alan([A, B, C], 6), VARSAYILAN_YAZIM, { cumleIci: true })).toBe('A(ABC) = 6 birimkare');
   });
 
   it("A_1 ve B' adları", () => {
@@ -78,8 +78,8 @@ describe('düz metin (MEB yazımı)', () => {
 
   it('dokuz köşeli çokgen adı sözcüğe düşer (en fazla 8 harf)', () => {
     const k = 'ABCDEFGHK'.split('').map((l) => P(l));
-    expect(olcuMetni(alan(k, 10))).toBe('Alan = 10 br²');
-    expect(olcuMetni(alan(k.slice(0, 8), 10))).toBe('A(ABCDEFGH) = 10 br²');
+    expect(olcuMetni(alan(k, 10))).toBe('Alan = 10 birimkare');
+    expect(olcuMetni(alan(k.slice(0, 8), 10))).toBe('A(ABCDEFGH) = 10 birimkare');
   });
 
   it('çember başlığı', () => {
@@ -154,7 +154,7 @@ describe('sesli okunuş: hiçbir sembol okunmaz', () => {
   });
 
   it('açıklama (fare ipucu) adları ekrandaki gibi yazar', () => {
-    expect(aciklama(alan([A, B, C], 12))).toBe('ABC üçgeninin alanı: 12 br²');
+    expect(aciklama(alan([A, B, C], 12))).toBe('ABC üçgeninin alanı: 12 birimkare');
     expect(aciklama(uzunluk(A, B, 6 * Math.sqrt(3)))).toBe('AB uzunluğu: ≈ 10,39 br');
     expect(aciklama(egim(A, B, null))).toBe('AB doğrusunun eğimi tanımsız');
   });
@@ -163,8 +163,8 @@ describe('sesli okunuş: hiçbir sembol okunmaz', () => {
 describe('metniSeslendir: yanıtlar ve ipuçları', () => {
   const YASAK = /[|∠≈=°²³̂͡△⌢]|\bm\(|\bbr\b|\bcm\b/u;
   it.each([
-    ['A(ABC) = 6 br², Ç(ABC) = 12 br.', 'a be ce üçgeninin alanı altı birimkare, a be ce üçgeninin çevresi on iki birim.'],
-    ['Ç(A, r): alan = πr² ≈ 28,27 br², çevre = 2πr ≈ 18,85 br.',
+    ['A(ABC) = 6 birimkare, Ç(ABC) = 12 br.', 'a be ce üçgeninin alanı altı birimkare, a be ce üçgeninin çevresi on iki birim.'],
+    ['Ç(A, r): alan = πr² ≈ 28,27 birimkare, çevre = 2πr ≈ 18,85 br.',
       'a merkezli çember: alan pi r kare yaklaşık yirmi sekiz virgül yirmi yedi birimkare, çevre iki pi r yaklaşık on sekiz virgül seksen beş birim.'],
     ['|B͡C| ≈ 3,14 br. m(B͡C) = 90°.', 'be ce yayının uzunluğu yaklaşık üç virgül on dört birim. be ce yayının ölçüsü doksan derece.'],
     ['r = |OA| = 3 br', 'yarıçap, o a uzunluğu üç birim'],
@@ -182,7 +182,7 @@ describe('metniSeslendir: yanıtlar ve ipuçları', () => {
     ['|AB| = 5 br. |CD| = 2 br.', 'a be uzunluğu beş birim. ce de uzunluğu iki birim.'],
     ['kiriş |BC| ≈ 2,83 br', 'be ce kirişinin uzunluğu yaklaşık iki virgül seksen üç birim'],
     ['çap |BC| = 2r = 6 br', 'be ce çapının uzunluğu, iki r altı birim'],
-    ['A(AOB dilimi) ≈ 4,71 br²', 'a o be daire diliminin alanı yaklaşık dört virgül yetmiş bir birimkare'],
+    ['A(AOB dilimi) ≈ 4,71 birimkare', 'a o be daire diliminin alanı yaklaşık dört virgül yetmiş bir birimkare'],
     ['△ABC çizildi (kenar 4 br, açı 60°).', 'a be ce üçgeni çizildi (kenar dört birim, açı altmış derece).'],
     ['%50 olasılık', 'yüzde elli olasılık'],
     ["ABC'nin alanı", "a be ce'nin alanı"],
@@ -216,9 +216,9 @@ describe('metniCozumle: düz metin ↔ süslü gösterim', () => {
     olcuMetni(daireAlani(9 * Math.PI)),
     olcuMetni(kiris(A, B, 6, true)),
     olcuMetni(koordinat(A, 2.5, -3)),
-    'ABC: A(ABC) = 6 br², ∠ABC açısı silindi, △ABC ≅ △DEF',
+    'ABC: A(ABC) = 6 birimkare, ∠ABC açısı silindi, △ABC ≅ △DEF',
     "ABC'nin alanı",
-    'Ç(A, r): alan = πr² ≈ 28,27 br², çevre = 2πr ≈ 18,85 br.',
+    'Ç(A, r): alan = πr² ≈ 28,27 birimkare, çevre = 2πr ≈ 18,85 br.',
     'y = 2x + 1: eğim = 2.',
     'f(x) = x² - 1: eğim tanımsız.',
     'Toplam %50 oranında büyütüldü.',

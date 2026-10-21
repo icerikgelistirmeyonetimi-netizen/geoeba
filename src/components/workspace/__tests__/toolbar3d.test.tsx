@@ -10,6 +10,7 @@ import { ARAC_KATEGORI_RENKLERI } from '../toolDefinitions';
 import { TREE_TOOL_GROUPS_3D, TUM_3B_ARACLAR, araclari3BAra, CISIM_ADLARI } from '../treeToolDefinitions3D';
 import { ILKOKUL_3B_ARACLARI, arac3BGorunurMu, gruplari3BSuz, grupAcikliklari3B } from '../kademeDuzeyleri3B';
 import { CISIM_RENKLERI, KOPYA_RENGI } from '../cisimRenkleri';
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 
 /*
  * 3B araç paneli: tek kaynak (treeToolDefinitions3D), kademe süzgeci (kademeDuzeyleri3B), 2B tasarım
@@ -134,7 +135,7 @@ describe('3B araç ağacı (tek kaynak)', () => {
     expect(Object.keys(CISIM_ADLARI)).toHaveLength(7);
     expect(CISIM_RENKLERI.length).toBeGreaterThanOrEqual(8);
     for (const r of CISIM_RENKLERI) expect(r.hex).toMatch(/^#[0-9a-f]{6}$/);
-    expect(KOPYA_RENGI).toBe('#9333ea');
+    expect(KOPYA_RENGI).toBe(NESNE_RENGI.mor);
   });
 
   it('arama "döndür" hem kamera (Döndür ve İncele) hem cisim döndürmeyi bulur', () => {
@@ -231,7 +232,7 @@ describe('Toolbar3D çizimi (2B tasarım sistemi)', () => {
     const dolu = ciz({ initialTab: 'baglamlar', solids: [kup], selectedSolidId: kup.id, selectedSolidIds: [kup.id], onUpdateSolid: vi.fn(), onClearAll: vi.fn() });
     expect(dolu).toContain('animate-pulse');
     expect(dolu).toContain('V = 27 br³');
-    expect(dolu).toContain('A = 54 br²');
+    expect(dolu.replace(/<[^>]*>/g, '')).toContain('A = 54 birimkare');
     expect(dolu).toContain('K - E + Y = 2');
     expect(dolu).toContain('Küp 1');
     for (const r of CISIM_RENKLERI) expect(dolu).toContain(`aria-label="Renk: ${r.name}"`);
@@ -249,7 +250,7 @@ describe('Toolbar3D çizimi (2B tasarım sistemi)', () => {
     expect(yuzlu).toContain('aria-label="Yüzü Mavi yap"');
     // Türkçe ondalık: 2,5³ = 15,625 → 15,63; yüz alanı 6,25
     expect(yuzlu).toContain('V = 15,63 br³');
-    expect(yuzlu).toContain('6,25 br²');
+    expect(yuzlu).toContain('6,25 birimkare');
   });
 
   it('Nesneler: göz simgesiyle göster/gizle, renk noktası, bağlam ve sil düğmeleri; Tümünü Sil', () => {
@@ -273,35 +274,35 @@ describe('Toolbar3D çizimi (2B tasarım sistemi)', () => {
   it('Bağlamlar: küre ve silindirde V, A doğru ve Euler satırı yok; döndürülmüş küpte yüz alanı değişmez', () => {
     const kure = ciz({ initialTab: 'baglamlar', solids: [{ ...kup, id: 'k', type: 'sphere', dimensions: { width: 4, height: 4, depth: 4, radius: 2 } }], selectedSolidId: 'k' });
     expect(kure).toContain('V = 33,51 br³');
-    expect(kure).toContain('A = 50,27 br²');
+    expect(kure.replace(/<[^>]*>/g, '')).toContain('A = 50,27 birimkare');
     expect(kure).not.toContain('K - E + Y');
     expect(kure).toContain('aria-label="Yarıçap (r)"');
     expect(kure).not.toContain('aria-label="Açınım oranı"');
 
     const silindir = ciz({ initialTab: 'baglamlar', solids: [{ ...kup, id: 's', type: 'cylinder', dimensions: { width: 2, height: 2, depth: 2, radius: 1 } }], selectedSolidId: 's' });
     expect(silindir).toContain('V = 6,28 br³');
-    expect(silindir).toContain('A = 18,85 br²');
+    expect(silindir.replace(/<[^>]*>/g, '')).toContain('A = 18,85 birimkare');
     expect(silindir).toContain('aria-label="Yükseklik (h)"');
 
     // Yüz alanı Newell formülüyle, döndürme ve ötelemeden bağımsız; palet seçili yüzün rengini basılı gösterir
     const donmus = ciz({
       initialTab: 'baglamlar',
-      solids: [{ ...kup, rotation: { x: 30, y: 45, z: 60 }, position: { x: 2.5, y: -1, z: 0 }, selectedFaceIndex: 2, faceColors: { 2: '#ec4899' } }],
+      solids: [{ ...kup, rotation: { x: 30, y: 45, z: 60 }, position: { x: 2.5, y: -1, z: 0 }, selectedFaceIndex: 2, faceColors: { 2: NESNE_RENGI.pembe } }],
       selectedSolidId: kup.id,
     });
-    expect(donmus).toContain('A = 9 br²');
+    expect(donmus).toContain('A = 9 birimkare');
     expect(donmus).toMatch(/aria-label="Yüzü Pembe yap" aria-pressed="true"/);
     // Geçersiz yüz dizini: yüz kartı çizilmez, panel çökmez
     expect(ciz({ initialTab: 'baglamlar', solids: [{ ...kup, selectedFaceIndex: 99 }], selectedSolidId: kup.id })).not.toContain('Seçili Yüz');
   });
 
-  it('ilkokul Bağlamlar (SIL [180]): yüz, köşe, ayrıt ve yüz biçimleri; V, A, br², br³, harfle kenar, konum ve derece yok', () => {
+  it('ilkokul Bağlamlar (SIL [180]): yüz, köşe, ayrıt ve yüz biçimleri; V, A, birimkare, br³, harfle kenar, konum ve derece yok', () => {
     kademe.duzey = 'ilkokul';
     const html = ciz({ initialTab: 'baglamlar', solids: [{ ...kup, selectedFaceIndex: 0 }], selectedSolidId: kup.id, selectedSolidIds: [kup.id], onUpdateSolid: vi.fn() });
     expect(html).toContain('data-ilkokul-cisim-ozellikleri');
     expect(html).toContain('Cismin Özellikleri');
     expect(html).toContain('6 kare');
-    for (const yok of ['br³', 'br²', 'V =', 'A =', 'K - E + Y', 'aria-label="Kenar (a)"', 'aria-label="Konum X"', 'aria-label="X ekseni"', '°']) {
+    for (const yok of ['br³', 'birimkare', 'V =', 'A =', 'K - E + Y', 'aria-label="Kenar (a)"', 'aria-label="Konum X"', 'aria-label="X ekseni"', '°']) {
       expect(html, yok).not.toContain(yok);
     }
     expect(html).toContain('aria-label="Kenar uzunluğu"');

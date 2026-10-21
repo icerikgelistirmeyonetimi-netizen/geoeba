@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import { describe, expect, it } from 'vitest';
 import type { AngleObject, ArcObject, CircleObject, LineObject, MathObject, MeasurementObject, PointObject, PolygonObject, SectorObject, SegmentObject } from '@/types/math';
 import { resolveCommandBindings } from '../../commandBindings';
@@ -69,7 +70,7 @@ describe('legacy measure behaviour', () => {
     expect(poly(r.objects).showArea).toBe(true);
     expect((byLabel(r.objects, 'DEF') as PolygonObject).showArea).toBe(false);
     expect(r.selectedIds).toEqual([first.id]);
-    expect(r.message).toContain('6 br²');
+    expect(r.message).toContain('6 birimkare');
   });
 
   it('shows one polygon-corner angle even when asked twice', () => {
@@ -132,7 +133,7 @@ describe('area and perimeter', () => {
     const scene = triangle();
     const r = expectOk(handlers, text, scene);
     expect(poly(r.objects).showArea).toBe(true);
-    expect(r.message).toContain('A(ABC) = 6 br²');
+    expect(r.message).toContain('A(ABC) = 6 birimkare');
     expect(r.selectedIds).toEqual([poly(scene).id]);
   });
 
@@ -140,23 +141,23 @@ describe('area and perimeter', () => {
     const once = expectOk(handlers, "ABC'nin alanı kaç?", triangle());
     const twice = expectOk(handlers, "ABC'nin alanı kaç?", once.objects);
     expect(twice.sceneChanged).toBe(false);
-    expect(twice.message).toContain('6 br²');
+    expect(twice.message).toContain('6 birimkare');
   });
 
   it('handles circles, ellipses, sectors and several clauses', () => {
     const c = expectOk(handlers, 'çemberin alanını hesapla', circle());
     expect(byType(c.objects, 'circle')[0].showArea).toBe(true);
-    expect(c.message).toContain('≈ 28,27 br²');
+    expect(c.message).toContain('≈ 28,27 birimkare');
     const byName = expectOk(handlers, "c1'in alanı nedir", circle());
-    expect(byName.message).toContain('c1: alan = πr² ≈ 28,27 br²');
+    expect(byName.message).toContain('c1: alan = πr² ≈ 28,27 birimkare');
     const centre = expectOk(handlers, "M merkezli çemberin çevresi ne kadar", circle());
     expect(centre.message).toContain('≈ 18,85 br');
     const e = expectOk(handlers, 'Elipsin alanını göster', ellipse());
     expect(byType(e.objects, 'ellipse')[0].showArea).toBe(true);
-    expect(e.message).toContain(`≈ ${(Math.PI * 6).toFixed(2).replace('.', ',')} br²`);
+    expect(e.message).toContain(`≈ ${(Math.PI * 6).toFixed(2).replace('.', ',')} birimkare`);
     const s = expectOk(handlers, 'Daire diliminin alanı nedir', arc('sector'));
     expect(byType(s.objects, 'sector')[0].showArea).toBe(true);
-    expect(s.message).toContain('≈ 3,14 br²');
+    expect(s.message).toContain('≈ 3,14 birimkare');
     const sp = expectOk(handlers, 'daire diliminin çevresini hesapla', arc('sector'));
     expect(sp.message).toContain(`≈ ${(Math.PI + 4).toFixed(2).replace('.', ',')} br`);
     const both = expectOk(handlers, 'ABC üçgeninin alanını ve çevresini hesapla', triangle());
@@ -168,7 +169,7 @@ describe('area and perimeter', () => {
 
   it('answers for bare points without a polygon', () => {
     const r = unchanged(pointsOnly(), "ABC'nin alanı kaç?");
-    expect(r.message).toContain('A(ABC) = 6 br²');
+    expect(r.message).toContain('A(ABC) = 6 birimkare');
     expect(r.message).toContain('çizili çokgen yok');
   });
 
@@ -217,7 +218,7 @@ describe('lengths, edges and distances', () => {
     unchanged(scene, 'A ve C arasındaki uzaklık ne kadar?');
     const shown = expectOk(handlers, 'B ile C arasındaki mesafeyi ölç', scene);
     const seg = byType(shown.objects, 'segment')[0];
-    expect(seg).toMatchObject({ label: '|BC|', unit: 'br', color: '#059669', thickness: 3, showLength: true });
+    expect(seg).toMatchObject({ label: '|BC|', unit: 'br', color: NESNE_RENGI.zumrut, thickness: 3, showLength: true });
     expect(shown.message).toContain('|BC| = 5 br');
     expect(shown.selectedIds).toEqual([seg.id]);
     const again = expectOk(handlers, 'B ile C arasındaki mesafeyi göster', shown.objects);
@@ -289,7 +290,7 @@ describe('angles', () => {
   it('creates an angle from three labels without arms and reuses it', () => {
     const r = expectOk(handlers, 'ABC açısını ölç', pointsOnly());
     const [angle] = byType(r.objects, 'angle');
-    expect(angle).toMatchObject({ label: '∠ABC', color: '#f59e0b', showValue: true });
+    expect(angle).toMatchObject({ label: '∠ABC', color: NESNE_RENGI.kehribar, showValue: true });
     expect(angle.vertexPointId).toBe(point(r.objects, 'B').id);
     expect(byType(r.objects, 'segment')).toHaveLength(0);
     expect(r.message).toContain('m(∠ABC) = 90°');
@@ -483,7 +484,7 @@ describe('equations and slopes', () => {
   it('creates one slope measurement like the tool', () => {
     const r = expectOk(handlers, "AB'nin eğimini ölç", lineAB());
     const [m] = byType(r.objects, 'measurement');
-    expect(m).toMatchObject({ kind: 'slope', label: 'AB eğimi', color: '#059669', showValue: true });
+    expect(m).toMatchObject({ kind: 'slope', label: 'AB eğimi', color: NESNE_RENGI.zumrut, showValue: true });
     expect(m.pointIds).toEqual(['A', 'B'].map(l => point(r.objects, l).id));
     expect(r.message).toContain('AB eğimi = 2');
     // Doğru varsa odakta doğru kalır ("… eğimini ölç ve kırmızı yap" doğruyu boyar); yalnızca noktalar varken ölçüm seçilir.
@@ -511,7 +512,7 @@ describe('trigonometric ratios', () => {
   it('creates a trig measurement for a named angle', () => {
     const r = expectOk(handlers, 'ABC açısının trigonometrik oranları', triangle());
     const [m] = byType(r.objects, 'measurement') as MeasurementObject[];
-    expect(m).toMatchObject({ kind: 'trig', color: '#7c3aed', label: 'ABC açısının oranları' });
+    expect(m).toMatchObject({ kind: 'trig', color: NESNE_RENGI.mor, label: 'ABC açısının oranları' });
     expect(m.pointIds).toEqual(['A', 'B', 'C'].map(l => point(r.objects, l).id));
     expect(r.message).toContain('sin = 0,6, cos = 0,8, tan = 0,75');
     expect(byType(expectOk(handlers, 'CBA açısının sin cos tan değerlerini göster', r.objects).objects, 'measurement')).toHaveLength(1);
@@ -566,7 +567,7 @@ describe('show and hide an object’s measurements', () => {
   it('shows every measurement of a named, selected or described object', () => {
     const r = expectOk(handlers, "ABC'nin ölçülerini göster", triangle());
     expect(poly(r.objects)).toMatchObject({ showArea: true, showPerimeter: true, edgeLabels: [0, 1, 2] });
-    expect(r.message).toContain('A(ABC) = 6 br²');
+    expect(r.message).toContain('A(ABC) = 6 birimkare');
     const a = expectOk(handlers, 'Yayın tüm ölçülerini göster', arc());
     expect(byType(a.objects, 'arc')[0] as ArcObject).toMatchObject({ showArcLength: true, showRadius: true, showChordLength: true, showCentralAngle: true });
     const scene = triangle();

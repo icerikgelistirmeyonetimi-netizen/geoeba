@@ -191,7 +191,7 @@ function showAngle(x: Ctx, spec: Extract<AngleSpec, { kind: 'angle' }>, create: 
   const [p1, v, p3] = spec.ids.map(id => scene.point(id));
   const inner = calculateAngleDegrees(p1, v, p3);
   if (!create) return { value: spec.reflex ? 360 - inner : inner, created: false };
-  const made = scene.addAngle(spec.ids[0], spec.ids[1], spec.ids[2], { reflex: spec.reflex });
+  const made = scene.addAngle(spec.ids[0], spec.ids[1], spec.ids[2], { reflex: spec.reflex, showValue: true });
   if (made.type !== 'angle') {
     const g = arcGeometry(scene, made);
     return { value: g.sweep * 180 / Math.PI, object: made, created: false };

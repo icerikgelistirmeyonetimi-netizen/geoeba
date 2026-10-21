@@ -1,6 +1,7 @@
 'use client';
+import { NESNE_RENGI, NESNE_RENKLERI } from '@/utils/nesneRenkleri';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useWorkspace } from '@/state/WorkspaceContext';
 import { ToolMode } from '@/types/workspace';
@@ -32,7 +33,7 @@ import { PanelOlcusu } from './PanelOlcusu';
 import { MatematikMetni } from './MatematikMetni';
 import { YazimKopyala } from './YazimKopyala';
 import { validateMathExpression, extractVariableNames, compileMathExpression, evaluateNumericInput } from '@/math/parser';
-import { functionDefinitionCycle, functionNameOwner, relabelFunction, undefinedFunctionCalls } from '@/math/functionNames';
+import { functionDefinitionCycle, functionNameOf, functionNameOwner, relabelFunction, undefinedFunctionCalls } from '@/math/functionNames';
 import {
   Trash2,
   Search,
@@ -71,6 +72,8 @@ import { gruplariSuz, grupAcikliklari } from './kademeDuzeyleri';
 import { gorunenKisayol } from './ilkokulKipi';
 import { KademeAramaBosNotu, KademeSuzgeciSeridi } from './KademeSuzgeci';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
+import { ObjectFunctionEditor } from './ObjectFunctionEditor';
+import { trigonometriIpucuGosterilir } from './fonksiyonSablonlari';
 import { MathKeypad } from '@/components/workspace/MathKeypad';
 import { LayoutMode } from './PropertiesPanel';
 import { GorunumDuzeniPaneli } from './gorunumDuzenleri';
@@ -153,6 +156,7 @@ export function Toolbar({
     deleteObject,
     addObject,
     addFunction,
+    updateFunction,
     assignSliderValue,
     setHintMessage,
     setCircleRadius,
@@ -197,6 +201,7 @@ export function Toolbar({
   const [editingRowId, setEditingRowId] = useState<string | null>(null);
   const [rowDraft, setRowDraft] = useState<{ a: string; b: string }>({ a: '', b: '' });
   const [rowError, setRowError] = useState<string | null>(null);
+  const rowEditorId = useId();
 
   const cancelRowEdit = () => {
     setEditingRowId(null);
@@ -328,7 +333,18 @@ export function Toolbar({
         setRowError(dogrulama.error);
         return;
       }
-      updateObject(obj.id, { expression: ifade, label: relabelFunction(obj, ifade, objects) });
+      const ad = functionNameOf(obj);
+      const eksikCagrilar = undefinedFunctionCalls(kaynakNesneler, ifade, ad);
+      if (eksikCagrilar.length > 0) {
+        setRowError(`${eksikCagrilar[0]}(x) tanımlı değil. Önce bu fonksiyonu tanımlayalım; çarpma için ${eksikCagrilar[0]}*(…) yazalım.`);
+        return;
+      }
+      const dongu = ad ? functionDefinitionCycle(kaynakNesneler, ad, ifade) : null;
+      if (dongu) {
+        setRowError(`Bir fonksiyon kendisine bağlı olamaz: ${dongu.map((n) => `${n}(x)`).join(' → ')}.`);
+        return;
+      }
+      updateFunction(obj.id, ifade, relabelFunction(obj, ifade, kaynakNesneler));
       cancelRowEdit();
       return;
     }
@@ -688,7 +704,7 @@ export function Toolbar({
     const xVal = matchNumber(row[0]);
     const yVal = matchNumber(row[1]);
     if (xVal !== null && yVal !== null) {
-      upsertPoint(rowPointId, xVal, yVal, '#3b82f6');
+      upsertPoint(rowPointId, xVal, yVal, NESNE_RENGI.mavi);
     } else {
       removePoint(rowPointId);
     }
@@ -698,7 +714,7 @@ export function Toolbar({
       const cellPointId = `spreadsheet-point-${r}-${c}`;
       const coord = matchCoordinate(row[c]);
       if (coord) {
-        upsertPoint(cellPointId, coord[0], coord[1], '#6366f1');
+        upsertPoint(cellPointId, coord[0], coord[1], NESNE_RENGI.indigo);
       } else {
         removePoint(cellPointId);
       }
@@ -742,16 +758,7 @@ export function Toolbar({
       </React.Fragment>
     ));
 
-  const PRESET_COLORS = [
-    { name: 'Mavi', hex: '#3b82f6' },
-    { name: 'İndigo', hex: '#6366f1' },
-    { name: 'Zümrüt', hex: '#10b981' },
-    { name: 'Kırmızı', hex: '#ef4444' },
-    { name: 'Kehribar', hex: '#f59e0b' },
-    { name: 'Mor', hex: '#8b5cf6' },
-    { name: 'Camgöbeği', hex: '#06b6d4' },
-    { name: 'Koyu', hex: '#334155' },
-  ];
+  const PRESET_COLORS = NESNE_RENKLERI;
 
   // Aynı adı taşıyan nesneler listede "(2)", "(3)" ekiyle ayırt edilir (alan uzmanı, 4. tur; nesneListesi.ts)
   const listeAdlari = useMemo(() => ayirtEdiciAdlar(objects), [objects]);
@@ -775,7 +782,7 @@ export function Toolbar({
       x: -pt.x,
       y: -pt.y,
       label,
-      color: pt.color || '#3b82f6',
+      color: pt.color || NESNE_RENGI.mavi,
       size: pt.size || 5,
       isIndependent: true,
       visible: true,
@@ -793,7 +800,7 @@ export function Toolbar({
       x: pt.x,
       y: -pt.y,
       label,
-      color: pt.color || '#3b82f6',
+      color: pt.color || NESNE_RENGI.mavi,
       size: pt.size || 5,
       isIndependent: true,
       visible: true,
@@ -811,7 +818,7 @@ export function Toolbar({
       x: -pt.x,
       y: pt.y,
       label,
-      color: pt.color || '#3b82f6',
+      color: pt.color || NESNE_RENGI.mavi,
       size: pt.size || 5,
       isIndependent: true,
       visible: true,
@@ -834,7 +841,7 @@ export function Toolbar({
       x: mx,
       y: my,
       label,
-      color: '#10b981',
+      color: NESNE_RENGI.zumrut,
       size: 5,
       isIndependent: true,
       visible: true,
@@ -858,7 +865,7 @@ export function Toolbar({
       x: avgX,
       y: avgY,
       label,
-      color: '#8b5cf6',
+      color: NESNE_RENGI.mor,
       size: 6,
       isIndependent: true,
       visible: true,
@@ -1123,7 +1130,7 @@ export function Toolbar({
                             {/* Renk Noktası */}
                             <span
                               className="w-2.5 h-2.5 rounded-full shrink-0 border border-foreground/15 shadow-xs"
-                              style={{ backgroundColor: obj.color || '#3b82f6' }}
+                              style={{ backgroundColor: obj.color || NESNE_RENGI.mavi }}
                             />
 
                             {/* Nesne Adı — alt indis ve üssü yazımla çizilir ("A_1" değil "A₁"). Uzun ad üç noktayla
@@ -1144,7 +1151,7 @@ export function Toolbar({
                             </span>
 
                             {/* Konum / Boyut / İfade Bilgisi */}
-                            {duzenleniyor ? (
+                            {duzenleniyor && obj.type !== 'function' ? (
                               <form
                                 className="flex items-center gap-1 min-w-0 flex-1"
                                 onSubmit={(e) => {
@@ -1183,6 +1190,22 @@ export function Toolbar({
 
                           {/* Aksiyon Butonları */}
                           <div className="flex items-center gap-1 shrink-0">
+                            {obj.type === 'function' && (
+                              <button type="button"
+                                aria-label={`${gorunenAd} matematik editörünü ${duzenleniyor ? 'kapat' : 'aç'}`}
+                                title="Fonksiyonu matematik editörüyle düzenle"
+                                aria-expanded={duzenleniyor}
+                                aria-controls={duzenleniyor ? rowEditorId : undefined}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedObjectId(obj.id);
+                                  if (duzenleniyor) cancelRowEdit();
+                                  else startRowEdit(obj);
+                                }}
+                                className={`rounded-lg border p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${duzenleniyor ? 'border-primary/30 bg-primary text-primary-foreground' : 'border-primary/20 bg-primary/5 text-primary hover:bg-primary/15'}`}>
+                                <Keyboard className="h-3.5 w-3.5" aria-hidden="true" />
+                              </button>
+                            )}
                             {/* Bağlam sekmesine git */}
                             <button
                               onClick={(e) => {
@@ -1209,6 +1232,17 @@ export function Toolbar({
                             </button>
                           </div>
                         </div>
+                        {duzenleniyor && obj.type === 'function' && (
+                          <div id={rowEditorId}>
+                            <ObjectFunctionEditor key={obj.id}
+                              expression={rowDraft.a}
+                              onChange={(a) => { setRowDraft((draft) => ({ ...draft, a })); setRowError(null); }}
+                              onSave={() => commitRowEdit(obj)}
+                              onCancel={cancelRowEdit}
+                              error={rowError}
+                              ileriIslevler={trigonometriIpucuGosterilir(kademeDuzeyi)} />
+                          </div>
+                        )}
                       </div>
                     );
                   })
@@ -1264,7 +1298,7 @@ export function Toolbar({
                         <div className="flex items-center gap-2 min-w-0">
                           <span
                             className="w-3 h-3 rounded-full shrink-0 border border-foreground/15 shadow-xs"
-                            style={{ backgroundColor: selectedObject.color || '#3b82f6' }}
+                            style={{ backgroundColor: selectedObject.color || NESNE_RENGI.mavi }}
                           />
                           <span className="font-bold text-sm text-foreground min-w-0 truncate" title={nesneGorunenAdi(selectedObject)}>
                             {nesneGorunenAdi(selectedObject)}
@@ -1341,7 +1375,7 @@ export function Toolbar({
                             key={c.hex}
                             onClick={() => updateObject(selectedObject.id, { color: c.hex })}
                             className={`w-6 h-6 rounded-full transition-transform cursor-pointer shadow-xs ${
-                              (selectedObject.color || '#3b82f6') === c.hex
+                              (selectedObject.color || NESNE_RENGI.mavi) === c.hex
                                 ? 'scale-125 ring-2 ring-primary ring-offset-2'
                                 : 'hover:scale-110'
                             }`}

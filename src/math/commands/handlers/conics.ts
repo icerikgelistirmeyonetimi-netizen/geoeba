@@ -171,7 +171,7 @@ export const regionInequality: CommandHandler = {
     const center = centerPoint(scene, found.conic.center);
     if (found.conic.kind === 'circle') {
       const r = found.conic.radius;
-      scene.addCircle({ centerId: center.id, radius: r }, { label: `${center.label} Dairesi (r = ${trNum(r)})`, fillOpacity: 0.25, showArea: true }) as CircleObject;
+      scene.addCircle({ centerId: center.id, radius: r }, { label: `${center.label} Dairesi (r = ${trNum(r)})`, fillOpacity: 0.25, showArea: scene.options.showMeasurementsOnCreate !== false }) as CircleObject;
       scene.say(`${written} bölgesi çizildi: merkezi ${center.label} (${trNum(center.x)}; ${trNum(center.y)}), yarıçapı ${trNum(r)} olan daire.${edgeNote}`);
     } else {
       const { rx, ry } = found.conic;

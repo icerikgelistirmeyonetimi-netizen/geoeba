@@ -42,6 +42,8 @@ export type CommandFailure = {
 export type CommandResult = CommandSuccess | CommandFailure;
 
 export interface EngineOptions {
+  /** Yeni çizimdeki ölçüm etiketleri; açık ölçme komutları bu varsayımdan bağımsızdır. */
+  showMeasurementsOnCreate?: boolean;
   /** Yeni nesneleri görünür alana yerleştirmek ve görünüm komutları için. */
   viewport?: ViewportTransform;
   /** Göreli stil komutları ("yazıları büyüt") için güncel stil ayarları. */

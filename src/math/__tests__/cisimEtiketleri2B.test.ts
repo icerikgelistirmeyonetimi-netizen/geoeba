@@ -46,7 +46,7 @@ function yerlestir(cisimler: Solid3DObject[], engeller: EkranKutusu[] = []) {
 describe('Cisim bilgi satırı', () => {
   it('tek satır: ad + taban alanı + hacim; taban biçiminin adı (Kare, Daire (Koni)) yazılmaz', () => {
     const kup = cisimBilgiSatiri(projectSolidFor2D(cisim('cube', 0, 0), VP, false, 'top'));
-    expect(kup).toEqual({ ad: 'Küp 1', degerler: 'Taban alanı = 9 br² · V = 27 br³' });
+    expect(kup).toEqual({ ad: 'Küp 1', degerler: 'Taban alanı = 9 birimkare · V = 27 br³' });
     const koni = cisimBilgiSatiri(projectSolidFor2D(cisim('cone', 0, 0), VP, false, 'top'));
     expect(koni.ad).toBe('Koni 1');
     expect(`${koni.ad} ${koni.degerler}`).not.toMatch(/Daire|\(/);

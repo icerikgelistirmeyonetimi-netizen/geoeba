@@ -1,4 +1,5 @@
 'use client';
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import { resolveCommandBindings, constructionDependencies, commandCircleGeometry } from '@/math/commandBindings';
 import { detachSliderBindings } from '@/math/sliderBindings';
 import type { PointAnimUpdate } from '@/math/pathAnimation';
@@ -392,7 +393,7 @@ function parametreKaydiricilari(
     x: yerler[i].x,
     y: yerler[i].y,
     length: uzunluk,
-    color: '#8b5cf6',
+    color: NESNE_RENGI.mor,
     visible: true,
     createdAt: Date.now(),
   }));
@@ -1139,7 +1140,7 @@ function oteleSekil(
       objs.filter((o) => o.type === 'point').map((o) => o.label)
     );
     (kaynaklar as PointObject[]).forEach((p, i) => {
-      const yeni = noktaUret(p.x + vektor.x, p.y + vektor.y, '#9333ea');
+      const yeni = noktaUret(p.x + vektor.x, p.y + vektor.y, NESNE_RENGI.mor);
       yeni.label = adlar[i];
       yeni.donusum = 'oteleme';
       yeniler.push(yeni);
@@ -1148,7 +1149,7 @@ function oteleSekil(
     return { yeniler, esleme };
   };
 
-  const ortak = { visible: true, showLabel: true, createdAt: Date.now(), color: '#9333ea', donusum: 'oteleme' as const };
+  const ortak = { visible: true, showLabel: true, createdAt: Date.now(), color: NESNE_RENGI.mor, donusum: 'oteleme' as const };
 
   if (hedef.type === 'polygon') {
     const k = kopyala(hedef.pointIds);
@@ -1161,7 +1162,7 @@ function oteleSekil(
         type: 'polygon',
         label: `${hedef.label || 'Çokgen'} (öteleme)`,
         pointIds: hedef.pointIds.map((id) => k.esleme.get(id) as string),
-        fillColor: '#9333ea',
+        fillColor: NESNE_RENGI.mor,
         fillOpacity: 0.15,
       } as MathObject,
     ];
@@ -1217,7 +1218,7 @@ function oteleSekil(
         radiusX: hedef.radiusX,
         radiusY: hedef.radiusY,
         rotation: hedef.rotation,
-        fillColor: '#9333ea',
+        fillColor: NESNE_RENGI.mor,
         fillOpacity: hedef.fillOpacity ?? 0.12,
       } as MathObject,
     ];
@@ -1241,7 +1242,7 @@ function oteleSekil(
             id: createId('sec'),
             type: 'sector',
             label: `${hedef.label || 'Daire Dilimi'} (öteleme)`,
-            fillColor: '#9333ea',
+            fillColor: NESNE_RENGI.mor,
             fillOpacity: 0.3,
           } as MathObject),
     ];
@@ -2022,7 +2023,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         label: label ?? functionLabel(nextFunctionName(mevcut), expression),
         showLabel: true,
         expression,
-        color: '#2563eb',
+        color: NESNE_RENGI.mavi,
         thickness: 2.5,
         visible: true,
         createdAt: Date.now(),
@@ -2102,7 +2103,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         x: yer.x,
         y: yer.y,
         length: uzunluk,
-        color: '#8b5cf6',
+        color: NESNE_RENGI.mor,
         visible: true,
         createdAt: Date.now(),
       };
@@ -2305,7 +2306,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         point1Id: p1.id,
         vertexPointId: pointId,
         point3Id: p3.id,
-        color: '#f59e0b',
+        color: NESNE_RENGI.kehribar,
         visible: true,
         showValue: true,
         createdAt: Date.now(),
@@ -2507,7 +2508,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           showLabel: true,
           startPointId: a.id,
           endPointId: b.id,
-          color: '#0284c7',
+          color: NESNE_RENGI.camgobegi,
           visible: true,
           createdAt: Date.now(),
         });
@@ -2664,7 +2665,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         showLabel: true,
         expression: ifade,
         // Fonksiyon aracıyla aynı renk: pembe, seçim rengiyle karışıp eğriyi hep "seçili" gösteriyordu.
-        color: '#2563eb',
+        color: NESNE_RENGI.mavi,
         thickness: 2.5,
         visible: true,
         createdAt: Date.now(),
@@ -2867,7 +2868,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       };
 
       const yeniCokgenler: PolygonObject[] = [];
-      const renkler = ['#0ea5e9', '#f59e0b'];
+      const renkler = [NESNE_RENGI.camgobegi, NESNE_RENGI.kehribar];
       for (let i = 0; i < parcalar.length; i++) {
         const ids = parcalar[i].map(kimlikBul);
         if (ids.some((x) => !x)) {
@@ -2896,7 +2897,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         showLabel: true,
         startPointId: kesenler[0].id,
         endPointId: kesenler[1].id,
-        color: '#334155',
+        color: NESNE_RENGI.koyu,
         visible: true,
         createdAt: Date.now(),
       };
@@ -2956,8 +2957,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         createdAt: Date.now(),
       });
 
-      const sol = parca(a, p, '#0ea5e9');
-      const sag = parca(p, b, '#f59e0b');
+      const sol = parca(a, p, NESNE_RENGI.camgobegi);
+      const sag = parca(p, b, NESNE_RENGI.kehribar);
       commit(
         (prev) => [
           // P dışında eski parçaya KİLİTLİ noktalar, üzerinde durdukları yeni parçaya kilitli kalır
@@ -3022,8 +3023,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         createdAt: Date.now(),
       });
 
-      const y1 = yay(noktalar[0], noktalar[1], '#0ea5e9');
-      const y2 = yay(noktalar[1], noktalar[0], '#f59e0b');
+      const y1 = yay(noktalar[0], noktalar[1], NESNE_RENGI.camgobegi);
+      const y2 = yay(noktalar[1], noktalar[0], NESNE_RENGI.kehribar);
       commit(
         (prev) => [
           ...bagiParcalaraDevret(bagiCoz(prev, noktalar.map((n) => n.id)), circleId, [y1, y2]).filter((o) => o.id !== circleId),
@@ -3070,8 +3071,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         createdAt: Date.now(),
       });
 
-      const ilkYay = yay(bas, p, '#0ea5e9');
-      const ikinciYay = yay(p, bit, '#f59e0b');
+      const ilkYay = yay(bas, p, NESNE_RENGI.camgobegi);
+      const ikinciYay = yay(p, bit, NESNE_RENGI.kehribar);
       commit(
         (prev) => [
           ...bagiParcalaraDevret(bagiCoz(prev, [p.id]), arcId, [ilkYay, ikinciYay]).filter((o) => o.id !== arcId),
@@ -3277,7 +3278,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             animMode: 'oscillating',
             x: -8,
             y: 6 - prev.filter((o) => o.type === 'slider').length * 1.5,
-            color: '#0284c7',
+            color: NESNE_RENGI.camgobegi,
             visible: true,
             createdAt: Date.now(),
           } as SliderObject;
@@ -3420,9 +3421,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               showLabel: true,
               startPointId: nextPending[0],
               endPointId: nextPending[1],
-              color: '#0284c7',
+              color: NESNE_RENGI.camgobegi,
               visible: true,
-              showLength: true,
+              showLength: false,
               thickness: 2.5,
               createdAt: Date.now(),
             };
@@ -3436,7 +3437,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               showLabel: true,
               point1Id: nextPending[0],
               point2Id: nextPending[1],
-              color: '#0284c7',
+              color: NESNE_RENGI.camgobegi,
               visible: true,
               showEquation: true,
               thickness: 2,
@@ -3452,7 +3453,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               showLabel: true,
               startPointId: nextPending[0],
               throughPointId: nextPending[1],
-              color: '#0284c7',
+              color: NESNE_RENGI.camgobegi,
               visible: true,
               thickness: 2,
               createdAt: Date.now(),
@@ -3467,7 +3468,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               showLabel: true,
               centerPointId: nextPending[0],
               radiusPointId: nextPending[1],
-              color: '#8b5cf6',
+              color: NESNE_RENGI.mor,
               visible: true,
               // Ölçüler (yarıçap, alan, çevre) hazır gelmez; sağ tık menüsü ya da komutla açılır (8 Ekim 2026).
               fillOpacity: 0.1,
@@ -3521,7 +3522,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         } else {
           const olculenAci: AngleObject = { id: createId('ang'), type: 'angle', label: `∠${mp1.label}${mVertex.label}${mp3.label}`,
             showLabel: true, point1Id: mp1.id, vertexPointId: mVertex.id, point3Id: mp3.id,
-            showValue: true, visible: true, color: '#d97706', createdAt: Date.now(), olcumSekli: true };
+            showValue: true, visible: true, color: NESNE_RENGI.kehribar, createdAt: Date.now(), olcumSekli: true };
           commitWith([olculenAci], 'Açı ölçüsü tuvale eklendi');
         }
 
@@ -3539,7 +3540,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       /** Yeni bir yardımcı nokta üretir; etiketi sıradaki boş harftir. */
       /** Yardımcı nokta. Üretilen adlar listeye eklenir: art arda iki çağrı AYNI adı vermesin (orta dikme). */
       const yardimciAdlar: string[] = [];
-      const yardimciNokta = (x: number, y: number, renk = '#7c3aed'): PointObject => {
+      const yardimciNokta = (x: number, y: number, renk: string = NESNE_RENGI.mor): PointObject => {
         const mevcut = [...objs, ...newlyCreated]
           .filter((o): o is PointObject => o.type === 'point')
           .map((o) => o.label || '')
@@ -3648,9 +3649,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             return;
           }
           // Orta noktada nokta varsa (Orta Nokta aracı) orta dikme onu kullanır: aynı yerde ikinci harf olmaz
-          const orta = noktaYaDaYeni(pb[0].x, pb[0].y, '#0f766e');
+          const orta = noktaYaDaYeni(pb[0].x, pb[0].y, NESNE_RENGI.zumrut);
           const n1 = orta.nokta;
-          const n2 = yardimciNokta(pb[1].x, pb[1].y, '#0f766e');
+          const n2 = yardimciNokta(pb[1].x, pb[1].y, NESNE_RENGI.zumrut);
           if (orta.yeni) { n1.construction = { kind: 'midpoint', pointIds: [a.id, b.id] }; n1.isIndependent = false; }
           n2.construction = { kind: 'direction', throughId: n1.id, linePointIds: [a.id, b.id], mode: 'perpendicular' };
           n2.isIndependent = false;
@@ -3663,7 +3664,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             showLabel: true,
             point1Id: n1.id,
             point2Id: n2.id,
-            color: '#0f766e',
+            color: NESNE_RENGI.zumrut,
             visible: true,
             createdAt: Date.now(),
           };
@@ -3692,7 +3693,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             showLabel: true,
             pointIds: [a.id, b.id],
             showValue: true,
-            color: '#059669',
+            color: NESNE_RENGI.zumrut,
             visible: true,
             createdAt: Date.now(),
           };
@@ -3768,7 +3769,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             if (!okundu.ok) return okundu.error;
             const uzunluk = okundu.value;
             if (uzunluk <= 0) return 'Uzunluk sıfırdan büyük olmalı.';
-            const uc = yardimciNokta(bas.x + uzunluk, bas.y, '#0284c7');
+            const uc = yardimciNokta(bas.x + uzunluk, bas.y, NESNE_RENGI.camgobegi);
             const seg: SegmentObject = {
               id: createId('seg'),
               type: 'segment',
@@ -3776,8 +3777,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               showLabel: true,
               startPointId: bas.id,
               endPointId: uc.id,
-              color: '#0284c7',
-              showLength: true,
+              color: NESNE_RENGI.camgobegi,
+              showLength: false,
               unit: 'br',
               visible: true,
               createdAt: Date.now(),
@@ -3861,7 +3862,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             commitPendingOnly();
             return;
           }
-          const n2 = yardimciNokta(uc.x, uc.y, '#c2410c');
+          const n2 = yardimciNokta(uc.x, uc.y, NESNE_RENGI.kehribar);
           n2.construction = { kind: 'bisector', pointIds: [a.id, b.id, c.id] };
           n2.isIndependent = false;
           n2.visible = false;
@@ -3873,7 +3874,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             showLabel: true,
             startPointId: b.id,
             throughPointId: n2.id,
-            color: '#c2410c',
+            color: NESNE_RENGI.kehribar,
             visible: true,
             createdAt: Date.now(),
           };
@@ -3890,7 +3891,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             commitPendingOnly();
             return;
           }
-          const n2 = yardimciNokta(ikinci.x, ikinci.y, '#1d4ed8');
+          const n2 = yardimciNokta(ikinci.x, ikinci.y, NESNE_RENGI.mavi);
           n2.construction = { kind: 'direction', throughId: c.id, linePointIds: [a.id, b.id], mode: tool };
           n2.isIndependent = false;
           n2.visible = false;
@@ -3907,7 +3908,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             showLabel: true,
             point1Id: c.id,
             point2Id: n2.id,
-            color: '#1d4ed8',
+            color: NESNE_RENGI.mavi,
             visible: true,
             createdAt: Date.now(),
           };
@@ -3934,7 +3935,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             showLabel: true,
             pointIds: [a.id, b.id, c.id],
             showValue: true,
-            color: '#7c3aed',
+            color: NESNE_RENGI.mor,
             visible: true,
             createdAt: Date.now(),
           };
@@ -3982,7 +3983,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             showLabel: true,
             centerPointId: '',
             throughPointIds: [a.id, b.id, c.id],
-            color: '#8b5cf6',
+            color: NESNE_RENGI.mor,
             fillOpacity: 0,
             visible: true,
             createdAt: Date.now(),
@@ -4015,6 +4016,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             directionPointId: c.id,
             visible: true,
             showLabel: true,
+            showCentralAngle: false,
             createdAt: Date.now(),
           };
           const yeniSekil: MathObject =
@@ -4024,19 +4026,19 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
                   id: createId('arc'),
                   type: 'arc',
                   label: `${b.label}${c.label} Yayı`,
-                  color: '#0284c7',
+                  color: NESNE_RENGI.camgobegi,
                   thickness: 3,
-                  showArcLength: true,
+                  showArcLength: false,
                 } as ArcObject)
               : ({
                   ...ortak,
                   id: createId('sect'),
                   type: 'sector',
                   label: `${a.label} Daire Dilimi`,
-                  color: '#10b981',
-                  fillColor: '#10b981',
+                  color: NESNE_RENGI.zumrut,
+                  fillColor: NESNE_RENGI.zumrut,
                   fillOpacity: 0.4,
-                  showArea: true,
+                  showArea: false,
                 } as SectorObject);
 
           commit(
@@ -4083,7 +4085,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           showLabel: false,
           startPointId: nextPending[1],
           endPointId: nextPending[0],
-          color: '#f59e0b',
+          color: NESNE_RENGI.kehribar,
           visible: true,
           thickness: 2,
           armOfAngleId: angleId,
@@ -4097,7 +4099,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           showLabel: false,
           startPointId: nextPending[1],
           endPointId: nextPending[2],
-          color: '#f59e0b',
+          color: NESNE_RENGI.kehribar,
           visible: true,
           thickness: 2,
           armOfAngleId: angleId,
@@ -4112,9 +4114,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           point1Id: nextPending[0],
           vertexPointId: nextPending[1],
           point3Id: nextPending[2],
-          color: '#f59e0b',
+          color: NESNE_RENGI.kehribar,
           visible: true,
-          showValue: true,
+          showValue: false,
           createdAt: Date.now(),
         };
 
@@ -4153,7 +4155,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               unit,
               startPointId: nextPending[0],
               endPointId: nextPending[1],
-              color: isCm ? '#0284c7' : '#059669',
+              color: isCm ? NESNE_RENGI.camgobegi : NESNE_RENGI.zumrut,
               visible: true,
               showLength: true,
               thickness: 3,
@@ -4194,8 +4196,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             label: 'Çokgen',
             showLabel: true,
             pointIds: [...pending],
-            color: '#10b981',
-            fillColor: '#10b981',
+            color: NESNE_RENGI.zumrut,
+            fillColor: NESNE_RENGI.zumrut,
             fillOpacity: 0.2,
             visible: true,
             showArea: isArea,
@@ -4231,12 +4233,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             label: names ? `${names} Çokgeni` : 'Çokgen',
             showLabel: true,
             pointIds: [...pending],
-            color: '#10b981',
-            fillColor: '#10b981',
+            color: NESNE_RENGI.zumrut,
+            fillColor: NESNE_RENGI.zumrut,
             fillOpacity: 0.15,
             visible: true,
-            showArea: true,
-            showPerimeter: true,
+            showArea: false,
+            showPerimeter: false,
             createdAt: Date.now(),
           };
           commitWith([newPolygon], `${newPolygon.label} oluşturuldu`);
@@ -4382,7 +4384,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             targetId: hedef.id,
             field: hedef.type === 'slider' ? 'value' : 'expression',
             width: hedef.type === 'slider' ? 90 : 170,
-            color: '#0d9488',
+            color: NESNE_RENGI.zumrut,
             visible: true,
             createdAt: Date.now(),
           };
@@ -4412,7 +4414,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             y: konum.y,
             targetIds: hedefler,
             checked: true,
-            color: '#2563eb',
+            color: NESNE_RENGI.mavi,
             visible: true,
             createdAt: Date.now(),
           };
@@ -4438,7 +4440,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             kaydiricilar.length > 0
               ? { kind: 'animate', sliderIds: kaydiricilar }
               : { kind: 'toggle', targetIds: hedefler },
-          color: '#4f46e5',
+          color: NESNE_RENGI.indigo,
           visible: true,
           createdAt: Date.now(),
         };
@@ -4483,7 +4485,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       const worldPos = kenaraYapisti ? yapisma.nokta : snapToVisibleGrid(rawWorldPos, vp);
       const existingLabels = (currentObjects.filter((o) => o.type === 'point') as PointObject[]).map((p) => p.label);
 
-      const makePoint = (label: string, x: number, y: number, color = '#2563eb'): PointObject => ({
+      const makePoint = (label: string, x: number, y: number, color: string = NESNE_RENGI.mavi): PointObject => ({
         id: createId('pt'),
         type: 'point',
         label,
@@ -4543,19 +4545,19 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               latest.current.objects.filter((o) => o.type === 'point').map((o) => o.label || ''),
               4
             );
-            const pts = kareKoseleri(kose, kenar).map((k, i) => makePoint(adlar[i], k.x, k.y, '#3b82f6'));
+            const pts = kareKoseleri(kose, kenar).map((k, i) => makePoint(adlar[i], k.x, k.y, NESNE_RENGI.mavi));
             const poly: PolygonObject = {
               id: createId('poly'),
               type: 'polygon',
               label: 'Kare',
               showLabel: true,
               pointIds: pts.map((pt) => pt.id),
-              color: '#f43f5e',
-              fillColor: '#f43f5e',
+              color: NESNE_RENGI.pembe,
+              fillColor: NESNE_RENGI.pembe,
               fillOpacity: 0.18,
               visible: true,
-              showArea: true,
-              showPerimeter: true,
+              showArea: false,
+              showPerimeter: false,
               createdAt: Date.now(),
             };
             addObjects([...pts, poly], `Kare oluşturuldu (a = ${formatTurkishNumber(kenar)} br)`);
@@ -4574,7 +4576,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const x2 = x1 + w;
         const y2 = y1 + h;
         const labels = generateNextPointLabels(existingLabels, 4);
-        const color = '#3b82f6';
+        const color = NESNE_RENGI.mavi;
 
         const pts = [
           makePoint(labels[0], x1, y1, color),
@@ -4589,12 +4591,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           label: 'Dikdörtgen',
           showLabel: true,
           pointIds: pts.map((p) => p.id),
-          color: '#f59e0b',
-          fillColor: '#f59e0b',
+          color: NESNE_RENGI.kehribar,
+          fillColor: NESNE_RENGI.kehribar,
           fillOpacity: 0.18,
           visible: true,
-          showArea: true,
-          showPerimeter: true,
+          showArea: false,
+          showPerimeter: false,
           createdAt: Date.now(),
         };
 
@@ -4629,7 +4631,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           y: worldPos.y,
           radius: 2.5,
           modelType: kesir.model,
-          color: '#8b5cf6',
+          color: NESNE_RENGI.mor,
           visible: true,
           createdAt: Date.now(),
         };
@@ -4642,7 +4644,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       if (tool === 'measure_distance' || tool === 'unit_measure') {
         const isCm = tool === 'measure_distance';
         const label = generateNextPointLabel(existingLabels);
-        const newPt = makePoint(label, worldPos.x, worldPos.y, isCm ? '#0284c7' : '#059669');
+        const newPt = makePoint(label, worldPos.x, worldPos.y, isCm ? NESNE_RENGI.camgobegi : NESNE_RENGI.zumrut);
         handlePointClick(newPt.id, [...currentObjects, newPt]);
         return;
       }

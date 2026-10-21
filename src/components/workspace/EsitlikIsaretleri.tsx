@@ -5,6 +5,7 @@
  * Hesap @/math/esitlikIsaretleri'nde (saf), ekran geometrisi ./esitlikCizimi'nde.
  */
 import React from 'react';
+import { NESNE_SECIM_RENGI } from '@/utils/nesneRenkleri';
 import type { MathObject, PointObject, ViewportTransform } from '@/types/math';
 import { worldToScreen } from '@/math/coordinates';
 import type { ContextMenuItem } from './ContextMenu';
@@ -24,10 +25,11 @@ const EMPTY: readonly PointObject[] = [];
  * Çentik katmanı. Geçiş (transition) ve sınıf YOK: kaydırırken yol `d` her karede yeniden hesaplanır, geride kalmaz.
  * Tıklamayı engellemez (pointerEvents none). Sade görünümde de çizilir (ölçü rozeti değil, geometrik gösterim).
  */
-export function EsitlikIsaretleriKatmani({ isaretler, viewport, seciliIdler, cizgiOlcegi, noktalar, noktaYaricapi = 5, aciYaricapiPx, aciYaricaplariPx }: {
+export function EsitlikIsaretleriKatmani({ isaretler, viewport, seciliIdler, secimRengi = NESNE_SECIM_RENGI, cizgiOlcegi, noktalar, noktaYaricapi = 5, aciYaricapiPx, aciYaricaplariPx }: {
   isaretler: EsitlikIsareti[];
   viewport: ViewportTransform;
   seciliIdler: string[];
+  secimRengi?: string;
   cizgiOlcegi: number;
   /**
    * Açı yayının EKRAN yarıçapı (px). Açının yayı yakınlaştırmayla büyümediği için dünya birimiyle
@@ -79,7 +81,7 @@ export function EsitlikIsaretleriKatmani({ isaretler, viewport, seciliIdler, ciz
             key={m.anahtar}
             d={d}
             fill="none"
-            stroke={seciliIdler.includes(m.sahipId) ? '#ec4899' : m.renk}
+            stroke={seciliIdler.includes(m.sahipId) ? secimRengi : m.renk}
             strokeWidth={kalinlik}
             strokeLinecap="round"
             data-esitlik-isareti={m.anahtar}

@@ -51,7 +51,7 @@ describe('[152] denetim: alan modeli çizilmiş etiketlerin ve yönerge çubuğu
   });
 
   it('modelin kendi yazıları (üst, sol, alt) için pay bırakılır: engelin hemen altına yapışmaz', () => {
-    // Ortada (model -2..2 × -1,5..1,5) bir etiket kutusu var; modelin alt yazısı ("4 × 3 = 12 br²") ona değmemeli
+    // Ortada (model -2..2 × -1,5..1,5) bir etiket kutusu var; modelin alt yazısı ("4 × 3 = 12 birimkare") ona değmemeli
     const engel = { x0: -2, y0: 1.6, x1: 2, y1: 2.2 };
     const yer = alanModeliniYerlestir(4, 3, vp, [engel]);
     const pay = 24 / vp.zoom;

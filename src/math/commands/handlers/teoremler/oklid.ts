@@ -429,7 +429,7 @@ function pisagorSekliKur(c: Clause, scene: CommandScene, A: PointObject, B: Poin
   const b = uzaklik(A, C), cc = uzaklik(A, B), a = uzaklik(B, C);
   const esit = yaklasikMi(cc * cc) || yaklasikMi(b * b) || yaklasikMi(a * a) ? '≈' : '=';
   scene.say(`${giris} Pisagor bağıntısı: |${A.label}${B.label}|² + |${A.label}${C.label}|² = |${B.label}${C.label}|²: `
-    + `${yazi(cc * cc)} + ${yazi(b * b)} ${esit} ${yazi(a * a)} (karelerin alanları ${yazi(cc * cc)}, ${yazi(b * b)} ve ${yazi(a * a)} br²).`);
+    + `${yazi(cc * cc)} + ${yazi(b * b)} ${esit} ${yazi(a * a)} (karelerin alanları ${yazi(cc * cc)}, ${yazi(b * b)} ve ${yazi(a * a)} birimkare).`);
   if (notlar.length) scene.say(notlar.join(' '));
   cumleRengiUygula(c, scene);
   scene.setFocus([ucgen.id, ...kareler.map(k => k.id)]);

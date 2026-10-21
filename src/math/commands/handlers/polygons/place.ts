@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import type { Point2D, PointObject, PolygonObject } from '@/types/math';
 import { type CommandScene, fail, trNum } from '../../scene';
 import { signedArea } from './analyze';
@@ -5,7 +6,7 @@ import { signedArea } from './analyze';
 export type PolyKind = 'polygon' | 'triangle' | 'square' | 'rectangle' | 'regular';
 
 /** Araçlardaki köşe renkleri */
-export const VERTEX_COLORS = { square: '#3b82f6', rectangle: '#3b82f6', regular: '#10b981' } as const;
+export const VERTEX_COLORS = { square: NESNE_RENGI.mavi, rectangle: NESNE_RENGI.mavi, regular: NESNE_RENGI.zumrut } as const;
 
 export interface ShapePlan {
   /** İletilerde kullanılan Türkçe ad ("üçgen", "kare") */

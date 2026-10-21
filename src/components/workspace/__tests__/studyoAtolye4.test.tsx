@@ -262,7 +262,7 @@ describe('[164] Ekle > Nesne Ekle (Koordinatla)', () => {
     expect(adAlaniEtiketi('circle')).toBe('Merkez noktasının adı (tuvalde görünür)');
     expect(adAlaniEtiketi('point')).toBe('Nokta adı');
     const kaynak = oku('AddObjectModal.tsx');
-    expect(kaynak).toContain('const center = makePoint(x, y, trimmedName, \'#2563eb\');');
+    expect(kaynak).toContain('const center = makePoint(x, y, trimmedName, NESNE_RENGI.mavi);');
     expect(kaynak).toContain("label: `${trimmedName} Merkezli ${selectedTab === 'disk' ? 'Daire' : 'Çember'}`,");
   });
 

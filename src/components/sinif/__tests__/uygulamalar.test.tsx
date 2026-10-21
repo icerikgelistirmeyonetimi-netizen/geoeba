@@ -74,11 +74,11 @@ describe('uygulama kayıt defteri', () => {
 describe('ilkokul kademesi (alan uzmanları, 2. ve 4. tur)', () => {
   it('Olasılık Laboratuvarı ilkokulda da masaüstünde (4. tur, satır 183: «olay kartları» kipi, MAT.4.4.1); sıra korunur', () => {
     expect(ILKOKULDA_GIZLI_UYGULAMALAR).toEqual([]);
-    expect(kademeninUygulamalari(true).map((u) => u.id)).toEqual([CIZIM_KIMLIGI, 'veri-grafik', 'olasilik', 'algoritma']);
+    expect(kademeninUygulamalari('ilkokul').map((u) => u.id)).toEqual([CIZIM_KIMLIGI, 'veri-grafik', 'olasilik', 'algoritma']);
   });
 
   it('ilkokulda Olasılık kısayolunun açıklaması ve simgesi olay kartlarını anlatır: sayı, yüzde, sayı küpü yok', () => {
-    const o = kademeninUygulamalari(true).find((u) => u.id === 'olasilik');
+    const o = kademeninUygulamalari('ilkokul').find((u) => u.id === 'olasilik');
     expect(o?.aciklama).toBe(olasilikIlkokulManifesti.aciklama);
     expect(o?.aciklama).toMatch(/imkânsız, olabilir ya da kesin/);
     expect(o?.aciklama).not.toMatch(/[0-9%]|teorik|deneysel|öznel|sayı küpü|zar/i);
@@ -91,12 +91,12 @@ describe('ilkokul kademesi (alan uzmanları, 2. ve 4. tur)', () => {
     expect(o?.renk).toBe(genel?.renk);
     expect(o?.Bilesen).toBe(genel?.Bilesen);
     // Açıklamalar uyarlanırken gövde bileşenleri korunur.
-    for (const u of kademeninUygulamalari(true)) expect(u.Bilesen).toBe(uygulamaBul(u.id)?.Bilesen);
-    expect(kademeninUygulamalari(true).find((u) => u.id === 'algoritma')?.ad).toBe('Algoritma');
+    for (const u of kademeninUygulamalari('ilkokul')) expect(u.Bilesen).toBe(uygulamaBul(u.id)?.Bilesen);
+    expect(kademeninUygulamalari('ilkokul').find((u) => u.id === 'algoritma')?.ad).toBe('Algoritma');
   });
 
   it('ilkokul açıklamaları çizim ve veri araçlarının bu oturumdaki kapsamını anlatır', () => {
-    const liste = kademeninUygulamalari(true);
+    const liste = kademeninUygulamalari('ilkokul');
     expect(liste.find((u) => u.id === CIZIM_KIMLIGI)?.aciklama).toBe('Şekilleri çiz, ölç ve geometrik cisimleri keşfet.');
     expect(liste.find((u) => u.id === veriGrafikManifesti.id)?.aciklama).toBe('Nesne ve şekil grafikleri oluştur; çetele ve sıklık tablolarını incele.');
   });
@@ -113,8 +113,9 @@ describe('ilkokul kademesi (alan uzmanları, 2. ve 4. tur)', () => {
     }
   });
 
-  it('ortaokul, lise ve "Tüm araçlar"da liste değişmez', () => {
-    expect(kademeninUygulamalari(false)).toBe(UYGULAMALAR);
+  it('ortaokulda tüm uygulamalar, lisede Algoritma dışındaki uygulamalar gösterilir', () => {
+    expect(kademeninUygulamalari('ortaokul')).toBe(UYGULAMALAR);
+    expect(kademeninUygulamalari('lise').map((u) => u.id)).toEqual([CIZIM_KIMLIGI, 'veri-grafik', 'olasilik']);
     expect(uygulamaBul('olasilik')?.aciklama).toBe('Sınıfını seç; olasılığı o sınıfın yaklaşımıyla (öznel, deneysel, teorik) 3B deneylerle incele.');
   });
 

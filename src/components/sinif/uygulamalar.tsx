@@ -15,6 +15,7 @@
  * (WorkspaceView + başlık çubuğunda WorkspaceMenuBar).
  */
 import React, { Suspense, lazy, useState, type ComponentType } from 'react';
+import type { LevelId } from '@/types/curriculum';
 import { WorkspaceMenuBar } from '@/components/workspace/WorkspaceMenuBar';
 import { manifest as veriGrafikManifesti } from '@/components/uygulamalar/veri-grafik/manifest';
 import { ilkokulManifesti as olasilikIlkokulManifesti, manifest as olasilikManifesti } from '@/components/uygulamalar/olasilik/manifest';
@@ -160,7 +161,8 @@ const ILKOKUL_UYARLAMALARI: Readonly<Record<string, Partial<Pick<UygulamaManifes
 };
 
 /** Masaüstü, görev çubuğu ve Başlat menüsünün kademeye göre listesi (sıra korunur) */
-export function kademeninUygulamalari(ilkokul: boolean, liste: readonly UygulamaTanimi[] = UYGULAMALAR): readonly UygulamaTanimi[] {
-  if (!ilkokul) return liste;
+export function kademeninUygulamalari(kademe: LevelId | null, liste: readonly UygulamaTanimi[] = UYGULAMALAR): readonly UygulamaTanimi[] {
+  if (kademe === 'lise') return liste.filter((u) => u.id !== algoritmaManifesti.id);
+  if (kademe !== 'ilkokul') return liste;
   return liste.filter((u) => !ILKOKULDA_GIZLI_UYGULAMALAR.includes(u.id)).map((u) => (ILKOKUL_UYARLAMALARI[u.id] ? { ...u, ...ILKOKUL_UYARLAMALARI[u.id] } : u));
 }

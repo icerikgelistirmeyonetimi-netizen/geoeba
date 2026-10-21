@@ -34,11 +34,11 @@ describe('ilkokul görünümü gerçek veriye sızmaz', () => {
     expect(oku('Canvas.tsx')).not.toMatch(/copyObjects\(objects,/);
   });
 
-  it('ilkokulda görünümün gizlediği ölçüleri açan menü maddeleri sunulmaz (hayalet bayrak yok)', () => {
+  it('ölçüm menüsü isteği görünümde korunur ve ayrıntılı görünümü açar', () => {
     const canvas = oku('Canvas.tsx');
-    // Çember: alan / çevre / yarıçap maddeleri ilkokul dışında
-    expect(canvas).toMatch(/if \(!ilkokul\) \{\s*\n\s*maddeler\.push\(\{ id: 'olc-alan', label: 'Alanını ölç', onSelect: \(\) => measureArea\(circ\.id\)/);
-    // Çokgen: alan maddesi ilkokul dışında, çevre kalır
-    expect(canvas).toMatch(/if \(!ilkokul\) maddeler\.push\(\{ id: 'olc-alan', label: 'Alanını ölç', separatorBefore: true, onSelect: \(\) => measureArea\(hedef\.id\)/);
+    expect(canvas).toContain("id: 'olc-alan', label: 'Alanını ölç', onSelect: () => measureArea(circ.id)");
+    expect(canvas).toContain("id: 'olc-alan', label: 'Alanını ölç', separatorBefore: true, onSelect: () => measureArea(hedef.id)");
+    expect(canvas).toContain("id: 'olc-aci-deger-gorunurluk'");
+    expect(canvas).toContain("setStyleMode('Ayrıntılı')");
   });
 });

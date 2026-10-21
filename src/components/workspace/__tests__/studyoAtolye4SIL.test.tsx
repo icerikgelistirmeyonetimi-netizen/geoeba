@@ -12,7 +12,7 @@ import { cokgenKartSatirlari, olcumKartKutulari } from '@/math/olcuYazimlari';
 import { olcuMetni, uzunluk, type YazimAyari } from '@/math/matematikYazimi';
 import { cisimBilgiSatiri, satirGenisligi } from '@/math/cisimEtiketleri2B';
 import {
-  ILKOKUL_EGIK_CEVRE_ETIKETI, ceyregeYuvarla, egikCevreUyarisi, ilkokulCevreGorunumu, ilkokulDonusAcisi, ilkokulDonusAdi,
+  ceyregeYuvarla, ilkokulDonusAcisi, ilkokulDonusAdi,
   ilkokulGorunumu, kenarZemineParalelMi, kenarlarZemineParalelMi,
 } from '../ilkokulKipi';
 import {
@@ -53,7 +53,7 @@ const TAM_SAYI_YAZIMI: YazimAyari = { olcuYazimi: 'tam', aciYazimi: 'sapka', tam
 const ikizkenar = [nokta('a', 0, 0), nokta('b', 4, 0), nokta('c', 2, 4)];
 const dikdortgen = [nokta('p', 0, 0), nokta('q', 4, 0), nokta('r', 4, 3), nokta('s', 0, 3)];
 
-describe('[176] ilkokulda çevre: gerçek kenarlar toplanır, sonra yuvarlanır; eğik kenarda "cetvelle ölç"', () => {
+describe('[176] ilkokulda çevre: istenen çevrede gerçek kenarlar toplanır, sonra yuvarlanır', () => {
   it('ikizkenar üçgen (taban 4, yükseklik 4): 12 değil yaklaşık 13 br', () => {
     const r = toplamdanYuvarlananCevre(ikizkenar);
     expect(r.deger).toBe(13);
@@ -92,38 +92,29 @@ describe('[176] ilkokulda çevre: gerçek kenarlar toplanır, sonra yuvarlanır;
     expect(kenarZemineParalelMi(P(0, 0), P(1, 0), 'izometrik')).toBe(false);
   });
 
-  it('eğik kenarlı çokgenin çevre etiketi okuma değil yönlendirme; paralel kenarlıda ve elle yazılmış etikette dokunulmaz', () => {
-    const ucgen = cokgen('u', ['a', 'b', 'c']);
-    const dik = cokgen('d', ['p', 'q', 'r', 's']);
-    const elle = cokgen('e', ['a', 'b', 'c'], { id: 'e', labelTexts: { perimeter: 'Benim etiketim' } });
-    const nesneler: MathObject[] = [...ikizkenar, ...dikdortgen, ucgen, dik, elle];
-    const gorunum = ilkokulCevreGorunumu(nesneler, 'kareli');
-    expect((gorunum.find((o) => o.id === 'u') as PolygonObject).labelTexts?.perimeter).toBe(ILKOKUL_EGIK_CEVRE_ETIKETI);
-    expect(gorunum.find((o) => o.id === 'd')).toBe(dik);
-    expect((gorunum.find((o) => o.id === 'e') as PolygonObject).labelTexts?.perimeter).toBe('Benim etiketim');
-    expect(ucgen.labelTexts).toBeUndefined(); // gerçek nesne değişmez
-    // Yalnız paralel kenarlılar varsa dizinin kendisi döner
-    const paralel: MathObject[] = [...dikdortgen, dik];
-    expect(ilkokulCevreGorunumu(paralel)).toBe(paralel);
-    // Kart bu yazıyı basar
-    const kart = olcumKartKutulari({
-      objects: ilkokulCevreGorunumu([...ikizkenar, ucgen]),
+  it('istenen eğik çokgen çevresini sayısal gösterir; ölçülmeden önce kart oluşturmaz', () => {
+    const ucgen = cokgen('u', ['a', 'b', 'c'], { showPerimeter: false });
+    const kartlar = (p: PolygonObject) => olcumKartKutulari({
+      objects: ilkokulGorunumu([...ikizkenar, p]),
       viewport: { width: 800, height: 600, zoom: 40, panX: 0, panY: 0 } as never,
-      yazim: ILKOKUL_YAZIMI,
-      px: () => 11,
-    }).find((k) => k.anahtar === 'perimeter');
-    expect(kart?.duz).toBe('Çevre: cetvelle ölç');
-    expect(egikCevreUyarisi()).toBe('Bu şeklin kenarları kareli zemine paralel değil; çevresini cetvelle ölç.');
+      yazim: ILKOKUL_YAZIMI, px: () => 11,
+    });
+    expect(kartlar(ucgen)).toHaveLength(0);
+    const olculen = { ...ucgen, showPerimeter: true };
+    expect(kartlar(olculen).find(k => k.anahtar === 'perimeter')?.duz).toBe('Çevre yaklaşık 13 br');
+    expect(ucgen.showPerimeter).toBe(false);
+    const elle = { ...olculen, labelTexts: { perimeter: 'Benim etiketim' } };
+    expect(kartlar(elle).find(k => k.anahtar === 'perimeter')?.duz).toBe('Benim etiketim');
   });
 
-  it('Çevre Hesapla ilkokulda eğik kenarlı şekilde yönlendirme verir; kart ve bildirim aynı hesabı kullanır (kaynak)', () => {
+  it('çevre aracı ve kart aynı gerçek toplamı, ilkokulun yaklaşık yazımıyla kullanır', () => {
     const canvas = oku('Canvas.tsx');
-    expect(canvas).toMatch(/if \(ilkokul && !kenarlarZemineParalelMi\(polyPoints, viewport\.gridStyle\)\) \{/);
-    expect(canvas).toContain('setHintMessage(egikCevreUyarisi(viewport.gridStyle));');
     expect(canvas).toContain('cokgenKartSatirlari(polyPoints, false, true, yazim.tamSayi, ilkokul)');
     expect(canvas).toMatch(/ilkokul \? \{ yaklasikSozcukle: true \} : \{\}/);
-    expect(canvas).toContain('ilkokul ? ilkokulCevreGorunumu(objects, viewport.gridStyle) : objects');
+    expect(canvas).not.toContain('egikCevreUyarisi');
+    expect(canvas).not.toContain('ilkokulCevreGorunumu');
   });
+
 });
 
 describe('[177] ilkokulda ekranda "cm" yok: bütün ölçmeler br, cetvel tam / yarım birim çentikli', () => {
@@ -374,10 +365,10 @@ describe('[180] 3B ilkokul: eksen, koordinat, negatif sayı yok; cisim özellikl
     expect(arac3BGorunurMu('ortaokul', 'show_axes')).toBe(true);
   });
 
-  it('2B izdüşüm etiketi ilkokulda yalnız cismin adı (taban alanı, hacim, br², br³ yok)', () => {
+  it('2B izdüşüm etiketi ilkokulda yalnız cismin adı (taban alanı, hacim, birimkare, br³ yok)', () => {
     const proj = { name: 'Küp 1', type: 'cube', topView: { baseArea: 9 }, badge: { volume: 27, dimParts: [] } } as never;
     expect(cisimBilgiSatiri(proj, { yalnizAd: true })).toEqual({ ad: 'Küp 1', degerler: '' });
-    expect(cisimBilgiSatiri(proj).degerler).toBe('Taban alanı = 9 br² · V = 27 br³');
+    expect(cisimBilgiSatiri(proj).degerler).toBe('Taban alanı = 9 birimkare · V = 27 br³');
     expect(satirGenisligi({ ad: 'Küp 1', degerler: '' })).toBeLessThan(satirGenisligi(cisimBilgiSatiri(proj)));
   });
 
@@ -387,10 +378,13 @@ describe('[180] 3B ilkokul: eksen, koordinat, negatif sayı yok; cisim özellikl
     expect(c3).toContain('{eksenlerGorunur && overlays.gizmoLabels.map(');
     expect(c3).toContain('{eksenlerGorunur && overlays.coordBadges.map(');
     expect(c3).toContain('{overlays.faceBadge && !ilkokul3B && (');
-    expect(c3).toContain('{ilkokul3B ? ilkokulOzellikMetni(seciliCisim) : hacimAlanMetni(seciliCisim)}');
+    expect(c3).toContain('{ilkokul3B ? ilkokulOzellikMetni(seciliCisim) : seciliOlcuMetni}');
+    expect(c3).toContain('{seciliCisim && (ilkokul3B || seciliOlcuMetni) && (');
+    expect(c3).toContain('hacimAlanMetni(seciliCisim, cisimOlcumleri[seciliCisim.id] ?? {})');
     expect(c3).toContain('data-ilkokul-donus-yonleri');
     const canvas = oku('Canvas.tsx');
     expect(canvas).toContain('const yalnizAd = cisimIzdusumuYalnizAd(kademe);');
-    expect(canvas).toContain('{showDetails && !yalnizAd &&');
+    expect(canvas).toContain('yalnizAd: yalnizAd || !cisimIzdusumOlcumleri[solid.id]');
+    expect(canvas).toContain('{showDetails && !yalnizAd && cisimIzdusumOlcumleri[solid.id] &&');
   });
 });

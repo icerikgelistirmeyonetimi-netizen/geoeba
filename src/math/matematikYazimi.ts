@@ -40,7 +40,7 @@ export interface YazimAyari {
    * Yalnız tamSayi ile birlikte etkilidir; ortaokul / lise yazımı değişmez.
    */
   yaklasikSozcukle?: boolean;
-  /** Ortaokulda alan biriminin kısaltması yerine açık adı yazılır. */
+  /** Eski ayarlarla uyumluluk için tutulur; alan birimi bütün kademelerde birimkare yazılır. */
   alanBirimiAcik?: boolean;
 }
 /** Motorun ve ayarsız çağrıların varsayılanı: tam sayı KAPALI (komut yanıtları kesin değer verir). */
@@ -63,6 +63,9 @@ export function yazimAyari(s?: { olcuYazimi?: unknown; aciYazimi?: unknown; tamS
 
 export type Susleme = 'sapka' | 'yay' | 'ucgen';
 export type Birim = 'br' | 'br²' | 'br³' | 'cm' | 'cm²' | '°';
+
+/** İç birim anahtarları değişmez; öğrenciye gösterilen alan birimi açık adıyla yazılır. */
+export const birimGosterimi = (birim: Birim): string => birim === 'br²' ? 'birimkare' : birim;
 
 /** Görüntü ağacı. Boşluklar açıkça yazılır (sembol ' = ' gibi); birimden önceki boşluğu düzen ekler. */
 export type Dugum =
@@ -345,7 +348,7 @@ export function olcuDugumleri(o: Olcu, ayar: YazimAyari = VARSAYILAN_YAZIM, sec:
   const d = olcuDugumleriHam(tamSayiUygula(o, ayar), ayar);
   const ilk = d[0];
   if (sec.cumleIci && ilk?.t === 'kelime') d[0] = { ...ilk, s: ilk.s.charAt(0).toLocaleLowerCase('tr') + ilk.s.slice(1) };
-  return ayar.alanBirimiAcik ? d.map((n) => n.t === 'birim' && n.s === 'br²' ? kelime(' birimkare') : n) : d;
+  return d;
 }
 
 /** Çember / elips kartı satırının formülü — ad başlıkta olduğu için sözcükle yazılır. */
@@ -436,7 +439,7 @@ export const yazimImzasi = (satirlar: Dugum[][]): string => satirlar.map(imzaSat
 // ------------------------------------------------------------------------------------------------ düz metin
 
 /** Birimden önce boşluk (derece hariç). */
-const birimMetni = (b: Birim) => (b === '°' ? '°' : ` ${b}`);
+const birimMetni = (b: Birim) => (b === '°' ? '°' : ` ${birimGosterimi(b)}`);
 
 /**
  * Düz Unicode metin: pano, komut yanıtı, testler, ipucu çubuğu. Nokta adları saklandığı gibi yazılır (A_1, B'):
@@ -505,7 +508,7 @@ function latexSembol(s: string): string {
 }
 const metinKacis = (s: string) => s.replace(/\\/g, '\\textbackslash ').replace(/([&%$#_{}])/g, '\\$1');
 const LATEX_BIRIM: Record<Birim, string> = {
-  br: '\\ \\mathrm{br}', 'br²': '\\ \\mathrm{br}^2', 'br³': '\\ \\mathrm{br}^3',
+  br: '\\ \\mathrm{br}', 'br²': '\\ \\text{birimkare}', 'br³': '\\ \\mathrm{br}^3',
   cm: '\\ \\mathrm{cm}', 'cm²': '\\ \\mathrm{cm}^2', '°': '^\\circ',
 };
 
@@ -722,12 +725,12 @@ const altIndisleriDuzle = (s: string) => s.replace(/(\p{Lu})([₀-₉]+)/gu, (_,
 /**
  * metniCozumle'nin çözemediği düz metin parçasını simge / sayı / birim / ad / sözcük düğümlerine böler.
  * Amaç geçerli LaTeX: sözcükler \text{…} içine girer, nokta adları \mathrm{…} olur, 'r' ve 'x' matematik
- * kipinde eğik kalır, sayı ve birim kendi düğümüne ayrılır. duzMetin(metinDugumleri(s)) === s korunur.
+ * kipinde eğik kalır, sayı ve birim kendi düğümüne ayrılır. Eski br² kısaltması çıktıda birimkare olur.
  */
 const PARCA = new RegExp(
   [
     '(?<sayi>(?<![\\p{L}\\d])[-−]?\\d+(?:,\\d+)?)',
-    '(?<birim> (?:br²|br³|br|cm²|cm)(?![\\p{L}])|°)',
+    '(?<birim> (?:birimkare|br²|br³|br|cm²|cm)(?![\\p{L}])|°)',
     '(?<islev>[A-ZÇ]|m)(?=\\()',
     '(?<fonk>(?<![\\p{L}\\d])(?:sin|cos|tan|cot)(?![\\p{L}\\d]))',
     `(?<ad>(?:${AD})+)(?![\\p{Ll}])`,
@@ -757,7 +760,7 @@ export function metinDugumleri(metin: string): Dugum[] {
   for (const m of s.matchAll(PARCA)) {
     const g = m.groups!;
     if (g.sayi) ekle({ t: 'sayi', s: g.sayi });
-    else if (g.birim) ekle({ t: 'birim', s: g.birim.trim() as Birim });
+    else if (g.birim) ekle({ t: 'birim', s: g.birim.trim() === 'birimkare' ? 'br²' : g.birim.trim() as Birim });
     else if (g.islev) ekle(sembol(g.islev));
     else if (g.fonk) ekle(sembol(g.fonk));
     else if (g.ad) for (const a of g.ad.match(new RegExp(AD, 'gu')) ?? []) ekle(ad(a));
@@ -832,7 +835,7 @@ function cozumleHam(metin: string, ayar: YazimAyari): Dugum[] {
 /**
  * Düz metni (komut yanıtı, ipucu, panel satırı) süslü görüntü ağacına çevirir. Tanınan kalıplar:
  *   m(∠ABC)  m(A͡B)  |A͡B|  |AB|  ∠ABC  △ABC  B̂  A͡B
- * Geri kalanı sayı, birim, ad ve sözcük düğümlerine ayrılır; duzMetin ile aynı metne döner.
+ * Geri kalanı sayı, birim, ad ve sözcük düğümlerine ayrılır; eski br² kısaltması açık yazıma dönüştürülür.
  */
 export function metniCozumle(metin: string, ayar: YazimAyari = VARSAYILAN_YAZIM): Dugum[] {
   return onbellekli(COZUM_ONBELLEK, `${ayar.aciYazimi} ${metin}`, () => cozumleHam(metin, ayar));

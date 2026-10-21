@@ -298,8 +298,8 @@ window.EGITSEL = {
       sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
       sayac.appendChild(el("span", "b", "Boş: " + s.bos));
       kutu.appendChild(sayac);
-      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
-        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kutu.appendChild(el("p", "", s.bos ? "Numaralarına dokunarak boş bıraktığımız sorulara dönebiliriz."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladık." : "Soru numaralarına dokunarak soruları yeniden inceleyebiliriz.")));
       kap.appendChild(kutu);
       govde.appendChild(kap);
       eylemKur([

@@ -1,4 +1,5 @@
 'use client';
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 
 import React, { useState } from 'react';
 import { useWorkspace } from '@/state/WorkspaceContext';
@@ -145,7 +146,7 @@ export function RegularPolygonDialog({
         showLabel: true,
         x: px,
         y: py,
-        color: '#10b981',
+        color: NESNE_RENGI.zumrut,
         visible: true,
         isIndependent: true,
         createdAt: base + i,
@@ -158,12 +159,12 @@ export function RegularPolygonDialog({
       label: polyName,
       showLabel: true,
       pointIds: pts.map((p) => p.id),
-      color: '#059669',
-      fillColor: '#10b981',
+      color: NESNE_RENGI.zumrut,
+      fillColor: NESNE_RENGI.zumrut,
       fillOpacity: 0.2,
       visible: true,
-      showArea: true,
-      showPerimeter: true,
+      showArea: false,
+      showPerimeter: false,
       createdAt: base + sides,
     };
 

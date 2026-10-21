@@ -308,7 +308,7 @@ class ParsedClause implements Clause {
         // "a = 2 buçuk" → "2,5"
         const value = assignment[2].replace(/\s+(?:olsun|yap|ayarla)$/i, '').replace(/(?<![\d.,])(\d+)\s+bu[çc]uk(?![\p{L}])/giu, '$1,5').trim();
         const words = fold(value).match(/[a-z]{4,}/g) ?? [];
-        const mathWords = /^(?:sqrt|kok|cbrt|kupkok|asin|acos|atan|sind|cosd|tand|abs|mutlak|floor|ceil|round|exp|log)$/;
+        const mathWords = /^(?:sqrt|kok|cbrt|kupkok|root|asin|acos|atan|sind|cosd|tand|cotd|abs|mutlak|floor|ceil|round|exp|log)$/;
         if (value && words.every(w => mathWords.test(w))) this.assignment = { name: assignment[1], valueRaw: value };
       }
     }

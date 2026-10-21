@@ -1,4 +1,5 @@
 'use client';
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useWorkspace } from '@/state/WorkspaceContext';
@@ -152,7 +153,7 @@ export function AlgebraView({
     if (!raw) return;
 
     // Komut motoru bütün diziyi yeniden yazar: ilkokul görünümü (gizli adlar) değil GERÇEK nesneler üzerinde çalışır
-    const plan = executeTurkishCommand(raw, kaynakNesneler, selectedObjectIds, { viewport, styleSettings });
+    const plan = executeTurkishCommand(raw, kaynakNesneler, selectedObjectIds, { viewport, styleSettings, showMeasurementsOnCreate: false });
     if (!plan.ok) {
       setCommandFeedback({ ok: false, message: plan.message });
       return;
@@ -413,7 +414,7 @@ export function AlgebraView({
                             <div className="flex items-center gap-2 min-w-0">
                               <span
                                 className="w-3 h-3 rounded-full shrink-0 shadow-xs border border-ada-fildisi/30"
-                                style={{ backgroundColor: solid.color || '#3b82f6' }}
+                                style={{ backgroundColor: solid.color || NESNE_RENGI.mavi }}
                               />
                               <div className="truncate">
                                 <span className="font-bold text-foreground mr-1.5">{solid.name}</span>
@@ -475,8 +476,8 @@ export function AlgebraView({
                                     : 'border-muted-foreground/40 bg-transparent scale-90 opacity-40'
                                 }`}
                                 style={{
-                                  backgroundColor: isVisible ? obj.color || '#3b82f6' : 'transparent',
-                                  borderColor: obj.color || '#3b82f6',
+                                  backgroundColor: isVisible ? obj.color || NESNE_RENGI.mavi : 'transparent',
+                                  borderColor: obj.color || NESNE_RENGI.mavi,
                                 }}
                                 title={isVisible ? 'Gizle' : 'Göster'}
                               />

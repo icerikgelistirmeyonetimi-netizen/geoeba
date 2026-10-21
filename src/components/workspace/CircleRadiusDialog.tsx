@@ -1,4 +1,5 @@
 'use client';
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 
 import React, { useEffect, useState } from 'react';
 import { useWorkspace } from '@/state/WorkspaceContext';
@@ -69,7 +70,7 @@ export function CircleRadiusDialog({ isOpen, onClose, targetPos = { x: 0, y: 0 }
       showLabel: true,
       x: targetPos.x,
       y: targetPos.y,
-      color: '#2563eb',
+      color: NESNE_RENGI.mavi,
       visible: true,
       isIndependent: true,
       createdAt: Date.now(),
@@ -81,7 +82,7 @@ export function CircleRadiusDialog({ isOpen, onClose, targetPos = { x: 0, y: 0 }
       showLabel: true,
       centerPointId: merkez.id,
       fixedRadius: r,
-      color: '#8b5cf6',
+      color: NESNE_RENGI.mor,
       fillOpacity: 0,
       visible: true,
       createdAt: Date.now(),

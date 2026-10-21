@@ -82,27 +82,27 @@ const spoken = (text: string) => normalizeSpokenCommand(text);
 
 describe('measure phrases (full engine): answers in the message', () => {
   it.each<[SceneKey, string, RegExp]>([
-    ['tri', 'ABC üçgeninin alanını hesapla', /A\(ABC\) = 6 br²/],
-    ['tri', 'abc üçgeninin alanı kaç', /A\(ABC\) = 6 br²/],
-    ['tri', 'ABCnin alanı ne kadar', /A\(ABC\) = 6 br²/],
-    ['tri', 'üçgenin alanını bulur musun', /A\(ABC\) = 6 br²/],
-    ['tri', 'üçgenin alanını hesaplar mısın lütfen', /A\(ABC\) = 6 br²/],
-    ['tri', 'bu üçgenin alanı nedir', /A\(ABC\) = 6 br²/],
+    ['tri', 'ABC üçgeninin alanını hesapla', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'abc üçgeninin alanı kaç', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'ABCnin alanı ne kadar', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'üçgenin alanını bulur musun', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'üçgenin alanını hesaplar mısın lütfen', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'bu üçgenin alanı nedir', /A\(ABC\) = 6 birimkare/],
     ['tri', 'üçgenin çevresini hesaplayalım', /Ç\(ABC\) = 12 br/],
     ['tri', 'üçgenin çevresini ölçmek istiyorum', /Ç\(ABC\) = 12 br/],
-    ['tri', 'bana üçgenin alanı lazım', /A\(ABC\) = 6 br²/],
-    ['tri', 'ABC üçgeninin alanını söyler misin', /A\(ABC\) = 6 br²/],
-    ['tri', 'ABC üçgeninin alanı nedir acaba', /A\(ABC\) = 6 br²/],
-    ['tri', 'üçgenin alanı ne', /A\(ABC\) = 6 br²/],
-    ['tri', 'ABC nin alanı', /A\(ABC\) = 6 br²/],
-    ['tri', 'ABC üçgeninin yüz ölçümü nedir', /A\(ABC\) = 6 br²/],
+    ['tri', 'bana üçgenin alanı lazım', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'ABC üçgeninin alanını söyler misin', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'ABC üçgeninin alanı nedir acaba', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'üçgenin alanı ne', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'ABC nin alanı', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'ABC üçgeninin yüz ölçümü nedir', /A\(ABC\) = 6 birimkare/],
     ['tri', 'üçgenin çevre uzunluğu ne kadar', /Ç\(ABC\) = 12 br/],
     ['tri', 'üçgenin etrafının uzunluğu kaç', /Ç\(ABC\) = 12 br/],
-    ['tri', 'ABC üçgeninin alanını ve çevresini bul', /A\(ABC\) = 6 br².*Ç\(ABC\) = 12 br/],
-    ['tri', 'ABC üçgeninin alanı kaç birim kare', /A\(ABC\) = 6 br²/],
-    ['tri', 'ABC nin alanı kaç br kare', /A\(ABC\) = 6 br²/],
-    ['tri', 'ABC üçgeninin alanı kaç santimetre kare', /A\(ABC\) = 6 br²/],
-    ['tri', 'üçgenin alanı kaç birim kare olur', /A\(ABC\) = 6 br²/],
+    ['tri', 'ABC üçgeninin alanını ve çevresini bul', /A\(ABC\) = 6 birimkare.*Ç\(ABC\) = 12 br/],
+    ['tri', 'ABC üçgeninin alanı kaç birim kare', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'ABC nin alanı kaç br kare', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'ABC üçgeninin alanı kaç santimetre kare', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'üçgenin alanı kaç birim kare olur', /A\(ABC\) = 6 birimkare/],
     ['tri', 'ABC nin çevresi kaç cm', /Ç\(ABC\) = 12 br/],
     ['tri', 'AB kaç santim', /\|AB\| = 4 br/],
     ['tri', 'AB kaç cm', /\|AB\| = 4 br/],
@@ -147,8 +147,8 @@ describe('measure phrases (full engine): answers in the message', () => {
     ['circle', 'çemberin yarı çapı kaç', /r = 3 br/],
     ['circle', 'c1 in yarıçapı ne kadar', /r = 3 br/],
     ['circle', 'çemberin çapı kaç santim', /çap = 6 br/],
-    ['circle', 'dairenin alanı kaç birim kare', /alan = πr² ≈ 28,27 br²/],
-    ['circle', 'M merkezli çemberin alanını hesapla', /alan = πr² ≈ 28,27 br²/],
+    ['circle', 'dairenin alanı kaç birim kare', /alan = πr² ≈ 28,27 birimkare/],
+    ['circle', 'M merkezli çemberin alanını hesapla', /alan = πr² ≈ 28,27 birimkare/],
     ['circle', 'dairenin çevre uzunluğu kaç', /çevre = 2πr ≈ 18,85 br/],
     ['circle', 'çemberin denklemini yaz', /\(x − 1\)² \+ \(y \+ 2\)² = 9/],
     ['circle', 'çemberin merkezi nerede', /merkezi: \(1; -2\)/],
@@ -157,9 +157,9 @@ describe('measure phrases (full engine): answers in the message', () => {
     ['arc', 'yayın kirişini göster', /kiriş \|SD\| ≈ 2,83 br/],
     ['arc', 'yayın yarıçapı nedir', /r = \|MS\| = 2 br/],
     ['sector', 'dilimin çevresi kaç', /Ç\(SMD dilimi\) ≈ 7,14 br/],
-    ['ellipse', 'elipsin alanı kaç', /alan = πab ≈ 18,85 br²/],
+    ['ellipse', 'elipsin alanı kaç', /alan = πab ≈ 18,85 birimkare/],
     ['ellipse', 'elipsin denklemi nedir', /x²\/9 \+ y²\/4 = 1/],
-    ['square', 'karenin alanı kaç', /A\(ABCD\) = 4 br²/],
+    ['square', 'karenin alanı kaç', /A\(ABCD\) = 4 birimkare/],
     ['square', 'ABCD nin çevresini hesapla', /Ç\(ABCD\) = 8 br/],
     ['square', 'AC nin uzunluğu kaç', /≈ 2,83 br/],
     ['pts', 'A ile B arası kaç birim', /\|AB\| = 4 br/],
@@ -168,7 +168,7 @@ describe('measure phrases (full engine): answers in the message', () => {
     ['pts', 'A B arası mesafe kaç', /\|AB\| = 4 br/],
     ['pts', 'A ile C arası kaç santim', /\|AC\| = 5 br/],
     ['pts', 'A dan C ye mesafe ne kadar', /\|AC\| = 5 br/],
-    ['pts', 'ABC nin alanı kaç', /çizili çokgen yok\): A\(ABC\) = 6 br²/],
+    ['pts', 'ABC nin alanı kaç', /çizili çokgen yok\): A\(ABC\) = 6 birimkare/],
     ['pts', 'BC doğrusunun eğimi kaç', /tanımsız/],
   ])('%s: “%s”', (key, text, expected) => {
     const scene = SCENES[key]();
@@ -259,9 +259,9 @@ describe('measure phrases (full engine): plural possessive measures every target
   });
 
   it.each([
-    ['iki üçgenin alanlarını hesapla', /A\(ABC\) = 6 br². A\(DEF\) = 6 br²/],
+    ['iki üçgenin alanlarını hesapla', /A\(ABC\) = 6 birimkare. A\(DEF\) = 6 birimkare/],
     ['tüm üçgenlerin çevrelerini hesapla', /Ç\(ABC\) = 12 br. Ç\(DEF\) = 12 br/],
-    ['üçgenlerin alanlarını göster', /A\(ABC\) = 6 br². A\(DEF\) = 6 br²/],
+    ['üçgenlerin alanlarını göster', /A\(ABC\) = 6 birimkare. A\(DEF\) = 6 birimkare/],
   ])('two triangles: “%s”', (text, expected) => {
     expect(run(text, SCENES.two()).message).toMatch(expected);
   });
@@ -354,16 +354,16 @@ describe('measure phrases (full engine): diagonals', () => {
 
 describe('measure phrases (full engine): speech transcripts', () => {
   it.each<[SceneKey, string, RegExp]>([
-    ['tri', 'tamam şimdi üçgenin alanını hesapla', /A\(ABC\) = 6 br²/],
-    ['tri', 'şey a be ce üçgeninin alanı kaç', /A\(ABC\) = 6 br²/],
-    ['tri', 'a be ce üçgeninin alanını hesapla', /A\(ABC\) = 6 br²/],
+    ['tri', 'tamam şimdi üçgenin alanını hesapla', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'şey a be ce üçgeninin alanı kaç', /A\(ABC\) = 6 birimkare/],
+    ['tri', 'a be ce üçgeninin alanını hesapla', /A\(ABC\) = 6 birimkare/],
     ['tri', 'a ile be arasındaki mesafe ne kadar', /\|AB\| = 4 br/],
     ['tri', 'a ile be arasındaki mesafe kaç birim', /\|AB\| = 4 br/],
     ['tri', 'be ce kenarının uzunluğu kaç', /\|BC\| = 5 br/],
     ['tri', 'a noktasının koordinatları nedir', /A\(0; 0\)/],
     ['tri', 'lütfen üçgenin çevresini hesapla', /Ç\(ABC\) = 12 br/],
     ['tri', 'a be ce açısı kaç derece', /∠ABC/],
-    ['tri', 'üçgenin alanı kaç evet', /A\(ABC\) = 6 br²/],
+    ['tri', 'üçgenin alanı kaç evet', /A\(ABC\) = 6 birimkare/],
     ['seg', 'a be nin uzunluğu kaç', /\|AB\| = 5 br/],
     ['seg', 'a be uzunluğu kaç', /\|AB\| = 5 br/],
     ['line', 'a be doğrusunun eğimi kaç', /AB eğimi = 2/],
@@ -385,10 +385,10 @@ describe('measure phrases (full engine): combined sentences', () => {
   });
 
   it.each<[string, Record<string, number>, RegExp]>([
-    ['üçgen çiz ve alanını göster', { polygon: 1, point: 3 }, /A\(ABC\) ≈ 6,93 br²/],
+    ['üçgen çiz ve alanını göster', { polygon: 1, point: 3 }, /A\(ABC\) ≈ 6,93 birimkare/],
     ['AB doğru parçası çiz ve uzunluğunu göster', { segment: 1, point: 2 }, /\|AB\| = 4 br/],
-    ['yarıçapı 3 olan çember çiz ve alanını hesapla', { circle: 1, point: 1 }, /alan = πr² ≈ 28,27 br²/],
-    ['kare çiz ve alanını göster', { polygon: 1, point: 4 }, /A\(ABCD\) = 16 br²/],
+    ['yarıçapı 3 olan çember çiz ve alanını hesapla', { circle: 1, point: 1 }, /alan = πr² ≈ 28,27 birimkare/],
+    ['kare çiz ve alanını göster', { polygon: 1, point: 4 }, /A\(ABCD\) = 16 birimkare/],
   ])('draws then measures: “%s”', (text, counts, expected) => {
     const r = run(text, []);
     expect(fresh([], r)).toEqual(counts);

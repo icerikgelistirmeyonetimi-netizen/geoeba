@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import type { CommandHandler } from '../types';
 import { fail, trNum } from '../scene';
 
@@ -29,9 +30,9 @@ export const areaModel: CommandHandler = {
     const x1 = Math.round(center.x - cols / 2), y1 = Math.round(center.y - rowCount / 2);
     const labels = scene.nextPointLabels(4);
     const corners = [[x1, y1], [x1 + cols, y1], [x1 + cols, y1 + rowCount], [x1, y1 + rowCount]];
-    const points = corners.map(([x, y], i) => scene.addPoint({ x, y }, { label: labels[i], color: '#10b981' }));
+    const points = corners.map(([x, y], i) => scene.addPoint({ x, y }, { label: labels[i], color: NESNE_RENGI.zumrut }));
     scene.addPolygon(points.map(p => p.id), {
-      kind: 'polygon', label: 'Alan Modeli', color: '#059669', fillColor: '#10b981', fillOpacity: 0.22, showArea: true, showPerimeter: true, reuse: false,
+      kind: 'polygon', label: 'Alan Modeli', color: NESNE_RENGI.zumrut, fillColor: NESNE_RENGI.zumrut, fillOpacity: 0.22, showArea: true, showPerimeter: true, reuse: false,
     });
     scene.say(`Alan modeli oluşturuldu: ${cols} × ${rowCount} = ${trNum(cols * rowCount)} birim kare (${points.map(p => p.label).join('')}).`);
   },

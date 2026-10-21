@@ -33,7 +33,7 @@ describe('MatematikEtiketi (tuval SVG etiketi)', () => {
 
   it('data-yazim satırları yeni satırla birleştirir (| çubuklarıyla karışmasın)', () => {
     const html = ciz({ satirlar: [d(alan([A, B, C], 6)), d(cevre([A, B, C], 12))] });
-    expect(html).toContain('data-yazim="A(ABC) = 6 br²\nÇ(ABC) = 12 br"');
+    expect(html).toContain('data-yazim="A(ABC) = 6 birimkare\nÇ(ABC) = 12 br"');
   });
 
   it('yerleşim tek transform ile yapılır (kaydırmada etiket başına tek öznitelik)', () => {
@@ -172,7 +172,7 @@ describe('MatematikMetni (panel ve yanıt HTML gösterimi)', () => {
   it('hazır düğüm yolunda çözümleme ve seslendirme yapılmaz', () => {
     const o = alan([A, B, C], 6);
     const s = html({ dugumler: d(o), sesli: sesli(o) });
-    expect(s).toContain('data-duz="A(ABC) = 6 br²"');
+    expect(s).toContain('data-duz="A(ABC) = 6 birimkare"');
     expect(s).toContain('a be ce üçgeninin alanı altı birimkare');
   });
 

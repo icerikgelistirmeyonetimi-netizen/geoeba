@@ -1,4 +1,4 @@
-import type { Dugum, Susleme } from '@/math/matematikYazimi';
+import { birimGosterimi, type Dugum, type Susleme } from '@/math/matematikYazimi';
 import { metinGenisligi } from '@/math/yaziGenisligi';
 
 /**
@@ -91,7 +91,7 @@ function yerlestir(d: Durum, dugumler: Dugum[]): { ustSinir: number } {
       case 'sembol': ekle(d, n.s); ustSinir = Math.max(ustSinir, /[()]/.test(n.s) ? PARANTEZ_UST : BUYUK); break;
       case 'kelime': ekle(d, n.s, !!n.soluk); ustSinir = Math.max(ustSinir, BUYUK); break;
       case 'sayi': ekle(d, n.s.replace('-', '−')); ustSinir = Math.max(ustSinir, BUYUK); break;
-      case 'birim': ekle(d, n.s === '°' ? '°' : ` ${n.s}`); break;
+      case 'birim': ekle(d, n.s === '°' ? '°' : ` ${birimGosterimi(n.s)}`); break;
       case 'ad': {
         const m = n.s.match(/^(\p{L})(?:_(\d+))?('*)$/u);
         if (m && m[2]) {

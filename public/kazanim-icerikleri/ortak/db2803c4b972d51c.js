@@ -298,8 +298,8 @@ window.EGITSEL = {
       sayac.appendChild(el("span", "y", "Yanlış: " + s.yanlis));
       sayac.appendChild(el("span", "b", "Boş: " + s.bos));
       kutu.appendChild(sayac);
-      kutu.appendChild(el("p", "", s.bos ? "Boş bıraktığın sorulara numarasına dokunarak dönebilirsin."
-        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladın." : "Sorulara numaralarına dokunarak geri dönüp inceleyebilirsin.")));
+      kutu.appendChild(el("p", "", s.bos ? "Numaralarına dokunarak boş bıraktığımız sorulara dönebiliriz."
+        : (s.dogru === n ? "Harika! Bütün soruları doğru cevapladık." : "Soru numaralarına dokunarak soruları yeniden inceleyebiliriz.")));
       kap.appendChild(kutu);
       govde.appendChild(kap);
       eylemKur([
@@ -418,7 +418,7 @@ window.EGITSEL = {
    kalıyordu. İlkokul (1-4) matematikte \frac = \dfrac (rakamlar gövde boyunda). */
 window.MathJax = { tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]],
                           displayMath: [["\\[", "\\]"], ["$$", "$$"]],
-                          macros: /^MAT\.[1-4]\./.test("MAT.4.1.3")
+                          macros: /^MAT\.[1-4]\./.test("MAT.1.1.1")
                                   ? { frac: ["\\dfrac{#1}{#2}", 2] } : {} },
                    options: { skipHtmlTags: ["script", "noscript", "style",
                                              "textarea", "pre", "code",

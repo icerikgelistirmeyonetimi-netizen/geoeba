@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import type { MathObject, Point2D, PointObject, PolygonObject } from '@/types/math';
 import { triangleCoordinates } from '../../commandBindings';
 import type { CommandHandler } from '../types';
@@ -361,7 +362,7 @@ const triangle: CommandHandler = {
     const vertexNames = roles.names ?? spec.names;
     const allExisting = vertexNames?.length === 3 && vertexNames.every(n => scene.findPoint(n));
     const shape: LocalShape = { local: triangleLocal(spec.ab, spec.bc, spec.ca), notes: spec.notes, explicit: spec.explicit, summary: '', kind: 'triangle', noun: spec.noun, snap: true };
-    createMany(scene, roles, () => planFrom(shape, { ...roles, names: vertexNames }, color, allExisting && !spec.explicit ? {} : { edgeLabels: [0, 1, 2] }), result => {
+    createMany(scene, roles, () => planFrom(shape, { ...roles, names: vertexNames }, color, (allExisting && !spec.explicit) || scene.options.showMeasurementsOnCreate === false ? {} : { edgeLabels: [0, 1, 2] }), result => {
       const label = result.polygon.label;
       if (result.reused.length === 3 && hasType(spec.flags) && breaksType(result.points, spec.flags)) {
         const adjective = spec.noun.replace(/ üçgen$/, '');
@@ -416,7 +417,7 @@ const square: CommandHandler = {
     createMany(scene, roles, () => planFrom(shape, roles, color), result => {
       const [p0, p1, p2, p3] = result.points;
       if (result.reused.length === 4 && !isSquare([p0, p1, p2, p3])) {
-        scene.update(result.polygon.id, { color: '#10b981', fillColor: '#10b981' });
+        scene.update(result.polygon.id, { color: NESNE_RENGI.zumrut, fillColor: NESNE_RENGI.zumrut });
         scene.say(`${result.polygon.label} dörtgeni çizildi; ancak ${result.polygon.label} köşeleri tam bir kare oluşturmuyor.${vertexNote(result)}`);
         return;
       }
@@ -436,7 +437,7 @@ function quadFromCoordinates(scene: CommandScene, roles: Roles, r: Reader, noun:
   const given = roles.names ?? [];
   let next = 0;
   const vertices = roles.vertices.map(v => v.name ? v : { ...v, name: given[next++] });
-  const result = fromCoordinates(scene, vertices, { noun, kind, color, ...(kind !== 'polygon' ? { pointColor: '#3b82f6' } : {}) });
+  const result = fromCoordinates(scene, vertices, { noun, kind, color, ...(kind !== 'polygon' ? { pointColor: NESNE_RENGI.mavi } : {}) });
   announce(scene, result, noun, coordText(result.points));
 }
 

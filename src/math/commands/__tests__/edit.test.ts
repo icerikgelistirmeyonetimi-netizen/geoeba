@@ -1,3 +1,4 @@
+import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 import { describe, expect, it } from 'vitest';
 import type { AngleObject, CircleObject, EllipseObject, FractionObject, FunctionObject, MathObject, PointObject, PolygonObject, SegmentObject, SliderObject, TextObject } from '@/types/math';
 import { resolveCommandBindings } from '@/math/commandBindings';
@@ -93,7 +94,7 @@ const EXAMPLES: Record<string, ExampleCase> = {
   'çemberin rengini yeşil yap': { scene: circleScene, check: r => expect(byType(r.objects, 'circle')[0].color).toBe('#10b981') },
   'tüm noktaları maviye boya': { scene: () => build(s => { s.addPoint({ x: 0, y: 0 }, { label: 'A', color: '#000000' }); s.addPoint({ x: 1, y: 0 }, { label: 'B', color: '#000000' }); }), check: r => expect(byType(r.objects, 'point').every(p => p.color === '#2563eb')).toBe(true) },
   '#ff8800 yap': { scene: triangle, selection: selectType('polygon'), check: r => expect(byType(r.objects, 'polygon')[0].color).toBe('#ff8800') },
-  "ABC'nin içini sarıya boya": { scene: triangle, check: r => expect(byType(r.objects, 'polygon')[0]).toMatchObject({ color: '#10b981', fillColor: '#eab308' }) },
+  "ABC'nin içini sarıya boya": { scene: triangle, check: r => expect(byType(r.objects, 'polygon')[0]).toMatchObject({ color: NESNE_RENGI.zumrut, fillColor: '#eab308' }) },
   "AB'nin rengi mor olsun": { scene: segmentScene, check: r => expect(byType(r.objects, 'segment')[0].color).toBe('#8b5cf6') },
   // dolgu
   'içini doldur': { scene: triangle, selection: selectType('polygon'), check: r => expect(byType(r.objects, 'polygon')[0].fillOpacity).toBe(0.35) },
@@ -321,10 +322,10 @@ describe('color', () => {
     expect(byType(r.objects, 'sector')[0]).toMatchObject({ color: '#f59e0b', fillColor: '#f59e0b' });
   });
   it.each([
-    ["ABC'nin kenarlarını pembe yap", { color: '#ec4899', fillColor: '#10b981' }],
+    ["ABC'nin kenarlarını pembe yap", { color: '#ec4899', fillColor: NESNE_RENGI.zumrut }],
     ['ABC üçgeninin rengini açık mavi yap', { color: '#0284c7', fillColor: '#0284c7' }],
     ['ABC yi yeşile boyar mısın', { color: '#10b981' }],
-    ["ABC'nin dolgusunu kırmızı yap", { fillColor: '#ef4444', color: '#10b981' }],
+    ["ABC'nin dolgusunu kırmızı yap", { fillColor: '#ef4444', color: NESNE_RENGI.zumrut }],
   ])('%s', (text, expected) => {
     expect(byType(ok(text, triangle()).objects, 'polygon')[0]).toMatchObject(expected);
   });
@@ -565,7 +566,7 @@ describe('phrasing variety', () => {
     expect(byType(hidden.objects, 'polygon')[0].visible).toBe(true);
     const colored = ok('ABC üçgeninin noktalarını kırmızı yap', triangle());
     expect(byType(colored.objects, 'point').every(p => p.color === '#ef4444')).toBe(true);
-    expect(byType(colored.objects, 'polygon')[0].color).toBe('#10b981');
+    expect(byType(colored.objects, 'polygon')[0].color).toBe(NESNE_RENGI.zumrut);
     expect(byType(ok("ABC'nin köşelerini sil", triangle()).objects, 'polygon')).toHaveLength(0);
   });
   it('renames with a colon, hides a name with “görünmesin”, colors everything', () => {

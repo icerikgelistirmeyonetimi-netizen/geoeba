@@ -48,7 +48,7 @@ export function YazimKopyala({ metin, dugumler, satirlar, ayar, className = '', 
   useEffect(() => { setDurum({ tur: 'bos' }); }, [metin, dugumler, satirlar]);
 
   const agaclar = (): Dugum[][] => satirlar ?? [dugumler ?? metniCozumle(metin ?? '', ayar)];
-  const duz = () => (satirlar || dugumler ? agaclar().map(duzMetin).join('\n') : metin ?? '');
+  const duz = () => agaclar().map(duzMetin).join('\n');
 
   const kopyala = async (hangi: 'metin' | 'latex') => {
     const deger = hangi === 'metin' ? duz() : agaclar().map((d) => latex(d)).join(' \\\\ ');

@@ -249,7 +249,7 @@ describe('yay ve daire dilimi ölçüleri', () => {
     expect(olcuMetni(yayMerkezAcisi(dilim, bul([M, S, D]), [M, S, D], g, 90, { basamak: 1 }))).toBe('m(∠SMD) = 90°');
     const liste = yayOlculeri(dilim, bul([M, S, D]), [M, S, D], g);
     expect(liste.map((x) => x.kind)).toEqual(['arcLength', 'area', 'perimeter']);
-    expect(olcuMetni(liste[1].olcu)).toBe('A(SMD dilimi) ≈ 3,14 br²');
+    expect(olcuMetni(liste[1].olcu)).toBe('A(SMD dilimi) ≈ 3,14 birimkare');
     expect(olcuMetni(liste[2].olcu)).toBe('Ç(SMD dilimi) ≈ 7,14 br');
   });
 
@@ -333,13 +333,13 @@ describe('ölçüm kartları', () => {
   it('çokgenin alanı ve çevresi AYRI etiketlerdir, alt alta boşlukla dizilir', () => {
     const poly = govde<PolygonObject>({ id: 'poly1', type: 'polygon', pointIds: [A.id, B.id, C.id], showArea: true, showPerimeter: true });
     const ks = kartlar([A, B, C, poly]);
-    expect(metinler(ks)).toEqual(['A(ABC) = 6 br²', 'Ç(ABC) = 12 br']);
+    expect(metinler(ks)).toEqual(['A(ABC) = 6 birimkare', 'Ç(ABC) = 12 br']);
     expect(ks.map((k) => k.satir)).toEqual(['alan', 'cevre']);
     expect(ks.map((k) => k.anahtar)).toEqual(['area', 'perimeter']);
     expect(ks[0].sesli).toContain('üçgeninin alanı');
     expect(ks[0].sesli).not.toContain('çevre');
     // Fare ipucu OKUNUR açıklamadır; ekran okuyucunun sözcük biçimi görsel arayüze sızmaz.
-    expect(ks.map((k) => k.ipucu)).toEqual(['ABC üçgeninin alanı: 6 br²', 'ABC üçgeninin çevresi: 12 br']);
+    expect(ks.map((k) => k.ipucu)).toEqual(['ABC üçgeninin alanı: 6 birimkare', 'ABC üçgeninin çevresi: 12 br']);
     expect(ks[1].merkez.x).toBeCloseTo(ks[0].merkez.x, 5);
     expect(ks[1].kutu.y0 - ks[0].kutu.y1).toBeCloseTo(6 * scale, 5);
   });
@@ -382,7 +382,7 @@ describe('ölçüm kartları', () => {
     const gizli = nokta('C', 2, 3, { showLabel: false });
     const poly = govde<PolygonObject>({ id: 'poly1', type: 'polygon', pointIds: [A.id, B.id, gizli.id], showArea: true });
     const [k] = kartlar([A, B, gizli, poly]);
-    expect(k.satirlar.map(duzMetin)).toEqual(['Alan = 6 br²']);
+    expect(k.satirlar.map(duzMetin)).toEqual(['Alan = 6 birimkare']);
   });
 
   it('ayrılmış kartın engel kutusu ortak çapayı ve değişen metin genişliğinde sol hizayı izler', () => {
@@ -407,7 +407,7 @@ describe('ölçüm kartları', () => {
     const circ = govde<CircleObject>({ id: 'c1', type: 'circle', centerPointId: M.id, radiusPointId: T.id, showArea: true, showPerimeter: true });
     const ks = kartlar([M, T, circ]);
     expect(metinler(ks)).toEqual([
-      'r = |MT| = 2 br', 'Alan = πr² ≈ 12,57 br²', 'Çevre = 2πr ≈ 12,57 br',
+      'r = |MT| = 2 br', 'Alan = πr² ≈ 12,57 birimkare', 'Çevre = 2πr ≈ 12,57 br',
     ]);
     expect(ks.map((k) => k.satir)).toEqual(['yaricap', 'alan', 'cevre']);
     expect(ks.map((k) => k.anahtar)).toEqual(['radius', 'area', 'perimeter']);
@@ -484,13 +484,13 @@ describe('ölçüm kartları', () => {
     const U = nokta('U', 0, 0);
     const elp = govde<EllipseObject>({ id: 'e1', type: 'ellipse', centerPointId: U.id, radiusX: 3, radiusY: 2, showArea: true, showPerimeter: true });
     const ks = kartlar([U, elp]);
-    expect(metinler(ks)).toEqual(['Alan = πab ≈ 18,85 br²', 'Çevre ≈ 15,87 br']);
+    expect(metinler(ks)).toEqual(['Alan = πab ≈ 18,85 birimkare', 'Çevre ≈ 15,87 br']);
     expect(ks.map((k) => k.anahtar)).toEqual(['area', 'perimeter']);
   });
 
   it('kısa ayarda etiketler de kısalır', () => {
     const poly = govde<PolygonObject>({ id: 'poly1', type: 'polygon', pointIds: [A.id, B.id, C.id], showArea: true, showPerimeter: true });
-    expect(metinler(kartlar([A, B, C, poly], KISA))).toEqual(['Alan = 6 br²', 'Çevre = 12 br']);
+    expect(metinler(kartlar([A, B, C, poly], KISA))).toEqual(['Alan = 6 birimkare', 'Çevre = 12 br']);
   });
 
   it('ölçüsü kapalı ve görünmez şekiller kart üretmez', () => {

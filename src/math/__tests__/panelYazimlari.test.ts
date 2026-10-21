@@ -52,13 +52,13 @@ describe('çokgen satırları', () => {
 
   it('alan ve çevre köşe adlarıyla yazılır', () => {
     const poly = govde<PolygonObject>({ id: 'poly1', type: 'polygon', label: 'Çokgen', pointIds: [A.id, B.id, C.id] });
-    expect(metinler(poly, [A, B, C, poly])).toEqual(['A(ABC) = 6 br²', 'Ç(ABC) = 12 br']);
+    expect(metinler(poly, [A, B, C, poly])).toEqual(['A(ABC) = 6 birimkare', 'Ç(ABC) = 12 br']);
   });
 
   it('köşe adı gizliyken sözcüğe düşer (nesnenin kendi etiketi kullanılmaz)', () => {
     const G = nokta('C', 0, 3, { showLabel: false });
     const poly = govde<PolygonObject>({ id: 'poly2', type: 'polygon', label: 'Çokgen', pointIds: [A.id, B.id, G.id] });
-    expect(metinler(poly, [A, B, G, poly])).toEqual(['Alan = 6 br²', 'Çevre = 12 br']);
+    expect(metinler(poly, [A, B, G, poly])).toEqual(['Alan = 6 birimkare', 'Çevre = 12 br']);
   });
 
   it('köşesi eksik çokgen sözcükle anlatılır', () => {
@@ -124,7 +124,7 @@ describe('çember ve elips satırları', () => {
 
   it('yarıçap, alan ve çevre MEB yazımıyla gelir', () => {
     const circ = govde<CircleObject>({ id: 'c1', type: 'circle', centerPointId: M.id, radiusPointId: S.id });
-    expect(metinler(circ, [M, S, circ])).toEqual(['r = |MS| = 2 br', 'Alan = πr² ≈ 12,57 br²', 'Çevre = 2πr ≈ 12,57 br']);
+    expect(metinler(circ, [M, S, circ])).toEqual(['r = |MS| = 2 br', 'Alan = πr² ≈ 12,57 birimkare', 'Çevre = 2πr ≈ 12,57 br']);
   });
 
   it('sabit yarıçaplı çemberde yalnızca r yazılır', () => {
@@ -144,7 +144,7 @@ describe('çember ve elips satırları', () => {
 
   it('elipste alan ve çevre yaklaşık, a ile b düz metindir', () => {
     const elp = govde<EllipseObject>({ id: 'e1', type: 'ellipse', centerPointId: 'yok', radiusX: 3, radiusY: 2, rotation: 0 });
-    expect(metinler(elp, [elp])).toEqual(['Alan = πab ≈ 18,85 br²', 'Çevre ≈ 15,87 br', 'a = 3 br, b = 2 br']);
+    expect(metinler(elp, [elp])).toEqual(['Alan = πab ≈ 18,85 birimkare', 'Çevre ≈ 15,87 br', 'a = 3 br, b = 2 br']);
   });
 });
 
@@ -165,7 +165,7 @@ describe('yay ve daire dilimi satırları', () => {
   it('dilimde alan ve çevre eklenir, merkez açı ∠ ile yazılır', () => {
     const sec = govde<SectorObject>({ id: 'd1', type: 'sector', centerPointId: M.id, startPointId: S.id, directionPointId: D.id });
     expect(metinler(sec, [M, S, D, sec])).toEqual([
-      '|S͡D| ≈ 3,14 br', 'm(∠SMD) = 90°', 'A(SMD dilimi) ≈ 3,14 br²', 'Ç(SMD dilimi) ≈ 7,14 br', 'r = |MS| = 2 br',
+      '|S͡D| ≈ 3,14 br', 'm(∠SMD) = 90°', 'A(SMD dilimi) ≈ 3,14 birimkare', 'Ç(SMD dilimi) ≈ 7,14 br', 'r = |MS| = 2 br',
     ]);
   });
 
@@ -226,6 +226,6 @@ describe('ölçüsü olmayan nesneler', () => {
     const B = nokta('B', 4, 0);
     const C = nokta('C', 0, 3);
     const poly = govde<PolygonObject>({ id: 'poly9', type: 'polygon', pointIds: [A.id, B.id, C.id] });
-    expect(nesneMetni(poly, [A, B, C, poly])).toBe('A(ABC) = 6 br², Ç(ABC) = 12 br');
+    expect(nesneMetni(poly, [A, B, C, poly])).toBe('A(ABC) = 6 birimkare, Ç(ABC) = 12 br');
   });
 });

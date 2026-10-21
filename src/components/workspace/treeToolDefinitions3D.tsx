@@ -14,12 +14,9 @@ import {
   CircleDot,
   Minus,
   Square,
-  Eye,
-  Axis3d,
-  Grid3x3,
   Magnet,
 } from 'lucide-react';
-import { EksenSimgesi } from './GrafikMenuSimgeleri';
+import { GorunumSimgesi3D } from './GorunumSimgesi3D';
 import type { Solid3DType, Tool3DMode } from '@/types/workspace3d';
 import { GeometryToolIcon } from './GeometryToolIcon';
 import { ARAC_KATEGORI_RENKLERI } from './toolDefinitions';
@@ -168,18 +165,18 @@ export const TREE_TOOL_GROUPS_3D: TreeTool3DGroup[] = [
     ],
   },
 
-  // 6. Görünüm: kamera açıları (ızgara ve eksen tuval şeridindedir)
+  // 6. Görünüm: sahne ızgarası, üç boyutlu eksenler ve kamera açıları
   {
     id: 'gorunum_3b',
     name: 'Görünüm',
     defaultExpanded: false,
     tools: [
-      { id: 'show_grid', kind: 'toggle', name: 'Zemin Izgarası', description: 'Zemindeki kareli ızgarayı açar / kapatır.', icon: <Grid3x3 className="w-4 h-4" />, iconColor: R.etkilesim },
-      { id: 'show_axes', kind: 'toggle', name: 'Eksenler', description: 'x, y ve z eksenlerini açar / kapatır.', icon: <EksenSimgesi />, iconColor: R.etkilesim },
-      { id: 'view_front', kind: 'camera', cameraPreset: 'front', name: 'Önden Görünüm', description: 'Kamerayı cismin tam önüne alır.', icon: <Eye className="w-4 h-4" />, iconColor: R.etkilesim },
-      { id: 'view_top', kind: 'camera', cameraPreset: 'top', name: 'Üstten Görünüm', description: 'Kamerayı tam üste alır; tabanlar görünür.', icon: <Eye className="w-4 h-4" />, iconColor: R.etkilesim },
-      { id: 'view_right', kind: 'camera', cameraPreset: 'right', name: 'Sağdan Görünüm', description: 'Kamerayı sağ yana alır.', icon: <Eye className="w-4 h-4" />, iconColor: R.etkilesim },
-      { id: 'view_isometric', kind: 'camera', cameraPreset: 'isometric', name: 'İzometrik Görünüm', description: 'Üç yüzü birden gösteren eğik bakış.', icon: <Axis3d className="w-4 h-4" />, iconColor: R.etkilesim },
+      { id: 'show_grid', kind: 'toggle', name: 'Zemin Izgarası', description: 'Zemindeki kareli ızgarayı açar / kapatır.', icon: <GorunumSimgesi3D tur="grid" />, iconColor: R.etkilesim },
+      { id: 'show_axes', kind: 'toggle', name: 'Eksenler', description: 'x, y ve z eksenlerini açar / kapatır.', icon: <GorunumSimgesi3D tur="axes" />, iconColor: R.etkilesim },
+      { id: 'view_front', kind: 'camera', cameraPreset: 'front', name: 'Önden Görünüm', description: 'Kamerayı cismin tam önüne alır.', icon: <GorunumSimgesi3D tur="front" />, iconColor: R.etkilesim },
+      { id: 'view_top', kind: 'camera', cameraPreset: 'top', name: 'Üstten Görünüm', description: 'Kamerayı tam üste alır; tabanlar görünür.', icon: <GorunumSimgesi3D tur="top" />, iconColor: R.etkilesim },
+      { id: 'view_right', kind: 'camera', cameraPreset: 'right', name: 'Sağdan Görünüm', description: 'Kamerayı sağ yana alır.', icon: <GorunumSimgesi3D tur="right" />, iconColor: R.etkilesim },
+      { id: 'view_isometric', kind: 'camera', cameraPreset: 'isometric', name: 'İzometrik Görünüm', description: 'Üç yüzü birden gösteren eğik bakış.', icon: <GorunumSimgesi3D tur="isometric" />, iconColor: R.etkilesim },
     ],
   },
 ];

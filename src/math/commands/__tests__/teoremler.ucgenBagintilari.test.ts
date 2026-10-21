@@ -387,12 +387,12 @@ describe('sinüs ve kosinüs teoremi', () => {
 describe('Heron formülü', () => {
   it('alanı sayılarla yazar ve çokgenin alanını gösterir', () => {
     const r = ok('Heron formülüyle alanı hesapla', S.dik());
-    expect(r.message).toBe('Heron formülü (ABC): u = (|AB| + |BC| + |CA|) / 2 = (4 + 5 + 3) / 2 = 6; A(ABC) = karekök(u × (u − |AB|) × (u − |BC|) × (u − |CA|)) = karekök(6 × 2 × 1 × 3) = karekök(36) = 6 br².');
+    expect(r.message).toBe('Heron formülü (ABC): u = (|AB| + |BC| + |CA|) / 2 = (4 + 5 + 3) / 2 = 6; A(ABC) = karekök(u × (u − |AB|) × (u − |BC|) × (u − |CA|)) = karekök(6 × 2 × 1 × 3) = karekök(36) = 6 birimkare.');
     expect(byType(r.objects, 'polygon')[0].showArea).toBe(true);
     expect(r.selectedIds).toEqual([byType(r.objects, 'polygon')[0].id]);
     const genel = ok('Heron formülünü göster', S.genel());
-    expect(genel.message).toContain('karekök(144) = 12 br².');
-    expect(ok("Heron ile ABC'nin alanı", S.noktalar()).message).toContain('= 6 br²');
+    expect(genel.message).toContain('karekök(144) = 12 birimkare.');
+    expect(ok("Heron ile ABC'nin alanı", S.noktalar()).message).toContain('= 6 birimkare');
   });
 });
 

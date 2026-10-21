@@ -146,7 +146,7 @@ export function CommandPanel({ onSelectTool, variant = 'bar', visible = true, in
     if (!raw) return;
     // pendingPointIds: yarım kalmış çokgen/parça çiziminin tıklanmış noktaları komut yolunda da KULLANIMDA sayılır.
     // Komut motoru bütün diziyi yeniden yazar: ilkokul görünümü (gizli adlar) değil GERÇEK nesneler üzerinde çalışır
-    const plan = executeTurkishCommand(raw, kaynakNesneler, selectedObjectIds, { viewport, styleSettings, pendingPointIds });
+    const plan = executeTurkishCommand(raw, kaynakNesneler, selectedObjectIds, { viewport, styleSettings, pendingPointIds, showMeasurementsOnCreate: false });
     if (!plan.ok) {
       if (!preserveDraft) setText(raw);
       setResult({ ok: false, message: plan.message, suggestions: plan.suggestions?.length ? plan.suggestions : suggestions.map(s => s.text) });

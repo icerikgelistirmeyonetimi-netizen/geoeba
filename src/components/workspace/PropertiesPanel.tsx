@@ -1,4 +1,5 @@
 'use client';
+import { NESNE_RENGI, NESNE_RENKLERI } from '@/utils/nesneRenkleri';
 
 import React, { useState } from 'react';
 import { exportPng, exportSvg, exportPdf, exportWord } from '@/utils/exportCanvas';
@@ -64,16 +65,7 @@ interface PropertiesPanelProps {
   onClose?: () => void;
 }
 
-const COLOR_PRESETS = [
-  '#2563eb', // Mavi
-  '#0284c7', // Açık Mavi
-  '#8b5cf6', // Mor
-  '#ec4899', // Pembe
-  '#ef4444', // Kırmızı
-  '#f59e0b', // Turuncu
-  '#10b981', // Yeşil
-  '#6b7280', // Gri
-];
+const COLOR_PRESETS = NESNE_RENKLERI.map(({ hex }) => hex);
 
 export function PropertiesPanel({
   layoutMode = '2d_only',
@@ -858,7 +850,7 @@ export function PropertiesPanel({
                 <div className="flex items-center gap-2">
                   <div
                     className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: selectedObject.color || '#2563eb' }}
+                    style={{ backgroundColor: selectedObject.color || NESNE_RENGI.mavi }}
                   />
                   <h3 className="font-bold text-sm text-foreground truncate">
                     {/* Fonksiyon başlığı okunur yazımla: "f(x) = 2x + 1" (alan uzmanı, 4. tur) */}
