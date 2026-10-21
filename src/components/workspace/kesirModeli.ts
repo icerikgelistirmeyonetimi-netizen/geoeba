@@ -9,7 +9,7 @@
  */
 import { useSyncExternalStore } from 'react';
 
-export type KesirModelTuru = 'pie' | 'bar';
+export type KesirModelTuru = 'pie' | 'bar' | 'line';
 
 export interface KesirAyari {
   pay: number;
@@ -18,7 +18,7 @@ export interface KesirAyari {
 }
 
 /** Çubukta ve sesli okumada modelin adı */
-export const KESIR_MODEL_ADLARI: Readonly<Record<KesirModelTuru, string>> = { pie: 'Daire', bar: 'Şerit' };
+export const KESIR_MODEL_ADLARI: Readonly<Record<KesirModelTuru, string>> = { pie: 'Daire', bar: 'Şerit', line: 'Sayı doğrusu' };
 
 export const VARSAYILAN_KESIR_AYARI: KesirAyari = { pay: 1, payda: 2, model: 'pie' };
 
@@ -43,7 +43,7 @@ export function kesirAyariniSinirla(ham: Partial<KesirAyari>, ilkokul: boolean):
   const s = kesirSinirlari(ilkokul);
   const payda = Math.max(s.paydaEnAz, Math.min(s.paydaEnCok, tamSayi(ham.payda, VARSAYILAN_KESIR_AYARI.payda)));
   const pay = Math.max(s.payEnAz, Math.min(s.payEnCok(payda), tamSayi(ham.pay, VARSAYILAN_KESIR_AYARI.pay)));
-  const model: KesirModelTuru = ham.model === 'bar' ? 'bar' : 'pie';
+  const model: KesirModelTuru = ham.model === 'bar' || ham.model === 'line' ? ham.model : 'pie';
   return { pay, payda, model };
 }
 

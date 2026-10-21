@@ -2706,7 +2706,8 @@ export function Canvas({
             `Elips oluşturuldu (a = ${formatTurkishNumber(ra)} br, b = ${formatTurkishNumber(rb)} br)`
           );
         } else if (activeTool === 'circle') {
-          const radius = round1(dist);
+          // Tam sayı ölçüde (ilkokul hep) yarıçap tam birim (en az 1): "r = 5,8 br" değil "r = 6 br" (alan uzmanı, 21.10.2026)
+          const radius = tamSayiOlcu ? Math.max(1, Math.round(dist)) : round1(dist);
           const [centerLabel] = generateNextPointLabels(labels, 1);
           const centerPt = makePoint(centerLabel, dragCreateStart.x, dragCreateStart.y, '#8b5cf6');
           const circ: CircleObject = {
@@ -7502,12 +7503,51 @@ export function Canvas({
             // Bileşik kesir: her bütünde d parça, ceil(n/d) bütün çizilir
             const wholes = Math.max(1, Math.ceil(n / d));
             const isBar = frac.modelType === 'bar';
+            const isLine = frac.modelType === 'line';
 
             const shapes: React.ReactNode[] = [];
             let totalWidthPx = 0;
             let totalHeightPx = 0;
+            /** Sayı doğrusunda kesrin etiketi noktanın üstünde (altta bütünlerin sayıları yazar) */
+            let ustEtiket: { x: number; y: number } | null = null;
 
-            if (isBar) {
+            if (isLine) {
+              // Sayı doğrusu (alan uzmanı, 21.10.2026): 0'dan başlar, her bütün d eşit parçaya bölünür; 0 ile n/d arası
+              // renkli, n/d noktada işaretli; bütünlerin altında 0, 1, 2 …; sağ uçta ok
+              const birimPx = rPx * 2;
+              const uzanti = Math.max(14 * etiketOlcegi, birimPx * 0.18);
+              totalWidthPx = wholes * birimPx + uzanti;
+              totalHeightPx = Math.max(30 * etiketOlcegi, 34);
+              const x0 = center.x - totalWidthPx / 2;
+              const y0 = center.y;
+              const kucuk = 7 * etiketOlcegi;
+              const buyuk = 12 * etiketOlcegi;
+              const cizgiRengi = isSelected ? '#ec4899' : fracColor;
+              // Tutma alanı: ince doğruya dokunmak kolay olsun
+              shapes.push(<rect key="tutamak" x={x0 - 6} y={y0 - totalHeightPx / 2} width={totalWidthPx + 12} height={totalHeightPx} fill="transparent" />);
+              shapes.push(<line key="dogru" x1={x0} y1={y0} x2={x0 + totalWidthPx} y2={y0} stroke={cizgiRengi} strokeWidth={isSelected ? 3 : 2} />);
+              const okX = x0 + totalWidthPx;
+              shapes.push(
+                <polyline key="ok" points={`${okX - 9 * etiketOlcegi},${y0 - 5 * etiketOlcegi} ${okX},${y0} ${okX - 9 * etiketOlcegi},${y0 + 5 * etiketOlcegi}`} fill="none" stroke={cizgiRengi} strokeWidth={2} />
+              );
+              const nX = x0 + (n / d) * birimPx;
+              if (n > 0) shapes.push(<line key="kesir-parca" x1={x0} y1={y0} x2={nX} y2={y0} stroke={fracColor} strokeWidth={7 * etiketOlcegi} strokeOpacity={0.45} strokeLinecap="round" />);
+              for (let k = 0; k <= wholes * d; k++) {
+                const x = x0 + (k / d) * birimPx;
+                const tam = k % d === 0;
+                const h = tam ? buyuk : kucuk;
+                shapes.push(<line key={`centik-${k}`} x1={x} y1={y0 - h} x2={x} y2={y0 + h} stroke={fracColor} strokeWidth={tam ? 2 : 1.4} />);
+                if (tam) {
+                  shapes.push(
+                    <text key={`sayi-${k}`} x={x} y={y0 + buyuk + 15 * etiketOlcegi} fontSize={fs(13, 'measure')} fontWeight={700} textAnchor="middle" fill="hsl(var(--foreground))">
+                      {k / d}
+                    </text>
+                  );
+                }
+              }
+              shapes.push(<circle key="kesir-noktasi" cx={nX} cy={y0} r={5.5 * etiketOlcegi} fill={fracColor} stroke="#ffffff" strokeWidth={1.5} />);
+              ustEtiket = { x: nX, y: y0 - buyuk - 16 * etiketOlcegi };
+            } else if (isBar) {
               // Çubuk modeli: her bütün, d eşit dikdörtgen parçaya bölünmüş bir çubuk
               const barW = rPx * 2;
               const barH = Math.max(18 * etiketOlcegi, rPx * 0.6);
@@ -7624,8 +7664,8 @@ export function Canvas({
                 className={`select-none ${imlecSinifi(activeTool, 'nesne')}`}
               >
                 {shapes}
-                {showDetails && (
-                  metinOlcuEtiketi(`${n}/${d}`, center.x, badgeY, fracColor)
+                {(showDetails || ustEtiket) && (
+                  ustEtiket ? metinOlcuEtiketi(`${n}/${d}`, ustEtiket.x, ustEtiket.y, fracColor) : metinOlcuEtiketi(`${n}/${d}`, center.x, badgeY, fracColor)
                 )}
               </g>
             );
@@ -7909,8 +7949,8 @@ export function Canvas({
               </g>
             );
           } else if (activeTool === 'circle') {
-            // Oluşan çemberin yarıçapı 0,1'e yuvarlanır; önizleme de aynı değeri çizmeli
-            const yariCap = yuvarla(distWorld);
+            // Oluşan çemberin yarıçapı 0,1'e (tam sayı ölçüde tam birime) yuvarlanır; önizleme de aynı değeri çizmeli
+            const yariCap = tamSayiOlcu ? Math.max(1, Math.round(distWorld)) : yuvarla(distWorld);
             const rPx = yariCap * viewport.zoom;
             return (
               <g className="pointer-events-none">
@@ -8058,7 +8098,7 @@ export function Canvas({
                     strokeDasharray="5,4"
                   />
                   <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y} stroke={RENK} strokeWidth={1.4} strokeDasharray="3,3" />
-                  {metinOlcuEtiketi(`r = ${formatTurkishNumber(uzunluk)} br`, s1.x, s1.y - 1)}
+                  {metinOlcuEtiketi(ilkokul ? `r = ${ilkokulUzunlukMetni(uzunluk, 'br')}` : `r = ${formatTurkishNumber(uzunluk)} br`, s1.x, s1.y - 1)}
                 </g>
               );
             }

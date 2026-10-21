@@ -176,6 +176,10 @@ const basamakla = (r: number) => YARICAP_BASAMAKLARI.find((b) => b <= r) ?? r;
 
 /** Yoğun yığın (yan yana sıralar ya da küçücük noktalar): tek tek etiket yerine yığın başına sayı yazılır */
 const YOGUN_YARICAP = 5;
+/** Yan yana düzende yarıçap bunun altına inerse (dağınık değerler) gruplar ortak eksenin üstünde ayrı satırlara geçer */
+const SATIRLI_ESIK = 6;
+/** Satırlı düzende her satırın üstünde grubun adına ayrılan yer */
+const SATIR_ADI_PAYI = 18;
 /**
  * Gruplamasız sayısal eksende noktalar yalnız bundan yüksek yığında yan yana sıralara dizilir (ör. 600 ölçüm).
  * Daha alçak yığında nokta küçülür ama tam değerinin üstünde tek sütunda kalır: 3 tane 80 puan 79 ile 81'e dağılmaz.
@@ -743,6 +747,8 @@ export function NoktaGrafigi({
     let siklik: Eksen | null = null;
     let birimSutun = 0;
     const yiginTepeleri: { x: number; y: number; adet: number }[] = [];
+    /** Satırlı yan yana düzende her grubun yatay bandı (yoksa null) */
+    let grupBantlari: { ad: string; renk: string; ust: number; alt: number }[] | null = null;
     const sayisalYigin = sayisal && olcek !== null && yiginlar.length > 0;
     // Komşu yığınlar çakışmaz: yarıçap en yakın iki yığının arasının yarısını aşmaz; tek yığında yalnız dikey alan sınırlar.
     // Geniş eksende (ör. toplama sırasında sabit tutulan 60–120 ölçüm penceresi, 1 birim ≈ 15 px) bu kural noktaları
@@ -848,7 +854,56 @@ export function NoktaGrafigi({
       siklik = siklikEkseni(enYuksek, hedefY);
       birimSutun = Math.max(0, alanY - 18) / siklik.max;
       const sutunG = Math.max(3, Math.min(Math.max(aralikPx, Math.min(enKucukUzaklik, alanG)) * 0.82, 64));
-      if (yanAnahtar) {
+      // Satırlı düzen (TEGM lise, 21.10.2026, 9-A / 9-B mekik): değerler çok dağınıkken yan yana sütunlar tek sıra küçük
+      // noktaya iner, sınıflar yalnız renkle ayrılır. O zaman her grup ortak eksenin üstünde kendi yatay satırındadır:
+      // nokta değerinin tam üstünde, aynı gruptaki aynı değerler üst üste (sıklık okunur), satırın başında grubun adı.
+      const satirUst = USTr + 2;
+      const bantH = K > 1 ? (taban - 4 - satirUst) / K : 0;
+      const grupYigini = yanAnahtar
+        ? Math.max(1, ...yiginlar.map((y) => Math.max(...grupla(y.ogeler.map((o) => o.satir)).map((g) => g.length))))
+        : 1;
+      const rSatir = basamakla(Math.max(0.8, Math.min(12, enKucukUzaklik / 2 - 0.5, (bantH - SATIR_ADI_PAYI - 4) / grupYigini / 2 - 0.5)));
+      const satirli = !!yanAnahtar && !sutunModu && K > 1 && r < SATIRLI_ESIK && rSatir >= r + 1;
+      if (yanAnahtar && satirli) {
+        r = rSatir;
+        const adimS = 2 * r + 1;
+        yiginSayisi = false;
+        const yanSutunG = Math.max(3, Math.min(Math.max(aralikPx, Math.min(enKucukUzaklik, alanG)) * 0.82 / K - 2, 40));
+        grupBantlari = yanAnahtar.kategoriler.map((ad, gi) => ({
+          ad,
+          renk: yanAnahtar.renkler.get(ad) ?? BOS_KATEGORI_RENGI,
+          ust: satirUst + gi * bantH,
+          alt: satirUst + (gi + 1) * bantH,
+        }));
+        yiginlar.forEach((y, yiginIndeksi) => {
+          const x = olcek.ileri(y.merkez);
+          const gruplar = grupla(y.ogeler.map((o) => o.satir));
+          const degerOf = new Map(y.ogeler.map((o) => [o.satir, o.deger]));
+          let tepe = taban;
+          gruplar.forEach((liste, gi) => {
+            const zemin = satirUst + (gi + 1) * bantH - 4;
+            liste.forEach((satir, sira) => {
+              const etiket = sira === liste.length - 1 ? 'ust' : undefined;
+              konumlar.push({ satir, x, y: zemin - r - sira * adimS, r, deger: degerOf.get(satir) ?? 0, dagitik: false, opaklik: 1, yiginIndeksi, etiket });
+            });
+            if (liste.length === 0) return;
+            const noktaTepe = zemin - r - (liste.length - 1) * adimS - r - 6;
+            tepe = Math.min(tepe, noktaTepe);
+            const ad = yanAnahtar.kategoriler[gi];
+            sutunlar.push({
+              anahtar: `sutun-${y.merkez}-${gi}`,
+              x: x + (gi - (K - 1) / 2) * (yanSutunG + 2),
+              genislik: yanSutunG,
+              sayi: liste.length,
+              parcalar: [{ ad, sayi: liste.length, renk: yanAnahtar.renkler.get(ad) ?? BOS_KATEGORI_RENGI, alt: 0 }],
+              noktaTepe,
+              sutunTepe: taban - liste.length * birimSutun - 6,
+              metin: String(liste.length),
+            });
+          });
+          yiginTepeleri.push({ x, y: tepe, adet: y.ogeler.length });
+        });
+      } else if (yanAnahtar) {
         // Yan yana: her değerde grupların yığınları yan yana (grup sırasıyla, ortası değerin üstünde)
         const yanAdim = 2 * r + 1;
         const yanSutunG = Math.max(3, Math.min(Math.max(aralikPx, Math.min(enKucukUzaklik, alanG)) * 0.82 / K - 2, 40));
@@ -1137,6 +1192,7 @@ export function NoktaGrafigi({
       veriSayisi,
       grupOlculeri,
       grupSatirY,
+      grupBantlari,
     };
   }, [
     satirAnahtari,
@@ -1305,6 +1361,10 @@ export function NoktaGrafigi({
       {olcek &&
         c.grupOlculeri.map((g, gi) => {
           const ortX = g.ort !== null ? olcek.ileri(g.ort) : null;
+          // Satırlı düzende her grubun ölçü çizgileri yalnız kendi satırında
+          const bant = c.grupBantlari?.[gi];
+          const y1 = bant ? bant.ust : UST - 6;
+          const y2 = bant ? bant.alt - 2 : taban;
           const parcalarMetni = [
             secenekler.ortalama && g.ort !== null ? olcuMetni('Aritmetik ortalama', g.ort, ondalik) : null,
             secenekler.ortanca && g.ortanca !== null ? olcuMetni('Ortanca', g.ortanca, ondalik) : null,
@@ -1316,26 +1376,26 @@ export function NoktaGrafigi({
             <g key={`grup-olcu-${g.ad}`} data-grup-olculeri={g.ad}>
               {secenekler.standartSapma && ortX !== null && g.ss !== null && (
                 <g data-standart-sapma-bandi>
-                  <rect x={olcek.ileri(g.ort! - g.ss)} y={UST - 6} width={Math.max(0, olcek.ileri(g.ort! + g.ss) - olcek.ileri(g.ort! - g.ss))} height={Math.max(0, taban - UST + 6)} fill={g.renk} fillOpacity={0.07} />
-                  <line x1={olcek.ileri(g.ort! - g.ss)} x2={olcek.ileri(g.ort! - g.ss)} y1={UST - 6} y2={taban} stroke={g.renk} strokeWidth={1.5} strokeDasharray="2 3" />
-                  <line x1={olcek.ileri(g.ort! + g.ss)} x2={olcek.ileri(g.ort! + g.ss)} y1={UST - 6} y2={taban} stroke={g.renk} strokeWidth={1.5} strokeDasharray="2 3" />
+                  <rect x={olcek.ileri(g.ort! - g.ss)} y={y1} width={Math.max(0, olcek.ileri(g.ort! + g.ss) - olcek.ileri(g.ort! - g.ss))} height={Math.max(0, y2 - y1)} fill={g.renk} fillOpacity={0.07} />
+                  <line x1={olcek.ileri(g.ort! - g.ss)} x2={olcek.ileri(g.ort! - g.ss)} y1={y1} y2={y2} stroke={g.renk} strokeWidth={1.5} strokeDasharray="2 3" />
+                  <line x1={olcek.ileri(g.ort! + g.ss)} x2={olcek.ileri(g.ort! + g.ss)} y1={y1} y2={y2} stroke={g.renk} strokeWidth={1.5} strokeDasharray="2 3" />
                 </g>
               )}
               {secenekler.oms && ortX !== null && g.oms !== null && (
                 <g data-oms-bandi>
-                  <rect x={olcek.ileri(g.ort! - g.oms)} y={UST - 6} width={Math.max(0, olcek.ileri(g.ort! + g.oms) - olcek.ileri(g.ort! - g.oms))} height={Math.max(0, taban - UST + 6)} fill={OMS_RENGI} fillOpacity={0.12} rx={3} />
-                  <line x1={olcek.ileri(g.ort! - g.oms)} x2={olcek.ileri(g.ort! - g.oms)} y1={UST - 6} y2={taban} stroke={OMS_RENGI} strokeWidth={2} />
-                  <line x1={olcek.ileri(g.ort! + g.oms)} x2={olcek.ileri(g.ort! + g.oms)} y1={UST - 6} y2={taban} stroke={OMS_RENGI} strokeWidth={2} />
+                  <rect x={olcek.ileri(g.ort! - g.oms)} y={y1} width={Math.max(0, olcek.ileri(g.ort! + g.oms) - olcek.ileri(g.ort! - g.oms))} height={Math.max(0, y2 - y1)} fill={OMS_RENGI} fillOpacity={0.12} rx={3} />
+                  <line x1={olcek.ileri(g.ort! - g.oms)} x2={olcek.ileri(g.ort! - g.oms)} y1={y1} y2={y2} stroke={OMS_RENGI} strokeWidth={2} />
+                  <line x1={olcek.ileri(g.ort! + g.oms)} x2={olcek.ileri(g.ort! + g.oms)} y1={y1} y2={y2} stroke={OMS_RENGI} strokeWidth={2} />
                 </g>
               )}
               {secenekler.ortalama && ortX !== null && (
                 <g data-ortalama-cizgisi>
-                  <line x1={ortX} x2={ortX} y1={UST - 6} y2={taban} stroke={RENK.kart} strokeWidth={5} strokeOpacity={0.9} />
-                  <line x1={ortX} x2={ortX} y1={UST - 6} y2={taban} stroke={g.renk} strokeWidth={2.5} />
+                  <line x1={ortX} x2={ortX} y1={y1} y2={y2} stroke={RENK.kart} strokeWidth={5} strokeOpacity={0.9} />
+                  <line x1={ortX} x2={ortX} y1={y1} y2={y2} stroke={g.renk} strokeWidth={2.5} />
                 </g>
               )}
               {secenekler.ortanca && g.ortanca !== null && (
-                <line data-ortanca-cizgisi x1={olcek.ileri(g.ortanca)} x2={olcek.ileri(g.ortanca)} y1={UST - 6} y2={taban} stroke={g.renk} strokeWidth={2.5} strokeDasharray="7 5" />
+                <line data-ortanca-cizgisi x1={olcek.ileri(g.ortanca)} x2={olcek.ileri(g.ortanca)} y1={y1} y2={y2} stroke={g.renk} strokeWidth={2.5} strokeDasharray="7 5" />
               )}
               {parcalarMetni.length > 0 && (
                 <g data-grup-olcu-satiri={g.ad} style={{ paintOrder: 'stroke', stroke: RENK.kart, strokeWidth: 3, strokeLinejoin: 'round' }}>
@@ -1379,6 +1439,24 @@ export function NoktaGrafigi({
               fill={RENK.izgara}
               fillOpacity={i % 2 === 0 ? 0.35 : 0.12}
             />
+          ))}
+        </g>
+      )}
+
+      {/* Satırlı yan yana düzen: her grubun satırı (açık zemin, taban çizgisi, başında grubun adı) */}
+      {c.grupBantlari && (
+        <g data-grup-satirlari>
+          {c.grupBantlari.map((b, gi) => (
+            <g key={`grup-satiri-${b.ad}`} data-grup-satiri={b.ad}>
+              {gi % 2 === 0 && <rect x={SOL - 8} y={b.ust} width={alanG + 16} height={Math.max(0, b.alt - b.ust)} rx={6} fill={RENK.izgara} fillOpacity={0.3} />}
+              {gi < c.grupBantlari!.length - 1 && <line x1={SOL - 8} x2={SOL + alanG + 8} y1={b.alt - 3} y2={b.alt - 3} stroke={b.renk} strokeOpacity={0.45} strokeWidth={1.5} strokeDasharray="4 4" />}
+              <g style={{ paintOrder: 'stroke', stroke: RENK.kart, strokeWidth: 3, strokeLinejoin: 'round' }}>
+                <circle cx={SOL + 2} cy={b.ust + 9} r={5.5} fill={b.renk} stroke="none" />
+                <text x={SOL + 12} y={b.ust + 14} fontSize={14} fontWeight={800} fill={RENK.metin}>
+                  {b.ad}
+                </text>
+              </g>
+            </g>
           ))}
         </g>
       )}

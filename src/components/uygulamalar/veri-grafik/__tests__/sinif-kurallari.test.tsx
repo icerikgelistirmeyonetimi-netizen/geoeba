@@ -363,6 +363,70 @@ describe('grafikler: eksen okları, yan yana sütun çiftleri, açısız daire, 
     }
   });
 
+  it('nokta grafiği yan yana, dağınık değerler (TEGM lise, mekik): her sınıf kendi satırında, nokta değerinin tam üstünde, aynı değerler üst üste', () => {
+    const ciz = (id: string, sinifAdi: string, degisken: string) => {
+      const tablo = ornekBul(id)!.olustur();
+      const grup = tablo.sutunlar.findIndex((s) => s.ad === sinifAdi);
+      const sutun = tablo.sutunlar.findIndex((s) => s.ad === degisken);
+      const html = renderToStaticMarkup(
+        <NoktaGrafigi
+          tablo={tablo}
+          sutun={sutun}
+          seciliSatir={null}
+          onSatirSec={bos}
+          onDegiskenBirak={bos}
+          aralik={1}
+          secenekler={{ ortalama: true, ortanca: true, oms: false, etiketler: false }}
+          sutunModu={false}
+          genislik={1060}
+          yukseklik={480}
+          azaltilmisHareket
+          surukleniyor={false}
+          renkEslemi={grupEslemesi(tablo, grup, undefined, null)!}
+          yanYana
+          olcuKumesi={sinifKurallari(9).olculer}
+        />,
+      );
+      const noktalar = Array.from(
+        html.matchAll(/data-satir="(\d+)"[^>]*style="transform:translate\(([-\d.]+)px, ([-\d.]+)px\)[\s\S]*?<circle r="([\d.]+)" fill="(?!transparent)/g),
+        (m) => ({ satir: Number(m[1]), x: Number(m[2]), y: Number(m[3]), r: Number(m[4]), grup: String(tablo.satirlar[Number(m[1])].hucreler[grup]), deger: Number(tablo.satirlar[Number(m[1])].hucreler[sutun]) }),
+      );
+      return { html, noktalar };
+    };
+    const { html, noktalar } = ciz('mekik', 'Sınıf', 'Tur sayısı');
+    expect(html).toContain('data-grup-satiri="9-A"');
+    expect(html).toContain('data-grup-satiri="9-B"');
+    expect(noktalar.length).toBe(30);
+    const a = noktalar.filter((n) => n.grup === '9-A');
+    const b = noktalar.filter((n) => n.grup === '9-B');
+    expect([a.length, b.length]).toEqual([15, 15]);
+    // Satırlar ayrı: 9-A'nın bütün noktaları 9-B'nin üstünde; noktalar okunur büyüklükte
+    expect(Math.max(...a.map((n) => n.y + n.r))).toBeLessThan(Math.min(...b.map((n) => n.y - n.r)));
+    expect(Math.min(...noktalar.map((n) => n.r))).toBeGreaterThanOrEqual(8);
+    // Aynı değer iki sınıfta aynı x'te (değerin tam üstü); x değerle doğrusal
+    const xOf = new Map<number, number>();
+    for (const n of noktalar) {
+      if (xOf.has(n.deger)) expect(n.x, `${n.deger}`).toBeCloseTo(xOf.get(n.deger)!, 3);
+      else xOf.set(n.deger, n.x);
+    }
+    const birim = (xOf.get(64)! - xOf.get(22)!) / 42;
+    for (const [d, x] of xOf) expect(x).toBeCloseTo(xOf.get(22)! + (d - 22) * birim, 3);
+    // Aynı sınıfta aynı değer üst üste: 9-B'de 42 ve 44 ikişer nokta, aynı x, farklı y; çakışma yok
+    for (const d of [42, 44]) {
+      const yigin = b.filter((n) => n.deger === d);
+      expect(yigin.length).toBe(2);
+      expect(Math.abs(yigin[0].y - yigin[1].y)).toBeGreaterThanOrEqual(yigin[0].r * 2);
+    }
+    for (let i = 0; i < noktalar.length; i++)
+      for (let j = i + 1; j < noktalar.length; j++)
+        expect(Math.hypot(noktalar[i].x - noktalar[j].x, noktalar[i].y - noktalar[j].y)).toBeGreaterThanOrEqual(noktalar[i].r + noktalar[j].r - 0.01);
+    // Ölçüler her sınıf için ayrı (değerler satır başında)
+    expect(svgYazilari(html)).toContain('9-A: Aritmetik ortalama = 42 · Ortanca = 40');
+    expect(svgYazilari(html)).toContain('9-B: Aritmetik ortalama = 44 · Ortanca = 44');
+    // Az değerli, yığınları yüksek örnekte (7-A / 7-B puanları) yan yana sütunlar kalır
+    expect(ciz('sinav', 'Sınıf', 'Puan').html).not.toContain('data-grup-satirlari');
+  });
+
   it('daire (5. sınıf, oransiz): açı ve yüzde yazılmaz; lejantta ad ve değer, şeritte parça ve bütün', () => {
     const gun = ornekBul('gun')!.olustur();
     const ortak = { tablo: gun, sutun: 1, onSatirSec: bos, onDegerlerDegis: bos, genislik: 800, yukseklik: 420, azaltilmisHareket: true };

@@ -132,7 +132,7 @@ export function validateProjectObjects(input: unknown): MathObject[] {
         if (!(o.max > o.min) || o.step <= 0 || o.value < o.min || o.value > o.max) fail('kaydırıcı sınırları geçersiz');
         if (o.x !== undefined || o.y !== undefined) numbers(o, ['x', 'y']);
         break;
-      case 'fraction': numbers(o, ['numerator']); numbers(o, ['denominator', 'radius'], true); if (!['pie', 'bar'].includes(o.modelType)) fail('kesir modeli geçersiz'); break;
+      case 'fraction': numbers(o, ['numerator']); numbers(o, ['denominator', 'radius'], true); if (!['pie', 'bar', 'line'].includes(o.modelType)) fail('kesir modeli geçersiz'); break;
       case 'pen': if (!Array.isArray(o.points)) fail('kalem noktaları eksik'); for (const p of o.points) numbers(row(p), ['x', 'y']); numbers(o, ['thickness'], true); break;
       case 'text': if (typeof o.text !== 'string') fail('yazı içeriği eksik'); break;
       case 'image': id(o, 'src'); numbers(o, ['width', 'height'], true); break;

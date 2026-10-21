@@ -1196,10 +1196,12 @@ const textHandler: CommandHandler = {
       if (den) d = c.num(den[1]);
       if (/\b(?:serit|cubuk|bar)\w*/.test(t)) modelType = 'bar';
       if (/\b(?:pasta|daire model)\w*/.test(t)) modelType = 'pie';
+      // "sayı" metinde yer tutucuya dönüşür ($0): ham metne bakılır
+      if (/say[ıi]\s+do[ğg]ru/i.test(c.raw)) modelType = 'line';
       if (!Number.isInteger(n) || !Number.isInteger(d) || n < 0 || n > 30 || d < 1 || d > 30) fail('Kesir için 0–30 arası pay ve 1–30 arası payda yazın (ör. “kesri 3/4 yap”).');
       s.update(f.id, { numerator: n, denominator: d, modelType, label: `${n}/${d} Kesir Modeli` });
       s.setFocus([f.id]);
-      s.say(`Kesir modeli ${n}/${d} yapıldı${modelType !== f.modelType ? ` (${modelType === 'bar' ? 'şerit' : 'daire'} modeli)` : ''}.`);
+      s.say(`Kesir modeli ${n}/${d} yapıldı${modelType !== f.modelType ? ` (${modelType === 'bar' ? 'şerit' : modelType === 'line' ? 'sayı doğrusu' : 'daire'} modeli)` : ''}.`);
       return;
     }
     if (keys.has('button') || keys.has('checkbox') || keys.has('inputBox')) {

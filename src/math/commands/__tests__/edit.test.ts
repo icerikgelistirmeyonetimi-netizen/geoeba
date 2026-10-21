@@ -150,6 +150,7 @@ const EXAMPLES: Record<string, ExampleCase> = {
   'yazının boyutunu 18 yap': { scene: textScene, check: r => expect(byType(r.objects, 'text')[0].fontSize).toBe(18) },
   'kesrin paydasını 8 yap': { scene: fractionScene, check: r => expect(byType(r.objects, 'fraction')[0]).toMatchObject({ numerator: 1, denominator: 8 }) },
   'kesri şerit modeli yap': { scene: fractionScene, check: r => expect(byType(r.objects, 'fraction')[0].modelType).toBe('bar') },
+  'kesri sayı doğrusu modeli yap': { scene: fractionScene, check: r => expect(byType(r.objects, 'fraction')[0].modelType).toBe('line') },
   'düğmenin yazısını "Başlat" yap': { scene: buttonScene, check: r => expect(byType(r.objects, 'button')[0].label).toBe('Başlat') },
   // kopyalama
   "ABC'yi kopyala": { scene: triangle, check: r => { expect(byType(r.objects, 'polygon').map(p => p.label)).toEqual(['ABC', 'DEF']); expect(r.selectedIds).toEqual([byType(r.objects, 'polygon')[1].id]); } },

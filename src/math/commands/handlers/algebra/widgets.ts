@@ -189,15 +189,15 @@ export const fractionHandler: CommandHandler = {
   run(c, scene) {
     const parts = fractionParts(c);
     const { numerator, denominator } = parts ?? { numerator: 1, denominator: 1 };
-    const modelType = /\b(?:serit|bant|cubuk|bar|dikdortgen)/.test(c.text) ? 'bar' : 'pie';
+    const modelType = /say[ıi]\s+do[ğg]ru/i.test(c.raw) ? 'line' : /\b(?:serit|bant|cubuk|bar|dikdortgen)/.test(c.text) ? 'bar' : 'pie';
     const radiusRef = c.text.match(/(?:yaricap\w*|boyut\w*)\s*(?::|=)?\s*(#\d+)/);
     const radius = radiusRef ? c.num(radiusRef[1]) : /\bbuyuk/.test(c.text) ? 3.5 : /\bkucuk/.test(c.text) ? 1.5 : 2.5;
     if (!(radius > 0 && radius <= 50)) fail('Kesir modelinin boyutu 0 ile 50 arasında olmalı.');
     const wholes = Math.max(1, Math.ceil(numerator / Math.max(1, denominator)));
-    const size = modelType === 'pie' ? { w: wholes * 2 * radius * 1.15, h: 2 * radius } : { w: 2 * radius, h: wholes * 1.2 };
+    const size = modelType === 'pie' ? { w: wholes * 2 * radius * 1.15, h: 2 * radius } : modelType === 'line' ? { w: wholes * 2 * radius + 1, h: 1.5 } : { w: 2 * radius, h: wholes * 1.2 };
     const pos = c.coords[0] ?? scene.placeShape(size.w, size.h);
     scene.addFraction(numerator, denominator, pos, { modelType, radius, color: colorIn(c) });
-    scene.say(`${numerator}/${denominator} kesir modeli (${modelType === 'pie' ? 'pasta' : 'şerit'}) eklendi.${parts ? '' : ' Kesir yazılmadığı için 1/1 alındı; örneğin “3/4 kesir modeli” yazabilirsiniz.'}`);
+    scene.say(`${numerator}/${denominator} kesir modeli (${modelType === 'pie' ? 'pasta' : modelType === 'line' ? 'sayı doğrusu' : 'şerit'}) eklendi.${parts ? '' : ' Kesir yazılmadığı için 1/1 alındı; örneğin “3/4 kesir modeli” yazabilirsiniz.'}`);
   },
 };
 

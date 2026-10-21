@@ -643,7 +643,7 @@ export class CommandScene {
     return this.add({ id: createId('txt'), type: 'text', label: text.slice(0, 20), showLabel: true, text, x: tidy(position.x), y: tidy(position.y),
       fontSize: o.fontSize ?? 14, color: o.color ?? COLORS.text, visible: true, createdAt: Date.now() } as TextObject);
   }
-  addFraction(numerator: number, denominator: number, position: Point2D, o: { modelType?: 'pie' | 'bar'; radius?: number; color?: string } = {}): FractionObject {
+  addFraction(numerator: number, denominator: number, position: Point2D, o: { modelType?: 'pie' | 'bar' | 'line'; radius?: number; color?: string } = {}): FractionObject {
     if (!Number.isInteger(numerator) || !Number.isInteger(denominator) || numerator < 0 || numerator > 30 || denominator < 1 || denominator > 30) fail('Kesir için 0–30 arası payda ve 1–30 arası payda yazın (ör. 3/4).');
     return this.add({ id: createId('frac'), type: 'fraction', label: `${numerator}/${denominator} Kesir Modeli`, showLabel: true, numerator, denominator,
       x: tidy(position.x), y: tidy(position.y), radius: o.radius ?? 2.5, modelType: o.modelType ?? 'pie', color: o.color ?? COLORS.fraction, visible: true, createdAt: Date.now() } as FractionObject);

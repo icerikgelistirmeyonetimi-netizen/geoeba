@@ -529,6 +529,7 @@ describe('fraction models', () => {
     ['üç bölü dört kesrini göster', 3, 4, 'pie'],
     ["2/5'i şerit modeliyle göster", 2, 5, 'bar'],
     ['5/8 pasta modeli', 5, 8, 'pie'],
+    ['3/4 kesrini sayı doğrusunda göster', 3, 4, 'line'],
     ['dörtte üç kesrini çiz', 3, 4, 'pie'],
     ["8'de 5 kesir modeli ekle", 5, 8, 'pie'],
     ['1 tam 1/2 kesir modeli ekle', 3, 2, 'pie'],

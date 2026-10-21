@@ -368,7 +368,8 @@ export interface FractionObject extends BaseMathObject {
   x: number;
   y: number;
   radius: number;
-  modelType: 'pie' | 'bar';
+  /** Daire (pasta), şerit ya da sayı doğrusu (alan uzmanı, 21.10.2026: kesir sayı doğrusunda da gösterilsin) */
+  modelType: 'pie' | 'bar' | 'line';
 }
 
 export interface PenStrokeObject extends BaseMathObject {

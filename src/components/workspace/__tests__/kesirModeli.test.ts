@@ -20,8 +20,9 @@ describe('kesir aracının ayarı', () => {
     expect(kesirAyariniOku()).toEqual(VARSAYILAN_KESIR_AYARI);
   });
 
-  it('iki model seçilir: daire ve şerit', () => {
-    expect(KESIR_MODEL_ADLARI).toEqual({ pie: 'Daire', bar: 'Şerit' });
+  it('üç model seçilir: daire, şerit ve sayı doğrusu (alan uzmanı, 21.10.2026)', () => {
+    expect(KESIR_MODEL_ADLARI).toEqual({ pie: 'Daire', bar: 'Şerit', line: 'Sayı doğrusu' });
+    expect(kesirAyariniSinirla({ pay: 3, payda: 4, model: 'line' }, true).model).toBe('line');
     expect(kesirAyariniSinirla({ pay: 3, payda: 4, model: 'bar' }, true).model).toBe('bar');
     expect(kesirAyariniSinirla({ pay: 3, payda: 4, model: 'kare' as never }, true).model).toBe('pie');
   });
