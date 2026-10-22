@@ -20,6 +20,10 @@ export interface YapismaTercihi {
 }
 
 let tercih: YapismaTercihi | null = null;
+let altTercih: { izgara: boolean; nesne: boolean } = { izgara: true, nesne: true };
+const SUNUCU_ALT_TERCIH = { izgara: true, nesne: true };
+const okuAlt = () => altTercih;
+const sunucuAltDegeri = () => SUNUCU_ALT_TERCIH;
 const dinleyiciler = new Set<() => void>();
 
 function abone(dinleyici: () => void): () => void {
@@ -46,16 +50,40 @@ export function yapisma3BDegistir(kademe: KademeDuzeyi): void {
 /** Testler için: seçimi siler (varsayılana dönülür). */
 export function yapisma3BTercihiniSifirla(): void {
   tercih = null;
+  altTercih = { izgara: true, nesne: true };
   bildir();
 }
 
 /** [açık mı, anahtar, kademe profili] */
-export function useYapisma3B(): { acik: boolean; degistir: () => void; profil: YapismaProfili } {
+export function yapisma3BIzgaraDegistir(): void {
+  altTercih = { ...altTercih, izgara: !altTercih.izgara };
+  bildir();
+}
+
+export function yapisma3BNesneDegistir(): void {
+  altTercih = { ...altTercih, nesne: !altTercih.nesne };
+  bildir();
+}
+
+export function useYapisma3B(): {
+  acik: boolean;
+  degistir: () => void;
+  profil: YapismaProfili;
+  izgaraAcik: boolean;
+  nesneAcik: boolean;
+  izgaraDegistir: () => void;
+  nesneDegistir: () => void;
+} {
+  const alt = useSyncExternalStore(abone, okuAlt, sunucuAltDegeri);
   const [kademe] = useKademeDuzeyi();
   const t = useSyncExternalStore(abone, oku, sunucuDegeri);
   return {
     acik: yapisma3BAcikMi(kademe, t),
     degistir: () => yapisma3BDegistir(kademe),
     profil: kademe3BYapismaProfili(kademe),
+    izgaraAcik: alt.izgara,
+    nesneAcik: alt.nesne,
+    izgaraDegistir: yapisma3BIzgaraDegistir,
+    nesneDegistir: yapisma3BNesneDegistir,
   };
 }

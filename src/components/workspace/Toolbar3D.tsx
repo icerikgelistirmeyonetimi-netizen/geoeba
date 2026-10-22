@@ -62,7 +62,8 @@ import {
  */
 
 type SidebarTab = 'araclar' | 'nesneler' | 'baglamlar' | 'gorunumler' | 'ara';
-type CreationMethod = 'instant' | 'draw';
+export type CreationMethod = 'instant' | 'draw';
+export type SolidPreset = { width?: number; height?: number; depth?: number; radius?: number };
 
 /** Araç panelinin daraltma/kapatma tercihi: 2B panelle aynı anahtar. */
 const PANEL_KAPALI_ANAHTARI = 'geoeba_arac_paneli_kapali_v1';
@@ -111,6 +112,10 @@ interface Toolbar3DProps {
   initialTab?: SidebarTab;
   /** Sekme değişince bildirilir: 2B ile 3B paneli arasında geçişte seçili sekme korunur (WorkspaceView) */
   onTabChange?: (sekme: SidebarTab) => void;
+  creationMethod?: CreationMethod;
+  onCreationMethodChange?: (method: CreationMethod) => void;
+  creationPreset?: SolidPreset | null;
+  onCreationPresetChange?: (preset: SolidPreset | null) => void;
 }
 
 /** Gizlenen cismin geri yüklenecek görünüm değerleri (göz simgesi) */
@@ -198,6 +203,7 @@ function SayiAlani({
         if (vazgecildi.current) {
           vazgecildi.current = false;
           setMetin(formatTurkishNumber(value, 2));
+
           return;
         }
         uygula();
@@ -322,6 +328,10 @@ export function Toolbar3D({
   onUpdateSolidById,
   initialTab = 'araclar',
   onTabChange,
+  creationMethod: creationMethodProp,
+  onCreationMethodChange,
+  creationPreset: creationPresetProp,
+  onCreationPresetChange,
 }: Toolbar3DProps) {
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>(initialTab);
   const onTabChangeRef = useRef(onTabChange);
@@ -330,7 +340,18 @@ export function Toolbar3D({
     onTabChangeRef.current?.(sidebarTab);
   }, [sidebarTab]);
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
-  const [creationMethod, setCreationMethod] = useState<CreationMethod>('instant');
+  const [localCreationMethod, setLocalCreationMethod] = useState<CreationMethod>('instant');
+  const [localCreationPreset, setLocalCreationPreset] = useState<SolidPreset | null>(null);
+  const creationMethod = creationMethodProp ?? localCreationMethod;
+  const creationPreset = creationPresetProp !== undefined ? creationPresetProp : localCreationPreset;
+  const setCreationMethod = (m: CreationMethod) => {
+    setLocalCreationMethod(m);
+    onCreationMethodChange?.(m);
+  };
+  const setCreationPreset = (p: SolidPreset | null) => {
+    setLocalCreationPreset(p);
+    onCreationPresetChange?.(p);
+  };
   const [toolSearch, setToolSearch] = useState('');
   const [objectSearch, setObjectSearch] = useState('');
   const [adDuzenlenen, setAdDuzenlenen] = useState<{ id: string; taslak: string } | null>(null);
@@ -447,23 +468,31 @@ export function Toolbar3D({
       case 'tool': {
         if (arac.id === 'delete' && hasSelection) {
           onDeleteSelected();
+
           return;
         }
+        setCreationPreset(null);
         setActiveTool(arac.id as Tool3DMode);
         return;
       }
       case 'solid': {
         const tur = arac.solidType ?? 'cube';
-        if (arac.preset) {
-          if (onAddSolidPreset) onAddSolidPreset(tur, arac.preset);
-          else onAddSolid(tur);
+        const kip = `create_${tur}` as Tool3DMode;
+        const yeniPreset = arac.preset ?? null;
+        const ayniArac = activeTool === kip && Boolean(creationPreset) === Boolean(yeniPreset);
+        setCreationPreset(ayniArac ? null : yeniPreset);
+        setActiveTool(ayniArac ? 'select_move' : kip); { {
+
+
+
+
           return;
         }
-        if (creationMethod === 'draw') {
-          const kip = `create_${tur}` as Tool3DMode;
-          setActiveTool(activeTool === kip ? 'select_move' : kip);
-        } else {
-          onAddSolid(tur);
+
+
+
+
+
         }
         return;
       }
@@ -502,7 +531,7 @@ export function Toolbar3D({
       case 'tool':
         return activeTool === arac.id;
       case 'solid':
-        return !arac.preset && creationMethod === 'draw' && activeTool === `create_${arac.solidType}`;
+        return activeTool === `create_${arac.solidType}` && Boolean(arac.preset) === Boolean(creationPreset);
       case 'toggle':
         if (arac.id === 'yapisma') return yapisma.acik;
         if (arac.id === 'show_grid') return showGrid;
@@ -517,7 +546,7 @@ export function Toolbar3D({
 
   const aracBasligi = (arac: TreeTool3DItem): string => {
     if (arac.kind === 'solid' && !arac.preset) {
-      return `${arac.name} — ${creationMethod === 'draw' ? 'Zeminde sürükleyerek çizin.' : 'Tıklayınca sahneye eklenir.'} ${arac.description}`;
+      return `${arac.name} — ${creationMethod === 'draw' ? 'Zeminde sürükleyerek çizin.' : 'Düzlemde istediğiniz konuma tıklayarak yerleştirin.'} ${arac.description}`;
     }
     return `${arac.name} — ${arac.description}`;
   };
@@ -714,7 +743,7 @@ export function Toolbar3D({
                           <div className="flex items-center gap-1 p-0.5 mb-1 rounded-lg bg-muted/60 border border-border/60" role="radiogroup" aria-label="Cisim ekleme yöntemi">
                             {(
                               [
-                                { kip: 'instant', ad: 'Tıkla Ekle', aciklama: 'Cisim sahnenin ortasına eklenir' },
+                                { kip: 'instant', ad: 'Tıkla Ekle', aciklama: 'Düzlemde tıkladığınız konuma eklenir' },
                                 { kip: 'draw', ad: 'Zeminde Çiz', aciklama: 'Tabanı zeminde sürükleyerek çizin' },
                               ] as { kip: CreationMethod; ad: string; aciklama: string }[]
                             ).map((secenek) => (

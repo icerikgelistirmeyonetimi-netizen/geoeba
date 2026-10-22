@@ -3,7 +3,7 @@ import type { Point3D, Solid3DObject, Solid3DType } from '@/types/workspace3d';
 import { calculate3DSurfaceArea, calculate3DVolume, generateSolidMesh } from '../geometry3d';
 import {
   aciNormalle, cisimMerkezi, cismiDondur, cismiOlcekle, cismiOtele, cismiYansit, donmeyiSifirla, eksenMatrisi, eulerMatrisi, kopyaAdi,
-  matrisEuler, olcekSonucu, uygula,
+  matrisEuler, olcekSonucu, uygula, seciliAltElemanBilgisi, altElemaniOtele, altElemaniOlcekle, altElemaniDondur,
 } from '../donusum3d';
 
 const TURLER: Solid3DType[] = ['cube', 'sphere', 'cylinder', 'prism', 'triangular_prism', 'cone', 'pyramid'];
@@ -151,5 +151,89 @@ describe('cismiOtele ve adlar', () => {
   it('kopya adı eki yinelenmez', () => {
     expect(kopyaAdi('Küp 1 (yansıma)', 'yansıma')).toBe('Küp 1 (yansıma)');
     expect(kopyaAdi('Küp 1 (öteleme)', 'kopya')).toBe('Küp 1 (kopya)');
+  });
+});
+
+describe('alt eleman (yüzey ve köşe) dönüşümleri', () => {
+  it('yüzey modunda yalnızca seçili yüzeyin köşelerini taşır, ölçekler ve döndürür; diğer köşeler sabit kalır', () => {
+    const kup = cisim('cube', { selectedFaceIndex: 0 });
+    const oncekiKoseler = koseler(kup);
+    const alt = seciliAltElemanBilgisi(kup, 'face');
+    expect(alt).not.toBeNull();
+    expect(alt!.tur).toBe('face');
+
+    const tasinmis = altElemaniOtele(kup, alt!.vertexIndices, { x: 0, y: 0, z: 2 });
+    const tasinmisKoseler = koseler(tasinmis);
+    oncekiKoseler.forEach((p, idx) => {
+      if (alt!.vertexIndices.includes(idx)) {
+        expect(tasinmisKoseler[idx].z).toBeCloseTo(p.z + 2, 5);
+      } else {
+        expect(yakin(tasinmisKoseler[idx], p)).toBe(true);
+      }
+    });
+
+    const olceklenmis = altElemaniOlcekle(kup, 'face', 2);
+    const olcekKoseler = koseler(olceklenmis);
+    oncekiKoseler.forEach((p, idx) => {
+      if (!alt!.vertexIndices.includes(idx)) {
+        expect(yakin(olcekKoseler[idx], p)).toBe(true);
+      }
+    });
+
+    const dondurulmus = altElemaniDondur(kup, 'face', 'z', 45);
+    const dondurKoseler = koseler(dondurulmus);
+    oncekiKoseler.forEach((p, idx) => {
+      if (!alt!.vertexIndices.includes(idx)) {
+        expect(yakin(dondurKoseler[idx], p)).toBe(true);
+      }
+    });
+  });
+
+  it('nokta modunda yalnızca seçili köşeyi taşır, diğer tüm köşeler sabit kalır', () => {
+    const kup = cisim('cube', { selectedVertexIndex: 0 });
+    const oncekiKoseler = koseler(kup);
+    const alt = seciliAltElemanBilgisi(kup, 'vertex');
+    expect(alt).not.toBeNull();
+    expect(alt!.tur).toBe('vertex');
+
+    const tasinmis = altElemaniOtele(kup, alt!.vertexIndices, { x: 1.5, y: -1, z: 0.5 });
+    const tasinmisKoseler = koseler(tasinmis);
+    expect(tasinmisKoseler[0].x).toBeCloseTo(oncekiKoseler[0].x + 1.5, 5);
+    expect(tasinmisKoseler[0].y).toBeCloseTo(oncekiKoseler[0].y - 1, 5);
+    expect(tasinmisKoseler[0].z).toBeCloseTo(oncekiKoseler[0].z + 0.5, 5);
+    for (let i = 1; i < oncekiKoseler.length; i++) {
+      expect(yakin(tasinmisKoseler[i], oncekiKoseler[i])).toBe(true);
+    }
+  });
+
+  it('yüzey silindiğinde açınım kalan yüzeylerin komşuluk ağacından yeniden hesaplanır', () => {
+    // 1) Küpte Arka Yüz (2) silindiğinde Üst Taban (1) Ön Yüz üzerinden açılır ve tüm kalan 5 yüz z=0 düzlemine yatar
+    const arkaSilinmisKup = cisim('cube', { position: { x: 0, y: 0, z: 0 }, deletedFaces: [2], unfoldProgress: 1 });
+    const acikKupMesh = generateSolidMesh(arkaSilinmisKup);
+    expect(acikKupMesh.faces.length).toBe(5);
+    acikKupMesh.vertices.forEach((v) => {
+      expect(v.z).toBeCloseTo(0, 4);
+    });
+    expect(calculate3DSurfaceArea(arkaSilinmisKup)).toBeCloseTo(5 * 9, 4);
+
+    // 2) Küpte Alt Taban (0) silindiğinde kalan 5 yüz Üst Taban etrafında z=0 düzlemine açılır
+    const altSilinmisKup = cisim('cube', { position: { x: 0, y: 0, z: 0 }, deletedFaces: [0], unfoldProgress: 1 });
+    const altAcikMesh = generateSolidMesh(altSilinmisKup);
+    expect(altAcikMesh.faces.length).toBe(5);
+    altAcikMesh.vertices.forEach((v) => {
+      expect(v.z).toBeCloseTo(0, 4);
+    });
+
+    // 3) Piramitte Kare Taban (0) silindiğinde kalan 4 üçgen yan yüz yan ayrıtlarından birbirine bağlı yelpaze olarak z=0 düzlemine açılır
+    const tabansizPiramit = cisim('pyramid', { position: { x: 0, y: 0, z: 0 }, deletedFaces: [0], unfoldProgress: 1 });
+    const piramitMesh = generateSolidMesh(tabansizPiramit);
+    expect(piramitMesh.faces.length).toBe(4);
+    piramitMesh.vertices.forEach((v) => {
+      expect(v.z).toBeCloseTo(0, 4);
+    });
+
+    // 4) Kürede tek yüzey olduğu için herhangi bir yüzey dilimi silindiğinde tüm küre yüzeyi silinir (0 yüz kalır)
+    const kureMesh = generateSolidMesh(cisim('sphere', { deletedFaces: [42] }));
+    expect(kureMesh.faces.length).toBe(0);
   });
 });

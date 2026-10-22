@@ -1,5 +1,6 @@
 import type { Point3D, Solid3DObject } from '@/types/workspace3d';
-import { rotatePoint3D } from './geometry3d';
+import type { Point3D, SelectionMode3D, Solid3DObject } from '@/types/workspace3d';
+import { generateSolidMesh, rotatePoint3D } from './geometry3d';
 
 /**
  * 3B katı cisim dönüşümleri (saf, sınanabilir): döndürme, büyütme / küçültme, düzleme göre yansıtma, öteleme.
@@ -186,6 +187,113 @@ export function cismiOtele(solid: Solid3DObject, v: Point3D, o: { id?: string; n
 }
 
 /** Kopya adı: "Küp 1" → "Küp 1 (yansıma)"; aynı ek iki kez eklenmez. */
+export interface AltElemanBilgisi {
+  tur: 'face' | 'vertex';
+  vertexIndices: number[];
+  merkez: Point3D;
+  koseler: Point3D[];
+}
+
+/**
+ * Yüzey ('face') veya Nokta ('vertex') seçim modunda seçili olan alt elemanın köşe dizinlerini ve merkezini döndürür.
+ * Nesne ('object') modundaysa veya seçili alt eleman yoksa null döner.
+ */
+export function seciliAltElemanBilgisi(solid: Solid3DObject, selectionMode: SelectionMode3D): AltElemanBilgisi | null {
+  if (selectionMode === 'vertex' && typeof solid.selectedVertexIndex === 'number') {
+    const mesh = generateSolidMesh(solid);
+    const v = mesh.vertices[solid.selectedVertexIndex];
+    if (!v) return null;
+    return {
+      tur: 'vertex',
+      vertexIndices: [solid.selectedVertexIndex],
+      merkez: v,
+      koseler: [v],
+    };
+  }
+  if (selectionMode === 'face' && typeof solid.selectedFaceIndex === 'number') {
+    const mesh = generateSolidMesh(solid);
+    const face = mesh.faces.find((f, idx) => (f.faceIndex ?? idx) === solid.selectedFaceIndex);
+    if (!face || face.vertexIndices.length === 0) return null;
+    const koseler = face.vertexIndices.map((vi) => mesh.vertices[vi]).filter(Boolean);
+    if (koseler.length === 0) return null;
+    const toplam = koseler.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y, z: acc.z + p.z }), { x: 0, y: 0, z: 0 });
+    const n = koseler.length;
+    const merkez = { x: toplam.x / n, y: toplam.y / n, z: toplam.z / n };
+    return {
+      tur: 'face',
+      vertexIndices: face.vertexIndices,
+      merkez,
+      koseler,
+    };
+  }
+  return null;
+}
+
+/**
+ * Seçili yüzeyin veya köşe noktasının köşelerini verilen `delta` kadar öteler (yalnızca o alt eleman taşınır).
+ */
+export function altElemaniOtele(solid: Solid3DObject, vertexIndices: readonly number[], delta: Point3D): Solid3DObject {
+  const mevcut = solid.vertexOffsets ?? {};
+  const yeni: Record<number, Point3D> = { ...mevcut };
+  const tekil = new Set<number>(vertexIndices);
+  for (const vi of tekil) {
+    const eski = mevcut[vi] ?? { x: 0, y: 0, z: 0 };
+    yeni[vi] = noktaTemizle(topla(eski, delta));
+  }
+  return { ...solid, vertexOffsets: yeni };
+}
+
+/**
+ * Yüzey veya Nokta seçim modunda seçili alt elemanı ölçekler; Nesne modundaysa tüm cismi ölçekler.
+ */
+export function altElemaniOlcekle(solid: Solid3DObject, selectionMode: SelectionMode3D, k: number): Solid3DObject {
+  const bilgi = seciliAltElemanBilgisi(solid, selectionMode);
+  if (!bilgi) return cismiOlcekle(solid, k, 'taban');
+  const oran = Math.min(OLCEK_EN_COK, Math.max(OLCEK_EN_AZ, k));
+  const mesh = generateSolidMesh(solid);
+  const pivot = bilgi.tur === 'face' ? bilgi.merkez : cisimMerkezi(solid);
+  const mevcut = solid.vertexOffsets ?? {};
+  const yeni: Record<number, Point3D> = { ...mevcut };
+  const tekil = new Set<number>(bilgi.vertexIndices);
+  for (const vi of tekil) {
+    const v = mesh.vertices[vi];
+    if (!v) continue;
+    const dv = olcek(cikar(v, pivot), oran - 1);
+    const eski = mevcut[vi] ?? { x: 0, y: 0, z: 0 };
+    yeni[vi] = noktaTemizle(topla(eski, dv));
+  }
+  return { ...solid, vertexOffsets: yeni };
+}
+
+/**
+ * Yüzey veya Nokta seçim modunda seçili alt elemanı döndürür; Nesne modundaysa tüm cismi döndürür.
+ */
+export function altElemaniDondur(
+  solid: Solid3DObject,
+  selectionMode: SelectionMode3D,
+  eksen: Eksen | Point3D,
+  derece: number
+): Solid3DObject {
+  const bilgi = seciliAltElemanBilgisi(solid, selectionMode);
+  if (!bilgi) return cismiDondur(solid, eksen, derece, 'merkez');
+  if (!Number.isFinite(derece)) return solid;
+  const Ra = eksenMatrisi(eksen, derece);
+  const mesh = generateSolidMesh(solid);
+  const pivot = bilgi.tur === 'face' ? bilgi.merkez : cisimMerkezi(solid);
+  const mevcut = solid.vertexOffsets ?? {};
+  const yeni: Record<number, Point3D> = { ...mevcut };
+  const tekil = new Set<number>(bilgi.vertexIndices);
+  for (const vi of tekil) {
+    const v = mesh.vertices[vi];
+    if (!v) continue;
+    const vYeni = topla(pivot, uygula(Ra, cikar(v, pivot)));
+    const dv = cikar(vYeni, v);
+    const eski = mevcut[vi] ?? { x: 0, y: 0, z: 0 };
+    yeni[vi] = noktaTemizle(topla(eski, dv));
+  }
+  return { ...solid, vertexOffsets: yeni };
+}
+
 export function kopyaAdi(name: string, ek: 'yansıma' | 'öteleme' | 'kopya'): string {
   const temel = name.replace(/\s*\((?:yansıma|öteleme|kopya)\)$/u, '');
   return `${temel} (${ek})`;

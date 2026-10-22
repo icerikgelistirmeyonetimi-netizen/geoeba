@@ -373,6 +373,11 @@ export function WorkspaceView() {
   const setSelectedSolidId = (id: string | null) => setSelectedSolidIds(id ? [id] : []);
 
   const [active3DTool, setActive3DTool] = useState<Tool3DMode>('select_move');
+  const [creationMethod3D, setCreationMethod3D] = useState<'instant' | 'draw'>('instant');
+  const [creationPreset3D, setCreationPreset3D] = useState<{ width?: number; height?: number; depth?: number; radius?: number } | null>(null);
+  useEffect(() => {
+    if (!active3DTool.startsWith('create_')) setCreationPreset3D(null);
+  }, [active3DTool]);
   // Araç değişince yarım kalmış sürükleme (taşıma, döndürme, ölçek) iptal edilir; geçmişte boş adım kalmaz
   useEffect(() => {
     handleDragCancel();
@@ -814,10 +819,16 @@ export function WorkspaceView() {
             selectedSolidId={selectedSolidId}
             selectedSolidIds={selectedSolidIds}
             activeTool={active3DTool}
+            creationMethod={creationMethod3D}
+            creationPreset={creationPreset3D}
             camera={camera3D}
             showGlobalVertices={showGlobalVertices}
             showGlobalEdges={showGlobalEdges}
             showGlobalFaces={showGlobalFaces}
+            setShowGlobalVertices={setShowGlobalVertices}
+            setShowGlobalEdges={setShowGlobalEdges}
+            setShowGlobalFaces={setShowGlobalFaces}
+            onSetCameraPreset={handleSetCameraPreset}
             setCamera={setCamera3D}
             onSelectSolid={setSelectedSolidId}
             onSelectSolids={setSelectedSolidIds}
@@ -865,6 +876,8 @@ export function WorkspaceView() {
             {show3DToolbar ? (
               <Toolbar3D
                 activeTool={active3DTool}
+            creationMethod={creationMethod3D}
+            creationPreset={creationPreset3D}
                 setActiveTool={setActive3DTool}
                 showEdges={showGlobalEdges}
                 showVertices={showGlobalVertices}
@@ -878,6 +891,8 @@ export function WorkspaceView() {
                 toggleShowAxes={() => setCamera3D((prev) => ({ ...prev, showAxes: !prev.showAxes }))}
                 onAddSolid={handleAddSolid}
                 onAddSolidPreset={handleAddSolidPreset}
+                onCreationMethodChange={setCreationMethod3D}
+                onCreationPresetChange={setCreationPreset3D}
                 onDeleteSelected={handleDeleteSolid}
                 hasSelection={selectedSolidIds.length > 0}
                 onOpenAddObjectDialog={() => setIsAddObjectDialogOpen(true)}

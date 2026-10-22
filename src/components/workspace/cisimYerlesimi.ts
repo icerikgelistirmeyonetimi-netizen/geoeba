@@ -21,6 +21,7 @@ import {
   type UcgenTabani,
 } from '@/types/workspace3d';
 import { eskenarYuksekligi, generateSolidMesh, ucgenTabaniniBul } from '@/math/geometry3d';
+import { yapismaOturumuKur, yapistir, type YapismaProfili } from '@/math/yapisma3d';
 import { kutuKoseleri } from './canvas3dDonusum';
 
 /** Stüdyonun açılış kamerası; Ölçek %100 = zoom 55 (Canvas3D alt bilgisi: zoom / 55). */
@@ -277,6 +278,61 @@ const bosCisim = (yeni: Pick<Solid3DObject, 'type' | 'dimensions'> & Partial<Pic
  * Uzaklık ekran yatayında (kameranın sağı) 1, derinlikte 2 ağırlıkla ölçülür; eşitlikte sağ taraf önce gelir.
  * Hiç boş yer yoksa bakış noktası döner.
  */
+export function yerlesimKonumuHesapla(
+  mevcut: readonly Solid3DObject[],
+  taslakTip: Solid3DType,
+  taslakOlcu: { width: number; height: number; depth: number; radius?: number },
+  hamKonum: Point3D,
+  ayarlar: {
+    acik: boolean;
+    izgaraAcik: boolean;
+    nesneAcik: boolean;
+    izgaraGorunur: boolean;
+    pikselBasinaBirim: number;
+    profil: YapismaProfili;
+  }
+): Point3D {
+  if (!ayarlar.acik || (!ayarlar.izgaraAcik && !ayarlar.nesneAcik)) {
+    return { x: Number(hamKonum.x.toFixed(1)), y: Number(hamKonum.y.toFixed(1)), z: Number((hamKonum.z || 0).toFixed(1)) };
+  }
+  const taslak: Solid3DObject = {
+    id: '__yerlesim_taslak__',
+    type: taslakTip,
+    name: '',
+    position: { x: 0, y: 0, z: 0 },
+    dimensions: taslakOlcu,
+    rotation: { x: 0, y: 0, z: 0 },
+    color: '',
+    opacity: 1,
+    showWireframe: true,
+    showVertices: false,
+    showFaces: true,
+    unfoldProgress: 0,
+    selectedFaceIndex: null,
+  };
+  const sahne = ayarlar.nesneAcik ? [...mevcut, taslak] : [taslak];
+  const profil: YapismaProfili = ayarlar.izgaraAcik
+    ? { ...ayarlar.profil, izgara: 'her_zaman' }
+    : ayarlar.profil;
+  const oturum = yapismaOturumuKur(
+    sahne,
+    ['__yerlesim_taslak__'],
+    { __yerlesim_taslak__: { x: 0, y: 0, z: 0 } },
+    'serbest',
+    profil
+  );
+  const sonuc = yapistir(oturum, {
+    hamDelta: hamKonum,
+    pikselBasinaBirim: ayarlar.pikselBasinaBirim,
+    izgaraGorunur: ayarlar.izgaraAcik && ayarlar.izgaraGorunur,
+  });
+  return {
+    x: Number(sonuc.delta.x.toFixed(2)),
+    y: Number(sonuc.delta.y.toFixed(2)),
+    z: Number(sonuc.delta.z.toFixed(2)),
+  };
+}
+
 export function bosKonumBul(
   mevcut: readonly Solid3DObject[],
   yeni: Pick<Solid3DObject, 'type' | 'dimensions'> & Partial<Pick<Solid3DObject, 'rotation'>>,

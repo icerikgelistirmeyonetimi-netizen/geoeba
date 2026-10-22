@@ -11,6 +11,7 @@ import {
   CAMERA_ZOOM_MIN,
   CAMERA_ZOOM_MAX,
   CAMERA_PITCH_LIMIT,
+  SelectionMode3D,
 } from '@/types/workspace3d';
 import {
   Point2D,
@@ -62,7 +63,7 @@ import {
 } from 'lucide-react';
 import { ViewCube3D } from './ViewCube3D';
 import { noktalariOlcekle3B, noktaYaricapiPx, type NoktaBoyutu3B } from './noktaBoyutu3B';
-import { ContextMenu } from './ContextMenu';
+import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { createId } from '@/state/ids';
 import {
   cisimMerkezi,
@@ -72,13 +73,17 @@ import {
   cismiYansit,
   cismiOtele,
   kopyaAdi,
+  seciliAltElemanBilgisi,
+  altElemaniOtele,
+  altElemaniOlcekle,
+  altElemaniDondur,
   OLCEK_EN_AZ,
   OLCEK_EN_COK,
   type AynaDuzlemi,
 } from '@/math/donusum3d';
 import { CISIM_RENKLERI, KOPYA_RENGI } from './cisimRenkleri';
 import { NESNE_RENGI, NESNE_SECIM_RENGI, NESNE_SECIM_RENGI_KOYU_TEMA } from '@/utils/nesneRenkleri';
-import { cismiGorunurKil, cizimOlculeri } from './cisimYerlesimi';
+import { VARSAYILAN_CISIM_OLCULERI, cismiGorunurKil, cizimOlculeri, kamerayiSifirla, yerlesimKonumuHesapla } from './cisimYerlesimi';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { gizliSecimBirakilir, kademe2BNesneleri3BdeGosterir, kademe3BEksenleriGosterir, type AyrimDurumu } from './kademeDuzeyleri3B';
 import { ILKOKUL_3B_DONUS_YONLERI, ilkokulOlcekNotu, ilkokulOzellikMetni } from './ilkokul3B';
@@ -142,7 +147,7 @@ import {
 import { yapismaOturumuKur, yapistir, surukleKipi, pikselBasinaBirim, type YapismaOturumu } from '@/math/yapisma3d';
 import { kilavuzuGuncelle, kilavuzuTemizle, bosKilavuzDurumu, type KilavuzDurumu } from './yapismaKilavuzu3B';
 import { useYapisma3B } from './yapisma3BDurumu';
-import { Magnet } from 'lucide-react';
+import { Magnet, Trash2, Settings, Eye, Layers, CircleDot } from 'lucide-react';
 
 /* -------------------------------------------------------------------------- */
 /*  Sabitler                                                                   */
@@ -568,6 +573,8 @@ interface BuiltSolid {
   triToFace: number[];
   /** Ayrıt çizgileri (Uzunluk Ölçme aracı bunlara ışın atar); ayrıtlar çizilmiyorsa null */
   edgeLines: THREE.LineSegments | null;
+  vertexMesh: THREE.InstancedMesh | null;
+  vertexIndices: number[];
 }
 
 /**
@@ -608,7 +615,7 @@ function buildSolid(
       const idx = face.vertexIndices;
       for (let i = 1; i < idx.length - 1; i++) {
         indices.push(idx[0], idx[i], idx[i + 1]);
-        triToFace.push(fIdx);
+        triToFace.push(face.faceIndex ?? fIdx);
       }
     });
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -618,9 +625,10 @@ function buildSolid(
     const positions: number[] = [];
     const colors: number[] = [];
     mesh.faces.forEach((face, fIdx) => {
-      const custom = solid.faceColors?.[fIdx];
+      const origFIdx = face.faceIndex ?? fIdx;
+      const custom = solid.faceColors?.[origFIdx];
       const col = custom ? new THREE.Color(custom) : baseColor.clone();
-      if (solid.selectedFaceIndex === fIdx) col.lerp(highlight, 0.32);
+      if (solid.selectedFaceIndex === origFIdx) col.lerp(highlight, 0.38);
       const idx = face.vertexIndices;
       for (let i = 1; i < idx.length - 1; i++) {
         const tri = [mesh.vertices[idx[0]], mesh.vertices[idx[i]], mesh.vertices[idx[i + 1]]];
@@ -629,7 +637,7 @@ function buildSolid(
           positions.push(v.x, v.y, v.z);
           colors.push(col.r, col.g, col.b);
         });
-        triToFace.push(fIdx);
+        triToFace.push(face.faceIndex ?? fIdx);
       }
     });
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -677,12 +685,30 @@ function buildSolid(
   }
 
   // --- Köşe (pivot) işaretçileri: boyutu cismin ebadına göre ölçeklenir ---
+  let vertexMesh: THREE.InstancedMesh | null = null;
+  let vertexIndices: number[] = [];
+  const aktifKoseler = new Set<number>();
+  mesh.faces.forEach((f) => f.vertexIndices.forEach((vi) => aktifKoseler.add(vi)));
+  let markerIndices: number[] = [];
   if (opts.showVertices) {
     let markerPoints: Point3D[] = [];
     if (solid.type === 'cone') {
-      markerPoints = mesh.vertices.length ? [mesh.vertices[mesh.vertices.length - 1]] : [];
+      const sonIdx = mesh.vertices.length - 1;
+      if (sonIdx >= 0 && aktifKoseler.has(sonIdx)) {
+        markerPoints = [mesh.vertices[sonIdx]];
+        markerIndices = [sonIdx];
+      }
     } else if (solid.type !== 'sphere' && solid.type !== 'cylinder') {
-      markerPoints = dedupeVertices(mesh.vertices);
+      const gorulen = new Set<string>();
+      mesh.vertices.forEach((v, idx) => {
+        if (!aktifKoseler.has(idx)) return;
+        const k = `${v.x.toFixed(4)}|${v.y.toFixed(4)}|${v.z.toFixed(4)}`;
+        if (!gorulen.has(k)) {
+          gorulen.add(k);
+          markerPoints.push(v);
+          markerIndices.push(idx);
+        }
+      });
     }
 
     if (markerPoints.length > 0) {
@@ -691,7 +717,7 @@ function buildSolid(
       const r = getVertexMarkerRadius(solid, opts.zoom);
       const sphereGeo = new THREE.SphereGeometry(1, 14, 10);
       const coreMat = new THREE.MeshStandardMaterial({
-        color: opts.selected ? highlight : outlineColor,
+        color: '#ffffff',
         roughness: 0.78,
         metalness: 0,
       });
@@ -700,8 +726,16 @@ function buildSolid(
       const core = new THREE.InstancedMesh(sphereGeo, coreMat, markerPoints.length);
       const halo = new THREE.InstancedMesh(sphereGeo, haloMat, markerPoints.length);
       const m = new THREE.Matrix4();
+      const seciliKose = typeof solid.selectedVertexIndex === 'number' ? mesh.vertices[solid.selectedVertexIndex] : undefined;
+      const koseSecimRengi = new THREE.Color('#f59e0b');
+      const varsayilanRenk = opts.selected ? highlight : outlineColor;
       markerPoints.forEach((p, i) => {
-        m.makeScale(r, r, r).setPosition(p.x, p.y, p.z);
+        const seciliMi =
+          solid.selectedVertexIndex === markerIndices[i] ||
+          Boolean(seciliKose && Math.hypot(p.x - seciliKose.x, p.y - seciliKose.y, p.z - seciliKose.z) < 1e-4);
+        const olcek = seciliMi ? r * 1.45 : r;
+        core.setColorAt(i, seciliMi ? koseSecimRengi : varsayilanRenk);
+        m.makeScale(olcek, olcek, olcek).setPosition(p.x, p.y, p.z);
         core.setMatrixAt(i, m);
         m.makeScale(r * 1.3, r * 1.3, r * 1.3).setPosition(p.x, p.y, p.z);
         halo.setMatrixAt(i, m);
@@ -713,11 +747,14 @@ function buildSolid(
       core.userData = { solidId: solid.id, kind: 'vertex' };
       halo.userData = { solidId: solid.id, kind: 'vertex' };
       group.add(halo);
+      if (core.instanceColor) core.instanceColor.needsUpdate = true;
       group.add(core);
+      vertexMesh = core;
+      vertexIndices = markerIndices;
     }
   }
 
-  return { group, faceMesh, triToFace, edgeLines };
+  return { group, faceMesh, triToFace, edgeLines, vertexMesh, vertexIndices };
 }
 
 /** Gizmo boyutu: cismin en büyük boyutuyla orantılı, makul sınırlar içinde */
@@ -1191,6 +1228,11 @@ interface Canvas3DProps {
   showGlobalVertices: boolean;
   showGlobalEdges: boolean;
   showGlobalFaces: boolean;
+  setShowGlobalVertices?: (val: boolean) => void;
+  setShowGlobalEdges?: (val: boolean) => void;
+  setShowGlobalFaces?: (val: boolean) => void;
+  onResetView?: () => void;
+  onSetCameraPreset?: (preset: 'isometric' | 'front' | 'back' | 'top' | 'bottom' | 'right' | 'left' | 'side') => void;
   setCamera: React.Dispatch<React.SetStateAction<Camera3D>>;
   onSelectSolid: (id: string | null) => void;
   onSelectSolids?: (ids: string[]) => void;
@@ -1221,6 +1263,8 @@ interface Canvas3DProps {
   onTransformSolids?: (next: Solid3DObject[]) => void;
   /** Sürükleme (döndürme/ölçek) karesi: dragSolids yoluyla, onDragEnd ile tek geri alma adımı */
   onDragSolidsTransform?: (next: Solid3DObject[]) => void;
+  creationMethod?: 'instant' | 'draw';
+  creationPreset?: { width?: number; height?: number; depth?: number; radius?: number } | null;
 }
 
 type Interaction =
@@ -1400,6 +1444,11 @@ export function Canvas3D(props: Canvas3DProps) {
     onTransformSolids,
     onDragSolidsTransform,
   } = props;
+  const creationMethod = props.creationMethod ?? 'instant';
+  const creationPreset = props.creationPreset ?? null;
+  const onizlemeKonumuRef = useRef<Point3D | null>(null);
+  const tuvaldenEklendiRef = useRef(false);
+  const baslangicCisimleriRef = useRef<Record<string, Solid3DObject>>({});
   const canUndo = canUndoProp ?? Boolean(onUndo);
   const canRedo = canRedoProp ?? Boolean(onRedo);
 
@@ -1486,7 +1535,15 @@ export function Canvas3D(props: Canvas3DProps) {
 
   // Yeni cisimler sonuç göstermeden başlar. Ölçme isteği yalnız seçilen cisme aittir.
   const [cisimOlcumleri, setCisimOlcumleri] = useState<Record<string, { hacim?: boolean; alan?: boolean }>>({});
-  const [cisimOlcumMenusu, setCisimOlcumMenusu] = useState<{ solidId: string; x: number; y: number } | null>(null);
+  const [selectionMode, setSelectionMode] = useState<SelectionMode3D>('object');
+  const [cisimOlcumMenusu, setCisimOlcumMenusu] = useState<{
+    solidId?: string | null;
+    faceIndex?: number | null;
+    vertexIndex?: number | null;
+    mathObjectId?: string | null;
+    x: number;
+    y: number;
+  } | null>(null);
   const sagTikRef = useRef<{ x: number; y: number; suruklendi: boolean } | null>(null);
 
   // Seçili tek cisim (canlı hacim/alan rozeti ve şeritler bunu kullanır)
@@ -1506,6 +1563,7 @@ export function Canvas3D(props: Canvas3DProps) {
     solidsGroup: THREE.Group;
     mathObjectsGroup: THREE.Group;
     gizmoGroup: THREE.Group;
+    previewGroup: THREE.Group;
     gridGroup: THREE.Group | null;
     axesGroup: THREE.Group | null;
     raycaster: THREE.Raycaster;
@@ -1543,6 +1601,9 @@ export function Canvas3D(props: Canvas3DProps) {
     onDragSolidsTransform,
     workspace,
     yaziOlcegi,
+    creationMethod,
+    creationPreset,
+    selectionMode,
     pikselOrani,
   });
   latest.current = {
@@ -1570,6 +1631,9 @@ export function Canvas3D(props: Canvas3DProps) {
     onDragSolidsTransform,
     workspace,
     yaziOlcegi,
+    creationMethod,
+    creationPreset,
+    selectionMode,
     pikselOrani,
   };
 
@@ -1590,6 +1654,13 @@ export function Canvas3D(props: Canvas3DProps) {
       return;
     }
     if (it.type !== 'move' || !it.moved) return;
+    if ((latest.current.selectionMode === 'face' || latest.current.selectionMode === 'vertex') && latest.current.onDragSolidsTransform) {
+      const baslangiclar = Object.values(baslangicCisimleriRef.current);
+      if (baslangiclar.length > 0) {
+        latest.current.onDragSolidsTransform(baslangiclar);
+        return;
+      }
+    }
     const { x, y, z } = it.applied;
     if (x === 0 && y === 0 && z === 0) return;
     const l = latest.current;
@@ -1634,7 +1705,71 @@ export function Canvas3D(props: Canvas3DProps) {
    * Seçili 2B nesneleri (2B'deki silme kuralıyla: bağımlılarıyla birlikte) ve seçili cisimleri siler.
    * Her ikisi de kendi geçmişine yazılır; ortak geri alma aynı eylemin iki adımını birlikte geri getirir.
    */
+  const yuzuSil = useCallback((solidId: string, faceIndex: number) => {
+    const l = latest.current;
+    const solid = l.solids.find((s) => s.id === solidId);
+    if (!solid) return;
+    if (solid.type === 'sphere') {
+      l.onDeleteSolid?.(solidId);
+      return;
+    }
+    let kanonikIndex = faceIndex;
+    const henuzDegismedi =
+      !solid.deletedFaces?.length &&
+      !solid.deletedVertices?.length &&
+      !(solid.vertexOffsets && Object.keys(solid.vertexOffsets).length > 0);
+    if ((solid.unfoldProgress || 0) > 0 && henuzDegismedi) {
+      if (solid.type === 'cube' || solid.type === 'prism') {
+        if (faceIndex === 1) kanonikIndex = 2;
+        else if (faceIndex === 2) kanonikIndex = 1;
+      } else if (solid.type === 'triangular_prism') {
+        if (faceIndex === 1) kanonikIndex = 2;
+        else if (faceIndex === 2) kanonikIndex = 1;
+        else if (faceIndex === 3) kanonikIndex = 4;
+        else if (faceIndex === 4) kanonikIndex = 3;
+      } else if (solid.type === 'cylinder') {
+        if (faceIndex === 47) kanonikIndex = 0;
+        else if (faceIndex === 48) kanonikIndex = 1;
+        else kanonikIndex = 2;
+      }
+    }
+    const yeniSilinenYuzler = Array.from(new Set([...(solid.deletedFaces ?? []), kanonikIndex]));
+    const kalan = generateSolidMesh({ ...solid, deletedFaces: yeniSilinenYuzler }).faces;
+    if (kalan.length === 0) {
+      l.onDeleteSolid?.(solidId);
+    } else {
+      l.onUpdateSolid?.(solidId, { deletedFaces: yeniSilinenYuzler, selectedFaceIndex: null });
+    }
+  }, []);
+
+  const noktayiSil = useCallback((solidId: string, vertexIndex: number) => {
+    const l = latest.current;
+    const solid = l.solids.find((s) => s.id === solidId);
+    if (!solid) return;
+    const yeniSilinenKoseler = Array.from(new Set([...(solid.deletedVertices ?? []), vertexIndex]));
+    const kalan = generateSolidMesh({ ...solid, deletedVertices: yeniSilinenKoseler }).faces;
+    if (kalan.length === 0) {
+      l.onDeleteSolid?.(solidId);
+    } else {
+      l.onUpdateSolid?.(solidId, { deletedVertices: yeniSilinenKoseler, selectedVertexIndex: null, selectedFaceIndex: null });
+    }
+  }, []);
+
   const seciliyiSil = useCallback(() => {
+    if (latest.current.selectionMode === 'vertex') {
+      const koseCismi = latest.current.solids.find((s) => typeof s.selectedVertexIndex === 'number');
+      if (koseCismi && typeof koseCismi.selectedVertexIndex === 'number') {
+        noktayiSil(koseCismi.id, koseCismi.selectedVertexIndex);
+        return;
+      }
+    }
+    if (latest.current.selectionMode === 'face') {
+      const yuzCismi = latest.current.solids.find((s) => typeof s.selectedFaceIndex === 'number');
+      if (yuzCismi && typeof yuzCismi.selectedFaceIndex === 'number') {
+        yuzuSil(yuzCismi.id, yuzCismi.selectedFaceIndex);
+        return;
+      }
+    }
     const l = latest.current;
     const nesneler = l.workspace.selectedObjectIds;
     if (nesneler.length > 0) {
@@ -1731,7 +1866,9 @@ export function Canvas3D(props: Canvas3DProps) {
     const solidsGroup = new THREE.Group();
     const mathObjectsGroup = new THREE.Group();
     const gizmoGroup = new THREE.Group();
-    scene.add(solidsGroup, mathObjectsGroup, gizmoGroup);
+    const previewGroup = new THREE.Group();
+    previewGroup.visible = false;
+    scene.add(solidsGroup, mathObjectsGroup, gizmoGroup, previewGroup);
 
     threeRef.current = {
       renderer,
@@ -1739,6 +1876,7 @@ export function Canvas3D(props: Canvas3DProps) {
       solidsGroup,
       mathObjectsGroup,
       gizmoGroup,
+      previewGroup,
       gridGroup: null,
       axesGroup: null,
       raycaster: new THREE.Raycaster(),
@@ -1754,6 +1892,7 @@ export function Canvas3D(props: Canvas3DProps) {
       clearGroup(t.solidsGroup);
       clearGroup(t.mathObjectsGroup);
       clearGroup(t.gizmoGroup);
+      clearGroup(t.previewGroup);
       if (t.gridGroup) disposeObject(t.gridGroup);
       if (t.axesGroup) disposeObject(t.axesGroup);
       t.etiketDokulari.hepsiniAt();
@@ -1823,7 +1962,7 @@ export function Canvas3D(props: Canvas3DProps) {
         showFaces: showGlobalFaces,
         // Uzunluk Ölçme ayrıtlara tıklar: ayrıtlar gizliyken de ölçülebilsin diye çizilir
         showEdges: showGlobalEdges || olcmeModu,
-        showVertices: showGlobalVertices,
+        showVertices: showGlobalVertices || selectionMode === 'vertex',
         isDark,
         zoom: camera.zoom,
       });
@@ -1831,7 +1970,7 @@ export function Canvas3D(props: Canvas3DProps) {
       t.solidsGroup.add(built.group);
     });
     requestRender();
-  }, [solids, effectiveSelectedIds, showGlobalFaces, showGlobalEdges, showGlobalVertices, isDark, camera.zoom, olcmeModu, requestRender]);
+  }, [solids, effectiveSelectedIds, showGlobalFaces, showGlobalEdges, showGlobalVertices, selectionMode, isDark, camera.zoom, olcmeModu, requestRender]);
 
   // Silinen cisimlerin ölçü etiketleri ve öteleme oku düşsün
   useEffect(() => {
@@ -1839,7 +1978,7 @@ export function Canvas3D(props: Canvas3DProps) {
       const kalan = Object.fromEntries(Object.entries(prev).filter(([id]) => solids.some((s) => s.id === id)));
       return Object.keys(kalan).length === Object.keys(prev).length ? prev : kalan;
     });
-    setCisimOlcumMenusu((prev) => prev && !solids.some((s) => s.id === prev.solidId) ? null : prev);
+    setCisimOlcumMenusu((prev) => prev && prev.solidId && !solids.some((s) => s.id === prev.solidId) ? null : prev);
     setOlculenAyritlar((prev) => {
       const kalan = prev.filter((a) => solids.some((s) => s.id === a.solidId));
       return kalan.length === prev.length ? prev : kalan;
@@ -1879,6 +2018,10 @@ export function Canvas3D(props: Canvas3DProps) {
     const onceki = oncekiCisimlerRef.current;
     oncekiCisimlerRef.current = new Set(solids.map((s) => s.id));
     if (!onceki) return;
+    if (tuvaldenEklendiRef.current) {
+      tuvaldenEklendiRef.current = false;
+      return;
+    }
     const yeniler = solids.filter((s) => !onceki.has(s.id) && effectiveSelectedIds.includes(s.id));
     if (yeniler.length === 0) return;
     const koseler = yeniler.flatMap((s) => kutuKoseleri(s));
@@ -1889,6 +2032,69 @@ export function Canvas3D(props: Canvas3DProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [solids]);
 
+  /* ---------------- Tıkla Ekle 3B yer tutucu (önizleme) ---------------- */
+  useEffect(() => {
+    const t = threeRef.current;
+    if (!t) return;
+    clearGroup(t.previewGroup);
+    const solidType = CREATE_TYPE_MAP[activeTool];
+    if (!solidType || creationMethod !== 'instant') {
+      t.previewGroup.visible = false;
+      onizlemeKonumuRef.current = null;
+      requestRender();
+      return;
+    }
+    const base = VARSAYILAN_CISIM_OLCULERI[solidType];
+    const dims = creationPreset
+      ? {
+          width: creationPreset.width ?? (creationPreset.radius ? creationPreset.radius * 2 : base.width),
+          height: creationPreset.height ?? base.height,
+          depth: creationPreset.depth ?? (creationPreset.radius ? creationPreset.radius * 2 : base.depth),
+          radius: creationPreset.radius ?? (creationPreset.width ? creationPreset.width / 2 : base.radius),
+        }
+      : { ...base };
+    if (solidType === 'cube') {
+      dims.height = dims.width;
+      dims.depth = dims.width;
+      dims.radius = dims.width / 2;
+    }
+    const nextColor = CISIM_RENKLERI[solids.length % CISIM_RENKLERI.length]?.hex || DEFAULT_SOLID_COLOR;
+    const taslak: Solid3DObject = {
+      id: '__onizleme__',
+      type: solidType,
+      name: '',
+      position: { x: 0, y: 0, z: 0 },
+      dimensions: dims,
+      rotation: { x: 0, y: 0, z: 0 },
+      color: nextColor,
+      opacity: 0.42,
+      showWireframe: true,
+      showVertices: false,
+      showFaces: true,
+      unfoldProgress: 0,
+      selectedFaceIndex: null,
+    };
+    const built = buildSolid(taslak, {
+      selected: true,
+      showFaces: true,
+      showEdges: true,
+      showVertices: false,
+      isDark,
+      zoom: camera.zoom,
+    });
+    if (built.faceMesh.material instanceof THREE.Material) {
+      built.faceMesh.material.depthWrite = false;
+    }
+    t.previewGroup.add(built.group);
+    if (onizlemeKonumuRef.current) {
+      t.previewGroup.position.set(onizlemeKonumuRef.current.x, onizlemeKonumuRef.current.y, 0);
+      t.previewGroup.visible = true;
+    } else {
+      t.previewGroup.visible = false;
+    }
+    requestRender();
+  }, [activeTool, creationMethod, creationPreset, solids.length, isDark, camera.zoom, requestRender]);
+
   /* ------------------------------ Gizmo -------------------------------- */
   useEffect(() => {
     const t = threeRef.current;
@@ -1897,7 +2103,9 @@ export function Canvas3D(props: Canvas3DProps) {
     const secili = solids.filter((s) => effectiveSelectedIds.includes(s.id));
     if (activeTool === 'select_move') {
       secili.forEach((solid) => {
-        const gizmo = buildGizmo(getSolidCenter(solid), gizmoLen(solid));
+        const alt = seciliAltElemanBilgisi(solid, selectionMode);
+        const merkez = alt ? new THREE.Vector3(alt.merkez.x, alt.merkez.y, alt.merkez.z) : getSolidCenter(solid);
+        const gizmo = buildGizmo(merkez, gizmoLen(solid));
         gizmo.userData = { solidId: solid.id };
         t.gizmoGroup.add(gizmo);
       });
@@ -1910,13 +2118,17 @@ export function Canvas3D(props: Canvas3DProps) {
       }
     } else if (activeTool === 'rotate_3d') {
       secili.forEach((solid) => {
-        const gizmo = buildRotateGizmo(getSolidCenter(solid), gizmoLen(solid) * 0.7);
+        const alt = seciliAltElemanBilgisi(solid, selectionMode);
+        const merkez = alt ? new THREE.Vector3(alt.merkez.x, alt.merkez.y, alt.merkez.z) : getSolidCenter(solid);
+        const gizmo = buildRotateGizmo(merkez, gizmoLen(solid) * 0.7);
         gizmo.userData = { solidId: solid.id };
         t.gizmoGroup.add(gizmo);
       });
     } else if (activeTool === 'scale_3d') {
       secili.forEach((solid) => {
-        const gizmo = buildScaleHandles(kutuKoseleri(solid), Math.max(0.12, getSolidExtent(solid) * 0.06));
+        const alt = seciliAltElemanBilgisi(solid, selectionMode);
+        const koseler = alt && alt.tur === 'face' ? alt.koseler : kutuKoseleri(solid);
+        const gizmo = buildScaleHandles(koseler, Math.max(0.12, getSolidExtent(solid) * 0.06));
         gizmo.userData = { solidId: solid.id };
         t.gizmoGroup.add(gizmo);
       });
@@ -1938,7 +2150,7 @@ export function Canvas3D(props: Canvas3DProps) {
       }
     }
     requestRender();
-  }, [solids, effectiveSelectedIds, activeTool, objects, selectedObjectIds, aynaDuzlemi, aynaSeviyesi, otelemeOku, requestRender]);
+  }, [solids, effectiveSelectedIds, activeTool, selectionMode, objects, selectedObjectIds, aynaDuzlemi, aynaSeviyesi, otelemeOku, requestRender]);
 
   /* ------------------------- Mıknatıs kılavuzu (YAP3B) ------------------ */
   // Taşıma bitince (bırakma, Esc, ikinci parmak: hepsi setInteraction(null)) oturum ve kılavuz silinir.
@@ -2030,15 +2242,16 @@ export function Canvas3D(props: Canvas3DProps) {
     [onTransformSolids, seciliCisimler]
   );
   const hazirAciylaDondur = useCallback(
-    (derece: number) => donusumUygula((s) => cismiDondur(s, dondurEkseni, derece, 'merkez')),
-    [donusumUygula, dondurEkseni]
+    (derece: number) => donusumUygula((s) => altElemaniDondur(s, selectionMode, dondurEkseni, derece)),
+    [donusumUygula, dondurEkseni, selectionMode]
+
   );
   const olcekle = useCallback(
     (k: number) => {
       if (!(k > 0)) return;
       // cismiOlcekle çarpanı [0,05; 50] aralığına kırpar; not da gerçekten uygulanan çarpanı anlatmalı
       const uygulanan = Math.min(OLCEK_EN_COK, Math.max(OLCEK_EN_AZ, k));
-      donusumUygula((s) => cismiOlcekle(s, uygulanan, 'taban'));
+      donusumUygula((s) => altElemaniOlcekle(s, latest.current.selectionMode, uygulanan));
       setSonOlcek(uygulanan);
     },
     [donusumUygula]
@@ -2078,6 +2291,65 @@ export function Canvas3D(props: Canvas3DProps) {
       onUpdateSolid(solid.id, { faceColors: next });
     },
     [onUpdateSolid]
+  );
+
+  const pickVertex = useCallback(
+    (ndc: THREE.Vector2): { solidId: string; vertexIndex: number; point: THREE.Vector3; distance: number } | null => {
+      const t = threeRef.current;
+      if (!t) return null;
+      t.raycaster.setFromCamera(ndc, latest.current.basis.camera);
+      const meshes: THREE.Object3D[] = [];
+      t.builtSolids.forEach((b) => {
+        if (b.vertexMesh) meshes.push(b.vertexMesh);
+      });
+      if (meshes.length > 0) {
+        const hits = t.raycaster.intersectObjects(meshes, false);
+        for (const hit of hits) {
+          const solidId = hit.object.userData?.solidId as string | undefined;
+          if (!solidId || typeof hit.instanceId !== 'number') continue;
+          const built = t.builtSolids.get(solidId);
+          const vertexIndex = built?.vertexIndices[hit.instanceId];
+          if (vertexIndex !== undefined) {
+            return { solidId, vertexIndex, point: hit.point.clone(), distance: hit.distance };
+          }
+        }
+      }
+      // Nokta seçim modunda köşenin yakın çevresine (22px) tıklanırsa da o köşeyi yakala
+      const l = latest.current;
+      if (l.selectionMode === 'vertex') {
+        const { width, height } = l.dimensions;
+        const sx = ((ndc.x + 1) * 0.5) * width;
+        const sy = ((1 - ndc.y) * 0.5) * height;
+        let enIyi: { solidId: string; vertexIndex: number; point: THREE.Vector3; distance: number; pxDist: number } | null = null;
+        for (const solid of l.solids) {
+          const built = t.builtSolids.get(solid.id);
+          if (!built || built.vertexIndices.length === 0) continue;
+          const mesh = generateSolidMesh(solid);
+          for (const vIdx of built.vertexIndices) {
+            const v = mesh.vertices[vIdx];
+            if (!v) continue;
+            const pt = new THREE.Vector3(v.x, v.y, v.z);
+            const p = projectToScreen(pt, l.basis.camera, width, height);
+            if (p.behind) continue;
+            const pxDist = Math.hypot(p.x - sx, p.y - sy);
+            if (pxDist <= 22 && (!enIyi || pxDist < enIyi.pxDist)) {
+              enIyi = {
+                solidId: solid.id,
+                vertexIndex: vIdx,
+                point: pt,
+                distance: t.raycaster.ray.origin.distanceTo(pt),
+                pxDist,
+              };
+            }
+          }
+        }
+        if (enIyi) {
+          return { solidId: enIyi.solidId, vertexIndex: enIyi.vertexIndex, point: enIyi.point, distance: enIyi.distance };
+        }
+      }
+      return null;
+    },
+    []
   );
 
   const pickSolid = useCallback(
@@ -2197,7 +2469,14 @@ export function Canvas3D(props: Canvas3DProps) {
           if (ids.includes(s.id)) startPositions[s.id] = { ...s.position };
         });
         const anchor = solids.find((s) => s.id === gizmoSolidId);
-        const plane = anchor ? new THREE.Plane(new THREE.Vector3(0, 0, 1), -anchor.position.z) : null;
+        const startSolids: Record<string, Solid3DObject> = {};
+        solids.forEach((s) => {
+          if (ids.includes(s.id)) startSolids[s.id] = s;
+        });
+        baslangicCisimleriRef.current = startSolids;
+        const altBilgi = anchor ? seciliAltElemanBilgisi(anchor, selectionMode) : null;
+        const duzlemZ = altBilgi ? altBilgi.merkez.z : anchor ? anchor.position.z : 0;
+        const plane = anchor ? new THREE.Plane(new THREE.Vector3(0, 0, 1), -duzlemZ) : null;
         const startHit = plane ? intersectPlane(ndc, plane) : null;
         setInteractionBoth({
           type: 'move',
@@ -2229,7 +2508,7 @@ export function Canvas3D(props: Canvas3DProps) {
         const anchor = solids.find((s) => s.id === g.solidId);
         if (!anchor) return;
         const { width, height } = dimensions;
-        const merkez3B = cisimMerkezi(anchor);
+        const merkez3B = seciliAltElemanBilgisi(anchor, selectionMode)?.merkez ?? cisimMerkezi(anchor);
         const m = projectToScreen(merkez3B, basis.camera, width, height);
         const ortak = {
           anchorId: g.solidId,
@@ -2264,7 +2543,11 @@ export function Canvas3D(props: Canvas3DProps) {
     }
 
     // 2. Cisim
-    const hit = pickSolid(ndc);
+    const vHit = selectionMode === 'vertex' ? pickVertex(ndc) : null;
+    const hamHit = pickSolid(ndc);
+    const hit = vHit
+      ? { solidId: vHit.solidId, faceIndex: hamHit?.solidId === vHit.solidId ? hamHit.faceIndex : null, point: vHit.point }
+      : hamHit;
     const solidDistance = hit && threeRef.current ? threeRef.current.raycaster.ray.origin.distanceTo(hit.point) : Infinity;
 
     // 2a. 2B çizimden gelen nesne (nokta, doğru parçası, çokgen…): ondan daha yakın bir cisim yoksa
@@ -2309,7 +2592,13 @@ export function Canvas3D(props: Canvas3DProps) {
         workspace.setSelectedObjectIds([]);
       }
       if (tool === 'delete') {
-        if (onDeleteSolid) onDeleteSolid(hit.solidId);
+        if (selectionMode === 'vertex' && vHit) {
+          noktayiSil(vHit.solidId, vHit.vertexIndex);
+        } else if (selectionMode === 'face' && typeof hit.faceIndex === 'number') {
+          yuzuSil(hit.solidId, hit.faceIndex);
+        } else if (onDeleteSolid) {
+          onDeleteSolid(hit.solidId);
+        }
         return;
       }
       if (tool === 'inspect') {
@@ -2327,6 +2616,32 @@ export function Canvas3D(props: Canvas3DProps) {
         setInteractionBoth({ type: tool, lastX: e.clientX, lastY: e.clientY });
         return;
       }
+      if (
+        onUpdateSolid &&
+        (tool === 'select_move' || tool === 'rotate_3d' || tool === 'scale_3d' || tool === 'reflect_3d' || tool === 'translate_3d')
+      ) {
+        if (selectionMode === 'vertex' && vHit) {
+          solids.forEach((s) => {
+            if (s.id !== vHit.solidId && (s.selectedVertexIndex != null || s.selectedFaceIndex != null)) {
+              onUpdateSolid(s.id, { selectedVertexIndex: null, selectedFaceIndex: null });
+            }
+          });
+          onUpdateSolid(vHit.solidId, { selectedVertexIndex: vHit.vertexIndex, selectedFaceIndex: null });
+        } else if (selectionMode === 'face') {
+          solids.forEach((s) => {
+            if (s.id !== hit.solidId && (s.selectedFaceIndex != null || s.selectedVertexIndex != null)) {
+              onUpdateSolid(s.id, { selectedFaceIndex: null, selectedVertexIndex: null });
+            }
+          });
+          onUpdateSolid(hit.solidId, { selectedFaceIndex: hit.faceIndex, selectedVertexIndex: null });
+        } else {
+          solids.forEach((s) => {
+            if (s.selectedFaceIndex != null || s.selectedVertexIndex != null) {
+              onUpdateSolid(s.id, { selectedFaceIndex: null, selectedVertexIndex: null });
+            }
+          });
+        }
+      }
       if (tool === 'rotate_3d') {
         // Cisme basıp sürükleme: "parmakla her yöne çevirme" (yatay → z, dikey → kamera sağ vektörü)
         const already = effectiveSelectedIds.includes(hit.solidId);
@@ -2336,8 +2651,16 @@ export function Canvas3D(props: Canvas3DProps) {
         solids.forEach((s) => {
           if (ids.includes(s.id)) start[s.id] = s;
         });
-        const anchor = solids.find((s) => s.id === hit.solidId)!;
-        const merkez3B = cisimMerkezi(anchor);
+        if (start[hit.solidId]) {
+          start[hit.solidId] =
+            selectionMode === 'vertex' && vHit
+              ? { ...start[hit.solidId], selectedVertexIndex: vHit.vertexIndex, selectedFaceIndex: null }
+              : selectionMode === 'face'
+                ? { ...start[hit.solidId], selectedFaceIndex: hit.faceIndex, selectedVertexIndex: null }
+                : start[hit.solidId];
+        }
+        const anchor = start[hit.solidId] || solids.find((s) => s.id === hit.solidId)!;
+        const merkez3B = seciliAltElemanBilgisi(anchor, selectionMode)?.merkez ?? cisimMerkezi(anchor);
         const m = projectToScreen(merkez3B, basis.camera, dimensions.width, dimensions.height);
         setInteractionBoth({
           type: 'rotate',
@@ -2376,6 +2699,20 @@ export function Canvas3D(props: Canvas3DProps) {
         solids.forEach((s) => {
           if (ids.includes(s.id)) startPositions[s.id] = { ...s.position };
         });
+        const startSolids: Record<string, Solid3DObject> = {};
+        solids.forEach((s) => {
+          if (ids.includes(s.id)) {
+            startSolids[s.id] =
+              s.id === hit.solidId
+                ? selectionMode === 'vertex' && vHit
+                  ? { ...s, selectedVertexIndex: vHit.vertexIndex, selectedFaceIndex: null }
+                  : selectionMode === 'face'
+                    ? { ...s, selectedFaceIndex: hit.faceIndex, selectedVertexIndex: null }
+                    : s
+                : s;
+          }
+        });
+        baslangicCisimleriRef.current = startSolids;
         const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -hit.point.z);
         setInteractionBoth({
           type: 'move',
@@ -2399,6 +2736,41 @@ export function Canvas3D(props: Canvas3DProps) {
 
     // 3. Boşluk
     if (CREATE_TYPE_MAP[tool]) {
+      const zeminNoktasi = intersectPlane(ndc, groundPlane);
+      const solidType = CREATE_TYPE_MAP[tool] || 'cube';
+      const base = VARSAYILAN_CISIM_OLCULERI[solidType];
+      const dims = creationPreset
+        ? {
+            width: creationPreset.width ?? (creationPreset.radius ? creationPreset.radius * 2 : base.width),
+            height: creationPreset.height ?? base.height,
+            depth: creationPreset.depth ?? (creationPreset.radius ? creationPreset.radius * 2 : base.depth),
+            radius: creationPreset.radius ?? (creationPreset.width ? creationPreset.width / 2 : base.radius),
+          }
+        : undefined;
+      if (creationMethod === 'instant') {
+        const yap = yapismaAyarRef.current;
+        const hamZemin = zeminNoktasi ? { x: zeminNoktasi.x, y: zeminNoktasi.y, z: 0 } : null;
+        const hedefKonum =
+          onizlemeKonumuRef.current ??
+          (hamZemin
+            ? yerlesimKonumuHesapla(solids, solidType, dims ?? base, hamZemin, {
+                acik: yap.acik && !e.altKey,
+                izgaraAcik: yap.izgaraAcik,
+                nesneAcik: yap.nesneAcik,
+                izgaraGorunur: camera.showGrid,
+                pikselBasinaBirim: pikselBasinaBirim(basis.camera.position, basis.forward, hamZemin, dimensions.height),
+                profil: yap.profil,
+              })
+            : null);
+        if (hedefKonum && onAddSolid) {
+          tuvaldenEklendiRef.current = true;
+          onAddSolid(solidType, dims, hedefKonum);
+          onizlemeKonumuRef.current = null;
+          if (threeRef.current) threeRef.current.previewGroup.visible = false;
+          if (setActive3DTool) setActive3DTool('select_move');
+        }
+        return;
+      }
       const ground = intersectPlane(ndc, groundPlane);
       setInteractionBoth({
         type: 'create',
@@ -2527,13 +2899,13 @@ export function Canvas3D(props: Canvas3DProps) {
         let donustur: (s: Solid3DObject) => Solid3DObject;
         if (it.type === 'scale') {
           const k = tutamacOlcegi(it.merkezEkran, it.startScreen, screen);
-          donustur = (s) => cismiOlcekle(s, k, 'taban');
+          donustur = (s) => altElemaniOlcekle(s, l.selectionMode, k);
         } else if (it.axis === 'free') {
           const { zDerece, sagDerece } = surukleAcisi(e.clientX - it.startClient.x, e.clientY - it.startClient.y, e.shiftKey);
           const sag = l.basis.right;
           donustur = (s) => {
-            let out = zDerece !== 0 ? cismiDondur(s, 'z', zDerece, 'merkez') : s;
-            if (sagDerece !== 0) out = cismiDondur(out, { x: sag.x, y: sag.y, z: sag.z }, sagDerece, 'merkez');
+            let out = zDerece !== 0 ? altElemaniDondur(s, l.selectionMode, 'z', zDerece) : s;
+            if (sagDerece !== 0) out = altElemaniDondur(out, l.selectionMode, { x: sag.x, y: sag.y, z: sag.z }, sagDerece);
             return out;
           };
         } else {
@@ -2548,7 +2920,7 @@ export function Canvas3D(props: Canvas3DProps) {
             const bakiyor = eksenKamerayaBakiyor(eksen, { x: l.basis.forward.x, y: l.basis.forward.y, z: l.basis.forward.z });
             derece = halkaAcisi(it.merkezEkran, it.startScreen, screen, bakiyor, e.shiftKey);
           }
-          donustur = (s) => (derece !== 0 ? cismiDondur(s, eksen, derece, 'merkez') : s);
+          donustur = (s) => (derece !== 0 ? altElemaniDondur(s, l.selectionMode, eksen, derece) : s);
         }
         interactionRef.current = { ...it, moved: true };
         l.onDragSolidsTransform(it.solidIds.map((id) => it.start[id]).filter(Boolean).map(donustur));
@@ -2583,6 +2955,8 @@ export function Canvas3D(props: Canvas3DProps) {
         }
         const step = { x: target.x - it.applied.x, y: target.y - it.applied.y, z: yuvarla2(target.z - it.applied.z) };
         interactionRef.current = { ...it, moved: true, applied: target };
+
+
         if (step.x !== 0 || step.y !== 0) l.workspace.moveObjects(it.objectIds, { x: step.x, y: step.y }, false);
         if (step.z !== 0) l.workspace.moveObjectsZ(it.objectIds, step.z, false);
         return;
@@ -2603,7 +2977,10 @@ export function Canvas3D(props: Canvas3DProps) {
           if (!startPos) return;
           const extent = getSolidExtent(anchor);
           const len = Math.min(6, Math.max(1.6, extent * 0.65 + 0.6));
-          const originPt = getSolidCenter({ ...anchor, position: startPos });
+          const altBilgi = seciliAltElemanBilgisi(baslangicCisimleriRef.current[anchor.id] ?? anchor, l.selectionMode);
+          const originPt = altBilgi
+            ? new THREE.Vector3(altBilgi.merkez.x, altBilgi.merkez.y, altBilgi.merkez.z)
+            : getSolidCenter({ ...anchor, position: startPos });
           const c = projectToScreen(originPt, l.basis.camera, width, height);
           const tip3D = new THREE.Vector3(
             originPt.x + (it.axis === 'x' ? len : 0),
@@ -2642,17 +3019,17 @@ export function Canvas3D(props: Canvas3DProps) {
         if (!it.moved && Math.hypot(e.clientX - it.startClient.x, e.clientY - it.startClient.y) < 3) return;
 
         // Mıknatıs (YAP3B): ham öteleme yapıştırma kurallarından geçer; yazım, applied, geri al ve Esc yolu aynen kalır
-        const yap = yapismaAyarRef.current;
+        const yap = { ...yapismaAyarRef.current, acik: yapismaAyarRef.current.acik && l.selectionMode === 'object' };
         if (yap.acik) {
           sonImlecRef.current = { x: e.clientX, y: e.clientY };
           let o = yapismaOturumuRef.current;
           if (!o || o.kaynak !== it.startPositions) {
-            o = yapismaOturumuKur(l.solids, it.solidIds, it.startPositions, surukleKipi(it.axis, it.vertical), yap.profil, it.startPositions);
+            o = yapismaOturumuKur(yap.nesneAcik ? l.solids : l.solids.filter((s) => it.solidIds.includes(s.id)), it.solidIds, it.startPositions, surukleKipi(it.axis, it.vertical), yap.profil, it.startPositions);
             yapismaOturumuRef.current = o;
           }
           const capa = l.solids.find((s) => s.id === it.anchorId);
           const pxBr = capa ? pikselBasinaBirim(l.basis.camera.position, l.basis.forward, getSolidCenter(capa), height) : l.camera.zoom;
-          const r = yapistir(o, { hamDelta: delta, pikselBasinaBirim: pxBr, dokunma: !(e instanceof MouseEvent), izgaraGorunur: l.camera.showGrid, geciciKapali: e.altKey });
+          const r = yapistir(o, { hamDelta: delta, pikselBasinaBirim: pxBr, dokunma: !(e instanceof MouseEvent), izgaraGorunur: l.camera.showGrid && yap.izgaraAcik, geciciKapali: e.altKey });
           delta = r.delta;
           const t3 = threeRef.current;
           if (t3 && kilavuzuGuncelle(t3.scene, kilavuzRef.current, r.iz, { hizaCizgisi: yap.profil.hizaCizgisi }, requestRender)) requestRender();
@@ -2665,10 +3042,28 @@ export function Canvas3D(props: Canvas3DProps) {
         };
         interactionRef.current = { ...it, moved: true, applied: target };
 
+
+
         // Birden çok cisim seçiliyse TEK bir toplu güncelleme gönderilir: aksi hâlde
         // her karede cisim başına ayrı `move:<id>` anahtarıyla dispatch edilir,
         // anahtarlar dönüşümlü değiştiği için geçmiş birleştirmesi çalışmaz ve
         // saniyeler içinde tüm geri alma geçmişi taşar.
+        if ((l.selectionMode === 'face' || l.selectionMode === 'vertex') && l.onDragSolidsTransform) {
+          const guncellenen: Solid3DObject[] = [];
+          it.solidIds.forEach((id) => {
+            const baslangic = baslangicCisimleriRef.current[id];
+            if (!baslangic) return;
+            const alt = seciliAltElemanBilgisi(baslangic, l.selectionMode);
+            if (alt && alt.vertexIndices.length > 0) {
+              guncellenen.push(altElemaniOtele(baslangic, alt.vertexIndices, target));
+            }
+          });
+          if (guncellenen.length > 0) {
+            l.onDragSolidsTransform(guncellenen);
+            return;
+          }
+        }
+
         if (it.solidIds.length > 1 && l.onUpdateSolidsPosition) {
           const step: Point3D = {
             x: target.x - it.applied.x,
@@ -2697,6 +3092,7 @@ export function Canvas3D(props: Canvas3DProps) {
       const l = latest.current;
 
       if (it.type === 'create' && l.onAddSolid) {
+        tuvaldenEklendiRef.current = true;
         const distPx = Math.hypot(it.currentScreen.x - it.startScreen.x, it.currentScreen.y - it.startScreen.y);
         const size = Number(Math.max(2, Math.min(8, distPx / 20)).toFixed(l.ilkokul3B ? 0 : 1));
         const solidType = CREATE_TYPE_MAP[l.activeTool] || 'cube';
@@ -2870,7 +3266,10 @@ export function Canvas3D(props: Canvas3DProps) {
     if (activeTool === 'select_move') {
       solids.forEach((solid) => {
         if (!effectiveSelectedIds.includes(solid.id)) return;
-        const center = getSolidCenter(solid);
+        const altBilgi = seciliAltElemanBilgisi(solid, selectionMode);
+        const center = altBilgi
+          ? new THREE.Vector3(altBilgi.merkez.x, altBilgi.merkez.y, altBilgi.merkez.z)
+          : getSolidCenter(solid);
         const extent = getSolidExtent(solid);
         const len = Math.min(6, Math.max(1.6, extent * 0.65 + 0.6));
         (['x', 'y', 'z'] as Axis[]).forEach((axis) => {
@@ -2921,7 +3320,7 @@ export function Canvas3D(props: Canvas3DProps) {
     const inspected = solids.find((s) => s.selectedFaceIndex !== null && s.selectedFaceIndex !== undefined);
     if (inspected && inspected.selectedFaceIndex !== null) {
       const mesh = generateSolidMesh(inspected);
-      const face = mesh.faces[inspected.selectedFaceIndex];
+      const face = mesh.faces.find((f, idx) => (f.faceIndex ?? idx) === inspected.selectedFaceIndex);
       if (face) {
         const centroid = new THREE.Vector3();
         face.vertexIndices.forEach((i) => {
@@ -3011,7 +3410,8 @@ export function Canvas3D(props: Canvas3DProps) {
       etkin ? 'bg-accent text-foreground ring-1 ring-primary/25' : 'text-foreground hover:bg-muted'
     }`;
 
-  const olcumMenusuCismi = cisimOlcumMenusu ? solids.find((s) => s.id === cisimOlcumMenusu.solidId) : undefined;
+  const olcumMenusuCismi = cisimOlcumMenusu?.solidId ? solids.find((s) => s.id === cisimOlcumMenusu.solidId) : undefined;
+  const olcumMenusu2BNesne = cisimOlcumMenusu?.mathObjectId ? objects.find((o) => o.id === cisimOlcumMenusu.mathObjectId) : undefined;
   const cisimOlcumunuDegistir = (solidId: string, tur: 'hacim' | 'alan') => {
     const goster = !cisimOlcumleri[solidId]?.[tur];
     setCisimOlcumleri((prev) => ({ ...prev, [solidId]: { ...prev[solidId], [tur]: goster } }));
@@ -3021,22 +3421,366 @@ export function Canvas3D(props: Canvas3DProps) {
     }
   };
 
+  const sagTikBasligi = useMemo(() => {
+    if (!cisimOlcumMenusu) return '3B Uzay';
+    if (olcumMenusu2BNesne) {
+      return olcumMenusu2BNesne.label || (olcumMenusu2BNesne.type === 'point' ? 'Nokta' : 'Nesne');
+    }
+    if (olcumMenusuCismi) {
+      if (typeof cisimOlcumMenusu.vertexIndex === 'number') {
+        return `${olcumMenusuCismi.name} · Köşe Noktası`;
+      }
+      if (typeof cisimOlcumMenusu.faceIndex === 'number') {
+        const yuzAdi =
+          generateSolidMesh(olcumMenusuCismi).faces.find((f, idx) => (f.faceIndex ?? idx) === cisimOlcumMenusu.faceIndex)?.label || 'Yüzey';
+        return `${olcumMenusuCismi.name} · ${yuzAdi}`;
+      }
+      return olcumMenusuCismi.name || 'Cisim';
+    }
+    return '3B Görünüm ve Yakalama';
+  }, [cisimOlcumMenusu, olcumMenusu2BNesne, olcumMenusuCismi]);
+
+  const sagTikMaddeleri = useMemo<ContextMenuItem[]>(() => {
+    if (!cisimOlcumMenusu) return [];
+
+    if (olcumMenusu2BNesne) {
+      const noktaMi = olcumMenusu2BNesne.type === 'point';
+      return [
+        {
+          id: 'nesne-2b-sil',
+          label: noktaMi ? 'Noktayı Sil' : 'Nesneyi Sil',
+          icon: <Trash2 className="w-4 h-4" />,
+          danger: true,
+          onSelect: () => {
+            workspace.deleteObjects([olcumMenusu2BNesne.id]);
+            workspace.setSelectedObjectIds([]);
+          },
+        },
+      ];
+    }
+
+    if (olcumMenusuCismi) {
+      const maddeler: ContextMenuItem[] = [];
+      if (activeTool !== 'select_move' && setActive3DTool) {
+        maddeler.push({
+          id: 'cisim-tasi',
+          label: 'Taşı',
+          icon: <MousePointer className="w-4 h-4" />,
+          onSelect: () => {
+            selectIds([olcumMenusuCismi.id]);
+            setActive3DTool('select_move');
+          },
+        });
+      }
+      if (!ilkokul3B) {
+        maddeler.push({
+          id: 'cisim-olcme',
+          label: 'Ölçme',
+          icon: <Ruler className="w-4 h-4" />,
+          submenu: [
+            {
+              id: 'cisim-hacim',
+              label: cisimOlcumleri[olcumMenusuCismi.id]?.hacim ? 'Hacim ölçümünü gizle' : 'Hacmini ölç',
+              onSelect: () => cisimOlcumunuDegistir(olcumMenusuCismi.id, 'hacim'),
+            },
+            {
+              id: 'cisim-alan',
+              label: cisimOlcumleri[olcumMenusuCismi.id]?.alan ? 'Yüzey alanı ölçümünü gizle' : 'Yüzey alanını ölç',
+              onSelect: () => cisimOlcumunuDegistir(olcumMenusuCismi.id, 'alan'),
+            },
+          ],
+        });
+      }
+      if (typeof cisimOlcumMenusu.faceIndex === 'number') {
+        const fIdx = cisimOlcumMenusu.faceIndex;
+        const yuzAdi =
+          generateSolidMesh(olcumMenusuCismi).faces.find((f, idx) => (f.faceIndex ?? idx) === fIdx)?.label || 'Yüzey';
+        maddeler.push({
+          id: 'yuzeyi-sec',
+          label: `Yüzeyi Seç (${yuzAdi})`,
+          icon: <Layers className="w-4 h-4" />,
+          separatorBefore: maddeler.length > 0,
+          onSelect: () => {
+            setSelectionMode('face');
+            selectIds([olcumMenusuCismi.id]);
+            onUpdateSolid?.(olcumMenusuCismi.id, { selectedFaceIndex: fIdx, selectedVertexIndex: null });
+          },
+        });
+      }
+      if (typeof cisimOlcumMenusu.vertexIndex === 'number') {
+        const vIdx = cisimOlcumMenusu.vertexIndex;
+        maddeler.push({
+          id: 'noktayi-sil',
+          label: 'Noktayı Sil (Bağlı Yüzeylerle)',
+          icon: <Trash2 className="w-4 h-4" />,
+          danger: true,
+          separatorBefore: maddeler.length > 0,
+          onSelect: () => noktayiSil(olcumMenusuCismi.id, vIdx),
+        });
+      }
+      if (typeof cisimOlcumMenusu.faceIndex === 'number') {
+        const fIdx = cisimOlcumMenusu.faceIndex;
+        const yuzAdi =
+          generateSolidMesh(olcumMenusuCismi).faces.find((f, idx) => (f.faceIndex ?? idx) === fIdx)?.label || 'Yüzey';
+        maddeler.push({
+          id: 'yuzeyi-sil',
+          label: `Yüzeyi Sil (${yuzAdi})`,
+          icon: <Trash2 className="w-4 h-4" />,
+          danger: true,
+          separatorBefore: typeof cisimOlcumMenusu.vertexIndex !== 'number' && maddeler.length > 0,
+          onSelect: () => yuzuSil(olcumMenusuCismi.id, fIdx),
+        });
+      }
+      maddeler.push({
+        id: 'cismi-sil',
+        label: 'Cismi Sil',
+        icon: <Trash2 className="w-4 h-4" />,
+        danger: true,
+        separatorBefore: maddeler.length > 0,
+        onSelect: () => onDeleteSolid?.(olcumMenusuCismi.id),
+      });
+      return maddeler;
+    }
+
+    // Boş alan / düzlem sağ tık menüsü (2B tuval ile uyumlu: görünüm ayarları + yakalama/snap seçenekleri)
+    const bosta: ContextMenuItem[] = [
+      {
+        id: 'zemini-goster',
+        label: 'Zemini Göster (Izgara)',
+        icon: <Grid3x3 className="w-4 h-4" />,
+        checked: camera.showGrid,
+        onSelect: () => setCamera((prev) => ({ ...prev, showGrid: !prev.showGrid })),
+      },
+      ...(!ilkokul3B
+        ? [
+            {
+              id: 'eksenleri-goster',
+              label: 'Eksenleri Göster',
+              checked: camera.showAxes,
+              onSelect: () => setCamera((prev) => ({ ...prev, showAxes: !prev.showAxes })),
+            } as ContextMenuItem,
+          ]
+        : []),
+      {
+        id: 'miknatis-acik',
+        label: 'Mıknatıs (Yakalama)',
+        icon: <Magnet className="w-4 h-4" />,
+        separatorBefore: true,
+        checked: yapisma3B.acik,
+        onSelect: () => yapisma3B.degistir(),
+      },
+      {
+        id: 'duzlem-cizgilerine-snap',
+        label: 'Düzlem Çizgilerine Yakala (Izgara Snap)',
+        checked: yapisma3B.acik && yapisma3B.izgaraAcik,
+        onSelect: () => {
+          if (!yapisma3B.acik) yapisma3B.degistir();
+          if (yapisma3B.acik || !yapisma3B.izgaraAcik) yapisma3B.izgaraDegistir();
+        },
+      },
+      {
+        id: 'nesneye-snap',
+        label: 'Nesneye Yakala (Nesne Snap)',
+        checked: yapisma3B.acik && yapisma3B.nesneAcik,
+        onSelect: () => {
+          if (!yapisma3B.acik) yapisma3B.degistir();
+          if (yapisma3B.acik || !yapisma3B.nesneAcik) yapisma3B.nesneDegistir();
+        },
+      },
+      {
+        id: 'gorunum-ayarlari',
+        label: 'Görünüm Ayarları',
+        icon: <Eye className="w-4 h-4" />,
+        separatorBefore: true,
+        submenu: [
+          {
+            id: 'gorunum-yuzler',
+            label: 'Yüzleri Göster',
+            checked: showGlobalFaces,
+            onSelect: () => props.setShowGlobalFaces?.(!showGlobalFaces),
+          },
+          {
+            id: 'gorunum-ayritlar',
+            label: 'Ayrıtları Göster',
+            checked: showGlobalEdges,
+            onSelect: () => props.setShowGlobalEdges?.(!showGlobalEdges),
+          },
+          {
+            id: 'gorunum-koseler',
+            label: 'Köşeleri Göster',
+            checked: showGlobalVertices,
+            onSelect: () => props.setShowGlobalVertices?.(!showGlobalVertices),
+          },
+          {
+            id: 'kamera-izometrik',
+            label: 'İzometrik Görünüm',
+            separatorBefore: true,
+            onSelect: () =>
+              props.onSetCameraPreset
+                ? props.onSetCameraPreset('isometric')
+                : setCamera((prev) => ({ ...prev, rotX: 25, rotY: -40, panX: 0, panY: 30, zoom: 55 })),
+          },
+          {
+            id: 'kamera-onden',
+            label: 'Önden Görünüm',
+            onSelect: () =>
+              props.onSetCameraPreset
+                ? props.onSetCameraPreset('front')
+                : setCamera((prev) => ({ ...prev, rotX: 0, rotY: 0, panX: 0, panY: 30, zoom: 55 })),
+          },
+          {
+            id: 'kamera-ustten',
+            label: 'Üstten Görünüm',
+            onSelect: () =>
+              props.onSetCameraPreset
+                ? props.onSetCameraPreset('top')
+                : setCamera((prev) => ({ ...prev, rotX: 85, rotY: 0, panX: 0, panY: 0, zoom: 55 })),
+          },
+          {
+            id: 'kamera-sagdan',
+            label: 'Sağdan Görünüm',
+            onSelect: () =>
+              props.onSetCameraPreset
+                ? props.onSetCameraPreset('right')
+                : setCamera((prev) => ({ ...prev, rotX: 0, rotY: -90, panX: 0, panY: 30, zoom: 55 })),
+          },
+        ],
+      },
+      {
+        id: 'gorunumu-sifirla',
+        label: 'Görünümü Sıfırla',
+        icon: <RotateCcw className="w-4 h-4" />,
+        separatorBefore: true,
+        onSelect: () => (props.onResetView ? props.onResetView() : setCamera(kamerayiSifirla)),
+      },
+      {
+        id: 'ayarlar-3b',
+        label: 'Ayarlar',
+        icon: <Settings className="w-4 h-4" />,
+        onSelect: () => window.dispatchEvent(new CustomEvent('geoeba:calisma-ayarlari', { detail: 'duzlem' })),
+      },
+    ];
+    return bosta;
+  }, [
+    cisimOlcumMenusu,
+    olcumMenusu2BNesne,
+    olcumMenusuCismi,
+    activeTool,
+    setActive3DTool,
+    selectIds,
+    ilkokul3B,
+    cisimOlcumleri,
+    onUpdateSolid,
+    noktayiSil,
+    yuzuSil,
+    onDeleteSolid,
+    camera.showGrid,
+    camera.showAxes,
+    setCamera,
+    yapisma3B,
+    showGlobalFaces,
+    showGlobalEdges,
+    showGlobalVertices,
+    props,
+    workspace,
+  ]);
+  const _unusedOlcumBaglantisi = () => { if (false) {
+    }
+  };
+
   return (
     <div
       ref={containerRef}
       onMouseDown={handleMouseDown}
+      onMouseMove={(e) => {
+        const solidType = CREATE_TYPE_MAP[activeTool];
+        const t = threeRef.current;
+        if (!solidType || creationMethod !== 'instant' || !t) return;
+        const ndc = getPointerNdc(e.clientX, e.clientY);
+        const ground = intersectPlane(ndc, groundPlane);
+        if (ground && Math.hypot(ground.x, ground.y) <= 200) {
+          const base = VARSAYILAN_CISIM_OLCULERI[solidType];
+          const dims = creationPreset
+            ? {
+                width: creationPreset.width ?? (creationPreset.radius ? creationPreset.radius * 2 : base.width),
+                height: creationPreset.height ?? base.height,
+                depth: creationPreset.depth ?? (creationPreset.radius ? creationPreset.radius * 2 : base.depth),
+                radius: creationPreset.radius ?? (creationPreset.width ? creationPreset.width / 2 : base.radius),
+              }
+            : { ...base };
+          if (solidType === 'cube') {
+            dims.height = dims.width;
+            dims.depth = dims.width;
+            dims.radius = dims.width / 2;
+          }
+          const yap = yapismaAyarRef.current;
+          const ham = { x: ground.x, y: ground.y, z: 0 };
+          const konum = yerlesimKonumuHesapla(solids, solidType, dims, ham, {
+            acik: yap.acik && !e.altKey,
+            izgaraAcik: yap.izgaraAcik,
+            nesneAcik: yap.nesneAcik,
+            izgaraGorunur: camera.showGrid,
+            pikselBasinaBirim: pikselBasinaBirim(basis.camera.position, basis.forward, ham, dimensions.height),
+            profil: yap.profil,
+          });
+          onizlemeKonumuRef.current = konum;
+          t.previewGroup.position.set(konum.x, konum.y, konum.z);
+          t.previewGroup.visible = true;
+        } else {
+          onizlemeKonumuRef.current = null;
+          t.previewGroup.visible = false;
+        }
+        requestRender();
+      }}
+      onMouseLeave={() => {
+        onizlemeKonumuRef.current = null;
+        if (threeRef.current && threeRef.current.previewGroup.visible) {
+          threeRef.current.previewGroup.visible = false;
+          requestRender();
+        }
+      }}
       onTouchStart={handleTouchStart}
       onContextMenu={(e) => {
         e.preventDefault();
         const sagTik = sagTikRef.current;
         sagTikRef.current = null;
         // Sağ tuşla sürükleme kamerayı kaydırmaya devam eder; yalnız kısa tıklama menü açar.
-        if (ilkokul3B || sagTik?.suruklendi || e.target !== canvasRef.current) return;
-        const hit = pickSolid(getPointerNdc(e.clientX, e.clientY));
+        if (sagTik?.suruklendi || e.target !== canvasRef.current) return;
+        const ndc = getPointerNdc(e.clientX, e.clientY);
+        const vHit = pickVertex(ndc);
+        const hit = pickSolid(ndc);
+        const mathHit = pickMathObject(ndc);
+        const solidDist = hit && threeRef.current ? threeRef.current.raycaster.ray.origin.distanceTo(hit.point) : Infinity;
+        if (vHit && vHit.distance <= solidDist + 0.45) {
+          selectIds([vHit.solidId]);
+          workspace.setSelectedObjectIds([]);
+          onUpdateSolid?.(vHit.solidId, { selectedVertexIndex: vHit.vertexIndex, selectedFaceIndex: null });
+          setCisimOlcumMenusu({
+            solidId: vHit.solidId,
+            faceIndex: hit?.solidId === vHit.solidId ? hit.faceIndex : null,
+            vertexIndex: vHit.vertexIndex,
+            x: e.clientX,
+            y: e.clientY,
+          });
+          return;
+        }
+        if (mathHit && mathHit.distance <= solidDist) {
+          selectIds([]);
+          workspace.setSelectedObjectIds([mathHit.objectId]);
+          setCisimOlcumMenusu({ mathObjectId: mathHit.objectId, x: e.clientX, y: e.clientY });
+          return;
+        }
+        if (!hit) {
+          setCisimOlcumMenusu({ solidId: null, faceIndex: null, vertexIndex: null, mathObjectId: null, x: e.clientX, y: e.clientY });
+          return;
+        }
         if (!hit) return;
         selectIds([hit.solidId]);
         workspace.setSelectedObjectIds([]);
-        setCisimOlcumMenusu({ solidId: hit.solidId, x: e.clientX, y: e.clientY });
+        if (selectionMode === 'face' && onUpdateSolid) {
+          onUpdateSolid(hit.solidId, { selectedFaceIndex: hit.faceIndex, selectedVertexIndex: null });
+        }
+        setCisimOlcumMenusu({ solidId: hit.solidId, faceIndex: hit.faceIndex, vertexIndex: null, x: e.clientX, y: e.clientY });
       }}
       className={`flex-1 w-full h-full min-h-0 relative select-none overflow-hidden touch-none bg-background ${cursorClass}`}
     >
@@ -3053,6 +3797,43 @@ export function Canvas3D(props: Canvas3DProps) {
       <div className="absolute top-3 left-4 right-4 z-20 flex items-center justify-between pointer-events-none">
         {/* Sol üst köşe: 2B tuvaldeki gibi Taşı · Döndür ve İncele · Geri Al · Yinele + cisim sayısı */}
         <div className="flex items-center gap-2 pointer-events-auto" onMouseDown={stopMouseDown}>
+          <div
+            className="absolute top-12 left-0 flex items-center p-0.5 rounded-xl bg-card/95 backdrop-blur-md border border-border shadow-sm"
+            role="group"
+            aria-label="Seçim modu"
+          >
+            {([
+              { kip: 'object' as SelectionMode3D, etiket: 'Nesne', baslik: 'Nesne Seç — tıklanan katı cismin tamamı seçilir', simge: <Box className="w-3.5 h-3.5" /> },
+              { kip: 'face' as SelectionMode3D, etiket: 'Yüzey', baslik: 'Yüzey Seç — tıklanan yüzey seçilir; taşıma ve büyütme o şekle uygulanır', simge: <Layers className="w-3.5 h-3.5" /> },
+              { kip: 'vertex' as SelectionMode3D, etiket: 'Nokta', baslik: 'Nokta Seç — tıklanan köşe noktası seçilir; silindiğinde bağlı yüzeyler de silinir', simge: <CircleDot className="w-3.5 h-3.5" /> },
+            ]).map((m) => {
+              const etkin = selectionMode === m.kip;
+              return (
+                <button
+                  key={m.kip}
+                  type="button"
+                  onClick={() => {
+                    setSelectionMode(m.kip);
+                    if (m.kip === 'object' && onUpdateSolid) {
+                      solids.forEach((s) => {
+                        if (s.selectedFaceIndex != null || s.selectedVertexIndex != null) {
+                          onUpdateSolid(s.id, { selectedFaceIndex: null, selectedVertexIndex: null });
+                        }
+                      });
+                    }
+                  }}
+                  aria-pressed={etkin}
+                  title={m.baslik}
+                  className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                    etkin ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
+                >
+                  {m.simge}
+                  <span>{m.etiket}</span>
+                </button>
+              );
+            })}
+          </div>
           <button
             type="button"
             onClick={() => setActive3DTool?.('select_move')}
@@ -3288,10 +4069,10 @@ export function Canvas3D(props: Canvas3DProps) {
         };
         // Geniş ekranda en üste, araç düğmeleriyle aynı satıra hizalanır; dar ekranda düğmelerin altında kalır. Sıkı iç boşluk.
         return (
-          <KayanCubuk konum="ust" className="!p-1 !gap-1 lg:!top-3" onMouseDown={stopMouseDown} data-acinim-cubugu>
+          <KayanCubuk konum="ust" className="!px-2 !py-1 !gap-1 !rounded-xl lg:!top-3 [&_button]:!min-h-[28px] [&_button]:!h-7 [&_button]:!px-2 [&_button]:!text-[11px] [&_button]:!rounded-lg [&>div]:!py-0 [&>div]:!pl-1 [&>div]:!pr-1.5 [&>div]:!gap-1.5 [&>div>span]:!h-6 [&>div>span]:!w-6 [&>div>span]:!rounded-lg [&>div>p]:!text-[11px] [&>span]:!h-4" onMouseDown={stopMouseDown} data-acinim-cubugu>
             <CubukMetni
               vurgu="altin"
-              simge={<BookOpen className="w-4 h-4" />}
+              simge={<BookOpen className="w-3.5 h-3.5" />}
               baslik={`${unfoldTarget.name || 'Cisim'} açınımı`}
               aciklama={`%${Math.round(progress * 100)}`}
             />
@@ -3313,7 +4094,7 @@ export function Canvas3D(props: Canvas3DProps) {
               aria-label="Açınım oranı"
               onChange={(e) => setProgress(parseFloat(e.target.value))}
               onMouseDown={(e) => e.stopPropagation()}
-              className="w-40 sm:w-64 lg:w-96 h-2 rounded-lg cursor-pointer accent-primary"
+              className="w-24 sm:w-32 h-1.5 rounded-lg cursor-pointer accent-primary"
             />
             <CubukDugmesi
               aria-label="%10 aç"
@@ -3635,7 +4416,11 @@ export function Canvas3D(props: Canvas3DProps) {
           <CubukMetni
             simge={<Sparkles className="w-4 h-4" />}
             baslik="Cisim oluştur"
-            aciklama="zemine basıp sürükleyerek cismi istediğiniz boyutta ve konumda oluşturun"
+            aciklama={
+              creationMethod === 'instant'
+                ? 'düzlemde istediğiniz konuma tıklayarak cismi yerleştirin'
+                : 'zemine basıp sürükleyerek cismi istediğiniz boyutta ve konumda oluşturun'
+            }
           />
           {setActive3DTool && (
             <>
@@ -3662,12 +4447,12 @@ export function Canvas3D(props: Canvas3DProps) {
       </div>
 
       <ContextMenu
-        open={!!olcumMenusuCismi && !ilkokul3B}
+        open={!!cisimOlcumMenusu && sagTikMaddeleri.length > 0}
         x={cisimOlcumMenusu?.x ?? 0}
         y={cisimOlcumMenusu?.y ?? 0}
-        title={olcumMenusuCismi?.name ?? 'Cisim'}
+        title={sagTikBasligi}
         ariaLabel="Cisim ölçümleri"
-        items={olcumMenusuCismi ? [{
+        items={sagTikMaddeleri ?? (olcumMenusuCismi ? [{
           id: 'cisim-olcme', label: 'Ölçme', icon: <Ruler className="w-4 h-4" />,
           submenu: [
             {
@@ -3681,7 +4466,7 @@ export function Canvas3D(props: Canvas3DProps) {
               onSelect: () => cisimOlcumunuDegistir(olcumMenusuCismi.id, 'alan'),
             },
           ],
-        }] : []}
+        }] : [])}
         onClose={() => setCisimOlcumMenusu(null)}
       />
     </div>

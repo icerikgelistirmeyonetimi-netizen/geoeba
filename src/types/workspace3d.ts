@@ -2,6 +2,8 @@
 
 export type Solid3DType = 'cube' | 'sphere' | 'cylinder' | 'prism' | 'triangular_prism' | 'cone' | 'pyramid';
 
+export type SelectionMode3D = 'object' | 'face' | 'vertex';
+
 export type Tool3DMode =
   | 'select_move'
   | 'orbit'
@@ -34,6 +36,7 @@ export interface Face3D {
   normal: Point3D;
   color?: string;
   label?: string;
+  faceIndex?: number;
 }
 
 export interface Edge3D {
@@ -60,6 +63,10 @@ export interface Solid3DObject {
   showFaces: boolean;
   unfoldProgress: number; // 0 (kapalı cisim) - 1 (tam açınım)
   selectedFaceIndex: number | null;
+  selectedVertexIndex?: number | null;
+  deletedFaces?: number[];
+  deletedVertices?: number[];
+  vertexOffsets?: Record<number, Point3D>;
   /** Yüz dizinine göre özel yüz renkleri (Yüzü renklendir aracı) */
   faceColors?: Record<number, string>;
   /**

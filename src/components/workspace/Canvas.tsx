@@ -159,6 +159,8 @@ import {
   ZoomOut,
   Search,
   Settings,
+  Play,
+  Pause,
   Check,
   Grid3x3,
   Magnet,
@@ -6276,6 +6278,34 @@ export function Canvas({
                   <title>Ayarlar için tıklayın; taşımak için sürükleyin</title>
                   <rect x={-4} y={-4} width={26} height={26} rx={5} fill="transparent" />
                   <Settings width={18} height={18} />
+                </g>
+                <g
+                  role="button"
+                  tabIndex={0}
+                  aria-label={sliderPlaying ? 'Animasyonu Durdur' : 'Animasyonu Başlat'}
+                  aria-pressed={sliderPlaying}
+                  transform={`translate(${sag.x + 44} ${sol.y - 9})`}
+                  className={`${sliderPlaying ? 'text-primary' : 'text-muted-foreground hover:text-primary'} ${imlecSinifi(activeTool, 'nesne')}`}
+                  style={{ touchAction: 'none' }}
+                  onPointerDown={(e) => {
+                    if (!nesneBasisiIslenmeli(activeTool, e) || e.button !== 0) return;
+                    e.stopPropagation();
+                    if (activeTool === 'delete') { deleteObject(s.id); return; }
+                    if (activeTool !== 'select') return;
+                    e.preventDefault();
+                    toggleSliderPlayback();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      toggleSliderPlayback();
+                    }
+                  }}
+                >
+                  <title>{sliderPlaying ? 'Animasyonu Durdur' : 'Animasyonu Başlat'}</title>
+                  <rect x={-4} y={-4} width={26} height={26} rx={5} fill="transparent" />
+                  {sliderPlaying ? <Pause width={18} height={18} /> : <Play width={18} height={18} />}
                 </g>
                 {isSelected && (
                   <circle

@@ -204,7 +204,7 @@ export function ViewCube3D({ camera, setCamera }: ViewCube3DProps) {
 
   return (
     <div
-      className="absolute top-14 left-4 z-30 flex flex-col items-center select-none"
+      className="absolute top-[6.25rem] left-4 z-30 flex flex-col items-center select-none"
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
