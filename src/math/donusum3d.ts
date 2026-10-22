@@ -1,4 +1,4 @@
-import type { Point3D, Solid3DObject } from '@/types/workspace3d';
+
 import type { Point3D, SelectionMode3D, Solid3DObject } from '@/types/workspace3d';
 import { generateSolidMesh, rotatePoint3D } from './geometry3d';
 
