@@ -89,3 +89,33 @@ describe('kaydırıcı oynatma (salınım)', () => {
     expect(next.a).toBeGreaterThanOrEqual(-5);
   });
 });
+
+describe('adıma göre canlandırma (akıcı konum, adıma oturan değer)', () => {
+  it('değerler hep adımın katı; sürekli konum her karede ilerler, takılmaz', () => {
+    const s = { id: 'a', min: 0, max: 10, value: 0, step: 1 };
+    const dirs: Record<string, 1 | -1> = {};
+    const konumlar: Record<string, number> = {};
+    let cur = { ...s };
+    const goruler = new Set<number>();
+    let oncekiKonum = 0;
+    for (let i = 0; i < 40; i++) {
+      const next = advanceSliders([cur], dirs, 0.05, 8, konumlar);
+      expect(Number.isInteger(next.a)).toBe(true);
+      expect(konumlar.a).toBeGreaterThan(oncekiKonum);
+      oncekiKonum = konumlar.a;
+      goruler.add(next.a);
+      cur = { ...cur, value: next.a };
+    }
+    // 40 kare × 0,05 sn = 2 sn → 10 birimlik aralığın dörtte biri: 0, 1, 2 ve 3 görülür
+    expect([...goruler].sort((x, y) => x - y)).toEqual([0, 1, 2, 3]);
+  });
+
+  it('elle değiştirilen değer sürekli konumu sıfırlar; adımsız kaydırıcı eskisi gibi sürekli', () => {
+    const konumlar: Record<string, number> = { a: 2.4 };
+    const next = advanceSliders([{ id: 'a', min: 0, max: 10, value: 7, step: 1 }], {}, 0.05, 8, konumlar);
+    expect(next.a).toBe(7);
+    expect(konumlar.a).toBeCloseTo(7.0625, 9);
+    const surekli = advanceSliders([{ id: 'b', min: 0, max: 10, value: 1 }], {}, 0.05, 8, {});
+    expect(surekli.b).toBeCloseTo(1.0625, 9);
+  });
+});

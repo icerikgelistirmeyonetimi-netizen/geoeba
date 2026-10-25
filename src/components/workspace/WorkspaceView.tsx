@@ -7,6 +7,8 @@ import { workspaceOwnsKeyboard, toolForShortcut } from './toolShortcuts';
 import { ARAC_SECILDI_OLAYI } from './olcmeAraclari';
 import { Toolbar, type SolSekme } from './Toolbar';
 import { aracSecilebilirMi, kapaliAracBildirimi } from './kademeDuzeyleri';
+import { arac3BGorunurMu } from './kademeDuzeyleri3B';
+import { CISIM_ADLARI } from './treeToolDefinitions3D';
 import { aracAdi } from './toolDefinitions';
 import { eskiDuzeniCevir } from './gorunumDuzenleri';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
@@ -60,7 +62,7 @@ import { useWorkspace } from '@/state/WorkspaceContext';
 import { syncUserFunctions } from '@/math/functionNames';
 import { createId } from '@/state/ids';
 import { validateProjectSolids } from '@/math/projectFile';
-import { VARSAYILAN_CISIM_OLCULERI, VARSAYILAN_KAMERA_3B, bosKonumBul } from './cisimYerlesimi';
+import { VARSAYILAN_KAMERA_3B, bosKonumBul, cisimOlculeriniBirlestir } from './cisimYerlesimi';
 import { CISIM_RENKLERI } from './cisimRenkleri';
 
 const SCENE_STORAGE_KEY = 'matematik_3d_sahne_v1';
@@ -71,16 +73,6 @@ export type LayoutMode = 'default' | 'algebra_only' | 'algebra_2d' | '2d_3d' | '
 
 /** Açılış kamerası (Görünümü Sıfırla da buna döner: cisimYerlesimi.kamerayiSifirla) */
 const DEFAULT_CAMERA_3D: Camera3D = VARSAYILAN_KAMERA_3B;
-
-const SOLID_NAMES: Record<Solid3DType, string> = {
-  cube: 'Küp',
-  sphere: 'Küre',
-  cylinder: 'Silindir',
-  prism: 'Prizma',
-  triangular_prism: 'Üçgen Prizma',
-  cone: 'Koni',
-  pyramid: 'Kare Piramit',
-};
 
 const SOLID_COLORS = CISIM_RENKLERI.map((renk) => renk.hex);
 
@@ -226,6 +218,7 @@ export function WorkspaceView() {
     objects,
     setSelectedObjectIds,
     setActiveTool,
+    activeTool,
     openRegularPolygonDialog,
     studioDimension,
     setStudioDimension,
@@ -378,6 +371,15 @@ export function WorkspaceView() {
   useEffect(() => {
     if (!active3DTool.startsWith('create_')) setCreationPreset3D(null);
   }, [active3DTool]);
+  // Kademe değişince (Kademe menüsü, 1-4. sınıf etkinliği) o kademede seçilemeyen etkin araç bırakılır: 2B'de Seç ve Taşı,
+  // 3B'de Taşı. Aksi hâlde ilkokula geçince ör. Yansıt ya da Doğru Parçası panelde görünmeden çalışmayı sürdürüyordu.
+  const etkinAraclarRef = useRef({ arac2B: activeTool, arac3B: active3DTool });
+  etkinAraclarRef.current = { arac2B: activeTool, arac3B: active3DTool };
+  useEffect(() => {
+    const { arac2B, arac3B } = etkinAraclarRef.current;
+    if (!aracSecilebilirMi(kademeDuzeyi, arac2B)) setActiveTool('select');
+    if (!arac3BGorunurMu(kademeDuzeyi, arac3B)) setActive3DTool('select_move');
+  }, [kademeDuzeyi, setActiveTool]);
   // Araç değişince yarım kalmış sürükleme (taşıma, döndürme, ölçek) iptal edilir; geçmişte boş adım kalmaz
   useEffect(() => {
     handleDragCancel();
@@ -467,21 +469,8 @@ export function WorkspaceView() {
     customDimensions?: { width?: number; height?: number; depth?: number; radius?: number },
     customPos?: Point3D
   ) => {
-    // Türün varsayılan ölçüsü: dikdörtgen prizma 4 × 3 × 2 (küp değil), ötekiler 3 br (cisimYerlesimi)
-    const base = VARSAYILAN_CISIM_OLCULERI[type];
-    const dims = customDimensions
-      ? {
-          width: customDimensions.width ?? (customDimensions.radius ? customDimensions.radius * 2 : base.width),
-          height: customDimensions.height ?? base.height,
-          depth: customDimensions.depth ?? (customDimensions.radius ? customDimensions.radius * 2 : base.depth),
-          radius: customDimensions.radius ?? (customDimensions.width ? customDimensions.width / 2 : base.radius),
-        }
-      : { ...base };
-    if (type === 'cube') {
-      dims.height = dims.width;
-      dims.depth = dims.width;
-      dims.radius = dims.width / 2;
-    }
+    // Türün varsayılan ölçüsü: dikdörtgen prizma 4 × 3 × 2 (küp değil), ötekiler 3 br; verilen ölçüler bununla tamamlanır
+    const dims = cisimOlculeriniBirlestir(type, customDimensions);
 
     const newId = createId(`solid-${type}`);
 
@@ -495,7 +484,8 @@ export function WorkspaceView() {
       const newSolid: Solid3DObject = {
         id: newId,
         type,
-        name: `${SOLID_NAMES[type]} ${count}`,
+        // Panelle aynı ad (CISIM_ADLARI): "Dikdörtgen Prizma 1"
+        name: `${CISIM_ADLARI[type]} ${count}`,
         position: customPos || autoPos,
         dimensions: dims,
         rotation: { x: 0, y: 0, z: 0 },

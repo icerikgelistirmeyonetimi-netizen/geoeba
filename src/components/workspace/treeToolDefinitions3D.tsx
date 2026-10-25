@@ -40,7 +40,7 @@ export type CameraPreset3D = 'isometric' | 'front' | 'back' | 'top' | 'bottom' |
 
 /**
  * Ağaçtaki satır kimlikleri: Canvas3D'nin araç kipleri (Tool3DMode) + yalnız panelde olan eylemler.
- * kare_prizma: onAddSolidPreset('prism', 3×4×3) · unfold: açınım şeridini açar · show_*: sahne katmanları ·
+ * kare_prizma: hazır ölçülü dikdörtgen prizma (Toolbar3D creationPreset 3×4×3) · unfold: açınım şeridini açar · show_*: sahne katmanları ·
  * view_*: kamera açıları.
  */
 export type Tool3DTreeId =

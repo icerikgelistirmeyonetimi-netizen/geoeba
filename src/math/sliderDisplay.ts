@@ -11,6 +11,18 @@ export interface SliderDisplay {
   name: string;
   text: string;
   unit: '°' | 'br' | 'cm' | '';
+  /**
+   * Tuvaldeki sürgünün başlığı: kaydırıcının KENDİ adıyla 'a = 3 br' (kullanıcı, 25.10.2026: "sürgüde değişken adı
+   * görünmeli"). Bağlı ölçünün adı ayrıca `bagliOlcuNodes` ile yazılır.
+   */
+  degiskenNodes: Dugum[];
+  /**
+   * Kaydırıcının bağlı olduğu ölçünün adı (|AB|, m(∠BAC), r = |OA| …); bağ geçici olarak kapatıldıysa (suspendedBinding)
+   * hatırlanan ölçünün adı; bir ölçüye bağlı değilse null.
+   */
+  bagliOlcuNodes: Dugum[] | null;
+  /** Bağ geçici olarak kapalı mı (suspendedBinding) */
+  bagAskida: boolean;
 }
 
 type Name = { nameNodes: Dugum[]; unit: SliderDisplay['unit']; suffix?: Dugum[] };
@@ -62,23 +74,28 @@ export function sliderDisplay(objects: readonly MathObject[], slider: SliderObje
     if (side === 1 && b && c) triangleSides.push([b.id, c.id]);
     if (side === 2 && c) triangleSides.push([c.id, rule.anchorId]);
   }
-  const lengthMatches = (a: string, b: string, reversible = false): boolean => {
+  const uzunlukEslesir = (a: string, b: string, reversible = false): boolean => {
     const rule = point(b)?.construction;
     return !!(rule?.kind === 'sliderPoint' && rule.sliderId === slider.id && rule.mode === 'length' && rule.anchorId === a)
       || triangleSides.some(([first, second]) => (first === a && second === b) || (first === b && second === a))
-      || (reversible && lengthMatches(b, a));
+      || (reversible && uzunlukEslesir(b, a));
   };
-  const angleMatches = (centerId: string, referenceId: string, movingId: string, reversible = false): boolean => {
+  const aciEslesir = (centerId: string, referenceId: string, movingId: string, reversible = false): boolean => {
     const rule = point(movingId)?.construction;
     return !!(rule?.kind === 'sliderPoint' && rule.mode === 'angle' && rule.sliderId === slider.id && rule.anchorId === centerId && rule.referenceId === referenceId)
       || !!(rule?.kind === 'rotate' && rule.sliderId === slider.id && rule.centerId === centerId && rule.sourceId === referenceId)
-      || (reversible && angleMatches(centerId, movingId, referenceId));
+      || (reversible && aciEslesir(centerId, movingId, referenceId));
   };
-  const forTarget = (target: MathObject, key: string): Name | null => {
+  /**
+   * Hedef özelliğin adı. `denetle` false: bağın sahnede kurulu olduğuna bakılmaz (geçici kapatılmış bağın adı için).
+   */
+  const forTarget = (target: MathObject, key: string, denetle = true): Name | null => {
+    const lengthMatches = (a: string, b: string, reversible = false) => !denetle || uzunlukEslesir(a, b, reversible);
+    const angleMatches = (c: string, r: string, m: string, reversible = false) => !denetle || aciEslesir(c, r, m, reversible);
     switch (target.type) {
       case 'point': {
         const rule = target.construction;
-        return rule?.kind === 'sliderPoint' && rule.sliderId === slider.id && (key === 'x' || key === 'y') && rule.mode === key
+        return (!denetle || (rule?.kind === 'sliderPoint' && rule.sliderId === slider.id && rule.mode === key)) && (key === 'x' || key === 'y')
           ? named(key, point(target.id), `${key} koordinatı`, '') : null;
       }
       case 'segment':
@@ -91,6 +108,7 @@ export function sliderDisplay(objects: readonly MathObject[], slider: SliderObje
         return fromMeasure(uzunluk(point(a), point(b), slider.value, { birim }), 'Uzunluk');
       }
       case 'polygon': {
+        if (key === 'sides') return !denetle || target.regularSides?.sliderId === slider.id ? { nameNodes: [kelime('Kenar sayısı')], unit: '' } : null;
         const match = /^(edge|angle):(\d+)$/.exec(key);
         if (!match || target.pointIds.length < 3) return null;
         const index = Number(match[2]), count = target.pointIds.length;
@@ -116,7 +134,7 @@ export function sliderDisplay(objects: readonly MathObject[], slider: SliderObje
           : merkezAci(point(target.startPointId), point(target.centerPointId), point(target.directionPointId), slider.value), 'Merkez açısı');
       }
       case 'ellipse':
-        if ((key !== 'radiusX' && key !== 'radiusY' && key !== 'rotation') || target.sliderBindings?.[key] !== slider.id) return null;
+        if ((key !== 'radiusX' && key !== 'radiusY' && key !== 'rotation') || (denetle && target.sliderBindings?.[key] !== slider.id)) return null;
         return key === 'rotation' ? named('θ', point(target.centerPointId), 'Elips dönme açısı', '°')
           : named(key === 'radiusX' ? 'a' : 'b', point(target.centerPointId), key === 'radiusX' ? 'Yatay yarıçap' : 'Dikey yarıçap', 'br');
       default: return null;
@@ -144,7 +162,7 @@ export function sliderDisplay(objects: readonly MathObject[], slider: SliderObje
   if (!selected) for (const object of objects) {
     const keys = object.type === 'segment' || object.type === 'line' || object.type === 'ray' ? ['length']
       : object.type === 'angle' ? ['angle'] : object.type === 'polygon'
-        ? [...object.pointIds.map((_, i) => `edge:${i}`), ...object.pointIds.map((_, i) => `angle:${i}`)] : [];
+        ? ['sides', ...object.pointIds.map((_, i) => `edge:${i}`), ...object.pointIds.map((_, i) => `angle:${i}`)] : [];
     for (const key of keys) { selected = forTarget(object, key); if (selected) break; }
     if (selected) break;
   }
@@ -160,7 +178,16 @@ export function sliderDisplay(objects: readonly MathObject[], slider: SliderObje
     }
     if (selected) break;
   }
-  const { nameNodes, unit, suffix = [] } = selected ?? { nameNodes: [sembol(slider.variableName)], unit: slider.sliderType === 'angle' ? '°' as const : '' as const };
-  const nodes: Dugum[] = [...nameNodes, sembol(' = '), { t: 'sayi', s: String(slider.value).replace('.', ',') }, ...(unit ? [{ t: 'birim' as const, s: unit }] : []), ...suffix];
-  return { nameNodes, nodes, name: duzMetin(nameNodes), text: duzMetin(nodes), unit };
+  // Geçici kapatılmış bağ: hatırlanan özelliğin adı (bağ kurulu olmadığı için eşleşme aranmaz)
+  const askidaki = !selected && slider.suspendedBinding ? byId.get(slider.suspendedBinding.objectId) : undefined;
+  const askida = askidaki ? forTarget(askidaki, slider.suspendedBinding!.propertyKey, false) : null;
+  const { nameNodes, unit, suffix = [] } = selected ?? { nameNodes: [sembol(slider.variableName)], unit: askida?.unit ?? (slider.sliderType === 'angle' ? '°' as const : '' as const) };
+  const deger: Dugum[] = [sembol(' = '), { t: 'sayi', s: String(slider.value).replace('.', ',') }, ...(unit ? [{ t: 'birim' as const, s: unit }] : [])];
+  const nodes: Dugum[] = [...nameNodes, ...deger, ...suffix];
+  return {
+    nameNodes, nodes, name: duzMetin(nameNodes), text: duzMetin(nodes), unit,
+    degiskenNodes: [sembol(slider.variableName), ...deger],
+    bagliOlcuNodes: selected ? nameNodes : askida ? askida.nameNodes : null,
+    bagAskida: !selected && !!slider.suspendedBinding,
+  };
 }

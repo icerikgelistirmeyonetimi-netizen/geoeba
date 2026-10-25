@@ -9,7 +9,7 @@ import { sliderDisplay } from '@/math/sliderDisplay';
 import { yazimAyari } from '@/math/matematikYazimi';
 import { MatematikMetni } from '@/components/workspace/MatematikMetni';
 import {
-  rebindSliderProperty, sliderBindingTargets, sliderIsBound, snapSliderValue, validateSliderSettings,
+  rebindSliderProperty, sliderBindingTargets, sliderCurrentBinding, sliderIsBound, snapSliderValue, validateSliderSettings,
 } from '@/math/sliderBindings';
 import type { MathObject } from '@/types/math';
 
@@ -84,8 +84,10 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
       x: slider.x === undefined ? '' : String(slider.x).replace('.', ','),
       y: slider.y === undefined ? '' : String(slider.y).replace('.', ','),
     });
-    setTargetId('');
-    setPropertyKey('');
+    // Bağlı kaydırıcıda bağlı olduğu şekil ve özellik seçili gelir; aynısı kaydedilince bağ olduğu gibi kalır
+    const bag = sliderCurrentBinding(objectsRef.current, sliderId);
+    setTargetId(bag?.targetId ?? '');
+    setPropertyKey(bag?.propertyKey ?? '');
     setActiveTab('general');
     setError(null);
   }, [sliderId, slider]);
@@ -273,7 +275,21 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
                 <select
                   id="slider-settings-property"
                   value={propertyKey}
-                  onChange={event => { setPropertyKey(event.target.value); setError(null); }}
+                  onChange={event => {
+                    const key = event.target.value;
+                    setPropertyKey(key);
+                    setError(null);
+                    // Kenar sayısı 3–30 arası tam sayıdır: aralık buna uymuyorsa önerilen aralık yazılır, değer çokgenin
+                    // şimdiki kenar sayısıdır (kaydedince şekil değişmez)
+                    const cokgen = objects.find(object => object.id === targetId);
+                    if (key !== 'sides' || cokgen?.type !== 'polygon') return;
+                    const n = cokgen.pointIds.length;
+                    setNumbers(previous => {
+                      const [en, enCok, adim] = [parseNumber(previous.min), parseNumber(previous.max), parseNumber(previous.step)];
+                      const uygun = en !== null && enCok !== null && adim !== null && en >= 3 && enCok <= 30 && Number.isInteger(adim) && n >= en && n <= enCok;
+                      return uygun ? { ...previous, value: String(n) } : { min: '3', max: String(Math.max(12, n)), step: '1', value: String(n) };
+                    });
+                  }}
                   className={INPUT_CLASS}
                 >
                   <option value="">Özellik seçin</option>
@@ -327,6 +343,7 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
 
         <div className="pt-3 space-y-3 border-t border-border">
           {bound && <p className="text-muted-foreground leading-relaxed">Kaydırıcı silindiğinde şekiller son değerlerinde kalır.</p>}
+          {!bound && slider.suspendedBinding && <p className="text-muted-foreground leading-relaxed">Bağ geçici olarak kapalı. Sürgünün altındaki zincire tıklayarak yeniden açabilirsiniz.</p>}
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"

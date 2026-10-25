@@ -59,6 +59,18 @@ export function validateProjectObjects(input: unknown): MathObject[] {
       const target = row(o.bindingTarget);
       o.bindingTarget = { objectId: id(target, 'objectId'), propertyKey: id(target, 'propertyKey') };
     }
+    if (o.regularSides !== undefined) {
+      if (o.type !== 'polygon') fail('kenar sayısı bağı yalnızca çokgene ait olabilir');
+      const bag = row(o.regularSides);
+      o.regularSides = { sliderId: id(bag, 'sliderId'), orientation: bag.orientation };
+      if (![1, -1].includes(bag.orientation)) fail('kenar sayısı bağının yönü geçersiz');
+    }
+    if (o.preBindingSides !== undefined) numbers(o, ['preBindingSides'], true);
+    if (o.suspendedBinding !== undefined) {
+      if (o.type !== 'slider') fail('kapatılmış bağ yalnızca kaydırıcıya ait olabilir');
+      const target = row(o.suspendedBinding);
+      o.suspendedBinding = { objectId: id(target, 'objectId'), propertyKey: id(target, 'propertyKey') };
+    }
     if (o.sliderBindings !== undefined) {
       if (o.type !== 'ellipse') fail('bu nesnenin kaydırıcı özellikleri desteklenmiyor');
       const bindings = row(o.sliderBindings);
@@ -191,6 +203,10 @@ export function validateProjectObjects(input: unknown): MathObject[] {
       switch (c.kind) {
         case 'foot': id(c, 'sourceId'); ids(c, 'linePointIds', 2, 2); break;
         case 'midpoint': ids(c, 'pointIds', 2, 2); break;
+        case 'regularVertex':
+          id(c, 'firstId'); id(c, 'secondId'); id(c, 'sliderId'); numbers(c, ['index']);
+          if (!Number.isInteger(c.index) || c.index < 2 || ![1, -1].includes(c.orientation)) fail('düzgün çokgen köşesi geçersiz');
+          break;
         case 'ratio': ids(c, 'pointIds', 2, 2); numbers(c, ['t']); break;
         case 'direction': id(c, 'throughId'); ids(c, 'linePointIds', 2, 2); if (!['parallel', 'perpendicular'].includes(c.mode)) fail('doğru inşası geçersiz'); break;
         case 'bisector': ids(c, 'pointIds', 3, 3); break;
@@ -226,6 +242,7 @@ export function validateProjectObjects(input: unknown): MathObject[] {
   if (byId.size !== objects.length) fail('aynı kimliği kullanan birden çok nesne var');
   // Ölçü adı görsel bilgidir; silinmiş hedef eski çizimin açılmasını engellemez.
   for (const o of objects) if (o.bindingTarget && !byId.has(o.bindingTarget.objectId)) delete o.bindingTarget;
+  for (const o of objects) if (o.suspendedBinding && !byId.has(o.suspendedBinding.objectId)) delete o.suspendedBinding;
   // Etiket çapası süs bilgisidir: eski gruptan bir nokta silinmişse çizim yine açılır.
   // Kısmi bir grubun merkezini kullanmak yazıyı sıçratır; o kayıtta eski kayıklığa dönülür.
   for (const o of objects) if (o.labelAnchors) {
@@ -238,7 +255,7 @@ export function validateProjectObjects(input: unknown): MathObject[] {
   function references(value: unknown, key = '', parent?: Row): string[] {
     // armOfAngleId yalnızca "bu parça şu açının kolu" hatırlatmasıdır: açı silinince parça kalabilir,
     // bu yüzden eksik hedefi kaydı reddettirmemeli (reddedilince kayıtlı çizim boş açılıyordu).
-    if (key === 'id' || key === 'releasedRadiusPointId' || key === 'armOfAngleId' || key === 'labelAnchors' || key === 'bindingTarget') return [];
+    if (key === 'id' || key === 'releasedRadiusPointId' || key === 'armOfAngleId' || key === 'labelAnchors' || key === 'bindingTarget' || key === 'suspendedBinding') return [];
     if (key === 'centerPointId' && parent?.type === 'circle' && parent.throughPointIds?.length) return [];
     if (key === 'sliderBindings') return Object.values(row(value)).flatMap(sliderId => references(sliderId, 'sliderId'));
     if (typeof value === 'string' && (/Ids?$/.test(key) || key === 'dependsOn')) {

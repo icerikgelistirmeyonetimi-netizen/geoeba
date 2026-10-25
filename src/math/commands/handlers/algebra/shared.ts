@@ -515,7 +515,7 @@ export function defineFunction(scene: CommandScene, o: { name?: string; expressi
   let created: SliderObject[];
   if (existing) {
     const known = new Set(scene.sliders().map(s => s.variableName));
-    created = extractVariableNames(o.expression).filter(n => !known.has(n)).map(n => scene.addSlider(n, { min: -5, max: 5, step: 0.1, value: 1 }));
+    created = extractVariableNames(o.expression).filter(n => !known.has(n)).map(n => scene.addSlider(n, { min: -5, max: 5, step: 1, value: 1 }));
     fn = scene.update(existing.id, { expression: o.expression, label, visible: true, ...(o.color ? { color: o.color } : {}) }) as FunctionObject;
     scene.setFocus([fn.id, ...created.map(s => s.id)]);
     scene.say(existing.expression === o.expression ? `${name}(x) zaten ${o.expression} olarak tanımlı.` : `${name}(x) yeniden tanımlandı: ${label}.`);

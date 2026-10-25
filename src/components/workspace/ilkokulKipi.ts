@@ -59,6 +59,18 @@ export function gorunenKisayol(arac: string, duzey: KademeDuzeyi): string | unde
 /** İlkokulda çokgen ve düzgün çokgenin en çok kenar (köşe) sayısı: sekizgen */
 export const ILKOKUL_EN_COK_KENAR = 8;
 
+/** Çokgen / düzgün çokgenin en çok kenar sayısı: ilkokulda sekizgen, diğer kademelerde aracın kendi sınırı (`sinirsiz`). */
+export const enCokKenarSayisi = (ilkokul: boolean, sinirsiz: number): number => (ilkokul ? ILKOKUL_EN_COK_KENAR : sinirsiz);
+
+/** Çokgen aracında sekizinci köşeden sonra yeni köşe konmak istenince (ilkokul) gösterilen ipucu */
+export const ILKOKUL_COKGEN_SINIRI_IPUCU = `İlkokulda çokgen en çok ${ILKOKUL_EN_COK_KENAR} köşeli olur (sekizgen). Şekli kapatmak için ilk köşeye dokun.`;
+
+/**
+ * Çokgen aracı: `koseSayisi` köşe konmuşken yeni köşe ilkokul sınırına takılır mı (React dışı okuma; WorkspaceContext)?
+ * Sınırdayken şekil yine ilk köşeye dokunarak kapatılır.
+ */
+export const ilkokulCokgenSiniriDoldu = (koseSayisi: number): boolean => koseSayisi >= ILKOKUL_EN_COK_KENAR && ilkokulKipindeMi();
+
 /** İlkokul zemininin değiştirdiği görünüm alanları */
 export type IlkokulZeminAlanlari = Pick<
   ViewportTransform,

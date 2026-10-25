@@ -1,5 +1,6 @@
-import type { MathObject, PointObject, SliderObject } from '@/types/math';
+import type { MathObject, PointObject, PolygonObject, SliderObject } from '@/types/math';
 import { constructionDependencies, resolveCommandBindings } from './commandBindings';
+import { DUZGUN_COKGEN_EN_AZ_KENAR, DUZGUN_COKGEN_EN_COK_KENAR, donusYonu, duzgunMu } from './duzgunCokgen';
 import { extractVariableNames } from './parser';
 import { withUserFunctions } from './functionNames';
 
@@ -18,6 +19,21 @@ type EllipseProperty = typeof ellipseProperties[number];
 const isEllipseProperty = (key: string): key is EllipseProperty => ellipseProperties.some(property => property === key);
 const availableEllipseProperty = (o: MathObject, key: string) => o.type === 'ellipse' && !o.locked && o.visible !== false
   && isEllipseProperty(key) && !o.sliderBindings?.[key];
+
+/**
+ * Kenar sayısı bağlanabilir mi (math/duzgunCokgen.ts): çokgen görünür ve kilitsiz, başka bir kaydırıcıya bağlı değil,
+ * köşeleri bu sırayla DÜZGÜN çokgen ve ilk iki köşe dışındaki köşeler serbest (onlar kaydırıcıyla yeniden kurulur).
+ */
+function kenarSayisiBaglanabilir(objects: readonly MathObject[], target: MathObject): target is PolygonObject {
+  if (target.type !== 'polygon' || target.locked || target.visible === false || target.regularSides) return false;
+  const n = target.pointIds.length;
+  if (n < DUZGUN_COKGEN_EN_AZ_KENAR || n > DUZGUN_COKGEN_EN_COK_KENAR || new Set(target.pointIds).size !== n) return false;
+  const byId = new Map(objects.map(o => [o.id, o]));
+  const koseler = target.pointIds.map(id => byId.get(id));
+  if (koseler.some(p => p?.type !== 'point' || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return false;
+  const noktalar = koseler as PointObject[];
+  return duzgunMu(noktalar) && noktalar.slice(2).every(p => free(p));
+}
 
 /** Açıyla çizilmiş yayın mevcut döndürmesini koruyarak sabit açıyı kaydırıcıya açar. */
 function fixedArcRotation(objects: readonly MathObject[], target: MathObject) {
@@ -177,6 +193,7 @@ function ownsBinding(objects: readonly MathObject[], sliderId: string, target: M
     case 'line': return key === 'length' && length(target.point1Id, target.point2Id, true);
     case 'ray': return key === 'length' && length(target.startPointId, target.throughPointId, true);
     case 'polygon': {
+      if (key === 'sides') return target.regularSides?.sliderId === sliderId;
       const match = /^(edge|angle):(\d+)$/.exec(key);
       if (!match || target.pointIds.length < 3) return false;
       const index = Number(match[2]), count = target.pointIds.length;
@@ -218,6 +235,8 @@ export function sliderBindingTargets(objects: readonly MathObject[], editedSlide
       properties = [
         ...object.pointIds.map((id, i) => ({ key: `edge:${i}`, label: `${pointName(id)}${pointName(object.pointIds[(i + 1) % count])} kenar uzunluğu` })),
         ...object.pointIds.map((id, i) => ({ key: `angle:${i}`, label: `${pointName(id)} köşe açısı (∠${pointName(object.pointIds[(i + count - 1) % count])}${pointName(id)}${pointName(object.pointIds[(i + 1) % count])})` })),
+        // Kenar sayısı yalnız düzgün çokgende (öteki çokgenlerde "düzenlenemiyor" görünür)
+        { key: 'sides', label: 'Kenar sayısı' },
       ];
     } else if (object.type === 'circle') {
       defaultLabel = 'Çember';
@@ -234,11 +253,33 @@ export function sliderBindingTargets(objects: readonly MathObject[], editedSlide
       const available = !!ownedId && ownsBinding(objects, ownedId, object, property.key)
         || (!shared && (availableObject.type === 'ellipse' ? availableEllipseProperty(availableObject, property.key)
           : planFor(availableObjects, availableObject, property.key, '') !== null
-            || (property.key === 'centralAngle' && fixedArcRotation(availableObjects, availableObject) !== null)));
+            || (property.key === 'centralAngle' && fixedArcRotation(availableObjects, availableObject) !== null)
+            || (property.key === 'sides' && kenarSayisiBaglanabilir(availableObjects, availableObject))));
       return available ? property : { ...property, disabled: true };
     });
     return [{ id: object.id, label: object.label || defaultLabel, properties }];
   });
+}
+
+/**
+ * Kaydırıcının şu anki şekil bağı: ayarlar penceresi açılınca bağlı olduğu şekil ve özellik seçili gelir. Önce kayıtlı
+ * hedefe (bindingTarget) bakılır; kayıt yoksa (eski çizim) ya da artık geçerli değilse listedeki şekillerin özellikleri
+ * taranır. Listede olmayan bir bağ (ör. nokta koordinatı, fonksiyon değişkeni) ya da bağ yoksa null döner.
+ */
+export function sliderCurrentBinding(objects: readonly MathObject[], sliderId: string): { targetId: string; propertyKey: string } | null {
+  const slider = objects.find(o => o.id === sliderId);
+  if (slider?.type !== 'slider') return null;
+  const sahip = (objectId: string, key: string) => {
+    const target = objects.find(o => o.id === objectId);
+    return !!target && ownsBinding(objects, sliderId, target, key);
+  };
+  const kayitli = slider.bindingTarget;
+  if (kayitli && sahip(kayitli.objectId, kayitli.propertyKey)) return { targetId: kayitli.objectId, propertyKey: kayitli.propertyKey };
+  for (const target of sliderBindingTargets(objects, sliderId)) {
+    const property = target.properties.find(p => sahip(target.id, p.key));
+    if (property) return { targetId: target.id, propertyKey: property.key };
+  }
+  return null;
 }
 
 export function sliderIsBound(objects: readonly MathObject[], sliderId: string): boolean {
@@ -266,24 +307,36 @@ function detachSliderGeometry(objects: readonly MathObject[], removed: ReadonlyS
       }
       const rule = next.construction;
       if ((rule?.kind === 'sliderPoint' && removed.has(rule.sliderId))
+        || (rule?.kind === 'regularVertex' && removed.has(rule.sliderId))
         || (rule?.kind === 'triangleVertex' && rule.sliderIds.some(id => removed.has(id)))) {
-        const { construction: _construction, ...rest } = next;
+        const { construction: _construction, preBindingPosition: _onceki, ...rest } = next;
         return { ...rest, isIndependent: !rest.onObjectId && !rest.dependsOn?.length };
       }
       if (rule?.kind === 'rotate' && rule.sliderId && removed.has(rule.sliderId)) {
         const { sliderId, sliderVariableName: _sliderVariableName, ...fixed } = rule;
-        return { ...next, construction: { ...fixed, degrees: values.get(sliderId)! } };
+        const { preBindingDegrees: _onceki, ...rest } = next;
+        return { ...rest, construction: { ...fixed, degrees: values.get(sliderId)! } };
       }
       if (next !== o && !rule && !next.onObjectId && !next.dependsOn?.length) return { ...next, isIndependent: true };
       return next;
     }
     if (o.type === 'ellipse' && Object.values(o.sliderBindings ?? {}).some(id => removed.has(id))) {
-      const { sliderBindings, ...rest } = o;
+      const { sliderBindings, preBindingValues, ...rest } = o;
       const remaining = Object.fromEntries(Object.entries(sliderBindings!).filter(([, id]) => !removed.has(id)));
-      return Object.keys(remaining).length ? { ...rest, sliderBindings: remaining } : rest;
+      const kalanOnceki = Object.fromEntries(Object.entries(preBindingValues ?? {}).filter(([key]) => key in remaining));
+      return {
+        ...rest,
+        ...(Object.keys(remaining).length ? { sliderBindings: remaining } : {}),
+        ...(Object.keys(kalanOnceki).length ? { preBindingValues: kalanOnceki } : {}),
+      };
     }
     if (o.type === 'angle' && o.valueSliderId && removed.has(o.valueSliderId)) {
       const { valueSliderId: _valueSliderId, ...rest } = o;
+      return rest;
+    }
+    // Kenar sayısı bağı çözülünce çokgen o anki köşeleriyle sıradan (serbest köşeli) bir çokgen olur
+    if (o.type === 'polygon' && o.regularSides && removed.has(o.regularSides.sliderId)) {
+      const { regularSides: _bag, preBindingSides: _onceki, ...rest } = o;
       return rest;
     }
     return o;
@@ -291,8 +344,63 @@ function detachSliderGeometry(objects: readonly MathObject[], removed: ReadonlyS
 }
 
 function rememberBinding(objects: MathObject[], sliderId: string, objectId: string, propertyKey: string): MathObject[] {
-  return objects.map(o => o.id === sliderId && o.type === 'slider'
-    ? { ...o, bindingTarget: { objectId, propertyKey } } : o);
+  return objects.map(o => {
+    if (o.id !== sliderId || o.type !== 'slider') return o;
+    // Bağ kurulunca geçici kapatılmış bağ kaydı düşer (ayarlar penceresinden yeniden bağlama da bağı açar)
+    const { suspendedBinding: _askida, ...rest } = o;
+    return { ...rest, bindingTarget: { objectId, propertyKey } };
+  });
+}
+
+/**
+ * Bağı GEÇİCİ olarak kapatır (sürgünün zincir simgesi; kullanıcı, 25.10.2026): şeklin noktaları serbest kalır ve
+ * sürüklenebilir, kaydırıcı hangi şeklin hangi özelliğine bağlı olduğunu `suspendedBinding` ile hatırlar.
+ */
+export function sliderBaginiAskiyaAl(objects: MathObject[], sliderId: string): MathObject[] {
+  const bag = sliderCurrentBinding(objects, sliderId);
+  if (!bag) throw new Error('Kaydırıcı bir şeklin kenarına, açısına ya da yarıçapına bağlı değil.');
+  if (hasSharedTriangleBinding(objects, sliderId)) throw new Error('Bu kaydırıcı üçgenin diğer kaydırıcılarıyla ortak bağlı; bağı tek başına kapatılamaz.');
+  // Kenar sayısı bağında çokgen bağlanmadan önceki kenar sayısıyla kurulur (kaydırıcının değeri geçici olarak o sayı
+  // yapılıp çözülür; bağ çözüldükten sonra kaydırıcı kendi değerine döner)
+  const kaydirici = objects.find((o): o is SliderObject => o.id === sliderId && o.type === 'slider')!;
+  const kenarCokgeni = objects.find((o): o is PolygonObject => o.type === 'polygon' && o.regularSides?.sliderId === sliderId);
+  const kaynak = kenarCokgeni?.preBindingSides
+    ? objects.map(o => (o.id === sliderId ? { ...kaydirici, value: kenarCokgeni.preBindingSides! } : o))
+    : objects;
+  const resolved = resolveCommandBindings(kaynak);
+  // Bağ kalkınca şekil bağlanmadan önceki hâline döner (kullanıcı, 25.10.2026: "bağ kaldırıldığında varsayılan konumuna
+  // dönse"). Kayıtlar korunur: bağ yeniden açılıp kapatılınca yine aynı hâle dönülür.
+  const geriDonus = new Map<string, (o: MathObject) => MathObject>();
+  for (const o of resolved) {
+    if (o.type === 'point' && o.preBindingPosition && o.construction?.kind === 'sliderPoint' && o.construction.sliderId === sliderId) {
+      const onceki = o.preBindingPosition;
+      geriDonus.set(o.id, (p) => ({ ...p, x: onceki.x, y: onceki.y, preBindingPosition: onceki } as MathObject));
+    }
+    if (o.type === 'point' && o.preBindingDegrees !== undefined && o.construction?.kind === 'rotate' && o.construction.sliderId === sliderId) {
+      const derece = o.preBindingDegrees;
+      geriDonus.set(o.id, (p) => (p.type === 'point' && p.construction?.kind === 'rotate'
+        ? { ...p, construction: { ...p.construction, degrees: derece }, preBindingDegrees: derece } : p));
+    }
+    if (o.type === 'ellipse' && o.preBindingValues) {
+      const anahtarlar = Object.entries(o.sliderBindings ?? {}).filter(([, id]) => id === sliderId).map(([key]) => key as keyof NonNullable<typeof o.preBindingValues>);
+      const degerler = Object.fromEntries(anahtarlar.flatMap(key => o.preBindingValues![key] !== undefined ? [[key, o.preBindingValues![key]]] : []));
+      if (Object.keys(degerler).length) {
+        geriDonus.set(o.id, (e) => ({ ...e, ...degerler, preBindingValues: { ...(e.type === 'ellipse' ? e.preBindingValues : {}), ...degerler } } as MathObject));
+      }
+    }
+  }
+  const cozulmus = detachSliderGeometry(resolved, new Set([sliderId])).map(o => geriDonus.get(o.id)?.(o) ?? o);
+  return resolveCommandBindings(cozulmus).map(o => o.id === sliderId && o.type === 'slider'
+    ? { ...o, value: kaydirici.value, suspendedBinding: { objectId: bag.targetId, propertyKey: bag.propertyKey } } : o);
+}
+
+/** Geçici olarak kapatılan bağı yeniden kurar: şekil kaydırıcının o anki değerine döner. Kurulamazsa hata verir, sahne aynı kalır. */
+export function sliderBaginiSurdur(objects: MathObject[], sliderId: string, createPointId: () => string): MathObject[] {
+  const slider = objects.find(o => o.id === sliderId);
+  if (slider?.type !== 'slider' || !slider.suspendedBinding) throw new Error('Kaydırıcının kapatılmış bir bağı yok.');
+  const { objectId, propertyKey } = slider.suspendedBinding;
+  if (!objects.some(o => o.id === objectId)) throw new Error('Kaydırıcının bağlı olduğu şekil artık yok. Ayarlardan yeni bir şekle bağlayın.');
+  return bindSliderProperty(resolveCommandBindings(objects), sliderId, objectId, propertyKey, createPointId);
 }
 
 /** Silme planından önce canlı değerleri sabitler; kaydırıcıların kendilerini plandan önce kaldırmaz. */
@@ -352,15 +460,36 @@ export function bindSliderProperty(objects: readonly MathObject[], sliderId: str
   if (error) throw new Error(error);
   const target = objects.find(o => o.id === targetId);
   if (!target) throw new Error('Bağlanacak nesne bulunamadı.');
+  if (propertyKey === 'sides') {
+    if (!kenarSayisiBaglanabilir(objects, target)) {
+      throw new Error('Kenar sayısı yalnızca düzgün çokgene bağlanabilir; çokgen kilitli olmamalı ve ilk iki köşe dışındaki köşeler serbest olmalı.');
+    }
+    if (slider.min < DUZGUN_COKGEN_EN_AZ_KENAR || slider.max > DUZGUN_COKGEN_EN_COK_KENAR || !Number.isInteger(slider.step)) {
+      throw new Error(`Kenar sayısı için kaydırıcı ${DUZGUN_COKGEN_EN_AZ_KENAR} ile ${DUZGUN_COKGEN_EN_COK_KENAR} arasında olmalı ve adımı tam sayı olmalı.`);
+    }
+    // İlk iki köşe serbest kalır; ötekiler bu iki köşeden ve kaydırıcıdan kurulur, köşe sayısı kaydırıcıya eşlenir
+    const byId = new Map(objects.map(o => [o.id, o]));
+    const orientation = donusYonu(target.pointIds.map(id => byId.get(id) as PointObject));
+    const [firstId, secondId] = target.pointIds;
+    const next = objects.map(o => {
+      if (o.id === target.id) return { ...target, regularSides: { sliderId, orientation }, preBindingSides: target.preBindingSides ?? target.pointIds.length };
+      const index = target.pointIds.indexOf(o.id);
+      return index >= 2 && o.type === 'point'
+        ? { ...o, isIndependent: false, construction: { kind: 'regularVertex' as const, firstId, secondId, sliderId, index, orientation } }
+        : o;
+    });
+    return rememberBinding(resolveCommandBindings(next), sliderId, targetId, propertyKey);
+  }
   if (target.type === 'ellipse') {
     if (!isEllipseProperty(propertyKey) || !availableEllipseProperty(target, propertyKey)) throw new Error('Elipsin bu özelliği kilitli, başka bir kaydırıcıya bağlı veya geçersiz.');
     if (propertyKey !== 'rotation' && !(slider.value > 0)) throw new Error('Yarıçap için kaydırıcının mevcut değeri sıfırdan büyük olmalı.');
-    return rememberBinding(resolveCommandBindings(objects.map(o => o.id === target.id ? { ...target, sliderBindings: { ...target.sliderBindings, [propertyKey]: sliderId } } : o)), sliderId, targetId, propertyKey);
+    const preBindingValues = { [propertyKey]: target[propertyKey], ...target.preBindingValues };
+    return rememberBinding(resolveCommandBindings(objects.map(o => o.id === target.id ? { ...target, preBindingValues, sliderBindings: { ...target.sliderBindings, [propertyKey]: sliderId } } : o)), sliderId, targetId, propertyKey);
   }
   const rotation = propertyKey === 'centralAngle' ? fixedArcRotation(objects, target) : null;
   if (rotation) {
     if (slider.value < 0 || slider.value > 360) throw new Error('Açı için kaydırıcının mevcut değeri 0 ile 360 derece arasında olmalı.');
-    const bound: PointObject = { ...rotation.point, isIndependent: false,
+    const bound: PointObject = { ...rotation.point, isIndependent: false, preBindingDegrees: rotation.point.preBindingDegrees ?? rotation.rule.degrees,
       construction: { ...rotation.rule, sliderId, sliderVariableName: slider.variableName } };
     return rememberBinding(resolveCommandBindings(objects.map(o => o.id === bound.id ? bound : o)), sliderId, targetId, propertyKey);
   }
@@ -372,7 +501,9 @@ export function bindSliderProperty(objects: readonly MathObject[], sliderId: str
   }
   const id = plan.create ? createPointId() : plan.point.id;
   if (!id || (plan.create && objects.some(o => o.id === id))) throw new Error('Yeni yarıçap noktası için benzersiz bir kimlik gerekli.');
-  const bound: PointObject = { ...plan.point, id, isIndependent: false, construction: plan.rule };
+  // Bağdan önceki konum (yeni yaratılan gizli yarıçap noktasında yok): bağ geçici kapatılınca nokta buraya döner
+  const preBindingPosition = plan.create ? undefined : plan.point.preBindingPosition ?? { x: plan.point.x, y: plan.point.y };
+  const bound: PointObject = { ...plan.point, id, isIndependent: false, construction: plan.rule, ...(preBindingPosition ? { preBindingPosition } : {}) };
   let next = objects.map(o => o.id === bound.id ? bound : o);
   if (target.type === 'angle') next = next.map(o => o.id === target.id ? { ...target, valueSliderId: sliderId } : o);
   if (plan.angleMeasurementIds?.length) next = next.map(o => o.type === 'angle' && plan.angleMeasurementIds!.includes(o.id) ? { ...o, valueSliderId: sliderId } : o);

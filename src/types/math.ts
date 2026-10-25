@@ -125,6 +125,13 @@ export interface BaseMathObject {
 }
 
 export interface PointObject extends BaseMathObject {
+  /**
+   * Kaydırıcıya bağlanmadan önceki konum (bağ kurulurken yazılır). Bağ geçici olarak kapatılınca nokta buraya döner
+   * (kullanıcı, 25.10.2026: "bağ kaldırıldığında varsayılan konumuna dönse"); bağ kalıcı olarak çözülünce silinir.
+   */
+  preBindingPosition?: { x: number; y: number };
+  /** Kaydırıcıya bağlanmadan önceki sabit dönme açısı (açıyla çizilmiş yayın yön noktası); preBindingPosition gibi. */
+  preBindingDegrees?: number;
   /** Türkçe komutlarla kurulan canlı geometrik ilişkiler. */
   construction?:
     | { kind: 'foot'; sourceId: string; linePointIds: [string, string] }
@@ -151,6 +158,11 @@ export interface PointObject extends BaseMathObject {
     | { kind: 'translate'; sourceId: string; vectorPointIds?: [string, string]; vector?: Point2D }
     /** Merkeze göre k katı (homotete). */
     | { kind: 'dilate'; sourceId: string; centerId?: string; center?: Point2D; factor: number }
+    /**
+     * Kenar sayısı kaydırıcıya bağlı düzgün çokgenin index. köşesi: ardışık iki köşesi firstId, secondId olan düzgün
+     * n-genin köşesi; n kaydırıcının değeridir (math/duzgunCokgen.ts).
+     */
+    | { kind: 'regularVertex'; firstId: string; secondId: string; sliderId: string; index: number; orientation: 1 | -1 }
     /** Üçgenin ağırlık, çevrel, iç teğet veya diklik merkezi. */
     | { kind: 'triangleCenter'; pointIds: [string, string, string]; center: 'centroid' | 'circumcenter' | 'incenter' | 'orthocenter' };
   type: 'point';
@@ -246,6 +258,8 @@ export interface CircleObject extends BaseMathObject {
  */
 export interface EllipseObject extends BaseMathObject {
   type: 'ellipse';
+  /** Kaydırıcıya bağlanmadan önceki özellik değerleri; bağ geçici olarak kapatılınca bunlara dönülür (PointObject.preBindingPosition gibi). */
+  preBindingValues?: Partial<Record<'radiusX' | 'radiusY' | 'rotation', number>>;
   centerPointId: string;
   /** Yatay yarıçap (dünya birimi) */
   radiusX: number;
@@ -276,6 +290,8 @@ export interface ArcObject extends BaseMathObject {
   showArcLength?: boolean;
   /** Merkez açı yazısı görünür mü? (varsayılan: evet) */
   showCentralAngle?: boolean;
+  /** Merkez açının dış (360° − iç) açısı gösterilir (sağ tık > İç açı / dış açı; çokgen açılarındaki reflex gibi) */
+  centralAngleReflex?: boolean;
   /** Elle konmuş eşitlik çentiği: 0 = işaretsiz, 1–8 = çizgi sayısı; yoksa otomatik (esitlikIsaretleri.ts). */
   equalityMark?: number;
 }
@@ -295,6 +311,8 @@ export interface SectorObject extends BaseMathObject {
   showPerimeter?: boolean;
   /** Merkez açı yazısı görünür mü? (varsayılan: evet) */
   showCentralAngle?: boolean;
+  /** Merkez açının dış (360° − iç) açısı gösterilir (sağ tık > İç açı / dış açı; çokgen açılarındaki reflex gibi) */
+  centralAngleReflex?: boolean;
   /** Elle konmuş eşitlik çentiği: 0 = işaretsiz, 1–8 = çizgi sayısı; yoksa otomatik (esitlikIsaretleri.ts). */
   equalityMark?: number;
 }
@@ -331,6 +349,13 @@ export interface PolygonObject extends BaseMathObject {
   fillOpacity?: number;
   showArea?: boolean;
   showPerimeter?: boolean;
+  /**
+   * Kenar sayısı kaydırıcıya bağlı düzgün çokgen: ilk iki köşe serbest, ötekiler `regularVertex` kurulumlu; köşe sayısı
+   * kaydırıcının değerine eşlenir (math/duzgunCokgen.ts). orientation: köşelerin dönüş yönü.
+   */
+  regularSides?: { sliderId: string; orientation: 1 | -1 };
+  /** Kenar sayısı kaydırıcıya bağlanmadan önceki kenar sayısı; bağ geçici kapatılınca çokgen bu sayıya döner. */
+  preBindingSides?: number;
 }
 
 export interface FunctionObject extends BaseMathObject {
@@ -347,6 +372,11 @@ export interface SliderObject extends BaseMathObject {
   variableName: string; // Örn: 'a', 'b', 'm'
   /** Görünen ölçü adının kaynağıdır; geometrik bağımlılık oluşturmaz. */
   bindingTarget?: { objectId: string; propertyKey: string };
+  /**
+   * Geçici olarak kapatılmış bağ (sürgünün zincir simgesine tıklanınca; sliderBaginiAskiyaAl): şekil serbesttir, kaydırıcı
+   * hangi şeklin hangi özelliğine bağlı olduğunu hatırlar; yeniden tıklanınca bağ kaydırıcının değeriyle kurulur.
+   */
+  suspendedBinding?: { objectId: string; propertyKey: string };
   min: number;
   max: number;
   step: number;

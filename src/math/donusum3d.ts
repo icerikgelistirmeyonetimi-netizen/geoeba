@@ -7,8 +7,9 @@ import { generateSolidMesh, rotatePoint3D } from './geometry3d';
  *
  * Cisim modeli (types/workspace3d.ts, geometry3d.generateSolidMesh): yerel köşeler tabanı z = 0 düzleminde ve taban
  * merkezi orijinde olacak biçimde üretilir; sonra `rotation` (derece, X→Y→Z sırası: dünya = Rz·Ry·Rx·yerel) uygulanır
- * ve `position` (TABAN merkezi) eklenir. Bu modül yalnızca `position`, `rotation` ve `dimensions` alanlarını değiştirir;
- * çizim motoru dokunulmadan kalır.
+ * ve `position` (TABAN merkezi) eklenir. Bu modül `position`, `rotation` ve `dimensions` alanlarını değiştirir; köşe
+ * kaydırmaları (`vertexOffsets`, dünya vektörleri) cisimle birlikte döndürülür, ölçeklenir ve yansıtılır, yansıtılan kopyada
+ * silinen yüz / köşeler ve yüz renkleri aynadaki karşılıklarına taşınır. Çizim motoru dokunulmadan kalır.
  *
  *  - Döndürme: yeni dönme matrisi R' = Ra · R (Ra: dünya ekseni etrafında); Euler açıları matristen geri çözülür.
  *    Pivot "merkez" ise taban merkezi, geometrik merkez etrafında döndürülür (cisim yerinde çevrilir).
@@ -69,9 +70,12 @@ export function matrisEuler(R: Mat): Point3D {
   return { x: aciNormalle(r2d(Math.atan2(R[2][1], R[2][2]))), y: aciNormalle(r2d(b)), z: aciNormalle(r2d(Math.atan2(R[1][0], R[0][0]))) };
 }
 
+/** Koordinat ekseninin birim vektörü: x → (1, 0, 0), y → (0, 1, 0), z → (0, 0, 1) */
+export const eksenBirimVektoru = (eksen: Eksen): Point3D => ({ x: eksen === 'x' ? 1 : 0, y: eksen === 'y' ? 1 : 0, z: eksen === 'z' ? 1 : 0 });
+
 /** Birim eksen vektörü ya da serbest vektör etrafında `derece` kadar dönme (Rodrigues). */
 export function eksenMatrisi(eksen: Eksen | Point3D, derece: number): Mat {
-  const v = typeof eksen === 'string' ? { x: eksen === 'x' ? 1 : 0, y: eksen === 'y' ? 1 : 0, z: eksen === 'z' ? 1 : 0 } : eksen;
+  const v = typeof eksen === 'string' ? eksenBirimVektoru(eksen) : eksen;
   const len = Math.hypot(v.x, v.y, v.z);
   if (!(len > 1e-12)) throw new RangeError('Dönme ekseni sıfır vektör olamaz.');
   const [x, y, z] = [v.x / len, v.y / len, v.z / len];
@@ -83,10 +87,28 @@ export function eksenMatrisi(eksen: Eksen | Point3D, derece: number): Mat {
   ];
 }
 
+/** Matrisin devriği (dönme matrisinin tersi) */
+const devrik = (M: Mat): Mat => [
+  [M[0][0], M[1][0], M[2][0]],
+  [M[0][1], M[1][1], M[2][1]],
+  [M[0][2], M[1][2], M[2][2]],
+];
+
 const topla = (p: Point3D, q: Point3D): Point3D => ({ x: p.x + q.x, y: p.y + q.y, z: p.z + q.z });
 const cikar = (p: Point3D, q: Point3D): Point3D => ({ x: p.x - q.x, y: p.y - q.y, z: p.z - q.z });
 const olcek = (p: Point3D, k: number): Point3D => ({ x: p.x * k, y: p.y * k, z: p.z * k });
 const noktaTemizle = (p: Point3D): Point3D => ({ x: temiz(p.x), y: temiz(p.y), z: temiz(p.z) });
+
+/**
+ * Köşe kaydırmalarını (dünya vektörleri) dönüştürür: cisim döner ya da büyürken biçimi bozulmuş köşeler cismi izler.
+ * Kaydırma yoksa alan eklenmez (cisim nesnesinin biçimi değişmez).
+ */
+function kaydirmaAlani(solid: Solid3DObject, donustur: (v: Point3D) => Point3D): Pick<Solid3DObject, 'vertexOffsets'> {
+  if (!solid.vertexOffsets) return {};
+  const vertexOffsets: Record<number, Point3D> = {};
+  for (const [i, v] of Object.entries(solid.vertexOffsets)) vertexOffsets[Number(i)] = noktaTemizle(donustur(v));
+  return { vertexOffsets };
+}
 
 /** Cismin yerel geometrik merkezinin yüksekliği (taban merkezinden). */
 export function merkezYuksekligi(solid: Solid3DObject): number {
@@ -110,16 +132,19 @@ export function cismiDondur(solid: Solid3DObject, eksen: Eksen | Point3D, derece
   if (!Number.isFinite(derece)) throw new RangeError('Dönme açısı sayı olmalı.');
   const Ra = eksenMatrisi(eksen, derece);
   const rotation = matrisEuler(carp(Ra, eulerMatrisi(solid.rotation)));
-  if (pivot === 'taban') return { ...solid, rotation };
+  const kaydirmalar = kaydirmaAlani(solid, (v) => uygula(Ra, v));
+  if (pivot === 'taban') return { ...solid, rotation, ...kaydirmalar };
   const c = cisimMerkezi(solid);
   const position = noktaTemizle(topla(c, uygula(Ra, cikar(solid.position, c))));
-  return { ...solid, rotation, position };
+  return { ...solid, rotation, position, ...kaydirmalar };
 }
 
 /** Cismin döndürmesini sıfırlar; geometrik merkez yerinde kalır. */
 export function donmeyiSifirla(solid: Solid3DObject): Solid3DObject {
   const c = cisimMerkezi(solid);
-  const dik: Solid3DObject = { ...solid, rotation: { x: 0, y: 0, z: 0 } };
+  // Cismin dünya yönelimi R'den birime döner: kaydırmalar Rᵀ ile çevrilir
+  const geriDon = devrik(eulerMatrisi(solid.rotation));
+  const dik: Solid3DObject = { ...solid, rotation: { x: 0, y: 0, z: 0 }, ...kaydirmaAlani(solid, (v) => uygula(geriDon, v)) };
   const yeniMerkez = cisimMerkezi(dik);
   return { ...dik, position: noktaTemizle(topla(solid.position, cikar(c, yeniMerkez))) };
 }
@@ -145,7 +170,7 @@ export function cismiOlcekle(solid: Solid3DObject, k: number, pivot: Pivot | Poi
   } else if (typeof pivot === 'object') {
     position = noktaTemizle(topla(pivot, olcek(cikar(solid.position, pivot), oran)));
   }
-  return { ...solid, dimensions, position };
+  return { ...solid, dimensions, position, ...kaydirmaAlani(solid, (v) => olcek(v, oran)) };
 }
 
 /** k katı büyütmede hacim k³, yüzey alanı k² katına çıkar. */
@@ -163,21 +188,86 @@ const YEREL_AYNA: Mat = [[-1, 0, 0], [0, 1, 0], [0, 0, 1]];
 /** Dik üçgen tabanlı prizma x → −x'e göre simetrik değildir (dik açı solda); y → −y simetrisi kullanılır. */
 const YEREL_AYNA_Y: Mat = [[1, 0, 0], [0, -1, 0], [0, 0, 1]];
 
+/** Noktanın düzleme göre ayna görüntüsü (yz → x = seviye, xz → y = seviye, xy → z = seviye) */
+function aynadaNokta(p: Point3D, duzlem: AynaDuzlemi, seviye: number): Point3D {
+  if (duzlem === 'yz') return { ...p, x: 2 * seviye - p.x };
+  if (duzlem === 'xz') return { ...p, y: 2 * seviye - p.y };
+  return { ...p, z: 2 * seviye - p.z };
+}
+
 /**
  * Düzleme göre yansıtılmış KOPYA (ayna görüntüsü). `seviye`: düzlemin konumu (yz → x = seviye, xz → y = seviye, xy → z = seviye).
- * Yüz renkleri aynada yer değiştireceğinden kopyaya taşınmaz. id ve name çağıranın verdiği değerleri alır (yoksa aynı kalır).
+ * Yüz renkleri, silinen yüz / köşeler ve köşe kaydırmaları aynadaki KARŞILIKLARINA taşınır (yerel ayna yüzlerin ve köşelerin
+ * dizinlerini değiştirir; dizin olduğu gibi kopyalanırsa görüntü yanlış yüzü boyar / siler). id ve name çağıranın verdiği
+ * değerleri alır (yoksa aynı kalır).
  */
 export function cismiYansit(solid: Solid3DObject, duzlem: AynaDuzlemi, seviye = 0, o: { id?: string; name?: string } = {}): Solid3DObject {
   const S = aynaMatrisi(duzlem);
   const yerel = solid.type === 'triangular_prism' && solid.tabanUcgeni === 'dik' ? YEREL_AYNA_Y : YEREL_AYNA;
   const rotation = matrisEuler(carp(carp(S, eulerMatrisi(solid.rotation)), yerel));
-  const p = { ...solid.position };
-  if (duzlem === 'yz') p.x = 2 * seviye - p.x;
-  else if (duzlem === 'xz') p.y = 2 * seviye - p.y;
-  else p.z = 2 * seviye - p.z;
-  const { faceColors: _renkler, ...kalan } = solid;
-  void _renkler;
-  return { ...kalan, id: o.id ?? solid.id, name: o.name ?? solid.name, position: noktaTemizle(p), rotation, selectedFaceIndex: null };
+  const { faceColors, vertexOffsets, deletedFaces, deletedVertices, ...kalan } = solid;
+  const kopya: Solid3DObject = {
+    ...kalan,
+    id: o.id ?? solid.id,
+    name: o.name ?? solid.name,
+    position: noktaTemizle(aynadaNokta(solid.position, duzlem, seviye)),
+    rotation,
+    selectedFaceIndex: null,
+  };
+  const altYapiVar =
+    (faceColors && Object.keys(faceColors).length > 0) ||
+    (vertexOffsets && Object.keys(vertexOffsets).length > 0) ||
+    !!deletedFaces?.length ||
+    !!deletedVertices?.length;
+  if (!altYapiVar) return { ...kopya, ...(vertexOffsets ? { vertexOffsets } : {}), ...(deletedFaces ? { deletedFaces } : {}), ...(deletedVertices ? { deletedVertices } : {}) };
+
+  // Ham ağlar (kaydırmasız, silinmemiş) üzerinde köşe ve yüzleri konumla eşle: özgündeki i, kopyada aynadaki j'dir
+  const ham = (s: Solid3DObject) => generateSolidMesh({ ...s, vertexOffsets: undefined, deletedFaces: undefined, deletedVertices: undefined });
+  const a = ham(solid);
+  const b = ham(kopya);
+  const yakin = (p: Point3D, q: Point3D) => Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) < 1e-5;
+  const koseKarsiligi = (i: number): number | undefined => {
+    const v = a.vertices[i];
+    if (!v) return undefined;
+    const hedef = aynadaNokta(v, duzlem, seviye);
+    const j = b.vertices.findIndex((r) => yakin(r, hedef));
+    return j >= 0 ? j : undefined;
+  };
+  const yuzMerkezi = (m: typeof a, f: (typeof a)['faces'][number]) => {
+    const k = f.vertexIndices.map((vi) => m.vertices[vi]).filter(Boolean);
+    const t = k.reduce((acc, p) => topla(acc, p), { x: 0, y: 0, z: 0 });
+    return olcek(t, 1 / Math.max(1, k.length));
+  };
+  const yuzKarsiligi = (yuzIndisi: number): number | undefined => {
+    const fi = a.faces.findIndex((f, idx) => (f.faceIndex ?? idx) === yuzIndisi);
+    if (fi < 0) return undefined;
+    const hedef = aynadaNokta(yuzMerkezi(a, a.faces[fi]), duzlem, seviye);
+    const gi = b.faces.findIndex((g) => yakin(yuzMerkezi(b, g), hedef));
+    return gi >= 0 ? b.faces[gi].faceIndex ?? gi : undefined;
+  };
+  const tasi = <T,>(kayit: Record<number, T> | undefined, karsilik: (i: number) => number | undefined, d: (v: T) => T) => {
+    if (!kayit) return undefined;
+    const out: Record<number, T> = {};
+    for (const [i, v] of Object.entries(kayit)) {
+      const j = karsilik(Number(i));
+      if (j !== undefined) out[j] = d(v);
+    }
+    return out;
+  };
+  const listeTasi = (liste: number[] | undefined, karsilik: (i: number) => number | undefined) =>
+    liste?.map(karsilik).filter((j): j is number => j !== undefined);
+
+  const yeniRenkler = tasi(faceColors, yuzKarsiligi, (r) => r);
+  const yeniKaydirmalar = tasi(vertexOffsets, koseKarsiligi, (v) => noktaTemizle(uygula(S, v)));
+  const yeniSilinenYuzler = listeTasi(deletedFaces, yuzKarsiligi);
+  const yeniSilinenKoseler = listeTasi(deletedVertices, koseKarsiligi);
+  return {
+    ...kopya,
+    ...(yeniRenkler ? { faceColors: yeniRenkler } : {}),
+    ...(yeniKaydirmalar ? { vertexOffsets: yeniKaydirmalar } : {}),
+    ...(yeniSilinenYuzler ? { deletedFaces: yeniSilinenYuzler } : {}),
+    ...(yeniSilinenKoseler ? { deletedVertices: yeniSilinenKoseler } : {}),
+  };
 }
 
 /** Vektörle ötelenmiş KOPYA. */
@@ -186,12 +276,20 @@ export function cismiOtele(solid: Solid3DObject, v: Point3D, o: { id?: string; n
   return { ...solid, id: o.id ?? solid.id, name: o.name ?? solid.name, position: noktaTemizle(topla(solid.position, v)), selectedFaceIndex: null };
 }
 
-/** Kopya adı: "Küp 1" → "Küp 1 (yansıma)"; aynı ek iki kez eklenmez. */
+/** Seçili alt elemanın (yüz ya da köşe) köşe dizinleri, merkezi ve köşeleri */
 export interface AltElemanBilgisi {
   tur: 'face' | 'vertex';
   vertexIndices: number[];
   merkez: Point3D;
   koseler: Point3D[];
+}
+
+/**
+ * Ağdaki yüzü KALICI kimliğiyle bulur. Yüz silinince dizi kayar; `faceIndex` (yoksa dizideki yeri) yüzün değişmeyen
+ * kimliğidir (seçim, renk ve silme bu kimliği kullanır). `mesh.faces[kimlik]` silinmiş cisimde başka yüzü verir.
+ */
+export function kaliciYuzBul<F extends { faceIndex?: number }>(mesh: { faces: F[] }, kimlik: number): F | undefined {
+  return mesh.faces.find((f, idx) => (f.faceIndex ?? idx) === kimlik);
 }
 
 /**
@@ -212,7 +310,7 @@ export function seciliAltElemanBilgisi(solid: Solid3DObject, selectionMode: Sele
   }
   if (selectionMode === 'face' && typeof solid.selectedFaceIndex === 'number') {
     const mesh = generateSolidMesh(solid);
-    const face = mesh.faces.find((f, idx) => (f.faceIndex ?? idx) === solid.selectedFaceIndex);
+    const face = kaliciYuzBul(mesh, solid.selectedFaceIndex);
     if (!face || face.vertexIndices.length === 0) return null;
     const koseler = face.vertexIndices.map((vi) => mesh.vertices[vi]).filter(Boolean);
     if (koseler.length === 0) return null;
@@ -294,6 +392,7 @@ export function altElemaniDondur(
   return { ...solid, vertexOffsets: yeni };
 }
 
+/** Kopya adı: "Küp 1" → "Küp 1 (yansıma)"; aynı ek iki kez eklenmez. */
 export function kopyaAdi(name: string, ek: 'yansıma' | 'öteleme' | 'kopya'): string {
   const temel = name.replace(/\s*\((?:yansıma|öteleme|kopya)\)$/u, '');
   return `${temel} (${ek})`;

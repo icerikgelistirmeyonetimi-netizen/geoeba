@@ -164,7 +164,7 @@ describe('function definitions', () => {
   it('auto-creates sliders for parameters (legacy y = a*x) and reuses existing ones', () => {
     const r = ok('y = a*x');
     const a = slider(r.objects, 'a');
-    expect(a).toMatchObject({ min: -5, max: 5, step: 0.1, value: 1, label: 'a Parametresi', color: NESNE_RENGI.mor });
+    expect(a).toMatchObject({ min: -5, max: 5, step: 1, value: 1, label: 'a Parametresi', color: NESNE_RENGI.mor });
     expect(r.message).toContain('a için kaydırıcı');
     const again = ok('y = a*x^2', r.objects);
     expect(byType(again.objects, 'slider')).toHaveLength(1);
@@ -291,10 +291,10 @@ describe('polynomial fit', () => {
 // ---------------------------------------------------------------------------
 
 describe('slider assignment', () => {
-  it('creates a slider like assignSliderValue (symmetric range, step 0.1)', () => {
+  it('creates a slider like assignSliderValue (symmetric range; step 1, or 0.1 for a decimal value)', () => {
     const r = ok('a = 2');
-    expect(slider(r.objects, 'a')).toMatchObject({ min: -5, max: 5, step: 0.1, value: 2, label: 'a Parametresi', visible: true });
-    expect(slider(ok('k = 3,5').objects, 'k')).toMatchObject({ value: 3.5, min: -7, max: 7 });
+    expect(slider(r.objects, 'a')).toMatchObject({ min: -5, max: 5, step: 1, value: 2, label: 'a Parametresi', visible: true });
+    expect(slider(ok('k = 3,5').objects, 'k')).toMatchObject({ value: 3.5, min: -7, max: 7, step: 0.1 });
     expect(slider(ok('b = -1 olsun').objects, 'b').value).toBe(-1);
     expect(slider(ok('t = pi/2').objects, 't').value).toBeCloseTo(Math.PI / 2, 6);
     expect(slider(ok('ç = 1').objects, 'ç').value).toBe(1);
@@ -348,7 +348,7 @@ describe('slider assignment', () => {
 describe('slider creation', () => {
   it('uses Slider dialog defaults and says which were applied', () => {
     const r = ok('a kaydırıcısı oluştur');
-    expect(slider(r.objects, 'a')).toMatchObject({ min: -5, max: 5, step: 0.5, value: 1, label: 'a Parametresi', color: NESNE_RENGI.mor, x: -8, y: 6, length: 4 });
+    expect(slider(r.objects, 'a')).toMatchObject({ min: -5, max: 5, step: 1, value: 1, label: 'a Parametresi', color: NESNE_RENGI.mor, x: -8, y: 6, length: 4 });
     expect(r.message).toContain('varsayılan');
     expect(r.selectedIds).toEqual([slider(r.objects, 'a').id]);
     expect(ranked('a kaydırıcısı oluştur')[0].score).toBe(50);

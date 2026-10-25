@@ -1,17 +1,16 @@
 'use client';
-import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 
 import React, { useState } from 'react';
 import { useWorkspace } from '@/state/WorkspaceContext';
-import { Point2D, PointObject, PolygonObject } from '@/types/math';
+import { Point2D } from '@/types/math';
 import { formatTurkishNumber } from '@/math/coordinates';
 import { generateNextPointLabels } from '@/math/geometry';
-import { regularPolygonVertices } from '@/math/regularPolygon';
-import { createId } from '@/state/ids';
 import { Modal } from '@/components/ui/Modal';
 import { Hexagon, X, Check, Sparkles } from 'lucide-react';
 import { useIlkokulKipi } from '@/hooks/useKademeDuzeyi';
-import { ILKOKUL_EN_COK_KENAR } from './ilkokulKipi';
+import { enCokKenarSayisi } from './ilkokulKipi';
+import { duzgunCokgenNesneleri } from './cizimNesneleri';
+import { DUZGUN_COKGEN_EN_COK_KENAR, duzgunCokgenAdi } from '@/math/duzgunCokgen';
 
 interface RegularPolygonDialogProps {
   isOpen: boolean;
@@ -20,7 +19,7 @@ interface RegularPolygonDialogProps {
 }
 
 const MIN_SIDES = 3;
-const MAX_SIDES = 30;
+const MAX_SIDES = DUZGUN_COKGEN_EN_COK_KENAR;
 const MIN_RADIUS = 0.5;
 const MAX_RADIUS = 10;
 
@@ -70,19 +69,6 @@ function CokgenSimgesi({ kenar }: { kenar: number }) {
   );
 }
 
-function getPolygonName(n: number): string {
-  if (n === 3) return 'Eşkenar Üçgen';
-  if (n === 4) return 'Kare (Düzgün Dörtgen)';
-  if (n === 5) return 'Düzgün Beşgen';
-  if (n === 6) return 'Düzgün Altıgen (Petek)';
-  if (n === 7) return 'Düzgün Yedigen';
-  if (n === 8) return 'Düzgün Sekizgen';
-  if (n === 9) return 'Düzgün Dokuzgen';
-  if (n === 10) return 'Düzgün Ongen';
-  if (n === 12) return 'Düzgün Onikigen';
-  return `Düzgün ${n}-gen`;
-}
-
 /** Kenar sayısını sınırlar; ilkokulda en çok sekizgen (alan uzmanı, 3. sınıf) */
 export const clampSides = (n: number, enCok: number = MAX_SIDES) => Math.max(MIN_SIDES, Math.min(enCok, Math.round(n)));
 const clampRadius = (r: number) => Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, r));
@@ -100,8 +86,8 @@ export function RegularPolygonDialog({
   const { addObjects, objects } = useWorkspace();
   // İlkokul: en çok sekizgen; iç / dış açı derecesi ve köşegen sayısı kartı gösterilmez (açı ölçme yok)
   const ilkokul = useIlkokulKipi();
-  const enCokKenar = ilkokul ? ILKOKUL_EN_COK_KENAR : MAX_SIDES;
-  const sablonlar = ilkokul ? PRESET_EDGES.filter((p) => p.count <= ILKOKUL_EN_COK_KENAR) : PRESET_EDGES;
+  const enCokKenar = enCokKenarSayisi(ilkokul, MAX_SIDES);
+  const sablonlar = PRESET_EDGES.filter((p) => p.count <= enCokKenar);
   // Ham metin: kullanıcı "1" -> "12" yazarken ara değerler bozulmasın.
   const [sidesRaw, setSidesRaw] = useState('6');
   const [radiusRaw, setRadiusRaw] = useState('3');
@@ -117,7 +103,7 @@ export function RegularPolygonDialog({
   const exteriorAngle = 360 / sides;
   const diagonalCount = (sides * (sides - 3)) / 2;
   const interiorSum = (sides - 2) * 180;
-  const polyName = getPolygonName(sides);
+  const polyName = duzgunCokgenAdi(sides);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,44 +118,11 @@ export function RegularPolygonDialog({
       sides
     );
 
-    // Ders kitabı düzeni: yatay tabana oturur, A sol alt köşede, köşeler saat yönünün tersine
-    const corners = regularPolygonVertices(sides, radius, targetPos);
-    const pts: PointObject[] = [];
-    for (let i = 0; i < sides; i++) {
-      // Köşeleri yuvarlamak eşit kenarları farklı uzunluklara dönüştürür. Yalnız görünüm yuvarlanır.
-      const px = corners[i].x;
-      const py = corners[i].y;
-      pts.push({
-        id: createId('pt'),
-        type: 'point',
-        label: labels[i],
-        showLabel: true,
-        x: px,
-        y: py,
-        color: NESNE_RENGI.zumrut,
-        visible: true,
-        isIndependent: true,
-        createdAt: base + i,
-      });
-    }
-
-    const poly: PolygonObject = {
-      id: createId('poly'),
-      type: 'polygon',
-      label: polyName,
-      showLabel: true,
-      pointIds: pts.map((p) => p.id),
-      color: NESNE_RENGI.zumrut,
-      fillColor: NESNE_RENGI.zumrut,
-      fillOpacity: 0.2,
-      visible: true,
-      showArea: false,
-      showPerimeter: false,
-      createdAt: base + sides,
-    };
+    // Ders kitabı düzeni: yatay tabana oturur, A sol alt köşede, köşeler saat yönünün tersine; köşeler yuvarlanmaz
+    const { koseler, cokgen } = duzgunCokgenNesneleri(sides, radius, targetPos, labels, polyName, base);
 
     // Köşeler ve çokgen tek geçmiş adımı olarak eklenir: tek Ctrl+Z hepsini geri alır.
-    addObjects([...pts, poly], `${polyName} oluşturuldu (${sides} kenar)`);
+    addObjects([...koseler, cokgen], `${polyName} oluşturuldu (${sides} kenar)`);
     onClose();
   };
 

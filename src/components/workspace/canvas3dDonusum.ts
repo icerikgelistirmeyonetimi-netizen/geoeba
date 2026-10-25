@@ -1,6 +1,6 @@
 import type { Point3D, Solid3DObject, Solid3DType, Tool3DMode } from '@/types/workspace3d';
 import { calculate3DSurfaceArea, calculate3DVolume, generateSolidMesh, rotatePoint3D } from '@/math/geometry3d';
-import { OLCEK_EN_AZ, OLCEK_EN_COK, olcekSonucu } from '@/math/donusum3d';
+import { OLCEK_EN_AZ, OLCEK_EN_COK, eksenBirimVektoru, olcekSonucu } from '@/math/donusum3d';
 import type { AynaDuzlemi, Eksen } from '@/math/donusum3d';
 import { formatTurkishNumber } from '@/math/coordinates';
 
@@ -86,7 +86,7 @@ export function halkaDuzlemiAcik(eksen: Eksen, kameraIleri: Point3D): boolean {
  * Vektörler önce düzleme izdüşürülür; biri sıfıra yakınsa 0.
  */
 export function eksenEtrafindaAci(eksen: Eksen, v0: Point3D, v1: Point3D, shift = false): number {
-  const n = { x: eksen === 'x' ? 1 : 0, y: eksen === 'y' ? 1 : 0, z: eksen === 'z' ? 1 : 0 };
+  const n = eksenBirimVektoru(eksen);
   const izdus = (v: Point3D): Point3D => {
     const d = v.x * n.x + v.y * n.y + v.z * n.z;
     return { x: v.x - d * n.x, y: v.y - d * n.y, z: v.z - d * n.z };
@@ -236,9 +236,13 @@ export function uzunlukMetni(uzunluk: number): string {
 
 /* ------------------------------ Sayılar ------------------------------ */
 
-/** Türkçe yazılmış sayıyı okur ("1,5", "−2", " 3 "); boş ya da geçersizse null. */
+/**
+ * Türkçe yazılmış sayıyı okur: "1,5", "−2", " 3 ", "1.000,5" (virgül varsa noktalar binlik ayırıcıdır); boş ya da
+ * geçersizse null. 3B'nin bütün sayı kutuları bunu kullanır (Toolbar3D.turkceSayiyiCoz üstüne sınır ve yuvarlama ekler).
+ */
 export function turkceSayiOku(metin: string): number | null {
-  const temiz = metin.trim().replace(/\s+/g, '').replace(/[−–]/g, '-').replace(',', '.');
+  let temiz = metin.trim().replace(/\s+/g, '').replace(/[−–]/g, '-');
+  if (temiz.includes(',')) temiz = temiz.replace(/\./g, '').replace(',', '.');
   if (temiz === '' || !/^[-+]?(\d+\.?\d*|\.\d+)$/.test(temiz)) return null;
   const v = Number(temiz);
   return Number.isFinite(v) ? v : null;
@@ -257,8 +261,9 @@ export const ONCE_CISIM_SECIN = 'Önce bir cisim seçin';
 /** Yalnızca istenen sonuçlar hesaplanır; hazır örneklerde iki sonucu birlikte istemek mümkündür. */
 export function hacimAlanMetni(solid: Solid3DObject, istenen: { hacim?: boolean; alan?: boolean } = { hacim: true, alan: true }): string {
   const sonuclar: string[] = [];
-  if (istenen.hacim) sonuclar.push(`V = ${formatTurkishNumber(calculate3DVolume(solid), 1)} br³`);
-  if (istenen.alan) sonuclar.push(`A = ${formatTurkishNumber(calculate3DSurfaceArea(solid), 1)} birimkare`);
+  // Bağlamlar sekmesiyle aynı basamak (2 ondalık)
+  if (istenen.hacim) sonuclar.push(`V = ${formatTurkishNumber(calculate3DVolume(solid), 2)} br³`);
+  if (istenen.alan) sonuclar.push(`A = ${formatTurkishNumber(calculate3DSurfaceArea(solid), 2)} birimkare`);
   return sonuclar.join(' · ');
 }
 

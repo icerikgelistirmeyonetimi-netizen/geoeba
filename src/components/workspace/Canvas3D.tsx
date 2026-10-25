@@ -79,11 +79,12 @@ import {
   altElemaniDondur,
   OLCEK_EN_AZ,
   OLCEK_EN_COK,
+  eksenBirimVektoru,
   type AynaDuzlemi,
 } from '@/math/donusum3d';
 import { CISIM_RENKLERI, KOPYA_RENGI } from './cisimRenkleri';
 import { NESNE_RENGI, NESNE_SECIM_RENGI, NESNE_SECIM_RENGI_KOYU_TEMA } from '@/utils/nesneRenkleri';
-import { VARSAYILAN_CISIM_OLCULERI, cismiGorunurKil, cizimOlculeri, kamerayiSifirla, yerlesimKonumuHesapla } from './cisimYerlesimi';
+import { cisimOlculeriniBirlestir, cismiGorunurKil, hazirOlculuCizimOlculeri, kamerayiSifirla, yerlesimKonumuHesapla } from './cisimYerlesimi';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { gizliSecimBirakilir, kademe2BNesneleri3BdeGosterir, kademe3BEksenleriGosterir, type AyrimDurumu } from './kademeDuzeyleri3B';
 import { ILKOKUL_3B_DONUS_YONLERI, ilkokulOlcekNotu, ilkokulOzellikMetni } from './ilkokul3B';
@@ -143,6 +144,7 @@ import {
   kameraEtkilesimi,
   ikiParmakKamera,
   parmakCifti,
+  CISIM_GEREKEN_ARACLAR,
 } from './canvas3dDonusum';
 import { yapismaOturumuKur, yapistir, surukleKipi, pikselBasinaBirim, type YapismaOturumu } from '@/math/yapisma3d';
 import { kilavuzuGuncelle, kilavuzuTemizle, bosKilavuzDurumu, type KilavuzDurumu } from './yapismaKilavuzu3B';
@@ -882,7 +884,7 @@ function buildGizmo(center: THREE.Vector3, len: number): THREE.Group {
   const r = Math.max(0.022, len * 0.018);
 
   (['x', 'y', 'z'] as Axis[]).forEach((axis) => {
-    const dir = new THREE.Vector3(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
+    const dir = new THREE.Vector3().copy(eksenBirimVektoru(axis));
     const mat = new THREE.MeshBasicMaterial({ color: AXIS_COLORS[axis], depthTest: false, transparent: true, opacity: 0.9 });
 
     const shaft = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len * 0.76, 12), mat);
@@ -1218,7 +1220,7 @@ interface Canvas3DProps {
   solids: Solid3DObject[];
   /**
    * 2B çizimden gelen nesneler (nokta, çember, fonksiyon…) sahnede gösterilsin, seçilip taşınsın mı? Verilmezse kademeden:
-   * ortaokulda hayır (kademeDuzeyleri3B.kademe2BNesneleri3BdeGosterir: 2B ve 3B nesne kümeleri ayrı), ötekilerde evet.
+   * ilkokul ve ortaokulda hayır (kademeDuzeyleri3B.kademe2BNesneleri3BdeGosterir: 2B ve 3B nesne kümeleri ayrı), lisede evet.
    */
   goster2BNesneler?: boolean;
   selectedSolidId: string | null;
@@ -1296,6 +1298,8 @@ type Interaction =
       merkezEkran: Point2D;
       startScreen: Point2D;
       moved: boolean;
+      /** Son sürüklemede uygulanan çarpan (ölçekleme notu bunu yazar) */
+      sonCarpan?: number;
     }
   | { type: 'marquee'; start: Point2D; current: Point2D }
   | { type: 'create'; startScreen: Point2D; currentScreen: Point2D; groundPos: Point3D | null }
@@ -2044,20 +2048,7 @@ export function Canvas3D(props: Canvas3DProps) {
       requestRender();
       return;
     }
-    const base = VARSAYILAN_CISIM_OLCULERI[solidType];
-    const dims = creationPreset
-      ? {
-          width: creationPreset.width ?? (creationPreset.radius ? creationPreset.radius * 2 : base.width),
-          height: creationPreset.height ?? base.height,
-          depth: creationPreset.depth ?? (creationPreset.radius ? creationPreset.radius * 2 : base.depth),
-          radius: creationPreset.radius ?? (creationPreset.width ? creationPreset.width / 2 : base.radius),
-        }
-      : { ...base };
-    if (solidType === 'cube') {
-      dims.height = dims.width;
-      dims.depth = dims.width;
-      dims.radius = dims.width / 2;
-    }
+    const dims = cisimOlculeriniBirlestir(solidType, creationPreset);
     const nextColor = CISIM_RENKLERI[solids.length % CISIM_RENKLERI.length]?.hex || DEFAULT_SOLID_COLOR;
     const taslak: Solid3DObject = {
       id: '__onizleme__',
@@ -2402,7 +2393,7 @@ export function Canvas3D(props: Canvas3DProps) {
   /** İşaretçi ışınının halka düzlemini (merkezden geçen, normali eksen) kestiği noktanın merkeze göre vektörü */
   const halkaVektoru = useCallback(
     (ndc: THREE.Vector2, axis: Axis, merkez: Point3D): Point3D | null => {
-      const n = new THREE.Vector3(axis === 'x' ? 1 : 0, axis === 'y' ? 1 : 0, axis === 'z' ? 1 : 0);
+      const n = new THREE.Vector3().copy(eksenBirimVektoru(axis));
       const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(n, new THREE.Vector3(merkez.x, merkez.y, merkez.z));
       const hit = intersectPlane(ndc, plane);
       return hit ? { x: hit.x - merkez.x, y: hit.y - merkez.y, z: hit.z - merkez.z } : null;
@@ -2618,7 +2609,7 @@ export function Canvas3D(props: Canvas3DProps) {
       }
       if (
         onUpdateSolid &&
-        (tool === 'select_move' || tool === 'rotate_3d' || tool === 'scale_3d' || tool === 'reflect_3d' || tool === 'translate_3d')
+        (tool === 'select_move' || CISIM_GEREKEN_ARACLAR.includes(tool))
       ) {
         if (selectionMode === 'vertex' && vHit) {
           solids.forEach((s) => {
@@ -2738,22 +2729,15 @@ export function Canvas3D(props: Canvas3DProps) {
     if (CREATE_TYPE_MAP[tool]) {
       const zeminNoktasi = intersectPlane(ndc, groundPlane);
       const solidType = CREATE_TYPE_MAP[tool] || 'cube';
-      const base = VARSAYILAN_CISIM_OLCULERI[solidType];
-      const dims = creationPreset
-        ? {
-            width: creationPreset.width ?? (creationPreset.radius ? creationPreset.radius * 2 : base.width),
-            height: creationPreset.height ?? base.height,
-            depth: creationPreset.depth ?? (creationPreset.radius ? creationPreset.radius * 2 : base.depth),
-            radius: creationPreset.radius ?? (creationPreset.width ? creationPreset.width / 2 : base.radius),
-          }
-        : undefined;
+      // Hazır ölçü yoksa ölçüyü WorkspaceView.handleAddSolid tamamlar (aynı cisimOlculeriniBirlestir kuralı)
+      const dims = creationPreset ? cisimOlculeriniBirlestir(solidType, creationPreset) : undefined;
       if (creationMethod === 'instant') {
         const yap = yapismaAyarRef.current;
         const hamZemin = zeminNoktasi ? { x: zeminNoktasi.x, y: zeminNoktasi.y, z: 0 } : null;
         const hedefKonum =
           onizlemeKonumuRef.current ??
           (hamZemin
-            ? yerlesimKonumuHesapla(solids, solidType, dims ?? base, hamZemin, {
+            ? yerlesimKonumuHesapla(solids, solidType, dims ?? cisimOlculeriniBirlestir(solidType), hamZemin, {
                 acik: yap.acik && !e.altKey,
                 izgaraAcik: yap.izgaraAcik,
                 nesneAcik: yap.nesneAcik,
@@ -2899,6 +2883,7 @@ export function Canvas3D(props: Canvas3DProps) {
         let donustur: (s: Solid3DObject) => Solid3DObject;
         if (it.type === 'scale') {
           const k = tutamacOlcegi(it.merkezEkran, it.startScreen, screen);
+          interactionRef.current = { ...it, sonCarpan: k };
           donustur = (s) => altElemaniOlcekle(s, l.selectionMode, k);
         } else if (it.axis === 'free') {
           const { zDerece, sagDerece } = surukleAcisi(e.clientX - it.startClient.x, e.clientY - it.startClient.y, e.shiftKey);
@@ -2922,7 +2907,7 @@ export function Canvas3D(props: Canvas3DProps) {
           }
           donustur = (s) => (derece !== 0 ? altElemaniDondur(s, l.selectionMode, eksen, derece) : s);
         }
-        interactionRef.current = { ...it, moved: true };
+        interactionRef.current = { ...(interactionRef.current ?? it), moved: true } as Interaction;
         l.onDragSolidsTransform(it.solidIds.map((id) => it.start[id]).filter(Boolean).map(donustur));
         return;
       }
@@ -2975,8 +2960,8 @@ export function Canvas3D(props: Canvas3DProps) {
           if (!anchor) return;
           const startPos = it.startPositions[anchor.id];
           if (!startPos) return;
-          const extent = getSolidExtent(anchor);
-          const len = Math.min(6, Math.max(1.6, extent * 0.65 + 0.6));
+          // Çizilen gizmo okuyla aynı uzunluk (gizmoLen): fare oku nerede tutuyorsa orada izler
+          const len = gizmoLen(anchor);
           const altBilgi = seciliAltElemanBilgisi(baslangicCisimleriRef.current[anchor.id] ?? anchor, l.selectionMode);
           const originPt = altBilgi
             ? new THREE.Vector3(altBilgi.merkez.x, altBilgi.merkez.y, altBilgi.merkez.z)
@@ -3098,20 +3083,18 @@ export function Canvas3D(props: Canvas3DProps) {
         const solidType = CREATE_TYPE_MAP[l.activeTool] || 'cube';
         l.onAddSolid(
           solidType,
-          // Dikdörtgen prizma küp olmasın: 4 : 3 : 2 oranı (cisimYerlesimi.cizimOlculeri)
-          cizimOlculeri(solidType, size, l.ilkokul3B),
+          // Dikdörtgen prizma küp olmasın: 4 : 3 : 2 oranı; hazır ölçülü satır (Kare Prizma) kendi oranıyla büyür
+          hazirOlculuCizimOlculeri(solidType, size, l.creationPreset, l.ilkokul3B),
           it.groundPos ? { x: Number(it.groundPos.x.toFixed(1)), y: Number(it.groundPos.y.toFixed(1)), z: 0 } : undefined
         );
         if (l.setActive3DTool) l.setActive3DTool('select_move');
       }
 
       if ((it.type === 'move' || it.type === 'rotate' || it.type === 'scale') && it.moved && l.onDragEnd) l.onDragEnd();
-      if (it.type === 'scale' && it.moved) {
-        const anchorStart = it.start[it.anchorId];
-        const anchorNow = l.solids.find((s) => s.id === it.anchorId);
-        if (anchorStart && anchorNow && anchorStart.dimensions.width > 0) {
-          setSonOlcek(Math.round((anchorNow.dimensions.width / anchorStart.dimensions.width) * 100) / 100);
-        }
+      if (it.type === 'scale' && it.moved && it.sonCarpan !== undefined) {
+        // Not, gerçekten uygulanan çarpanı yazar (yüz / köşe kipinde boyutlar değişmez, kaydırmalar değişir);
+        // şeritteki olcekle ile aynı kırpma
+        setSonOlcek(Math.round(Math.min(OLCEK_EN_COK, Math.max(OLCEK_EN_AZ, it.sonCarpan)) * 100) / 100);
       }
 
       if (it.type === 'moveMath' && it.moved && it.applied.x === 0 && it.applied.y === 0 && it.applied.z === 0) {
@@ -3270,8 +3253,8 @@ export function Canvas3D(props: Canvas3DProps) {
         const center = altBilgi
           ? new THREE.Vector3(altBilgi.merkez.x, altBilgi.merkez.y, altBilgi.merkez.z)
           : getSolidCenter(solid);
-        const extent = getSolidExtent(solid);
-        const len = Math.min(6, Math.max(1.6, extent * 0.65 + 0.6));
+        // Etiketler çizilen okların ucunun biraz ötesinde (gizmoLen; eskiden başka bir uzunlukla okların çok ötesinde kalıyordu)
+        const len = gizmoLen(solid);
         (['x', 'y', 'z'] as Axis[]).forEach((axis) => {
           const tip = center.clone();
           tip[axis] += len * 1.12;
@@ -3684,10 +3667,6 @@ export function Canvas3D(props: Canvas3DProps) {
     props,
     workspace,
   ]);
-  const _unusedOlcumBaglantisi = () => { if (false) {
-    }
-  };
-
   return (
     <div
       ref={containerRef}
@@ -3699,20 +3678,7 @@ export function Canvas3D(props: Canvas3DProps) {
         const ndc = getPointerNdc(e.clientX, e.clientY);
         const ground = intersectPlane(ndc, groundPlane);
         if (ground && Math.hypot(ground.x, ground.y) <= 200) {
-          const base = VARSAYILAN_CISIM_OLCULERI[solidType];
-          const dims = creationPreset
-            ? {
-                width: creationPreset.width ?? (creationPreset.radius ? creationPreset.radius * 2 : base.width),
-                height: creationPreset.height ?? base.height,
-                depth: creationPreset.depth ?? (creationPreset.radius ? creationPreset.radius * 2 : base.depth),
-                radius: creationPreset.radius ?? (creationPreset.width ? creationPreset.width / 2 : base.radius),
-              }
-            : { ...base };
-          if (solidType === 'cube') {
-            dims.height = dims.width;
-            dims.depth = dims.width;
-            dims.radius = dims.width / 2;
-          }
+          const dims = cisimOlculeriniBirlestir(solidType, creationPreset);
           const yap = yapismaAyarRef.current;
           const ham = { x: ground.x, y: ground.y, z: 0 };
           const konum = yerlesimKonumuHesapla(solids, solidType, dims, ham, {
@@ -3774,7 +3740,6 @@ export function Canvas3D(props: Canvas3DProps) {
           setCisimOlcumMenusu({ solidId: null, faceIndex: null, vertexIndex: null, mathObjectId: null, x: e.clientX, y: e.clientY });
           return;
         }
-        if (!hit) return;
         selectIds([hit.solidId]);
         workspace.setSelectedObjectIds([]);
         if (selectionMode === 'face' && onUpdateSolid) {
@@ -4452,21 +4417,7 @@ export function Canvas3D(props: Canvas3DProps) {
         y={cisimOlcumMenusu?.y ?? 0}
         title={sagTikBasligi}
         ariaLabel="Cisim ölçümleri"
-        items={sagTikMaddeleri ?? (olcumMenusuCismi ? [{
-          id: 'cisim-olcme', label: 'Ölçme', icon: <Ruler className="w-4 h-4" />,
-          submenu: [
-            {
-              id: 'cisim-hacim',
-              label: cisimOlcumleri[olcumMenusuCismi.id]?.hacim ? 'Hacim ölçümünü gizle' : 'Hacmini ölç',
-              onSelect: () => cisimOlcumunuDegistir(olcumMenusuCismi.id, 'hacim'),
-            },
-            {
-              id: 'cisim-alan',
-              label: cisimOlcumleri[olcumMenusuCismi.id]?.alan ? 'Yüzey alanı ölçümünü gizle' : 'Yüzey alanını ölç',
-              onSelect: () => cisimOlcumunuDegistir(olcumMenusuCismi.id, 'alan'),
-            },
-          ],
-        }] : [])}
+        items={sagTikMaddeleri}
         onClose={() => setCisimOlcumMenusu(null)}
       />
     </div>

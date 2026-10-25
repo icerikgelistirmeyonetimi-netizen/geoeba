@@ -207,11 +207,17 @@ export function yayUclari(
   };
 }
 
-/** Yay / daire diliminin merkez açısı: ucu yayın üzerinde olan YAYDA m(A͡B), yoksa m(∠AOB). */
+/**
+ * Yay / daire diliminin merkez açısı: ucu yayın üzerinde olan YAYDA m(A͡B), yoksa m(∠AOB). Dış açı seçiliyse
+ * (centralAngleReflex) çizilen yayın değil merkezdeki açının tamamlayanıdır: m(∠AOB) = 360° − derece.
+ */
 export function yayMerkezAcisi(
   shape: ArcObject | SectorObject, nokta: NoktaBul, objects: readonly MathObject[], g: YayGeometrisi,
   derece: number, s?: Secenek,
 ): Olcu {
+  if (shape.centralAngleReflex) {
+    return merkezAci(nokta(shape.startPointId), nokta(shape.centerPointId), nokta(shape.directionPointId), 360 - derece, { ...s, disAci: true });
+  }
   const uclar = yayUclari(shape, nokta, objects, g);
   if (shape.type === 'arc' && uclar.son) return yayOlcusu(uclar, derece, s);
   return merkezAci(nokta(shape.startPointId), nokta(shape.centerPointId), nokta(shape.directionPointId), derece, s);
@@ -283,6 +289,17 @@ export type KartAnahtari = 'radius' | 'area' | 'perimeter';
 export const KART_ANAHTARLARI: Record<KartSatiri, KartAnahtari> = {
   yaricap: 'radius', alan: 'area', cevre: 'perimeter',
 };
+
+/**
+ * Çemberin yarıçapı çizili mi: merkezle yarıçap noktasını birleştiren görünür bir doğru parçası varsa yarıçap etiketi
+ * kartta değil, o çizginin yanında (doğru parçası uzunluğu gibi) durur. Üç noktadan geçen çemberde merkez adsızdır.
+ */
+export function cemberYaricapCizgisiVar(c: CircleObject, objects: readonly MathObject[]): boolean {
+  if ((c.throughPointIds?.length ?? 0) > 0 || !c.radiusPointId) return false;
+  const [a, b] = [c.centerPointId, c.radiusPointId];
+  return objects.some((o) => o.type === 'segment' && o.visible !== false
+    && ((o.startPointId === a && o.endPointId === b) || (o.startPointId === b && o.endPointId === a)));
+}
 
 /** Çemberin yarıçap etiketi: açıkça açılıp kapatılmadıysa alan/çevre etiketleriyle birlikte görünür. */
 export const cemberYaricapiGorunur = (c: CircleObject): boolean => c.showRadius ?? !!(c.showArea || c.showPerimeter);
@@ -472,6 +489,8 @@ export function olcumKartKutulari(g: KartGirdisi): OlcumKarti[] {
   const oran = Math.max(1, fontScale / (labelZoomScale(viewport) || 1));
   const layoutViewport = labelLayoutViewport(viewport);
   const out: OlcumKarti[] = [];
+  // Etiket doğal yerinden 18 yerleşim px'i ayrılınca uzak sayılır (olcuEtiketi.ETIKET_UZAK_ESIK, Canvas.serbestEtiketYeri)
+  const uzakEsigi = 18 * labelZoomScale(viewport);
   /** Şeklin etiketlerini üst kenarı `ust` olan dikey bir yığına dizer; her satır ayrı bir etikettir. */
   const ekle = (
     o: MathObject, tur: KartTuru, satirlar: Olcu[], turler: KartSatiri[],
@@ -481,9 +500,16 @@ export function olcumKartKutulari(g: KartGirdisi): OlcumKarti[] {
     satirlar.forEach((s, i) => {
       const satir = turler[i];
       const anahtar = KART_ANAHTARLARI[satir];
+      const anchor = o.labelAnchors?.[anahtar];
+      const kayiklik = o.labelOffsets?.[anahtar];
+      // YAZIM KURALI (kullanıcı, 25.10.2026): alan ve çevrenin kısa / tam biçimi yoktur, tek biçimde yazılırlar: çokgen
+      // adıyla ('A(ABC) = 6 birimkare'), çember ve elips formülsüz ('Alan = 28 birimkare', 'Çevre = 19 br'). Yarıçap bir
+      // uzunluktur: parça ve açı etiketleri gibi yanındayken kısa ('r = 3 br'), sürüklenip ayrılınca tam ('r = |MT| = 3 br').
+      const uzak = !!anchor || (!!kayiklik && Math.hypot(kayiklik.x, kayiklik.y) * z > uzakEsigi);
+      const kisaYazim = satir === 'yaricap' ? !uzak : tur !== 'cokgen';
       // Kullanıcının elle yazdığı etiket metni (sağ tık > Etiketi düzenle) hesaplanan yazının yerine geçer
       const ozel = o.labelTexts?.[anahtar];
-      const dugumler = ozel !== undefined ? [metinDugumleri(ozel)] : kartDugumleri([s], yazim);
+      const dugumler = ozel !== undefined ? [metinDugumleri(ozel)] : kisaYazim ? [yazimlar(s, yazim).kisa] : kartDugumleri([s], yazim);
       const olcu = kutuOlcusu(dugumler, boy);
       // Doğal merkez referans ölçekte yerleşir ve dünya konumunu korur.
       // Referans ölçü değişmez; gerçek çakışma kutusu çizilen yazıyla aynı ölçekte kalır.
@@ -493,11 +519,9 @@ export function olcumKartKutulari(g: KartGirdisi): OlcumKarti[] {
       const width = olcu.genislik * fontScale, height = olcu.yukseklik * fontScale;
       const merkez = projectLabelPoint(kartMerkezi(cx, y, yerlesimOlcu), viewport);
       y += yerlesimOlcu.yukseklik + ETIKET_ARALIGI * oran; // aralık da yazıyla ölçeklenir (mesafe oranlaması)
-      const anchor = o.labelAnchors?.[anahtar];
       // Kayıklık ve çapa DÜNYA biriminde: uzaklaşınca etiket şekille birlikte yerinde kalır (Canvas.etiketKaymasi ile aynı)
       const fixed = anchor ? anchoredLabelPosition(anchor, objects, width / z) : null;
       const screen = fixed ? worldToScreen(fixed, viewport) : null;
-      const kayiklik = o.labelOffsets?.[anahtar];
       const dx = screen ? screen.x - merkez.x : kayiklik ? kayiklik.x * z : 0;
       const dy = screen ? screen.y - merkez.y : kayiklik ? -kayiklik.y * z : 0;
       out.push({
@@ -523,7 +547,8 @@ export function olcumKartKutulari(g: KartGirdisi): OlcumKarti[] {
     if (o.visible === false) continue;
     const alanVar = !!(o as PolygonObject).showArea;
     const cevreVar = !!(o as PolygonObject).showPerimeter;
-    const yaricapVar = o.type === 'circle' && cemberYaricapiGorunur(o);
+    // Yarıçapı çizili çemberde yarıçap etiketi kartta değil çizginin yanındadır (Canvas, 5. katman)
+    const yaricapVar = o.type === 'circle' && cemberYaricapiGorunur(o) && !cemberYaricapCizgisiVar(o, objects);
     if (!alanVar && !cevreVar && !yaricapVar) continue;
 
     if (o.type === 'polygon') {

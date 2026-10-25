@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MathObject, PointObject, SliderObject } from '@/types/math';
 import { advancePointOnHost, PointAnimUpdate } from '@/math/pathAnimation';
+import { snapSliderValue } from '@/math/sliderBindings';
 
 /** Bir kaydırıcının veya yol turunun taranması için geçen süre (saniye). */
 const TUR_SANIYE = 8;
@@ -14,20 +15,38 @@ const TUR_SANIYE = 8;
  */
 const MAX_KARE_MS = 50;
 
+/** Değeri kaydırıcının adım ızgarasına oturtur; adım yoksa ya da ayarlar geçersizse değer olduğu gibi kalır. */
+function adimaOturt(s: Pick<SliderObject, 'min' | 'max'> & Partial<SliderObject>, deger: number): number {
+  if (!(s.step && s.step > 0)) return deger;
+  try {
+    return snapSliderValue(deger, s.min, s.max, s.step);
+  } catch {
+    return deger;
+  }
+}
+
 /**
  * Tek bir animasyon karesinde kaydırıcı değerlerini ilerletir (SAF fonksiyon).
  * `dirs` yerinde güncellenir: uca gelen kaydırıcının yönü ters çevrilir.
+ *
+ * ADIM (kullanıcı, 25.10.2026: "animasyon akıcı olmalı ama sliderda değerler adıma göre olmalı"): `konumlar` verilirse
+ * her kaydırıcının SÜREKLİ konumu orada tutulur ve akıcı ilerler; dönen değer o konumun adıma oturtulmuş hâlidir. Değer
+ * her karede yeniden adıma yuvarlansaydı küçük kare artışları hep aynı değere geri yuvarlanır, canlandırma takılırdı.
+ * Kaydırıcının değeri dışarıdan değiştiyse (elle sürükleme) sürekli konum yeniden değerden başlar.
  */
 export function advanceSliders(
   sliders: (Pick<SliderObject, 'id' | 'min' | 'max' | 'value'> & Partial<SliderObject>)[],
   dirs: Record<string, 1 | -1>,
   dtSeconds: number,
-  tourSeconds: number = TUR_SANIYE
+  tourSeconds: number = TUR_SANIYE,
+  konumlar?: Record<string, number>
 ): Record<string, number> {
   const next: Record<string, number> = {};
   for (const s of sliders) {
     const aralik = s.max - s.min;
     if (!(aralik > 0)) continue;
+    const kayitli = konumlar?.[s.id];
+    const baslangic = kayitli !== undefined && Math.abs(adimaOturt(s, kayitli) - s.value) <= (s.step ?? 0) / 2 + 1e-9 ? kayitli : s.value;
 
     const animSpeed = s.animSpeed ?? 1;
     const animMode = s.animMode ?? 'oscillating';
@@ -36,7 +55,7 @@ export function advanceSliders(
     if (animMode === 'increasing' || animMode === 'increasing_once') yon = 1;
     if (animMode === 'decreasing') yon = -1;
 
-    let d = s.value + (yon * aralik * dtSeconds * animSpeed) / tourSeconds;
+    let d = baslangic + (yon * aralik * dtSeconds * animSpeed) / tourSeconds;
 
     if (animMode === 'oscillating') {
       if (d >= s.max) {
@@ -56,7 +75,12 @@ export function advanceSliders(
       }
     }
 
-    next[s.id] = d;
+    if (konumlar) {
+      konumlar[s.id] = d;
+      next[s.id] = adimaOturt(s, d);
+    } else {
+      next[s.id] = d;
+    }
   }
   return next;
 }
@@ -105,6 +129,9 @@ interface Params {
  */
 export function useSliderPlayback({ sliders, animatingPoints = [], allObjects = [], onValues }: Params) {
   const [isPlaying, setIsPlaying] = useState(false);
+  /** Canlandırmada kaydırıcıların sürekli (adıma oturtulmamış) konumları: tutamak akıcı kaysın diye */
+  const [canliKonumlar, setCanliKonumlar] = useState<Record<string, number>>({});
+  const konumlarRef = useRef<Record<string, number>>({});
 
   const frameRef = useRef<number | null>(null);
   const prevTimeRef = useRef<number | null>(null);
@@ -159,13 +186,15 @@ export function useSliderPlayback({ sliders, animatingPoints = [], allObjects = 
       return;
     }
 
+    konumlarRef.current = {};
     const adim = (simdi: number) => {
       const onceki = prevTimeRef.current;
       prevTimeRef.current = simdi;
 
       if (onceki !== null) {
         const gecen = Math.min(MAX_KARE_MS, simdi - onceki) / 1000;
-        const yeniSliders = advanceSliders(slidersRef.current, dirsRef.current, gecen);
+        const yeniSliders = advanceSliders(slidersRef.current, dirsRef.current, gecen, TUR_SANIYE, konumlarRef.current);
+        setCanliKonumlar({ ...konumlarRef.current });
         const yeniPoints = advancePoints(pointsRef.current, allObjectsRef.current, dirsRef.current, gecen);
 
         const hasSliderUpdates = Object.keys(yeniSliders).length > 0;
@@ -198,5 +227,5 @@ export function useSliderPlayback({ sliders, animatingPoints = [], allObjects = 
     if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
   }, []);
 
-  return { isPlaying, toggle, play, stop };
+  return { isPlaying, toggle, play, stop, canliKonumlar };
 }

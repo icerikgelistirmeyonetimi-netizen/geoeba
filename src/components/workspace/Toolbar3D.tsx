@@ -13,6 +13,8 @@ import {
   ucgenTabaniniBul,
 } from '@/math/geometry3d';
 import { ucgenTabaniGuncellemesi } from './cisimYerlesimi';
+import { donmeyiSifirla, kaliciYuzBul } from '@/math/donusum3d';
+import { turkceSayiOku } from './canvas3dDonusum';
 import { formatTurkishNumber } from '@/math/coordinates';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
 import { KademeAramaBosNotu, KademeSuzgeciSeridi } from './KademeSuzgeci';
@@ -22,6 +24,7 @@ import {
   TREE_TOOL_GROUPS_3D,
   TUM_3B_ARACLAR,
   arac3BAramayaUyar,
+  araclari3BAra,
   type CameraPreset3D,
   type TreeTool3DItem,
 } from './treeToolDefinitions3D';
@@ -100,7 +103,7 @@ interface Toolbar3DProps {
   onDeleteSolidById?: (id: string) => void;
   layoutMode?: LayoutMode;
   onLayoutModeChange?: (mode: LayoutMode) => void;
-  /** Hazır ölçülü cisim ("Kare Prizma": prism, 3 × 4 × 3). Yoksa onAddSolid ile varsayılan ölçü eklenir. */
+  /** Kullanılmıyor: hazır ölçülü satırlar (Kare Prizma) creationPreset ile Canvas3D'den eklenir. Uyumluluk için duruyor. */
   onAddSolidPreset?: (type: Solid3DType, dims: { width?: number; height?: number; depth?: number; radius?: number }) => void;
   /** Başlıktaki geri al / yinele; verilmezse düğmeler çizilmez. */
   /**
@@ -142,11 +145,8 @@ export const GIZLEME_GUNCELLEMESI: Readonly<GizliGorunum> = { opacity: 0, showFa
  * [min, max] aralığına kırpılır. Sayı değilse null.
  */
 export function turkceSayiyiCoz(metin: string, sinir: { min?: number; max?: number } = {}): number | null {
-  let ham = metin.trim().replace(/\s+/g, '');
-  if (ham.includes(',')) ham = ham.replace(/\./g, '').replace(',', '.');
-  if (!/^[-+]?(\d+\.?\d*|\.\d+)$/.test(ham)) return null;
-  let v = Number(ham);
-  if (!Number.isFinite(v)) return null;
+  let v = turkceSayiOku(metin);
+  if (v === null) return null;
   if (typeof sinir.min === 'number') v = Math.max(sinir.min, v);
   if (typeof sinir.max === 'number') v = Math.min(sinir.max, v);
   return Number(v.toFixed(2));
@@ -481,19 +481,7 @@ export function Toolbar3D({
         const yeniPreset = arac.preset ?? null;
         const ayniArac = activeTool === kip && Boolean(creationPreset) === Boolean(yeniPreset);
         setCreationPreset(ayniArac ? null : yeniPreset);
-        setActiveTool(ayniArac ? 'select_move' : kip); { {
-
-
-
-
-          return;
-        }
-
-
-
-
-
-        }
+        setActiveTool(ayniArac ? 'select_move' : kip);
         return;
       }
       case 'toggle': {
@@ -554,7 +542,7 @@ export function Toolbar3D({
   // Arama (Ara sekmesi): kademe süzgecinden geçen araçlar arasında
   const normalizedSearch = toolSearch.trim().toLocaleLowerCase('tr');
   const aramayaUyar = (arac: TreeTool3DItem) => arac3BAramayaUyar(arac, normalizedSearch);
-  const aramaSonuclari = aracGruplari.flatMap((g) => g.tools).filter(aramayaUyar);
+  const aramaSonuclari = araclari3BAra(aracGruplari, normalizedSearch);
   const suzgecAramayiGizledi = aramaSonuclari.length === 0 && TUM_3B_ARACLAR.some(aramayaUyar);
 
   const filteredSolids = solids.filter((s) => {
@@ -567,7 +555,8 @@ export function Toolbar3D({
   const olcumler = useMemo(() => {
     if (!selectedSolid) return null;
     const mesh = selectedSolid.selectedFaceIndex !== null && selectedSolid.selectedFaceIndex !== undefined ? generateSolidMesh(selectedSolid) : null;
-    const yuz = mesh && selectedSolid.selectedFaceIndex !== null ? mesh.faces[selectedSolid.selectedFaceIndex] : null;
+    // Yüz kalıcı kimliğiyle bulunur: silinmiş yüzü olan cisimde dizideki yer başka yüzü verir
+    const yuz = mesh && selectedSolid.selectedFaceIndex !== null ? kaliciYuzBul(mesh, selectedSolid.selectedFaceIndex) ?? null : null;
     return {
       hacim: calculate3DVolume(selectedSolid),
       alan: calculate3DSurfaceArea(selectedSolid),
@@ -617,10 +606,10 @@ export function Toolbar3D({
   // ortaokul konusu); orada prizma eskisi gibi ikizkenar gelir.
   const ucgenTabani: UcgenTabani | null =
     selectedSolid?.type === 'triangular_prism' ? ucgenTabaniniBul(selectedSolid) : null;
-  const ucgenSecicisi = ucgenTabani !== null && kademeDuzeyi !== 'ilkokul';
   // İlkokul (uzman 4. tur [180]): hacim, yüzey alanı, br² / br³, harfle kenar (a, r, h), konum koordinatları ve derece yok;
   // cisim özellikleri yüz / köşe / ayrıt sayısı ve yüzlerin biçimiyle sınırlı (ilkokul3B.ts)
   const ilkokul = kademeDuzeyi === 'ilkokul';
+  const ucgenSecicisi = ucgenTabani !== null && !ilkokul;
   const eskenarMi = ucgenTabani === 'eskenar';
   const yuvarlakMi = selectedSolid ? selectedSolid.type === 'sphere' || selectedSolid.type === 'cylinder' || selectedSolid.type === 'cone' : false;
 
@@ -1337,7 +1326,12 @@ export function Toolbar3D({
                     sag={
                       <button
                         type="button"
-                        onClick={() => onUpdateSolid?.({ rotation: { x: 0, y: 0, z: 0 } })}
+                        onClick={() => {
+                          // Canvas3D şeridindeki "sıfırla" ile aynı: geometrik merkez yerinde kalır, köşe kaydırmaları da döner
+                          if (!selectedSolid) return;
+                          const { rotation, position, vertexOffsets } = donmeyiSifirla(selectedSolid);
+                          onUpdateSolid?.({ rotation, position, ...(vertexOffsets ? { vertexOffsets } : {}) });
+                        }}
                         title="Döndürmeyi sıfırla"
                         className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-muted hover:bg-muted/70 border border-border cursor-pointer"
                       >

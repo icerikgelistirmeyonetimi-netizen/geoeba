@@ -1,5 +1,6 @@
 import { CircleObject, MathObject, Point2D, PointObject } from '@/types/math';
 import { angleBisectorPoint, calculateCircumcircle, intersectCircles, intersectLineCircle, intersectLineEllipse, intersectLines } from './geometry';
+import { duzgunCokgenKoseleriniEsle, duzgunKose, kenarSayisi } from './duzgunCokgen';
 
 export function commandCircleGeometry(circle: CircleObject, point: (id: string) => PointObject): { center: Point2D; radius: number } {
   if (circle.throughPointIds?.length === 3) {
@@ -39,6 +40,7 @@ export function constructionDependencies(point: PointObject): string[] {
     case 'translate': return [rule.sourceId, ...(rule.vectorPointIds ?? [])];
     case 'dilate': return [rule.sourceId, ...(rule.centerId ? [rule.centerId] : [])];
     case 'triangleCenter': return rule.pointIds;
+    case 'regularVertex': return [rule.firstId, rule.secondId, rule.sliderId];
     default: return [];
   }
 }
@@ -106,6 +108,8 @@ export function rotateAround(p: Point2D, center: Point2D, degrees: number): Poin
 
 /** Atomik: geçersiz bir ilişki varsa hiçbir koordinat/parametre güncellemesi uygulanmaz. */
 export function resolveCommandBindings(objects: MathObject[]): MathObject[] {
+  // Kenar sayısı kaydırıcıya bağlı düzgün çokgenlerde önce köşe SAYISI eşlenir (noktalar eklenir / silinir)
+  objects = duzgunCokgenKoseleriniEsle(objects);
   if (!objects.some(o => (o.type === 'point' && o.construction) || (o.type === 'ellipse' && o.sliderBindings))) return objects;
   const byId = new Map(objects.map(o => [o.id, o]));
   // Şekil parametreleri nokta inşalarından önce çözülür: elips kesişimleri aynı
@@ -249,6 +253,12 @@ export function resolveCommandBindings(objects: MathObject[]): MathObject[] {
       case 'triangleCenter': {
         const [a, b, c] = r.pointIds.map(point);
         position = triangleCenterPoint(a, b, c, r.center);
+        break;
+      }
+      case 'regularVertex': {
+        const slider = byId.get(r.sliderId);
+        if (!slider || slider.type !== 'slider') throw new Error('Düzgün çokgenin kenar sayısı kaydırıcısı bulunamadı.');
+        position = duzgunKose(point(r.firstId), point(r.secondId), kenarSayisi(slider.value), r.index, r.orientation);
         break;
       }
       case 'tangent': {

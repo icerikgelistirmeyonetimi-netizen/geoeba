@@ -149,6 +149,10 @@ export function bagimliZleriHesapla(objects: MathObject[]): MathObject[] {
         case 'midpoint':
           sonuc = (z(r.pointIds[0]) + z(r.pointIds[1])) / 2;
           break;
+        case 'regularVertex':
+          // Düzgün çokgen düzlemseldir: köşeler ilk iki köşenin yüksekliğini izler
+          sonuc = (z(r.firstId) + z(r.secondId)) / 2;
+          break;
         case 'ratio':
           sonuc = dogrusal(z(r.pointIds[0]), z(r.pointIds[1]), r.t);
           break;

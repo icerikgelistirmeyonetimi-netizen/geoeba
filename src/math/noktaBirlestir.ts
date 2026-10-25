@@ -183,8 +183,12 @@ export function baglariYonlendir(o: MathObject, eski: string, yeni: string): Mat
       [kind, { ...anchor, pointIds: benzersiz(rList(anchor.pointIds)) }])) } as MathObject;
   }
   switch (o.type) {
-    case 'slider': return o.bindingTarget?.objectId === eski
-      ? { ...o, bindingTarget: { ...o.bindingTarget, objectId: yeni } } : o;
+    case 'slider': {
+      let s = o;
+      if (s.bindingTarget?.objectId === eski) s = { ...s, bindingTarget: { ...s.bindingTarget, objectId: yeni } };
+      if (s.suspendedBinding?.objectId === eski) s = { ...s, suspendedBinding: { ...s.suspendedBinding, objectId: yeni } };
+      return s;
+    }
     case 'segment': return { ...o, startPointId: r(o.startPointId), endPointId: r(o.endPointId) };
     case 'line': return { ...o, point1Id: r(o.point1Id), point2Id: r(o.point2Id) };
     case 'ray': return { ...o, startPointId: r(o.startPointId), throughPointId: r(o.throughPointId) };
@@ -242,6 +246,7 @@ function kurulumuYonlendir(rule: NonNullable<PointObject['construction']>, r: (i
   switch (rule.kind) {
     case 'foot': return { ...rule, sourceId: r(rule.sourceId), linePointIds: [r(rule.linePointIds[0]), r(rule.linePointIds[1])] };
     case 'midpoint': return { ...rule, pointIds: [r(rule.pointIds[0]), r(rule.pointIds[1])] };
+    case 'regularVertex': return { ...rule, firstId: r(rule.firstId), secondId: r(rule.secondId) };
     case 'tangent': return { ...rule, circleId: r(rule.circleId), sourceId: r(rule.sourceId) };
     case 'triangleVertex': return { ...rule, anchorId: r(rule.anchorId) };
     case 'sliderPoint':
@@ -311,6 +316,8 @@ function kurulumCokmusMu(p: PointObject, byId?: ReadonlyMap<string, MathObject>)
     case 'foot':
     case 'direction':
       return rule.linePointIds[0] === rule.linePointIds[1];
+    case 'regularVertex':
+      return rule.firstId === rule.secondId;
     case 'translate':
       return !!rule.vectorPointIds && rule.vectorPointIds[0] === rule.vectorPointIds[1];
     case 'reflect':
@@ -461,11 +468,11 @@ export function noktalariBirlestir(objects: MathObject[], idA: string, idB: stri
   if (kaldirilacak.size) sonuc = sonuc.filter(o => !kaldirilacak.has(o.id)).map(o => kolBaginiCoz(o, kaldirilacak));
   // Değişen köşe indeksindeki eski ölçü adı başka bir kenarı gösteremez.
   // Hedef silindiyse de yalnız süs bilgisi düşer; kaydırıcı sahnede kalır.
+  const gecersiz = (hedef?: { objectId: string }) => !!hedef && (kaldirilacak.has(hedef.objectId) || yenidenIndekslenen.has(hedef.objectId));
   sonuc = sonuc.map(o => {
-    if (o.type !== 'slider' || !o.bindingTarget
-      || (!kaldirilacak.has(o.bindingTarget.objectId) && !yenidenIndekslenen.has(o.bindingTarget.objectId))) return o;
-    const { bindingTarget: _bindingTarget, ...rest } = o;
-    return rest;
+    if (o.type !== 'slider' || (!gecersiz(o.bindingTarget) && !gecersiz(o.suspendedBinding))) return o;
+    const { bindingTarget, suspendedBinding, ...rest } = o;
+    return { ...rest, ...(bindingTarget && !gecersiz(bindingTarget) ? { bindingTarget } : {}), ...(suspendedBinding && !gecersiz(suspendedBinding) ? { suspendedBinding } : {}) };
   });
 
   // 4) Sahne gerçekten çözülebiliyor mu? Commit sırasında da `resolveCommandBindings` çalışır; orada

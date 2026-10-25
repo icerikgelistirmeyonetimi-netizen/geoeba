@@ -5,7 +5,7 @@ import type {
 } from '@/types/math';
 import { VARSAYILAN_YAZIM, duzMetin, olcuMetni, type YazimAyari } from '@/math/matematikYazimi';
 import {
-  aciGrubu, aciOlcusu, cemberKartSatirlari, cemberYaricapiGorunur, cokgenKartSatirlari, elipsKartSatirlari, kenarUzunlugu,
+  aciGrubu, aciOlcusu, cemberKartSatirlari, cemberYaricapCizgisiVar, cemberYaricapiGorunur, cokgenKartSatirlari, elipsKartSatirlari, kenarUzunlugu,
   nesnedenNokta, noktaBulucu, olcumKartKutulari, segmentUzunlugu, trigSatirlari, yayGeometrisi,
   yayMerkezAcisi, yayOlcumuYazimi, yayOlculeri, yayUclari, yazimlar,
 } from '@/math/olcuYazimlari';
@@ -406,8 +406,9 @@ describe('ölçüm kartları', () => {
     const T = nokta('T', 2, 0);
     const circ = govde<CircleObject>({ id: 'c1', type: 'circle', centerPointId: M.id, radiusPointId: T.id, showArea: true, showPerimeter: true });
     const ks = kartlar([M, T, circ]);
+    // Çemberin yanındayken kısa (kullanıcı, 25.10.2026: "çember çevre alan yazımı da açık metin şeklinde")
     expect(metinler(ks)).toEqual([
-      'r = |MT| = 2 br', 'Alan = πr² ≈ 12,57 birimkare', 'Çevre = 2πr ≈ 12,57 br',
+      'r = 2 br', 'Alan ≈ 12,57 birimkare', 'Çevre ≈ 12,57 br',
     ]);
     expect(ks.map((k) => k.satir)).toEqual(['yaricap', 'alan', 'cevre']);
     expect(ks.map((k) => k.anahtar)).toEqual(['radius', 'area', 'perimeter']);
@@ -459,7 +460,7 @@ describe('ölçüm kartları', () => {
     const temel = { id: 'c1', type: 'circle' as const, centerPointId: M.id, radiusPointId: T.id, showArea: true, showPerimeter: true };
     const hesaplanan = kartlar([M, T, govde<CircleObject>(temel)]);
     const elle = kartlar([M, T, govde<CircleObject>({ ...temel, labelTexts: { area: 'Alan = ?' } })]);
-    expect(metinler(elle)).toEqual(['r = |MT| = 2 br', 'Alan = ?', 'Çevre = 2πr ≈ 12,57 br']);
+    expect(metinler(elle)).toEqual(['r = 2 br', 'Alan = ?', 'Çevre ≈ 12,57 br']);
     const alan = elle.find((k) => k.anahtar === 'area')!;
     expect(alan.duz).toBe('Alan = ?');
     expect(alan.sesli).toBe('Alan = ?');
@@ -476,15 +477,48 @@ describe('ölçüm kartları', () => {
     const once = kartlar([M, T, govde<CircleObject>(temel)]);
     const sonra = kartlar([M, T, govde<CircleObject>({ ...temel, labelOffsets: { perimeter: { x: 1, y: 0 } } })]);
     const etiket = (ks: typeof once, a: string) => ks.find((k) => k.anahtar === a)!;
-    expect(etiket(sonra, 'perimeter').kutu.x0 - etiket(once, 'perimeter').kutu.x0).toBeCloseTo(GORUNUM.zoom, 5);
+    const ortaX = (k: (typeof once)[number]) => (k.kutu.x0 + k.kutu.x1) / 2;
+    expect(ortaX(etiket(sonra, 'perimeter')) - ortaX(etiket(once, 'perimeter'))).toBeCloseTo(GORUNUM.zoom, 5);
     for (const a of ['radius', 'area']) expect(etiket(sonra, a).kutu).toEqual(etiket(once, a).kutu);
+    // Alan ve çevrenin tek biçimi vardır: taşınan çevre de formülsüz kalır
+    expect(metinler(sonra)).toEqual(['r = 2 br', 'Alan ≈ 12,57 birimkare', 'Çevre ≈ 12,57 br']);
+  });
+
+  it('alan ve çevre tek biçimde yazılır (uzaklaştırılınca değişmez); yarıçap yanında kısa, ayrılınca tam', () => {
+    const M = nokta('M', 0, 0);
+    const T = nokta('T', 2, 0);
+    const temel = { id: 'c1', type: 'circle' as const, centerPointId: M.id, radiusPointId: T.id, showArea: true, showPerimeter: true };
+    // Eşiğin (18 yerleşim px'i) altındaki küçük kayma yazımı değiştirmez
+    const az = kartlar([M, T, govde<CircleObject>({ ...temel, labelOffsets: { area: { x: 0.3, y: 0 } } })]);
+    expect(metinler(az)[1]).toBe('Alan ≈ 12,57 birimkare');
+    // Koparılmış (çapalı) etiket tam yazılır
+    const capali = kartlar([M, T, govde<CircleObject>({ ...temel, labelAnchors: { radius: { pointIds: [M.id, T.id], offset: { x: 0, y: 3 }, alignment: 'center' } } })]);
+    expect(metinler(capali)[0]).toBe('r = |MT| = 2 br');
+    const U = nokta('U', 0, 0);
+    const elp = govde<EllipseObject>({ id: 'e1', type: 'ellipse', centerPointId: U.id, radiusX: 3, radiusY: 2, showArea: true, labelOffsets: { area: { x: 0, y: -2 } } });
+    expect(metinler(kartlar([U, elp]))).toEqual(['Alan ≈ 18,85 birimkare']);
+    const poly = govde<PolygonObject>({ id: 'poly1', type: 'polygon', pointIds: [A.id, B.id, C.id], showArea: true, showPerimeter: true });
+    expect(metinler(kartlar([A, B, C, poly]))).toEqual(['A(ABC) = 6 birimkare', 'Ç(ABC) = 12 br']);
+    const tasinmis = govde<PolygonObject>({ ...poly, labelOffsets: { area: { x: 3, y: -2 }, perimeter: { x: -3, y: -2 } } });
+    expect(metinler(kartlar([A, B, C, tasinmis]))).toEqual(['A(ABC) = 6 birimkare', 'Ç(ABC) = 12 br']);
+  });
+
+  it('yarıçapı çizili çemberde yarıçap etiketi kartta değil, çizginin yanındadır', () => {
+    const M = nokta('M', 0, 0);
+    const T = nokta('T', 2, 0);
+    const circ = govde<CircleObject>({ id: 'c1', type: 'circle', centerPointId: M.id, radiusPointId: T.id, showArea: true });
+    const parca = govde<SegmentObject>({ id: 's1', type: 'segment', startPointId: T.id, endPointId: M.id });
+    expect(kartlar([M, T, circ]).map((k) => k.anahtar)).toEqual(['radius', 'area']);
+    expect(kartlar([M, T, circ, parca]).map((k) => k.anahtar)).toEqual(['area']);
+    expect(cemberYaricapCizgisiVar(circ, [M, T, circ, parca])).toBe(true);
+    expect(cemberYaricapCizgisiVar(circ, [M, T, circ, { ...parca, visible: false }])).toBe(false);
   });
 
   it('elipsin alanı ve çevresi ayrı etiketlerdir; çevresi her zaman yaklaşıktır', () => {
     const U = nokta('U', 0, 0);
     const elp = govde<EllipseObject>({ id: 'e1', type: 'ellipse', centerPointId: U.id, radiusX: 3, radiusY: 2, showArea: true, showPerimeter: true });
     const ks = kartlar([U, elp]);
-    expect(metinler(ks)).toEqual(['Alan = πab ≈ 18,85 birimkare', 'Çevre ≈ 15,87 br']);
+    expect(metinler(ks)).toEqual(['Alan ≈ 18,85 birimkare', 'Çevre ≈ 15,87 br']);
     expect(ks.map((k) => k.anahtar)).toEqual(['area', 'perimeter']);
   });
 

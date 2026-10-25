@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { AngleObject, CircleObject, EllipseObject, MathObject, PointObject, PolygonObject, SliderObject } from '@/types/math';
 import { constructionDependencies, resolveCommandBindings } from '../commandBindings';
 import { calculateAngleDegrees, getArcGeometry } from '../geometry';
-import { bindSliderProperty, detachSliderBindings, rebindSliderProperty, sliderBindingTargets, sliderIsBound, snapSliderValue, validateSliderSettings } from '../sliderBindings';
+import { bindSliderProperty, detachSliderBindings, rebindSliderProperty, sliderBaginiAskiyaAl, sliderBaginiSurdur, sliderBindingTargets, sliderCurrentBinding, sliderIsBound, snapSliderValue, validateSliderSettings } from '../sliderBindings';
+import { sliderDisplay } from '../sliderDisplay';
 
 const base = (id: string) => ({ id, label: id, showLabel: true, color: '#123456', visible: true, createdAt: 0 });
 const point = (id: string, x: number, y: number, extra: Partial<PointObject> = {}): PointObject => ({ ...base(id), type: 'point', x, y, isIndependent: true, ...extra });
@@ -50,6 +51,89 @@ describe('kaydırıcının seçilmiş ölçü adı', () => {
   });
 });
 
+describe('kaydırıcının şu anki bağı (ayarlar penceresi açılınca seçili gelir)', () => {
+  const triangle: PolygonObject = { ...base('tri'), type: 'polygon', pointIds: ['A', 'B', 'C'] };
+  const ellipse: EllipseObject = { ...base('elp'), type: 'ellipse', centerPointId: 'A', radiusX: 3, radiusY: 2 };
+
+  it('bağsız kaydırıcıda null; bağlıda kayıtlı şekil ve özellik', () => {
+    expect(sliderCurrentBinding([A, B, C, slider(), triangle], 's')).toBeNull();
+    expect(sliderCurrentBinding(bind([A, B, C, slider(), triangle], 'tri', 'edge:1'), 's')).toEqual({ targetId: 'tri', propertyKey: 'edge:1' });
+    expect(sliderCurrentBinding(bind([A, slider(2), ellipse], 'elp', 'radiusY'), 's')).toEqual({ targetId: 'elp', propertyKey: 'radiusY' });
+  });
+
+  it('kaydı olmayan (eski) ya da artık geçersiz kayıtlı bağ şekillerden bulunur', () => {
+    const bound = bind([A, B, C, slider(60), triangle], 'tri', 'angle:0');
+    const eski = bound.map(o => {
+      if (o.type !== 'slider') return o;
+      const { bindingTarget: _bindingTarget, ...rest } = o;
+      return rest;
+    });
+    expect(sliderCurrentBinding(eski, 's')).toEqual({ targetId: 'tri', propertyKey: 'angle:0' });
+    const bayat = bound.map(o => o.type === 'slider' ? { ...o, bindingTarget: { objectId: 'tri', propertyKey: 'edge:2' } } : o);
+    expect(sliderCurrentBinding(bayat, 's')).toEqual({ targetId: 'tri', propertyKey: 'angle:0' });
+  });
+
+  it('başka kaydırıcının bağı bu kaydırıcınınki sayılmaz', () => {
+    const other = slider(2, { id: 'o', variableName: 'b' });
+    const bound = bindSliderProperty([A, B, C, slider(), other, triangle], 'o', 'tri', 'edge:0', () => 'x');
+    expect(sliderCurrentBinding(bound, 's')).toBeNull();
+    expect(sliderCurrentBinding(bound, 'o')).toEqual({ targetId: 'tri', propertyKey: 'edge:0' });
+  });
+});
+
+describe('bağı geçici olarak kapatma ve yeniden açma', () => {
+  const triangle: PolygonObject = { ...base('tri'), type: 'polygon', pointIds: ['A', 'B', 'C'] };
+
+  it('kapatınca nokta serbest kalır, bağ hatırlanır; açınca şekil kaydırıcının değerine döner', () => {
+    const bound = bind([A, B, C, slider(5), triangle], 'tri', 'edge:0');
+    const kapali = sliderBaginiAskiyaAl(bound, 's');
+    expect(sliderIsBound(kapali, 's')).toBe(false);
+    expect(kapali.find(o => o.id === 's')).toMatchObject({ suspendedBinding: { objectId: 'tri', propertyKey: 'edge:0' } });
+    expect(kapali.find(o => o.id === 's')).not.toHaveProperty('bindingTarget');
+    expect(sliderDisplay(kapali, kapali.find(o => o.id === 's') as SliderObject)).toMatchObject({ bagAskida: true, name: 'a' });
+    expect(sliderDisplay(kapali, kapali.find(o => o.id === 's') as SliderObject).bagliOlcuNodes).not.toBeNull();
+    // Serbest kalan nokta taşınır, kaydırıcı değiştirilir; bağ yeniden kurulunca uzunluk kaydırıcının değeridir
+    const tasindi = value(kapali.map(o => o.id === 'B' ? { ...o, x: 9, y: 9 } as PointObject : o), 3);
+    const acik = sliderBaginiSurdur(tasindi, 's', () => 'yeni');
+    expect(sliderCurrentBinding(acik, 's')).toEqual({ targetId: 'tri', propertyKey: 'edge:0' });
+    expect(acik.find(o => o.id === 's')).not.toHaveProperty('suspendedBinding');
+    const a = getPoint(acik, 'A'), b = getPoint(acik, 'B');
+    expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeCloseTo(3, 9);
+  });
+
+  it('bağ kapatılınca şekil bağlanmadan önceki konumuna döner; açıp yeniden kapatınca yine oraya', () => {
+    const bound = value(bind([A, B, C, slider(5), triangle], 'tri', 'edge:0'), 3);
+    expect(getPoint(bound, 'B')).toMatchObject({ preBindingPosition: { x: 4, y: 6 } });
+    const a0 = getPoint(bound, 'A'), b0 = getPoint(bound, 'B');
+    expect(Math.hypot(b0.x - a0.x, b0.y - a0.y)).toBeCloseTo(3, 9);
+    const kapali = sliderBaginiAskiyaAl(bound, 's');
+    expect(getPoint(kapali, 'B')).toMatchObject({ x: 4, y: 6 });
+    const acik = sliderBaginiSurdur(kapali, 's', () => 'x');
+    const a1 = getPoint(acik, 'A'), b1 = getPoint(acik, 'B');
+    expect(Math.hypot(b1.x - a1.x, b1.y - a1.y)).toBeCloseTo(3, 9);
+    expect(getPoint(sliderBaginiAskiyaAl(acik, 's'), 'B')).toMatchObject({ x: 4, y: 6 });
+    // Kaydırıcı silinince (kalıcı çözülme) şekil son değerinde kalır ve kayıt düşer
+    const silinmeye = detachSliderBindings(acik, ['s']);
+    expect(getPoint(silinmeye, 'B')).not.toHaveProperty('preBindingPosition');
+    expect(Math.hypot(getPoint(silinmeye, 'B').x - 1, getPoint(silinmeye, 'B').y - 2)).toBeCloseTo(3, 9);
+  });
+
+  it('elipsin bağlı özelliği de bağ kapatılınca ilk değerine döner', () => {
+    const ellipse: EllipseObject = { ...base('elp'), type: 'ellipse', centerPointId: 'A', radiusX: 3, radiusY: 2 };
+    const bound = value(bindSliderProperty([A, slider(5), ellipse], 's', 'elp', 'radiusX', () => 'x'), 6);
+    expect(bound.find(o => o.id === 'elp')).toMatchObject({ radiusX: 6, preBindingValues: { radiusX: 3 } });
+    expect(sliderBaginiAskiyaAl(bound, 's').find(o => o.id === 'elp')).toMatchObject({ radiusX: 3 });
+  });
+
+  it('bağsız kaydırıcı kapatılamaz; şekil silindiyse yeniden açılamaz; ayarlardan bağlamak kaydı temizler', () => {
+    expect(() => sliderBaginiAskiyaAl([A, B, C, slider(), triangle], 's')).toThrow();
+    const kapali = sliderBaginiAskiyaAl(bind([A, B, C, slider(5), triangle], 'tri', 'edge:0'), 's');
+    expect(() => sliderBaginiSurdur(kapali.filter(o => o.id !== 'tri'), 's', () => 'x')).toThrow('artık yok');
+    const yeniden = rebindSliderProperty(kapali, 's', 'tri', 'edge:1', { min: -10, max: 360, step: 0.25, value: 5 }, () => 'x');
+    expect(yeniden.find(o => o.id === 's')).not.toHaveProperty('suspendedBinding');
+  });
+});
+
 describe('kaydırıcı ayarları', () => {
   it('sonlu, sıralı sınırları, pozitif adımı ve mevcut değeri doğrular', () => {
     expect(validateSliderSettings(-2, 8, 0.3, 3)).toBeNull();
@@ -83,8 +167,10 @@ describe('kaydırıcı bağını yeniden düzenleme', () => {
     const bound = bind([...points, slider(5), triangle], 'tri', 'edge:0');
     expect(property(bound, 'tri', 'angle:2')?.disabled).toBe(true);
     const edited = sliderBindingTargets(bound, 's')[0];
-    expect(edited.properties).toHaveLength(6);
-    expect(edited.properties.every(p => !p.disabled)).toBe(true);
+    // Kenar sayısı yalnız düzgün çokgende seçilebilir (bu üçgen düzgün değil); kenarlar ve açılar seçime açık
+    const kenarVeAcilar = edited.properties.filter(p => p.key !== 'sides');
+    expect(kenarVeAcilar).toHaveLength(6);
+    expect(kenarVeAcilar.every(p => !p.disabled)).toBe(true);
     expect(property(bound, 'tri', 'angle:2', 'unknown')?.disabled).toBe(true);
   });
 
@@ -359,7 +445,7 @@ describe('bağlanabilir hedefler ve koruma', () => {
     ];
     const targets = sliderBindingTargets(objects);
     expect(targets.map(t => t.id)).toEqual(['circum', 'ellipse', 'poly', 'circle', 'arc', 'sector', 'lockedPoly']);
-    expect(targets.find(t => t.id === 'poly')?.properties.map(p => p.key)).toEqual(['edge:0', 'edge:1', 'edge:2', 'angle:0', 'angle:1', 'angle:2']);
+    expect(targets.find(t => t.id === 'poly')?.properties.map(p => p.key)).toEqual(['edge:0', 'edge:1', 'edge:2', 'angle:0', 'angle:1', 'angle:2', 'sides']);
     expect(targets.find(t => t.id === 'poly')?.properties[0].label).toBe('AB kenar uzunluğu');
     expect(targets.find(t => t.id === 'poly')?.properties[3].label).toBe('A köşe açısı (∠CAB)');
     expect(targets.find(t => t.id === 'circum')?.properties).toEqual([{ key: 'radius', label: 'Yarıçap', disabled: true }]);
@@ -442,7 +528,7 @@ describe('şekil özellikleri', () => {
     const points = Array.from({ length: count }, (_, i) => point(String.fromCharCode(65 + i), 3 * Math.cos(i * Math.PI * 2 / count), 3 * Math.sin(i * Math.PI * 2 / count)));
     const [target] = sliderBindingTargets([...points, polygon(points)]);
     expect(target.properties.map(p => p.key)).toEqual([
-      ...points.map((_, i) => `edge:${i}`), ...points.map((_, i) => `angle:${i}`),
+      ...points.map((_, i) => `edge:${i}`), ...points.map((_, i) => `angle:${i}`), 'sides',
     ]);
     expect(target.properties.every(p => !p.disabled)).toBe(true);
   });

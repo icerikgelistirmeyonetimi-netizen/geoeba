@@ -263,7 +263,8 @@ describe('[159] yeni sürgü boş yere konur, çubukların altında kalmaz, göv
     expect(baglam).toMatch(/const \[yer\] = yeniSurguYerleri\(vp, mevcut, uzunluk\);/);
     expect(baglam).toMatch(/const yerler = yeniSurguYerleri\(vp, mevcut, uzunluk, eksikler\.length\);/);
     const tuval = oku('Canvas.tsx');
-    expect(tuval).toMatch(/kisaBasis: bagli \? 'sec' : 'ayarlar',/);
+    // Bağı geçici kapalı sürgü de bağlı gibi seçilir (zincir simgesi, 25.10.2026)
+    expect(tuval).toMatch(/kisaBasis: bagli \|\| askida \? 'sec' : 'ayarlar',/);
     expect(tuval).toMatch(/else if \(e\.type === 'pointerup' && drag\.kisaBasis === 'sec'\) setSelectedObjectId\(drag\.id\);/);
   });
 });

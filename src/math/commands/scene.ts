@@ -617,7 +617,8 @@ export class CommandScene {
   }
   addSlider(name: string, o: { min?: number; max?: number; step?: number; value?: number; label?: string; color?: string; x?: number; y?: number; length?: number } = {}): SliderObject {
     if (this.sliders().some(s => s.variableName === name)) fail(`${name} adlı kaydırıcı zaten var.`);
-    const min = o.min ?? -5, max = o.max ?? 5, step = o.step ?? 0.1, value = o.value ?? 1;
+    // Varsayılan ayarlar ondalıksız (kullanıcı, 25.10.2026; Kaydırıcı penceresiyle aynı)
+    const min = o.min ?? -5, max = o.max ?? 5, step = o.step ?? 1, value = o.value ?? 1;
     if (!(min < max)) fail('Kaydırıcının en küçük değeri en büyük değerinden küçük olmalı.');
     if (!(step > 0)) fail('Kaydırıcı adımı 0’dan büyük olmalı.');
     const spot = this.widgetSpot(), b = this.viewBounds();
@@ -633,7 +634,7 @@ export class CommandScene {
     const check = validateMathExpression(expression);
     if (!check.ok) fail(check.error);
     const existing = new Set(this.sliders().map(s => s.variableName));
-    const sliders = extractVariableNames(expression).filter(n => !existing.has(n)).map(n => this.addSlider(n, { min: -5, max: 5, step: 0.1, value: 1 }));
+    const sliders = extractVariableNames(expression).filter(n => !existing.has(n)).map(n => this.addSlider(n, { min: -5, max: 5, step: 1, value: 1 }));
     const fn = this.add({
       id: createId('fn'), type: 'function', label: o.label ?? functionLabel(nextFunctionName(this.objects), expression), showLabel: true, expression,
       color: o.color ?? COLORS.function, thickness: 2.5, visible: true, createdAt: Date.now(),

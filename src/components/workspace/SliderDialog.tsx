@@ -22,7 +22,8 @@ const CANDIDATE_NAMES = ['a', 'b', 'c', 'd', 'f', 'g', 'h', 'k', 'm', 'n', 'p', 
 
 const DEFAULT_MIN = '-5';
 const DEFAULT_MAX = '5';
-const DEFAULT_STEP = '0,5';
+// Varsayılan ayarlar ondalıksız (kullanıcı, 25.10.2026): adım 1; ondalık adım istenirse elle yazılır
+const DEFAULT_STEP = '1';
 const DEFAULT_VALUE = '1';
 
 /** "-1,5" / "-1.5" gibi ham metni sayıya çevirir; geçersizse null. */

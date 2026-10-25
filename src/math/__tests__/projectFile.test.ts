@@ -31,6 +31,21 @@ describe('kaydırıcının görsel ölçü hedefi', () => {
   });
 });
 
+describe('kaydırıcının geçici kapatılmış bağı', () => {
+  const slider = { id: 's', type: 'slider', variableName: 'a', min: 1, max: 10, step: 1, value: 5 };
+  const suspendedBinding = { objectId: 'triangle', propertyKey: 'edge:0' };
+  const file = (target: unknown) => ({ objects: [p('A'), p('B', 5), p('C', 0, 4), { ...slider, suspendedBinding: target }, base] });
+
+  it('kaydedilip yeniden yüklenir; hedefi silinmişse temizlenir; geçersizi ve başka türdekini reddeder', () => {
+    const loaded = parseProjectFile(file(suspendedBinding));
+    expect(loaded.objects.find(o => o.id === 's')).toMatchObject({ suspendedBinding });
+    expect(parseProjectFile(JSON.parse(JSON.stringify(loaded)))).toEqual(loaded);
+    expect(parseProjectFile(file({ ...suspendedBinding, objectId: 'removed' })).objects.find(o => o.id === 's')).not.toHaveProperty('suspendedBinding');
+    expect(() => parseProjectFile(file({ objectId: '', propertyKey: 'edge:0' }))).toThrow();
+    expect(() => parseProjectFile({ objects: [{ ...p('A'), suspendedBinding }] })).toThrow();
+  });
+});
+
 describe('slider point construction persistence', () => {
   const slider = { id: 's', type: 'slider', variableName: 'a', min: -10, max: 180, step: 1, value: 5 };
   const length = { kind: 'sliderPoint', sliderId: 's', mode: 'length', anchorId: 'A', direction: { x: 0.6, y: 0.8 } };

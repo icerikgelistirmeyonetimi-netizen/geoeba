@@ -42,6 +42,12 @@ export interface YazimAyari {
   yaklasikSozcukle?: boolean;
   /** Eski ayarlarla uyumluluk için tutulur; alan birimi bütün kademelerde birimkare yazılır. */
   alanBirimiAcik?: boolean;
+  /**
+   * Tuval etiketleri (kullanıcı, 25.10.2026: "büyük yay gibi açıklamalara gerek yok"): ' (büyük yay)', ' (yarım çember)'
+   * ve ' (dış açı)' niteleyicileri yazılmaz; tuvalde çizilen yay ve açı yayı hangisinin ölçüldüğünü zaten gösterir.
+   * Yalnız yazıdan oluşan yerlerde (komut yanıtı, nesne listesi) ve seslendirmede niteleyici kalır.
+   */
+  niteleyiciGizli?: boolean;
 }
 /** Motorun ve ayarsız çağrıların varsayılanı: tam sayı KAPALI (komut yanıtları kesin değer verir). */
 export const VARSAYILAN_YAZIM: YazimAyari = { olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: false };
@@ -201,8 +207,8 @@ export const aci = (p1: AdGirdisi, kose: AdGirdisi, p3: AdGirdisi, derece: numbe
 /** m(B^) — tek köşe harfi yeterliyse (dik üçgenin oranları) */
 export const koseAcisi = (kose: AdGirdisi, derece: number, s?: Secenek) => olcu('aci', adlar(kose), derece, s);
 /** m(AOB^) — baş, MERKEZ, son. Son nokta yalnızca YÖN verse de (yayın üzerinde olmasa da) açı doğru adlanır. */
-export const merkezAci = (bas: AdGirdisi, merkez: AdGirdisi, son: AdGirdisi, derece: number, s?: Secenek) =>
-  olcu('merkezAci', adlar(bas, merkez, son), derece, s);
+export const merkezAci = (bas: AdGirdisi, merkez: AdGirdisi, son: AdGirdisi, derece: number, s?: Secenek & { disAci?: boolean }) =>
+  olcu('merkezAci', adlar(bas, merkez, son), derece, s, s?.disAci ? { disAci: true } : {});
 
 export interface YayUclari {
   bas: AdGirdisi;
@@ -388,7 +394,7 @@ function olcuDugumleriHam(o: Olcu, ayar: YazimAyari): Dugum[] {
     const d = s
       ? [s === 'r' ? sembol('r') : kelime(s), iliski(o), ...degerDugumleri(o)]
       : degerDugumleri(o, true);
-    if (o.disAci) d.push(kelime(' (dış açı)', true));
+    if (o.disAci && !ayar.niteleyiciGizli) d.push(kelime(' (dış açı)', true));
     return d;
   }
   let sol: Dugum[];
@@ -408,6 +414,7 @@ function olcuDugumleriHam(o: Olcu, ayar: YazimAyari): Dugum[] {
     default: sol = [];
   }
   const son = [...sol, iliski(o), ...degerDugumleri(o)];
+  if (ayar.niteleyiciGizli) return son;
   if (o.buyukYay) son.push(kelime(' (büyük yay)', true));
   if (o.yarimCember) son.push(kelime(' (yarım çember)', true));
   if (o.disAci) son.push(kelime(' (dış açı)', true));
@@ -662,7 +669,7 @@ function ozne(o: Olcu, oku: (a: string[]) => string): string {
   switch (o.tur) {
     case 'uzunluk': return a ? `${n}uzunluğu` : 'uzunluk';
     case 'aci': return a ? `${n}${o.disAci ? 'dış ' : ''}açısının ölçüsü` : 'açının ölçüsü';
-    case 'merkezAci': return a ? `${n}merkez açısının ölçüsü` : 'merkez açının ölçüsü';
+    case 'merkezAci': return a ? `${n}${o.disAci ? 'dış ' : ''}merkez açısının ölçüsü` : 'merkez açının ölçüsü';
     case 'yayOlcusu': return a ? `${n}${yayTuru} ölçüsü` : 'yayın ölçüsü';
     case 'yayUzunlugu': return a ? `${n}${yayTuru} uzunluğu` : 'yay uzunluğu';
     case 'alan': return a ? `${n}${COKGEN_IYELIK(a.length)} alanı` : 'alan';

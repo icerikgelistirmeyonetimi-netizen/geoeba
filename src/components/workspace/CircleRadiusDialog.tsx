@@ -3,13 +3,13 @@ import { NESNE_RENGI } from '@/utils/nesneRenkleri';
 
 import React, { useEffect, useState } from 'react';
 import { useWorkspace } from '@/state/WorkspaceContext';
-import { Point2D, PointObject, CircleObject } from '@/types/math';
+import { Point2D } from '@/types/math';
 import { formatTurkishNumber } from '@/math/coordinates';
 import { cemberCevresi, daireAlani, olcuDugumleri, sesli } from '@/math/matematikYazimi';
 import { MatematikMetni } from '@/components/workspace/MatematikMetni';
 import { generateNextPointLabel } from '@/math/geometry';
-import { createId } from '@/state/ids';
 import { Modal } from '@/components/ui/Modal';
+import { sabitYaricapliCemberNesnesi, yeniNokta } from './cizimNesneleri';
 import { Circle as CircleIcon, X, Check } from 'lucide-react';
 
 interface CircleRadiusDialogProps {
@@ -63,30 +63,8 @@ export function CircleRadiusDialog({ isOpen, onClose, targetPos = { x: 0, y: 0 }
     const mevcutEtiketler = objects.filter((o) => o.type === 'point').map((o) => o.label);
     const merkezEtiketi = generateNextPointLabel(mevcutEtiketler);
 
-    const merkez: PointObject = {
-      id: createId('pt'),
-      type: 'point',
-      label: merkezEtiketi,
-      showLabel: true,
-      x: targetPos.x,
-      y: targetPos.y,
-      color: NESNE_RENGI.mavi,
-      visible: true,
-      isIndependent: true,
-      createdAt: Date.now(),
-    };
-    const cember: CircleObject = {
-      id: createId('circ'),
-      type: 'circle',
-      label: `${merkezEtiketi} Çemberi (r = ${formatTurkishNumber(r)})`,
-      showLabel: true,
-      centerPointId: merkez.id,
-      fixedRadius: r,
-      color: NESNE_RENGI.mor,
-      fillOpacity: 0,
-      visible: true,
-      createdAt: Date.now(),
-    };
+    const merkez = yeniNokta(merkezEtiketi, targetPos.x, targetPos.y, NESNE_RENGI.mavi);
+    const cember = sabitYaricapliCemberNesnesi(merkez.id, `${merkezEtiketi} Çemberi (r = ${formatTurkishNumber(r)})`, r);
     addObjects([merkez, cember], `${merkezEtiketi} merkezli r = ${formatTurkishNumber(r)} çemberi oluşturuldu`);
     onClose();
   };

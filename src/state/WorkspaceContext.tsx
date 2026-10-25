@@ -20,8 +20,6 @@ import {
   MathObject,
   PointObject,
   SegmentObject,
-  LineObject,
-  RayObject,
   CircleObject,
   ArcObject,
   SectorObject,
@@ -29,7 +27,6 @@ import {
   PolygonObject,
   FunctionObject,
   SliderObject,
-  FractionObject,
   Point2D,
   MeasurementKind,
   MeasurementLabelAnchor, type LabelOffset,
@@ -100,11 +97,21 @@ import { ObjectClipboard, copyObjects, pasteObjects } from '@/math/objectClipboa
 import { ProjectFile, parseProjectFile } from '@/math/projectFile';
 import type { WorkspaceScene } from '@/types/workspaceScene';
 import type { Solid3DObject } from '@/types/workspace3d';
-import { ILKOKUL_EN_COK_KENAR, ilkokulGorunumu, ilkokulKipindeMi, ilkokulUzunlukMetni, useIlkokulKipindeMi } from '@/components/workspace/ilkokulKipi';
-import { kesirAyariniOku, kesirAyariniSinirla, kesirEtiketi } from '@/components/workspace/kesirModeli';
+import {
+  ILKOKUL_COKGEN_SINIRI_IPUCU, ilkokulCokgenSiniriDoldu, ilkokulGorunumu, ilkokulKipindeMi, ilkokulUzunlukMetni, useIlkokulKipindeMi,
+} from '@/components/workspace/ilkokulKipi';
+import { kesirAyariniOku, kesirAyariniSinirla } from '@/components/workspace/kesirModeli';
 import { tamSayiOlcuSimdi, uzunlukOlcuBirimiSimdi } from '@/components/workspace/olcuYuvarlama';
 import { surguUzunlugu, yeniSurguYerleri } from '@/components/workspace/surguYerlesimi';
 import { ayniKonumdakiNokta, goruntuNoktaAdlari, kareKoseleri } from '@/math/insaYardimcilari';
+import {
+  DIKDORTGEN_GORUNUMU, KARE_GORUNUMU, NOKTA_URETEN_ARACLAR, cokgenNesnesi, dikdortgenKoseleri, ikiNoktaliSekil, ikiNoktaliTemelAracMi,
+  koseliCokgen, olcumCokgeni, olculuParcaNesnesi, yeniNokta, IKI_NOKTALI_INSA_ARACLARI, UC_NOKTALI_INSA_ARACLARI, aciortayNesnesi,
+  dikVeyaParalelDogruNesnesi, olcumEtiketiNesnesi, ortaDikmeNesnesi, aciVeKollari, olculenAciNesnesi, olcumParcasiNesnesi,
+  ucNoktaliCemberNesnesi, yayUstundeKonum, yayVeyaDilimNesnesi, dugmeNesnesi, etkilesimKonumu, girdiKutusuNesnesi, isaretKutusuNesnesi,
+  kesirModeliNesnesi, ayniAciMi, DONDURULEBILIR_TURLER, adlariBirlestir, elipsNesneleri, DOGRUDAS_KOSELER_IPUCU, bekleyenKoseIpucu,
+} from '@/components/workspace/cizimNesneleri';
+import { olcmeAraciMi } from '@/components/workspace/olcmeAraclari';
 
 export { createId } from './ids';
 
@@ -388,7 +395,8 @@ function parametreKaydiricilari(
     variableName: ad,
     min: -5,
     max: 5,
-    step: 0.1,
+    // Varsayılan ayarlar ondalıksız (kullanıcı, 25.10.2026; Kaydırıcı penceresiyle aynı)
+    step: 1,
     value: 1,
     x: yerler[i].x,
     y: yerler[i].y,
@@ -555,6 +563,61 @@ export function sarkikBaglariCoz(objects: MathObject[]): MathObject[] {
   });
 }
 
+/**
+ * Ölçüm/açı etiketleri ve etkileşim bileşenleri şekil DEĞİLDİR: bir noktayı "kullanan şekil" sayılmazlar
+ * (kilitliOtelemeler, yayYonNoktalariniOturt).
+ */
+const ETIKET_TURLERI = new Set<string>(['measurement', 'angle', 'checkbox', 'button', 'input_box']);
+
+/**
+ * Yay ve daire diliminin yön noktası (üçüncü nokta) yalnız AÇIYI verir; araç onu yayın üstüne koyar. Başlangıç noktası
+ * ya da merkez kayınca yarıçap değişiyor, nokta yayın dışında kalıp şekilden kopuyordu (kullanıcı, 25.10.2026: "nokta
+ * şekilden yay ve dilimlerde ayrılmamalı"). Önceki durumda yayın ÜSTÜNDE duran ve başka hiçbir şeklin kullanmadığı serbest
+ * yön noktası kendi doğrultusunda yeni yarıçapa taşınır; kendisi sürüklenince de yay boyunca kayar. Başka bir şekle ait
+ * nokta (ör. açısı yayla gösterilen üçgenin köşesi) ya da baştan yayın dışında duran nokta yerinde kalır. Değişiklik
+ * yoksa AYNI dizi döner.
+ */
+export function yayYonNoktalariniOturt(objects: MathObject[], previous: MathObject[]): MathObject[] {
+  if (!objects.some((o) => o.type === 'arc' || o.type === 'sector')) return objects;
+  const byId = new Map(objects.map((o) => [o.id, o]));
+  const oncekiById = new Map(previous.map((o) => [o.id, o]));
+  const nokta = (harita: Map<string, MathObject>, id: string) => {
+    const o = harita.get(id);
+    return o?.type === 'point' ? o : null;
+  };
+  const kullanan = new Map<string, number>();
+  for (const o of objects) {
+    if (ETIKET_TURLERI.has(o.type) || o.type === 'point') continue;
+    for (const id of objectDependencies(o)) kullanan.set(id, (kullanan.get(id) ?? 0) + 1);
+  }
+  const yayda = (merkez: Point2D, bas: Point2D, yon: Point2D) => {
+    const r = calculateDistance(merkez, bas);
+    return r > 1e-9 && Math.abs(calculateDistance(merkez, yon) - r) <= 1e-6 * Math.max(1, r);
+  };
+  const tasinan = new Map<string, Point2D>();
+  for (const o of objects) {
+    if (o.type !== 'arc' && o.type !== 'sector') continue;
+    const yon = nokta(byId, o.directionPointId);
+    if (!yon || yon.construction || yon.onObjectId || kullanan.get(yon.id) !== 1) continue;
+    const onceki = oncekiById.get(o.id);
+    if (onceki?.type !== o.type) continue; // Yeni şekil: noktayı oluşturan araç yerleştirir
+    const [om, ob, oy] = [onceki.centerPointId, onceki.startPointId, onceki.directionPointId].map((id) => nokta(oncekiById, id));
+    if (!om || !ob || !oy || !yayda(om, ob, oy)) continue;
+    const merkez = nokta(byId, o.centerPointId);
+    const bas = nokta(byId, o.startPointId);
+    if (!merkez || !bas || yayda(merkez, bas, yon)) continue;
+    const r = calculateDistance(merkez, bas);
+    const d = calculateDistance(merkez, yon);
+    if (!(r > 1e-9) || !(d > 1e-9)) continue;
+    tasinan.set(yon.id, { x: merkez.x + ((yon.x - merkez.x) / d) * r, y: merkez.y + ((yon.y - merkez.y) / d) * r });
+  }
+  if (tasinan.size === 0) return objects;
+  return objects.map((o) => {
+    const p = tasinan.get(o.id);
+    return p ? ({ ...o, ...p } as MathObject) : o;
+  });
+}
+
 export function bagliNoktalariOturt(objects: MathObject[], previous: MathObject[] = objects): MathObject[] {
   if (!objects.some(o => o.type === 'point' && o.onObjectId)) return objects;
   objects = sarkikBaglariCoz(objects);
@@ -688,11 +751,10 @@ export function kilitliOtelemeler(
     const kayanlar = ids.filter((id) => pointIdsToShift.has(id));
     for (const id of kayanlar.slice(1)) kok.set(bul(id), bul(kayanlar[0]));
   };
-  // Ölçüm/açı etiketleri ve etkileşim bileşenleri şekil DEĞİLDİR: bir eğim etiketi serbest üçgeni kilitli noktaya
-  // bağlayıp üçgeni dondurmasın. Grupları gerçek şekiller, üzerinde durulan taşıyıcılar ve KENDİSİ sürüklenen açı
-  // nesnesi kurar (moveObjects yalnızca açının noktalarını taşır; kolları birlikte kaymazsa açı bozulur). Seçimdeki
-  // ölçüm etiketi ya da onay kutusu noktalarını taşımadığından grup bağlamaz.
-  const ETIKET_TURLERI = new Set<string>(['measurement', 'angle', 'checkbox', 'button', 'input_box']);
+  // Ölçüm/açı etiketleri ve etkileşim bileşenleri (ETIKET_TURLERI) şekil DEĞİLDİR: bir eğim etiketi serbest üçgeni
+  // kilitli noktaya bağlayıp üçgeni dondurmasın. Grupları gerçek şekiller, üzerinde durulan taşıyıcılar ve KENDİSİ
+  // sürüklenen açı nesnesi kurar (moveObjects yalnızca açının noktalarını taşır; kolları birlikte kaymazsa açı bozulur).
+  // Seçimdeki ölçüm etiketi ya da onay kutusu noktalarını taşımadığından grup bağlamaz.
   for (const o of objects) {
     if (ETIKET_TURLERI.has(o.type) && !(o.type === 'angle' && tutulanlar?.has(o.id))) continue;
     if (o.type !== 'point') birlestir(objectDependencies(o));
@@ -1363,7 +1425,17 @@ function resolveUpdater(next: ObjectsUpdater, prev: MathObject[]): MathObject[] 
   if (raw === prev) return prev;
   // Son adım: kurulumlu ve nesne üzerindeki noktaların 3B z'si kaynaklarından türetilir (bkz. zEkseni).
   // Çemberi/noktası kalmamış yay ölçümleri ayıklanır (ör. çember iki yaya bölününce): kayıtlı çizim yeniden açılabilsin.
-  return bagimliZleriHesapla(bagliNoktalariOturt(resolveCommandBindings(dropDanglingArcMeasurements(raw)), prev));
+  // Yay/dilimin yön noktası, üzerindeki noktalar oturtulmadan ÖNCE yaya döner: yayın ucu onun doğrultusundan çıkar.
+  return bagimliZleriHesapla(bagliNoktalariOturt(yayYonNoktalariniOturt(resolveCommandBindings(dropDanglingArcMeasurements(raw)), prev), prev));
+}
+
+/** İki nesne dizisi içerikçe aynı mı (aynı sıra, aynı alanlar)? Değişmeyen nesneler çoğunlukla aynı başvurudur. */
+function ayniIcerik(a: MathObject[], b: MathObject[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i] && JSON.stringify(a[i]) !== JSON.stringify(b[i])) return false;
+  }
+  return true;
 }
 
 function appendHistory(state: DocState, objects: MathObject[], description: string, now: number = Date.now()): DocState {
@@ -1390,8 +1462,9 @@ function docReducer(state: DocState, action: DocAction): DocState {
     case 'commit': {
       const nextObjects = resolveUpdater(action.next, state.objects);
       // Hiçbir şey değişmediyse geçmişe boş bir adım yazma (ör. aynı ölçümü ikinci kez istemek):
-      // aksi hâlde Ctrl+Z hiçbir şey yapmıyormuş gibi görünür.
-      if (nextObjects === state.objects) return state;
+      // aksi hâlde Ctrl+Z hiçbir şey yapmıyormuş gibi görünür. `.map` her zaman yeni dizi döndürdüğü için
+      // karşılaştırma içerikçe yapılır (aynıIcerik).
+      if (nextObjects === state.objects || ayniIcerik(nextObjects, state.objects)) return state;
       return appendHistory(state, nextObjects, action.description, action.now);
     }
     case 'set': {
@@ -2267,21 +2340,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const zatenVar = objects.some(
-        (o) =>
-          o.type === 'angle' &&
-          o.vertexPointId === pointId &&
-          ((o.point1Id === p1.id && o.point3Id === p3.id) || (o.point1Id === p3.id && o.point3Id === p1.id))
-      );
+      const zatenVar = objects.some((o) => ayniAciMi(o, pointId, p1.id, p3.id));
       if (zatenVar) {
         // Etiketi tıklayarak gizlemiş olabilir; yeniden ölçmek onu GERİ GETİRİR.
-        const mevcut = objects.find(
-          (o) =>
-            o.type === 'angle' &&
-            o.vertexPointId === pointId &&
-            ((o.point1Id === p1.id && o.point3Id === p3.id) ||
-              (o.point1Id === p3.id && o.point3Id === p1.id))
-        ) as AngleObject | undefined;
+        const mevcut = objects.find((o) => ayniAciMi(o, pointId, p1.id, p3.id));
         // Nesne listesindeki gözle ya da "… açısını gizle" komutuyla GİZLENMİŞ de olabilir: o zaman
         // yalnız değeri açmak yetmez, açının kendisi de geri gelmeli (yoksa madde hiçbir şey yapmıyor gibi görünür).
         if (mevcut && (mevcut.showValue === false || mevcut.visible === false)) {
@@ -3147,13 +3209,15 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   );
 
   /** Ölçülmüş bir açıyı iç açı <-> dış açı (360° tümleyeni) arasında çevirir. */
+  /** Açının ya da yay / daire diliminin merkez açısının iç ↔ dış (360° − iç) gösterimini çevirir. */
   const toggleAngleReflex = useCallback(
     (angleId: string) => {
-      const ang = objects.find((o) => o.id === angleId && o.type === 'angle') as AngleObject | undefined;
-      if (!ang) return;
-      const disMi = !ang.reflex;
+      const hedef = objects.find((o) => o.id === angleId);
+      if (!hedef || (hedef.type !== 'angle' && hedef.type !== 'arc' && hedef.type !== 'sector')) return;
+      const alan = hedef.type === 'angle' ? 'reflex' : 'centralAngleReflex';
+      const disMi = hedef.type === 'angle' ? !hedef.reflex : !hedef.centralAngleReflex;
       commit(
-        (prev) => prev.map((o) => (o.id === angleId ? ({ ...o, reflex: disMi } as MathObject) : o)),
+        (prev) => prev.map((o) => (o.id === angleId ? ({ ...o, [alan]: disMi } as MathObject) : o)),
         disMi ? 'Dış açı gösterildi' : 'İç açı gösterildi'
       );
       setHintMessage(disMi ? 'Dış açı gösteriliyor.' : 'İç açı gösteriliyor.');
@@ -3388,6 +3452,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           commitWith([], desc);
         }
       };
+      /**
+       * n nokta isteyen araçların ortak adımı: nokta eksikse bu tıklamanın noktası bekleyenlere eklenir (bu tıklamayla
+       * yaratıldıysa kaydedilir), varsa adım ipucu yazılır ve null döner; n nokta tamamlandıysa bekleyenler döner.
+       */
+      const noktaTopla = (n: number, adimIpucu?: (konan: number) => string): string[] | null => {
+        const nextPending = [...pending, pointId];
+        if (nextPending.length >= n) return nextPending;
+        commitPendingOnly();
+        setPendingPointIds(nextPending);
+        if (adimIpucu) setHintMessage(adimIpucu(nextPending.length));
+        return null;
+      };
 
       if (tool === 'select') {
         setSelectedObjectId(pointId);
@@ -3399,83 +3475,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      if (tool === 'segment' || tool === 'line' || tool === 'ray' || tool === 'circle') {
-        const nextPending = [...pending, pointId];
-        if (nextPending.length === 1) {
-          commitPendingOnly();
-          setPendingPointIds(nextPending);
-          return;
-        }
+      // Doğru parçası, doğru, ışın, çember: iki FARKLI nokta ister; şekil cizimNesneleri.ts'te kurulur
+      if (ikiNoktaliTemelAracMi(tool)) {
+        const nextPending = noktaTopla(2);
+        if (!nextPending) return;
 
         if (nextPending[0] !== nextPending[1]) {
-          const p1 = pointOf(nextPending[0]);
-          const p2 = pointOf(nextPending[1]);
-          const names = p1 && p2 ? `${p1.label}${p2.label}` : '';
-
-          if (tool === 'segment') {
-            const label = names ? `[${names}]` : 'Doğru Parçası';
-            const newSegment: SegmentObject = {
-              id: createId('seg'),
-              type: 'segment',
-              label,
-              showLabel: true,
-              startPointId: nextPending[0],
-              endPointId: nextPending[1],
-              color: NESNE_RENGI.camgobegi,
-              visible: true,
-              showLength: false,
-              thickness: 2.5,
-              createdAt: Date.now(),
-            };
-            commitWith([newSegment], `${label} doğru parçası oluşturuldu`);
-          } else if (tool === 'line') {
-            const label = names ? `${names} Doğrusu` : 'Doğru';
-            const newLine: LineObject = {
-              id: createId('line'),
-              type: 'line',
-              label,
-              showLabel: true,
-              point1Id: nextPending[0],
-              point2Id: nextPending[1],
-              color: NESNE_RENGI.camgobegi,
-              visible: true,
-              showEquation: true,
-              thickness: 2,
-              createdAt: Date.now(),
-            };
-            commitWith([newLine], `${label} oluşturuldu`);
-          } else if (tool === 'ray') {
-            const label = names ? `${names} Işını` : 'Işın';
-            const newRay: RayObject = {
-              id: createId('ray'),
-              type: 'ray',
-              label,
-              showLabel: true,
-              startPointId: nextPending[0],
-              throughPointId: nextPending[1],
-              color: NESNE_RENGI.camgobegi,
-              visible: true,
-              thickness: 2,
-              createdAt: Date.now(),
-            };
-            commitWith([newRay], `${label} oluşturuldu`);
-          } else {
-            const label = p1 ? `${p1.label} Merkezli Çember` : 'Çember';
-            const newCircle: CircleObject = {
-              id: createId('circ'),
-              type: 'circle',
-              label,
-              showLabel: true,
-              centerPointId: nextPending[0],
-              radiusPointId: nextPending[1],
-              color: NESNE_RENGI.mor,
-              visible: true,
-              // Ölçüler (yarıçap, alan, çevre) hazır gelmez; sağ tık menüsü ya da komutla açılır (8 Ekim 2026).
-              fillOpacity: 0.1,
-              createdAt: Date.now(),
-            };
-            commitWith([newCircle], `${label} oluşturuldu`);
-          }
+          const { nesne, aciklama } = ikiNoktaliSekil(tool, nextPending[0], nextPending[1], pointOf(nextPending[0]), pointOf(nextPending[1]));
+          commitWith([nesne], aciklama);
         } else {
           commitPendingOnly();
         }
@@ -3485,25 +3492,17 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       // AÇIÖLÇER: ölçülen açı tuvalde kalır ve kaynak noktalarla birlikte güncellenir.
       if (tool === 'measure_angle') {
-        const nextPending = [...pending, pointId];
-
         // İlkokulda açıölçer yalnız tanıtılır, açı ölçülmez (TYMM: "Açı ölçer ile açı ölçme uygulamalarına girilmez")
         if (ilkokulKipindeMi()) {
           setPendingPointIds([]);
-          setHintMessageState('Açıölçeri tanı: gövdesini taşı, kolunu ve tabanını döndür. Açı ölçme ileriki sınıflarda.');
+          setHintMessage('Açıölçeri tanı: gövdesini taşı, kolunu ve tabanını döndür. Açı ölçme ileriki sınıflarda.');
           return;
         }
 
-        if (nextPending.length < 3) {
-          commitPendingOnly();
-          setPendingPointIds(nextPending);
-          setHintMessageState(
-            nextPending.length === 1
-              ? 'Açı ölçümü: şimdi köşe (tepe) noktasına tıklayın'
-              : 'Açı ölçümü: son olarak üçüncü noktaya tıklayın'
-          );
-          return;
-        }
+        const nextPending = noktaTopla(3, (konan) =>
+          konan === 1 ? 'Açı ölçümü: şimdi köşe (tepe) noktasına tıklayın' : 'Açı ölçümü: son olarak üçüncü noktaya tıklayın'
+        );
+        if (!nextPending) return;
 
         setPendingPointIds([]);
         const mp1 = pointOf(nextPending[0]);
@@ -3511,22 +3510,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const mp3 = pointOf(nextPending[2]);
         if (!mp1 || !mVertex || !mp3 || new Set(nextPending).size < 3) {
           commitPendingOnly();
-          setHintMessageState('Farklı üç nokta seçin');
+          setHintMessage('Üç FARKLI nokta seçmelisiniz.');
           return;
         }
 
-        const varOlanAci = objs.find((o) => o.type === 'angle' && o.vertexPointId === mVertex.id &&
-          ((o.point1Id === mp1.id && o.point3Id === mp3.id) || (o.point1Id === mp3.id && o.point3Id === mp1.id)));
+        const varOlanAci = objs.find((o) => ayniAciMi(o, mVertex.id, mp1.id, mp3.id));
         if (varOlanAci) {
           commit((prev) => [...prev, ...newlyCreated].map((o) => o.id === varOlanAci.id ? { ...o, showValue: true, visible: true } as MathObject : o), 'Açı ölçüsü gösterildi');
         } else {
-          const olculenAci: AngleObject = { id: createId('ang'), type: 'angle', label: `∠${mp1.label}${mVertex.label}${mp3.label}`,
-            showLabel: true, point1Id: mp1.id, vertexPointId: mVertex.id, point3Id: mp3.id,
-            showValue: true, visible: true, color: NESNE_RENGI.kehribar, createdAt: Date.now(), olcumSekli: true };
-          commitWith([olculenAci], 'Açı ölçüsü tuvale eklendi');
+          commitWith([olculenAciNesnesi(mp1, mVertex, mp3)], 'Açı ölçüsü tuvale eklendi');
         }
 
-        setHintMessageState(
+        setHintMessage(
           `Açı ölçümü: ${olcuMetni(aci(mp1, mVertex, mp3, calculateAngleDegrees(mp1, mVertex, mp3), { basamak: 1 }))}`
         );
         return;
@@ -3547,18 +3542,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           .concat(yardimciAdlar);
         const [ad] = generateNextPointLabels(mevcut, 1);
         yardimciAdlar.push(ad);
-        return {
-          id: createId('pt'),
-          type: 'point',
-          label: ad,
-          showLabel: true,
-          x: Number(x.toFixed(10)),
-          y: Number(y.toFixed(10)),
-          color: renk,
-          visible: true,
-          isIndependent: true,
-          createdAt: Date.now(),
-        };
+        return yeniNokta(ad, Number(x.toFixed(10)), Number(y.toFixed(10)), renk);
       };
       /**
        * O konumda zaten bir nokta varsa yenisi açılmaz (alan uzmanı, 4. tur: Orta Nokta ile Orta Dikme aynı yerde
@@ -3607,14 +3591,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
 
       /** İki nokta isteyen inşa araçları */
-      const IKI_NOKTALI =['midpoint', 'divide_ratio', 'perp_bisector', 'measure_slope'];
-      if (IKI_NOKTALI.includes(tool)) {
-        const nextPending = [...pending, pointId];
-        if (nextPending.length < 2) {
-          commitPendingOnly();
-          setPendingPointIds(nextPending);
-          return;
-        }
+      if (IKI_NOKTALI_INSA_ARACLARI.includes(tool)) {
+        const nextPending = noktaTopla(2);
+        if (!nextPending) return;
         setPendingPointIds([]);
         const a = pointOf(nextPending[0]);
         const b = pointOf(nextPending[1]);
@@ -3656,47 +3635,25 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           n2.construction = { kind: 'direction', throughId: n1.id, linePointIds: [a.id, b.id], mode: 'perpendicular' };
           n2.isIndependent = false;
           n2.visible = false;
-          const dogru: LineObject = {
-            id: createId('line'),
-            type: 'line',
-            label: '[' + a.label + b.label + '] Orta Dikmesi',
-            insaGosterimi: { tur: 'perp_bisector', pointIds: [a.id, b.id] },
-            showLabel: true,
-            point1Id: n1.id,
-            point2Id: n2.id,
-            color: NESNE_RENGI.zumrut,
-            visible: true,
-            createdAt: Date.now(),
-          };
+          const dogru = ortaDikmeNesnesi(a, b, n1.id, n2.id);
           commitWith([...(orta.yeni ? [n1] : []), n2, dogru], dogru.label + ' oluşturuldu');
           return;
         }
 
         if (tool === 'measure_slope') {
           // Sonuç geçici ipucu satırında kaybolmasın: tuvale kalıcı, CANLI bir etiket konur.
-          const zatenVar = objs.some(
-            (o) =>
-              o.type === 'measurement' &&
-              (o as MeasurementObject).kind === 'slope' &&
-              (o as MeasurementObject).pointIds.join('|') === [a.id, b.id].join('|')
-          );
+          // AB ile BA aynı doğrunun eğimidir: iki sırada da yeniden ölçülmez
+          const zatenVar = objs.some((o) => {
+            if (o.type !== 'measurement' || (o as MeasurementObject).kind !== 'slope') return false;
+            const [p, q] = (o as MeasurementObject).pointIds;
+            return (p === a.id && q === b.id) || (p === b.id && q === a.id);
+          });
           if (zatenVar) {
             setHintMessage(a.label + b.label + ' eğimi zaten ölçülmüş.');
             commitPendingOnly();
             return;
           }
-          const etiket: MeasurementObject = {
-            id: createId('olc'),
-            type: 'measurement',
-            kind: 'slope',
-            label: a.label + b.label + ' eğimi',
-            showLabel: true,
-            pointIds: [a.id, b.id],
-            showValue: true,
-            color: NESNE_RENGI.zumrut,
-            visible: true,
-            createdAt: Date.now(),
-          };
+          const etiket = olcumEtiketiNesnesi('slope', adlariBirlestir(a, b) ? adlariBirlestir(a, b) + ' eğimi' : 'Eğim', [a.id, b.id], NESNE_RENGI.zumrut);
           const egim = calculateSlope(a, b);
           commitWith([etiket], etiket.label + ' ölçüldü');
           setHintMessage(
@@ -3769,20 +3726,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             if (!okundu.ok) return okundu.error;
             const uzunluk = okundu.value;
             if (uzunluk <= 0) return 'Uzunluk sıfırdan büyük olmalı.';
+            if (uzunluk > 100) return 'Uzunluk en çok 100 br olabilir.';
             const uc = yardimciNokta(bas.x + uzunluk, bas.y, NESNE_RENGI.camgobegi);
-            const seg: SegmentObject = {
-              id: createId('seg'),
-              type: 'segment',
-              label: `[${bas.label}${uc.label}]`,
-              showLabel: true,
-              startPointId: bas.id,
-              endPointId: uc.id,
-              color: NESNE_RENGI.camgobegi,
-              showLength: false,
-              unit: 'br',
-              visible: true,
-              createdAt: Date.now(),
-            };
+            const seg = olculuParcaNesnesi(bas, uc);
             commit(
               (prev) => [...prev, uc, seg],
               `${seg.label} oluşturuldu (${formatTurkishNumber(uzunluk)} br)`
@@ -3795,13 +3741,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
       /** Öteleme: seçili şekil, tıklanan iki noktanın belirlediği vektör kadar kopyalanır */
       if (tool === 'translate') {
-        const nextPending = [...pending, pointId];
-        if (nextPending.length < 2) {
-          commitPendingOnly();
-          setPendingPointIds(nextPending);
-          setHintMessage('Şimdi vektörün BİTİŞ noktasına tıklayın.');
-          return;
-        }
+        const nextPending = noktaTopla(2, () => 'Şimdi vektörün BİTİŞ noktasına tıklayın.');
+        if (!nextPending) return;
         setPendingPointIds([]);
         const a = pointOf(nextPending[0]);
         const b = pointOf(nextPending[1]);
@@ -3836,14 +3777,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
 
       /** Üç nokta isteyen inşa araçları */
-      const UC_NOKTALI = ['angle_bisector', 'perpendicular', 'parallel', 'trig_ratios'];
-      if (UC_NOKTALI.includes(tool)) {
-        const nextPending = [...pending, pointId];
-        if (nextPending.length < 3) {
-          commitPendingOnly();
-          setPendingPointIds(nextPending);
-          return;
-        }
+      if (UC_NOKTALI_INSA_ARACLARI.includes(tool)) {
+        const nextPending = noktaTopla(3);
+        if (!nextPending) return;
         setPendingPointIds([]);
         const a = pointOf(nextPending[0]);
         const b = pointOf(nextPending[1]);
@@ -3866,18 +3802,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           n2.construction = { kind: 'bisector', pointIds: [a.id, b.id, c.id] };
           n2.isIndependent = false;
           n2.visible = false;
-          const isin: RayObject = {
-            id: createId('ray'),
-            type: 'ray',
-            label: a.label + b.label + c.label + ' Açıortayı',
-            insaGosterimi: { tur: 'angle_bisector', pointIds: [a.id, b.id, c.id] },
-            showLabel: true,
-            startPointId: b.id,
-            throughPointId: n2.id,
-            color: NESNE_RENGI.kehribar,
-            visible: true,
-            createdAt: Date.now(),
-          };
+          const isin = aciortayNesnesi(a, b, c, n2.id);
           commitWith([n2, isin], isin.label + ' oluşturuldu');
           return;
         }
@@ -3895,23 +3820,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           n2.construction = { kind: 'direction', throughId: c.id, linePointIds: [a.id, b.id], mode: tool };
           n2.isIndependent = false;
           n2.visible = false;
-          const dogru: LineObject = {
-            id: createId('line'),
-            type: 'line',
-            label:
-              (tool === 'perpendicular' ? 'Dik doğru: ' : 'Paralel doğru: ') +
-              c.label +
-              ' / ' +
-              a.label +
-              b.label,
-            ...(tool === 'perpendicular' ? { insaGosterimi: { tur: 'perpendicular' as const, pointIds: [a.id, b.id, c.id] } } : {}),
-            showLabel: true,
-            point1Id: c.id,
-            point2Id: n2.id,
-            color: NESNE_RENGI.mavi,
-            visible: true,
-            createdAt: Date.now(),
-          };
+          const dogru = dikVeyaParalelDogruNesnesi(tool, a, b, c, n2.id);
           commitWith([n2, dogru], dogru.label + ' oluşturuldu');
           return;
         }
@@ -3927,18 +3836,12 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             commitPendingOnly();
             return;
           }
-          const etiket: MeasurementObject = {
-            id: createId('olc'),
-            type: 'measurement',
-            kind: 'trig',
-            label: a.label + b.label + c.label + ' açısının oranları',
-            showLabel: true,
-            pointIds: [a.id, b.id, c.id],
-            showValue: true,
-            color: NESNE_RENGI.mor,
-            visible: true,
-            createdAt: Date.now(),
-          };
+          const etiket = olcumEtiketiNesnesi(
+            'trig',
+            adlariBirlestir(a, b, c) ? adlariBirlestir(a, b, c) + ' açısının oranları' : 'Trigonometrik oranlar',
+            [a.id, b.id, c.id],
+            NESNE_RENGI.mor
+          );
           commitWith([etiket], etiket.label + ' ölçüldü');
           // İpucu, tuvaldeki etiketlerle AYNI yazım modelinden kurulur: 'm(AB̂C) ≈ 83,7°  ·  sin B̂ = …'
           // (yuvarlanan değer '≈' alır). Elle kurulan '=' hem yanlış hem de tuvalden farklıydı.
@@ -3951,20 +3854,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (tool === 'circle_3points' || tool === 'arc' || tool === 'sector') {
-        const nextPending = [...pending, pointId];
-        if (nextPending.length < 3) {
-          commitPendingOnly();
-          setPendingPointIds(nextPending);
-          return;
-        }
+        const nextPending = noktaTopla(3);
+        if (!nextPending) return;
         const [a, b, c] = nextPending.map(pointOf);
+        // Şekil kurulamasa da bu tıklamanın yarattığı nokta kaybolmaz (diğer araçlarla aynı: commitPendingOnly)
         if (!a || !b || !c) {
+          commitPendingOnly();
           setPendingPointIds([]);
           return;
         }
-        // Aynı noktaya iki kez tıklanmışsa şekil kurulamaz
-        if (new Set(nextPending).size < 3) {
+        // Aynı noktaya iki kez tıklanmışsa ya da yay/dilimde yön noktası merkezle çakışıyorsa şekil kurulamaz (çakışan
+        // noktada yay tanımsızdır; eskiden görünmeyen bozuk bir yay oluşuyordu)
+        if (new Set(nextPending).size < 3 || (tool !== 'circle_3points' && (calculateDistance(a, b) < 1e-9 || calculateDistance(a, c) < 1e-9))) {
           setHintMessage('Üç FARKLI nokta seçmelisiniz.');
+          commitPendingOnly();
           setPendingPointIds([]);
           return;
         }
@@ -3973,73 +3876,24 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
           const cc = calculateCircumcircle(a, b, c);
           if (!cc) {
             setHintMessage('Üç nokta aynı doğru üzerinde; çember çizilemez.');
+            commitPendingOnly();
             setPendingPointIds([]);
             return;
           }
-          const newCircle: CircleObject = {
-            id: createId('circ'),
-            type: 'circle',
-            label: `${a.label}${b.label}${c.label} Çemberi`,
-            showLabel: true,
-            centerPointId: '',
-            throughPointIds: [a.id, b.id, c.id],
-            color: NESNE_RENGI.mor,
-            fillOpacity: 0,
-            visible: true,
-            createdAt: Date.now(),
-          };
+          const newCircle = ucNoktaliCemberNesnesi(a, b, c);
           commitWith([newCircle], `${newCircle.label} oluşturuldu`);
         } else if (tool === 'arc' || tool === 'sector') {
           // Üçüncü nokta yalnızca AÇIYI belirler; yarıçapı |merkez-başlangıç| verir.
           // Bu yüzden nokta yayın üzerinde durmaz ve kaymış görünür. Nokta BU TIKLAMAYLA
           // yeni oluşturulduysa onu yayın üzerine (aynı açıda, doğru yarıçapta) oturturuz.
           // Var olan bir noktaya tıklandıysa dokunmayız: başka nesneler ona bağlı olabilir.
-          const yeniMi = newlyCreated.some((o) => o.id === c.id);
-          const yaricap = calculateDistance(a, b);
-          const dx = c.x - a.x;
-          const dy = c.y - a.y;
-          const uz = Math.hypot(dx, dy);
-          const yayUstunde =
-            yeniMi && uz > 1e-9 && yaricap > 1e-9
-              ? {
-                  x: Number((a.x + (dx / uz) * yaricap).toFixed(10)),
-                  y: Number((a.y + (dy / uz) * yaricap).toFixed(10)),
-                }
-              : null;
+          const yeniMi = newlyCreated.some((o) => o.id === c.id) && !c.onObjectId;
+          const yayUstunde = yeniMi ? yayUstundeKonum(a, b, c) : null;
           const kaydirilmisNoktalar = yayUstunde
             ? newlyCreated.map((o) => (o.id === c.id ? ({ ...o, ...yayUstunde } as MathObject) : o))
             : newlyCreated;
 
-          const ortak = {
-            centerPointId: a.id,
-            startPointId: b.id,
-            directionPointId: c.id,
-            visible: true,
-            showLabel: true,
-            showCentralAngle: false,
-            createdAt: Date.now(),
-          };
-          const yeniSekil: MathObject =
-            tool === 'arc'
-              ? ({
-                  ...ortak,
-                  id: createId('arc'),
-                  type: 'arc',
-                  label: `${b.label}${c.label} Yayı`,
-                  color: NESNE_RENGI.camgobegi,
-                  thickness: 3,
-                  showArcLength: false,
-                } as ArcObject)
-              : ({
-                  ...ortak,
-                  id: createId('sect'),
-                  type: 'sector',
-                  label: `${a.label} Daire Dilimi`,
-                  color: NESNE_RENGI.zumrut,
-                  fillColor: NESNE_RENGI.zumrut,
-                  fillOpacity: 0.4,
-                  showArea: false,
-                } as SectorObject);
+          const yeniSekil: MathObject = yayVeyaDilimNesnesi(tool, a, b, c);
 
           commit(
             (prev) => [...prev, ...kaydirilmisNoktalar, yeniSekil],
@@ -4054,18 +3908,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (tool === 'angle') {
-        const nextPending = [...pending, pointId];
-        if (nextPending.length < 3) {
-          commitPendingOnly();
-          setPendingPointIds(nextPending);
-          return;
-        }
+        const nextPending = noktaTopla(3);
+        if (!nextPending) return;
 
         // Aynı noktaya tekrar tıklandıysa dejenere açı oluşturma
         if (new Set(nextPending).size < 3) {
           commitPendingOnly();
           setPendingPointIds([]);
-          setHintMessageState('Farklı üç nokta seçin');
+          setHintMessage('Üç FARKLI nokta seçmelisiniz.');
           return;
         }
 
@@ -4073,69 +3923,22 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const vertex = pointOf(nextPending[1]);
         const p3 = pointOf(nextPending[2]);
         const deg = p1 && vertex && p3 ? Math.round(calculateAngleDegrees(p1, vertex, p3)) : 0;
-        const label = p1 && vertex && p3 ? `∠${p1.label}${vertex.label}${p3.label}` : 'Açı';
 
-        // Açının kollarını birleştiren doğru parçaları. Açıyla birlikte çizildikleri için açının kimliğini
-        // taşırlar: açı silinince (başka nesne kullanmıyorsa) kolları da gider, turuncu çizgiler sahipsiz kalmaz.
-        const angleId = createId('ang');
-        const seg1: SegmentObject = {
-          id: createId('seg'),
-          type: 'segment',
-          label: vertex && p1 ? `[${vertex.label}${p1.label}]` : 'Açı Kolu',
-          showLabel: false,
-          startPointId: nextPending[1],
-          endPointId: nextPending[0],
-          color: NESNE_RENGI.kehribar,
-          visible: true,
-          thickness: 2,
-          armOfAngleId: angleId,
-          createdAt: Date.now(),
-        };
+        // Açı ve kolları (kollar açının kimliğini taşır: açı silinince kolları da gider)
+        const { kollar, aci: newAngle } = aciVeKollari(nextPending[0], nextPending[1], nextPending[2], p1, vertex, p3);
 
-        const seg2: SegmentObject = {
-          id: createId('seg'),
-          type: 'segment',
-          label: vertex && p3 ? `[${vertex.label}${p3.label}]` : 'Açı Kolu',
-          showLabel: false,
-          startPointId: nextPending[1],
-          endPointId: nextPending[2],
-          color: NESNE_RENGI.kehribar,
-          visible: true,
-          thickness: 2,
-          armOfAngleId: angleId,
-          createdAt: Date.now(),
-        };
-
-        const newAngle: AngleObject = {
-          id: angleId,
-          type: 'angle',
-          label,
-          showLabel: true,
-          point1Id: nextPending[0],
-          vertexPointId: nextPending[1],
-          point3Id: nextPending[2],
-          color: NESNE_RENGI.kehribar,
-          visible: true,
-          showValue: false,
-          createdAt: Date.now(),
-        };
-
-        commitWith([seg1, seg2, newAngle], `${label} = ${deg}° açısı oluşturuldu`);
+        commitWith([...kollar, newAngle], `${newAngle.label} = ${deg}° açısı oluşturuldu`);
         setPendingPointIds([]);
         return;
       }
 
       if (tool === 'measure_distance' || tool === 'unit_measure') {
-        const nextPending = [...pending, pointId];
         const isCm = tool === 'measure_distance';
         // Ortaokulda Uzunluk Ölç de br yazar: aynı kenar tuvalde cm, listede br görünmesin (alan uzmanı, 4. tur)
         const unit = isCm ? uzunlukOlcuBirimiSimdi() : 'br';
 
-        if (nextPending.length === 1) {
-          commitPendingOnly();
-          setPendingPointIds(nextPending);
-          return;
-        }
+        const nextPending = noktaTopla(2);
+        if (!nextPending) return;
 
         if (nextPending[0] !== nextPending[1]) {
           const p1 = pointOf(nextPending[0]);
@@ -4145,26 +3948,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             // İlkokulda ölçü pozitif tam sayıdır (ondalık yok; yuvarlanan değer "yaklaşık" der)
             const ilkokul = ilkokulKipindeMi();
             const distStr = ilkokul ? ilkokulUzunlukMetni(rawDist, unit).replace(/ (cm|br)$/, '') : formatTurkishNumber(rawDist);
-            const segLabel = `|${p1.label}${p2.label}|`;
+            const segLabel = adlariBirlestir(p1, p2) ? `|${adlariBirlestir(p1, p2)}|` : 'Uzunluk';
 
-            const newSegment: SegmentObject = {
-              id: createId('seg'),
-              type: 'segment',
-              label: segLabel,
-              showLabel: true,
-              unit,
-              startPointId: nextPending[0],
-              endPointId: nextPending[1],
-              color: isCm ? NESNE_RENGI.camgobegi : NESNE_RENGI.zumrut,
-              visible: true,
-              showLength: true,
-              thickness: 3,
-              createdAt: Date.now(),
-            };
+            const newSegment = olcumParcasiNesnesi(nextPending[0], nextPending[1], segLabel, unit, isCm);
             commitWith([newSegment], `${segLabel} = ${distStr} ${unit} ölçüldü`);
             // İpucu kapsülü hem etkinlikte hem serbest masada görünür ve kendiliğinden
             // temizlenir; activeSuccessMessage yalnızca etkinlik başarı kutusuna aittir.
-            setHintMessageState(
+            setHintMessage(
               ilkokul
                 ? `${isCm ? 'Uzunluk' : 'Birim'} ölçümü: ${ilkokulUzunlukMetni(rawDist, unit)}`
                 : `${isCm ? 'Uzunluk' : 'Birim'} ölçümü: ${olcuMetni(uzunluk(p1, p2, rawDist, { birim: unit }), {
@@ -4189,23 +3979,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         if (pending.length >= 3 && pending[0] === pointId) {
           const polyPoints = pending.map((id) => pointOf(id)).filter(Boolean) as PointObject[];
           const isArea = tool === 'measure_area';
+          if (calculatePolygonArea(polyPoints) < 1e-9) {
+            setHintMessage(DOGRUDAS_KOSELER_IPUCU);
+            return;
+          }
 
-          const newPolygon: PolygonObject = {
-            id: createId('poly'),
-            type: 'polygon',
-            label: 'Çokgen',
-            showLabel: true,
-            pointIds: [...pending],
-            color: NESNE_RENGI.zumrut,
-            fillColor: NESNE_RENGI.zumrut,
-            fillOpacity: 0.2,
-            visible: true,
-            showArea: isArea,
-            showPerimeter: !isArea,
-            // Bu çokgen ÖLÇMEK için kuruldu: silinince kullanıcının noktalarını götürmez
-            olcumSekli: true,
-            createdAt: Date.now(),
-          };
+          // Bu çokgen ÖLÇMEK için kuruldu: silinince kullanıcının noktalarını götürmez (olcumSekli)
+          const newPolygon = olcumCokgeni(pending, isArea);
           commitWith(
             [newPolygon],
             isArea
@@ -4213,7 +3993,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               : `${olcuMetni(cevre(polyPoints, calculatePolygonPerimeter(polyPoints)))} hesaplandı`
           );
           setPendingPointIds([]);
-        } else if (!pending.includes(pointId)) {
+        } else if (pending.includes(pointId)) {
+          setHintMessage(bekleyenKoseIpucu(pending, pointId));
+        } else {
           commitPendingOnly();
           setPendingPointIds([...pending, pointId]);
         }
@@ -4221,32 +4003,22 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (tool === 'polygon') {
-        // İlk noktaya tekrar tıklandıysa çokgeni kapat
+        // İlk noktaya tekrar tıklandıysa çokgeni kapat (köşeler aynı doğru üzerindeyse kapanmaz: alanı sıfır)
         if (pending.length >= 3 && pending[0] === pointId) {
-          const names = pending
-            .map((id) => pointOf(id)?.label)
-            .filter(Boolean)
-            .join('');
-          const newPolygon: PolygonObject = {
-            id: createId('poly'),
-            type: 'polygon',
-            label: names ? `${names} Çokgeni` : 'Çokgen',
-            showLabel: true,
-            pointIds: [...pending],
-            color: NESNE_RENGI.zumrut,
-            fillColor: NESNE_RENGI.zumrut,
-            fillOpacity: 0.15,
-            visible: true,
-            showArea: false,
-            showPerimeter: false,
-            createdAt: Date.now(),
-          };
+          const koseler = pending.map(pointOf).filter(Boolean) as PointObject[];
+          if (calculatePolygonArea(koseler) < 1e-9) {
+            setHintMessage(DOGRUDAS_KOSELER_IPUCU);
+            return;
+          }
+          const newPolygon = cokgenNesnesi(pending, pending.map((id) => pointOf(id)?.label));
           commitWith([newPolygon], `${newPolygon.label} oluşturuldu`);
           setPendingPointIds([]);
-        } else if (!pending.includes(pointId)) {
+        } else if (pending.includes(pointId)) {
+          setHintMessage(bekleyenKoseIpucu(pending, pointId));
+        } else {
           // İlkokulda çokgen en çok sekizgen: 9. köşe konmaz, ilk köşeye dokunarak kapatılır
-          if (pending.length >= ILKOKUL_EN_COK_KENAR && ilkokulKipindeMi()) {
-            setHintMessageState(`İlkokulda çokgen en çok ${ILKOKUL_EN_COK_KENAR} köşeli olur (sekizgen). Şekli kapatmak için ilk köşeye dokun.`);
+          if (ilkokulCokgenSiniriDoldu(pending.length)) {
+            setHintMessage(ILKOKUL_COKGEN_SINIRI_IPUCU);
             return;
           }
           commitPendingOnly();
@@ -4361,7 +4133,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       // -------------------------------------------------------------------
       if (tool === 'checkbox' || tool === 'button' || tool === 'input_box') {
         const hedefler = selIds.filter((id) => currentObjects.some((o) => o.id === id));
-        const konum = { x: Number(rawWorldPos.x.toFixed(2)), y: Number(rawWorldPos.y.toFixed(2)) };
+        const konum = etkilesimKonumu(rawWorldPos);
 
         if (tool === 'input_box') {
           // Girdi kutusu TEK bir kaydırıcıya veya fonksiyona bağlanır
@@ -4374,20 +4146,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
             );
             return;
           }
-          const kutu: InputBoxObject = {
-            id: createId('inp'),
-            type: 'input_box',
-            label: hedef.type === 'slider' ? `${(hedef as SliderObject).variableName} =` : 'f(x) =',
-            showLabel: true,
-            x: konum.x,
-            y: konum.y,
-            targetId: hedef.id,
-            field: hedef.type === 'slider' ? 'value' : 'expression',
-            width: hedef.type === 'slider' ? 90 : 170,
-            color: NESNE_RENGI.zumrut,
-            visible: true,
-            createdAt: Date.now(),
-          };
+          const kutu = girdiKutusuNesnesi(konum, hedef);
           commit((prev) => [...prev, kutu], 'Girdi kutusu eklendi');
           setHintMessage(
             `Girdi kutusu ${describeObject(hedef)} nesnesine bağlandı. Değeri yazıp Enter'a basın.`
@@ -4405,19 +4164,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (tool === 'checkbox') {
-          const kutu: CheckboxObject = {
-            id: createId('chk'),
-            type: 'checkbox',
-            label: `${hedefler.length} nesneyi göster`,
-            showLabel: true,
-            x: konum.x,
-            y: konum.y,
-            targetIds: hedefler,
-            checked: true,
-            color: NESNE_RENGI.mavi,
-            visible: true,
-            createdAt: Date.now(),
-          };
+          const kutu = isaretKutusuNesnesi(konum, hedefler);
           commit((prev) => [...prev, kutu], 'İşaret kutusu eklendi');
           setHintMessage(
             `İşaret kutusu ${hedefler.length} nesneye bağlandı. Kutuyu kapatınca nesneler gizlenir, silinmez.`
@@ -4429,21 +4176,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const kaydiricilar = hedefler.filter((id) =>
           currentObjects.some((o) => o.id === id && o.type === 'slider')
         );
-        const dugme: ButtonObject = {
-          id: createId('btn'),
-          type: 'button',
-          label: kaydiricilar.length > 0 ? 'Oynat / Durdur' : 'Göster / Gizle',
-          showLabel: true,
-          x: konum.x,
-          y: konum.y,
-          action:
-            kaydiricilar.length > 0
-              ? { kind: 'animate', sliderIds: kaydiricilar }
-              : { kind: 'toggle', targetIds: hedefler },
-          color: NESNE_RENGI.indigo,
-          visible: true,
-          createdAt: Date.now(),
-        };
+        const dugme = dugmeNesnesi(konum, hedefler, kaydiricilar);
         commit((prev) => [...prev, dugme], 'Düğme eklendi');
         setHintMessage(
           kaydiricilar.length > 0
@@ -4463,18 +4196,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Ölçme aletleri, alan modeli, kalem, görsel, metin ve kaydırma:
+      // Ölçme aletleri (cetvel, gönye, açıölçer, alan modeli), kalem, görsel, metin ve kaydırma:
       // tuval tıklaması burada nesne üretmez (metin notu Canvas'taki diyalogla eklenir).
-      if (
-        tool === 'ruler' ||
-        tool === 'setsquare' ||
-        tool === 'measure_angle' ||
-        tool === 'area_model' ||
-        tool === 'pan' ||
-        tool === 'pen' ||
-        tool === 'image' ||
-        tool === 'text'
-      ) {
+      if (olcmeAraciMi(tool) || tool === 'pan' || tool === 'pen' || tool === 'image' || tool === 'text') {
         return;
       }
 
@@ -4485,28 +4209,21 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       const worldPos = kenaraYapisti ? yapisma.nokta : snapToVisibleGrid(rawWorldPos, vp);
       const existingLabels = (currentObjects.filter((o) => o.type === 'point') as PointObject[]).map((p) => p.label);
 
-      const makePoint = (label: string, x: number, y: number, color: string = NESNE_RENGI.mavi): PointObject => ({
-        id: createId('pt'),
-        type: 'point',
-        label,
-        showLabel: true,
-        x,
-        y,
-        color,
-        visible: true,
-        isIndependent: true,
-        createdAt: Date.now(),
-      });
+      /**
+       * Tıklanan yerde yeni nokta. Nokta bir nesnenin KENARINA oturduysa oraya BAĞLI kalır: sürüklendiğinde nesneden
+       * kopmaz, yalnızca üzerinde kayar; nesne taşınınca onunla gelir, silinince o da silinir. Kural nokta koyan bütün
+       * araçlarda aynıdır (Nokta, Doğru Parçası, Çember, inşa ve ölçme araçları).
+       */
+      const tiklananNokta = (label: string, color?: string): PointObject => {
+        const nokta = yeniNokta(label, worldPos.x, worldPos.y, color);
+        if (yapisma.hostId) nokta.onObjectId = yapisma.hostId;
+        return nokta;
+      };
 
       // 1. NOKTA ARACI
       if (tool === 'point') {
         const label = generateNextPointLabel(existingLabels);
-        const newPoint = makePoint(label, worldPos.x, worldPos.y);
-        if (yapisma.hostId) {
-          // Nokta bir nesnenin ÜZERİNDE doğdu: oraya BAĞLI kalır. Sürüklendiğinde
-          // nesneden kopmaz, yalnızca üzerinde kayar; nesne silinince o da silinir.
-          newPoint.onObjectId = yapisma.hostId;
-        }
+        const newPoint = tiklananNokta(label);
         const hedef = yapisma.hostId
           ? currentObjects.find((o) => o.id === yapisma.hostId)
           : undefined;
@@ -4545,22 +4262,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
               latest.current.objects.filter((o) => o.type === 'point').map((o) => o.label || ''),
               4
             );
-            const pts = kareKoseleri(kose, kenar).map((k, i) => makePoint(adlar[i], k.x, k.y, NESNE_RENGI.mavi));
-            const poly: PolygonObject = {
-              id: createId('poly'),
-              type: 'polygon',
-              label: 'Kare',
-              showLabel: true,
-              pointIds: pts.map((pt) => pt.id),
-              color: NESNE_RENGI.pembe,
-              fillColor: NESNE_RENGI.pembe,
-              fillOpacity: 0.18,
-              visible: true,
-              showArea: false,
-              showPerimeter: false,
-              createdAt: Date.now(),
-            };
-            addObjects([...pts, poly], `Kare oluşturuldu (a = ${formatTurkishNumber(kenar)} br)`);
+            addObjects(koseliCokgen(kareKoseleri(kose, kenar), adlar, NESNE_RENGI.mavi, KARE_GORUNUMU), `Kare oluşturuldu (a = ${formatTurkishNumber(kenar)} br)`);
             return null;
           },
         });
@@ -4576,31 +4278,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         const x2 = x1 + w;
         const y2 = y1 + h;
         const labels = generateNextPointLabels(existingLabels, 4);
-        const color = NESNE_RENGI.mavi;
 
-        const pts = [
-          makePoint(labels[0], x1, y1, color),
-          makePoint(labels[1], x2, y1, color),
-          makePoint(labels[2], x2, y2, color),
-          makePoint(labels[3], x1, y2, color),
-        ];
+        addObjects(
+          koseliCokgen(dikdortgenKoseleri(x1, y1, x2, y2), labels, NESNE_RENGI.mavi, DIKDORTGEN_GORUNUMU),
+          `Dikdörtgen oluşturuldu (${formatTurkishNumber(w)} x ${formatTurkishNumber(h)} br)`
+        );
+        return;
+      }
 
-        const poly: PolygonObject = {
-          id: createId('poly'),
-          type: 'polygon',
-          label: 'Dikdörtgen',
-          showLabel: true,
-          pointIds: pts.map((p) => p.id),
-          color: NESNE_RENGI.kehribar,
-          fillColor: NESNE_RENGI.kehribar,
-          fillOpacity: 0.18,
-          visible: true,
-          showArea: false,
-          showPerimeter: false,
-          createdAt: Date.now(),
-        };
-
-        addObjects([...pts, poly], `Dikdörtgen oluşturuldu (${formatTurkishNumber(w)} x ${formatTurkishNumber(h)} br)`);
+      // ELİPS (tıklama ile standart boyut): dikdörtgenin 6 × 4'lük kutusuna içten teğet, merkez tıklanan yer
+      if (tool === 'ellipse') {
+        const [merkezAdi] = generateNextPointLabels(existingLabels, 1);
+        addObjects(elipsNesneleri(worldPos, 3, 2, merkezAdi), 'Elips oluşturuldu (a = 3 br, b = 2 br)');
         return;
       }
 
@@ -4620,21 +4309,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       // konuyordu (alan uzmanı, 3. sınıf: "sadece 1/1 kesri daire şeklinde yapılabilmektedir").
       if (tool === 'fraction') {
         const kesir = kesirAyariniSinirla(kesirAyariniOku(), ilkokulKipindeMi());
-        const fractionObj: FractionObject = {
-          id: createId('frac'),
-          type: 'fraction',
-          label: kesirEtiketi(kesir.pay, kesir.payda),
-          showLabel: true,
-          numerator: kesir.pay,
-          denominator: kesir.payda,
-          x: worldPos.x,
-          y: worldPos.y,
-          radius: 2.5,
-          modelType: kesir.model,
-          color: NESNE_RENGI.mor,
-          visible: true,
-          createdAt: Date.now(),
-        };
+        const fractionObj = kesirModeliNesnesi(worldPos, kesir);
         addObject(fractionObj, `${kesir.pay}/${kesir.payda} kesir modeli eklendi`);
         setSelectedObjectId(fractionObj.id);
         return;
@@ -4644,7 +4319,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       if (tool === 'measure_distance' || tool === 'unit_measure') {
         const isCm = tool === 'measure_distance';
         const label = generateNextPointLabel(existingLabels);
-        const newPt = makePoint(label, worldPos.x, worldPos.y, isCm ? NESNE_RENGI.camgobegi : NESNE_RENGI.zumrut);
+        const newPt = tiklananNokta(label, isCm ? NESNE_RENGI.camgobegi : NESNE_RENGI.zumrut);
         handlePointClick(newPt.id, [...currentObjects, newPt]);
         return;
       }
@@ -4652,8 +4327,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       // 7. DÖNDÜRME (ROTATE): Dönüş, şekil üzerindeki tutamaç ve hazır derece
       // düğmeleriyle yapılır; boş tuval tıklaması yalnızca yönlendirme verir.
       if (tool === 'rotate') {
-        const hasShape = currentObjects.some((o) => o.id === currentSelectedId && o.type === 'polygon');
-        setHintMessageState(
+        const hasShape = currentObjects.some((o) => o.id === currentSelectedId && DONDURULEBILIR_TURLER.includes(o.type));
+        setHintMessage(
           hasShape
             ? ilkokulKipindeMi()
               // İlkokulda derece yok: çeyrek / yarım / tam dönüş (uzman 4. tur [179])
@@ -4668,7 +4343,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       // doğruya tıklanarak seçilir; boş tuval tıklaması yansıma üretmez.
       if (tool === 'reflect' || tool === 'symmetry') {
         const hasShape = currentObjects.some((o) => o.id === currentSelectedId && o.type === 'polygon');
-        setHintMessageState(
+        setHintMessage(
           hasShape
             ? 'Simetri ekseni için yukarıdaki eksen düğmelerine veya tuvaldeki bir doğruya tıklayın'
             : 'Önce bir şekil seçin'
@@ -4676,33 +4351,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // 9. DOĞRU PARÇASI, DOĞRU, IŞIN, ÇEMBER, AÇI, ÇOKGEN: yeni nokta oluştur ve adıma ekle
-      if (
-        [
-          'segment',
-          'line',
-          'ray',
-          'circle',
-          'circle_3points',
-          'arc',
-          'sector',
-          'angle',
-          'polygon',
-          // Klasik inşa araçları da boş tuvale tıklanınca önce nokta oluşturur
-          'midpoint',
-          'divide_ratio',
-          'perp_bisector',
-          'angle_bisector',
-          'perpendicular',
-          'parallel',
-          'segment_length',
-          'translate',
-          'measure_slope',
-          'trig_ratios',
-        ].includes(tool)
-      ) {
+      // 9. DOĞRU PARÇASI, DOĞRU, IŞIN, ÇEMBER, AÇI, ÇOKGEN ve klasik inşa araçları: yeni nokta oluştur ve adıma ekle
+      // (Nokta aracı 1. adımda kendi dalında biter)
+      if (NOKTA_URETEN_ARACLAR.includes(tool)) {
         const label = generateNextPointLabel(existingLabels);
-        const newPoint = makePoint(label, worldPos.x, worldPos.y);
+        const newPoint = tiklananNokta(label);
         handlePointClick(newPoint.id, [...currentObjects, newPoint]);
         return;
       }

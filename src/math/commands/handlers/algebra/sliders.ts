@@ -110,8 +110,10 @@ export const assignHandler: CommandHandler = {
       return;
     }
     const span = Math.max(5, Math.ceil(Math.abs(value) * 2) || 5);
-    scene.addSlider(name, { min: -span, max: span, step: 0.1, value });
-    scene.say(`${name} kaydırıcısı oluşturuldu ve ${trNum(value)} değeri atandı (aralık ${trNum(-span)} ile ${trNum(span)}, adım 0,1).`);
+    // Tam sayı değerde adım 1 (varsayılan ayarlar ondalıksız); ondalık değer atandıysa 0,1: değere sürükleyerek dönülebilsin
+    const step = Number.isInteger(value) ? 1 : 0.1;
+    scene.addSlider(name, { min: -span, max: span, step, value });
+    scene.say(`${name} kaydırıcısı oluşturuldu ve ${trNum(value)} değeri atandı (aralık ${trNum(-span)} ile ${trNum(span)}, adım ${trNum(step)}).`);
   },
 };
 
@@ -202,7 +204,8 @@ export const sliderCreateHandler: CommandHandler = {
     if (!(min! < max!)) fail(`En küçük değer (${trNum(min!)}) en büyük değerden (${trNum(max!)}) küçük olmalı.`);
     if (step === undefined) {
       const span = max! - min!;
-      step = defaults.includes('aralık') || span >= 10 ? 0.5 : span >= 2 ? 0.1 : 0.01;
+      // Varsayılan adım ondalıksız (kullanıcı, 25.10.2026); yalnız dar aralıkta (2 birimden az) eskisi gibi 0,01
+      step = span >= 2 ? 1 : 0.01;
       defaults.push('adım');
     }
     if (!(step > 0)) fail('Kaydırıcı adımı 0’dan büyük olmalı.');

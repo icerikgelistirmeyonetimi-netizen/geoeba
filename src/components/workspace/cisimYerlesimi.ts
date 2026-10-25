@@ -51,6 +51,31 @@ export interface CisimOlculeri {
 }
 
 /**
+ * Verilen (ya da hazır) ölçüleri türün varsayılanıyla tamamlar: eksik en / derinlik yarıçaptan, yarıçap enden gelir;
+ * küpte bütün ayrıtlar ene eşitlenir. Tıkla Ekle önizlemesi, tıklayarak ekleme ve WorkspaceView aynı kuralı kullanır.
+ */
+export function cisimOlculeriniBirlestir(
+  tur: Solid3DType,
+  ozel?: { width?: number; height?: number; depth?: number; radius?: number } | null
+): CisimOlculeri {
+  const base = VARSAYILAN_CISIM_OLCULERI[tur];
+  const dims = ozel
+    ? {
+        width: ozel.width ?? (ozel.radius ? ozel.radius * 2 : base.width),
+        height: ozel.height ?? base.height,
+        depth: ozel.depth ?? (ozel.radius ? ozel.radius * 2 : base.depth),
+        radius: ozel.radius ?? (ozel.width ? ozel.width / 2 : base.radius),
+      }
+    : { ...base };
+  if (tur === 'cube') {
+    dims.height = dims.width;
+    dims.depth = dims.width;
+    dims.radius = dims.width / 2;
+  }
+  return dims;
+}
+
+/**
  * Tıkla Ekle ile gelen cismin ölçüleri. Dikdörtgen prizmanın üç ayrıtı FARKLI (4 × 3 × 2 br: genişlik × derinlik
  * × yükseklik): küple aynı 3 × 3 × 3 ölçü, öğrenciye "dikdörtgen prizma = küp" modelini veriyordu.
  */
@@ -83,6 +108,24 @@ export function cizimOlculeri(tur: Solid3DType, boy: number, tamSayi = false): C
     return { width: boy, depth: yuvarla(v.depth), height: yuvarla(v.height), radius: boy / 2 };
   }
   return { width: boy, height: boy, depth: boy, radius: boy / 2 };
+}
+
+/**
+ * Zeminde Çiz: çizilen boyun ölçüleri. Hazır ölçülü satır seçiliyse (Kare Prizma 3 × 4 × 3) çizilen boy EN olur, öteki
+ * ölçüler hazır oranlarla büyür (kare taban korunur); hazır ölçü yoksa cizimOlculeri.
+ */
+export function hazirOlculuCizimOlculeri(
+  tur: Solid3DType,
+  boy: number,
+  hazir: { width?: number; height?: number; depth?: number; radius?: number } | null | undefined,
+  tamSayi = false
+): CisimOlculeri {
+  if (!hazir) return cizimOlculeri(tur, boy, tamSayi);
+  const taban = cisimOlculeriniBirlestir(tur, hazir);
+  const en = tamSayi ? Math.max(1, Math.round(boy)) : boy;
+  const k = en / taban.width;
+  const yuvarla = (n: number) => (tamSayi ? Math.max(1, Math.round(n * k)) : Math.max(0.5, Number((n * k).toFixed(1))));
+  return { width: en, height: yuvarla(taban.height), depth: yuvarla(taban.depth), radius: en / 2 };
 }
 
 /**
