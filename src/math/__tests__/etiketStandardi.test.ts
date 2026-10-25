@@ -26,6 +26,9 @@ import type { ViewportTransform } from '@/types/math';
  */
 const KOK = path.resolve(__dirname, '../../components/workspace');
 const canvas2B = readFileSync(path.join(KOK, 'Canvas.tsx'), 'utf8');
+// Eksen rozetleri, sayıları ve orijin 2B'de zemin katmanı modülünde çizilir (Canvas yalnızca çağırır)
+const zemin2B = readFileSync(path.join(KOK, 'katmanlar', 'izgaraVeEksenler.tsx'), 'utf8');
+const noktalar2B = readFileSync(path.join(KOK, 'katmanlar', 'noktalarVeIzler.tsx'), 'utf8');
 const vp = (zoom: number) => ({ zoom } as ViewportTransform);
 
 describe('etiketStandardi: yazı boyu (Stil > Yazı Boyutları)', () => {
@@ -52,21 +55,26 @@ describe('etiketStandardi: yazı boyu (Stil > Yazı Boyutları)', () => {
     expect(ETIKET_TURLERI.eksenAdi).toMatchObject({ taban: 12, grup: 'axis', agirlik: 900 });
     expect(ETIKET_TURLERI.orijin).toMatchObject({ taban: 11, grup: 'axis', agirlik: 900 });
     // 2B kaynağındaki karşılıkları
-    expect(canvas2B).toContain("const adBoyu = fs(12, 'label');");
-    expect(canvas2B).toContain("<tspan fontSize={fs(10, 'label') * yaziOlcegi} className=\"font-normal fill-muted-foreground ml-1\">");
-    expect(canvas2B).toContain("fontSize={adBoyu * yaziOlcegi} className=\"fill-foreground font-bold select-none drop-shadow\"");
-    expect(canvas2B).toContain("fontSize={fs(11, 'axis')} className=\"fill-foreground/80 select-none font-bold\"");
-    expect(canvas2B).toContain('<text x="18" y="14" textAnchor="middle" fill="#ffffff" fontSize={fs(12, \'axis\')} className="font-black font-sans">');
-    expect(canvas2B).toContain('<text x="24" y="14" textAnchor="middle" fill="#737373" fontSize={fs(11, \'axis\')} className="font-mono font-black">');
+    // Nokta adı ve koordinatı noktalar katmanı modülünde çizilir (b.yaziBoyu = Canvas.fs)
+    expect(noktalar2B).toContain("const adBoyu = b.yaziBoyu(12, 'label');");
+    expect(noktalar2B).toContain("const koordinatBoyu = b.yaziBoyu(10, 'label');");
+    expect(noktalar2B).toContain("<tspan fontSize={koordinatBoyu * b.yaziOlcegi} className=\"font-normal fill-muted-foreground ml-1\">");
+    expect(noktalar2B).toContain("fontSize={adBoyu * b.yaziOlcegi} className=\"fill-foreground font-bold select-none drop-shadow\"");
+    expect(canvas2B).toContain('yaziBoyu: fs,');
+    expect(zemin2B).toContain("const EKSEN_RENGI = '#737373';");
+    expect(zemin2B).toContain("fontSize={yaziBoyu(11, 'axis')} className=\"fill-foreground/80 select-none font-bold\"");
+    expect(zemin2B).toContain('<text x="18" y="14" textAnchor="middle" fill="#ffffff" fontSize={yaziBoyu(12, \'axis\')} className="font-black font-sans">');
+    expect(zemin2B).toContain('<text x="24" y="14" textAnchor="middle" fill={EKSEN_RENGI} fontSize={yaziBoyu(11, \'axis\')} className="font-mono font-black">');
+    expect(canvas2B).toContain('eksenler(viewport, originScreen, eksenYerlesimi, fs, eksenSayiHalesi)');
     expect(canvas2B).toContain("px={fs(11, 'measure')}");
   });
 
   it('rozet ölçüleri 2B ile aynı (36 × 20 eksen, 48 × 20 orijin, rx 6)', () => {
     expect(EKSEN_ROZETI).toMatchObject({ genislik: ROZET_GENISLIK, yukseklik: ROZET_YUKSEKLIK, rx: 6, taban: 14 });
-    expect(canvas2B).toContain('<rect width="36" height="20" rx="6" fill="#737373" className="shadow-sm" />');
+    expect(zemin2B).toContain('<rect width="36" height="20" rx="6" fill={EKSEN_RENGI} className="shadow-sm" />');
     expect(ORIJIN_ROZETI).toMatchObject({ genislik: 48, yukseklik: 20, rx: 6, cizgi: 1.5, kayma: 8 });
-    expect(canvas2B).toContain('<rect width="48" height="20" rx="6" fill="#ffffff" stroke="#737373" strokeWidth="1.5" className="shadow-sm" />');
-    expect(canvas2B).toContain('<g data-canvas-label="" transform="translate(8, 8)">');
+    expect(zemin2B).toContain('<rect width="48" height="20" rx="6" fill="#ffffff" stroke={EKSEN_RENGI} strokeWidth="1.5" className="shadow-sm" />');
+    expect(zemin2B).toContain('<g data-canvas-label="" transform="translate(8, 8)">');
   });
 
   it('hale kalınlıkları: ölçü px · 0,32 (MatematikEtiketi), eksen sayısı fs(3) 2,5–6 px', () => {

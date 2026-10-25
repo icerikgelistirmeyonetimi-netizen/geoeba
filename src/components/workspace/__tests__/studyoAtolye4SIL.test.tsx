@@ -330,7 +330,9 @@ describe('[179] ilkokulda döndürme çeyrek / yarım / tam dönüş + yön; gö
     expect(olcme).toContain("{aktifTutamac === 'don' && !ilkokul && okumaHapi(donusOkumasi(donus)");
     expect(olcme).toContain('gonyeMenusu({ donusSvg: setsquareRotation, ilkokul })');
     const canvas = oku('Canvas.tsx');
-    expect(canvas).toMatch(/if \(ilkokul\) \{\s*\n\s*deg = ceyregeYuvarla\(deg\);/);
+    // Serbest döndürme kolu ilkokulda çeyrek dönüşe yuvarlar (serbestDondurme.ts; davranışı serbestDondurme.test.ts sınar)
+    expect(oku('serbestDondurme.ts')).toContain('if (secenek.ilkokul) return ceyregeYuvarla(derece);');
+    expect(canvas).toContain('serbestDonusDerecesi(bas, ekranda(olay), merkezEkran, { ilkokul, onBesli: olay.shiftKey })');
     expect((canvas.match(/ilkokul=\{ilkokul\}/g) ?? []).length).toBeGreaterThanOrEqual(4);
   });
 });

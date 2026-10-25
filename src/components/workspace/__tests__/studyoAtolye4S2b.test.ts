@@ -274,7 +274,8 @@ describe('[159] yeni sürgü boş yere konur, çubukların altında kalmaz, göv
 describe('[160] yazı eklenince araç Seç ve Taşı\'ya döner', () => {
   it('Tuvale Ekle ve Vazgeç yazı aracını kapatır; düzenleme aracı değiştirmez', () => {
     const tuval = oku('Canvas.tsx');
-    expect(tuval).toMatch(/addObject\(newTextObj, `"\$\{text\}" notu eklendi`\);\s*\/\/ Metin eklendi: araç Seç ve Taşı'ya döner \(alan uzmanı, 4\. tur\)\s*if \(activeTool === 'text'\) setActiveTool\('select'\);/);
+    // Canvas.notuKaydet (davranışı fareBirakma.test.ts de sınar)
+    expect(tuval).toMatch(/addObject\(notNesnesi\(metin, pendingTextWorldPos, renk, boy\), `"\$\{metin\}" notu eklendi`\);\s*if \(activeTool === 'text'\) setActiveTool\('select'\);/);
     expect(tuval).toMatch(/if \(!editingTextObj && activeTool === 'text'\) setActiveTool\('select'\);/);
   });
 });

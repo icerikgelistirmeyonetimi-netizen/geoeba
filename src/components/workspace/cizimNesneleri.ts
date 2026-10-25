@@ -20,7 +20,7 @@ import { formatTurkishNumber } from '@/math/coordinates';
 import { ilkokulUzunlukMetni } from './ilkokulKipi';
 import type {
   AngleObject, ArcObject, ButtonObject, CheckboxObject, CircleObject, EllipseObject, FractionObject, InputBoxObject, LineObject, MathObject,
-  MeasurementObject, Point2D, PointObject, PolygonObject, RayObject, SectorObject, SegmentObject, SliderObject,
+  MeasurementObject, PenStrokeObject, Point2D, PointObject, PolygonObject, RayObject, SectorObject, SegmentObject, SliderObject, TextObject,
 } from '@/types/math';
 import type { ToolMode } from '@/types/workspace';
 
@@ -777,4 +777,36 @@ export const surukleParcaUzunlugu = (uzaklik: number, izgaraya: boolean | undefi
 export function onizlemeUzunlugu(uzaklik: number, secenek: { ilkokul: boolean; tamSayi: boolean }): string {
   if (secenek.ilkokul) return ilkokulUzunlukMetni(uzaklik, 'br');
   return `${formatTurkishNumber(secenek.tamSayi ? Math.round(uzaklik) : uzaklik)} br`;
+}
+
+/** Kalemle çizilen serbest çizgi: pembe, 3 px, adı gizli */
+export function kalemCizgisi(noktalar: Point2D[]): PenStrokeObject {
+  return {
+    id: createId('pen'),
+    type: 'pen',
+    label: 'Serbest Çizim',
+    showLabel: false,
+    points: noktalar,
+    thickness: 3,
+    color: NESNE_RENGI.pembe,
+    visible: true,
+    createdAt: Date.now(),
+  };
+}
+
+/** Metin notu: adı yazının ilk 20 harfi */
+export function notNesnesi(metin: string, konum: Point2D, renk: string, boy: number): TextObject {
+  return {
+    id: createId('txt'),
+    type: 'text',
+    label: metin.slice(0, 20),
+    showLabel: true,
+    text: metin,
+    x: konum.x,
+    y: konum.y,
+    fontSize: boy,
+    color: renk,
+    visible: true,
+    createdAt: Date.now(),
+  };
 }

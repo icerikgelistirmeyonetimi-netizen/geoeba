@@ -92,7 +92,8 @@ describe('[149] aynı yerde ikinci nokta açılmaz; doğru denklemi nokta adına
   it('Canvas denklemi ön geçişteki yerden çizer', () => {
     const canvas = oku('Canvas.tsx');
     expect(canvas).toMatch(/const denklemYerleri = useMemo/);
-    expect(canvas).toMatch(/denklemYerleri\.get\(line\.id\)/);
+    // Doğrunun denklem etiketi (Canvas.denklemEtiketi) yerini önce ön geçişten okur
+    expect(canvas).toMatch(/denklemYerleri\.get\(dogru\.id\)/);
   });
 });
 

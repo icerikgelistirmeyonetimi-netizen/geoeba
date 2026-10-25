@@ -186,9 +186,9 @@ export function duzgunCokgenKur(targetPos: Point2D) {
   };
 }
 
-/** WorkspaceProvider + 2B tuval (Canvas): fareyle basma, sürükleme, bırakma */
-export function tuvalKur() {
-  const tuval = bilesen('tuval', Canvas as (p: Record<string, unknown>) => unknown, { onSwitchTo3D: () => {} }, { efektler: false });
+/** WorkspaceProvider + 2B tuval (Canvas): fareyle basma, sürükleme, bırakma. `ekOzellikler` tuvalin diğer özellikleri (cisimler) */
+export function tuvalKur(ekOzellikler: Record<string, unknown> = {}) {
+  const tuval = bilesen('tuval', Canvas as (p: Record<string, unknown>) => unknown, { onSwitchTo3D: () => {}, ...ekOzellikler }, { efektler: false });
   const k = saglayiciKur(() => [tuval as Bilesen<unknown, unknown>]);
   durula([tuval as Bilesen<unknown, unknown>], k.kaydet);
   const sahteSvg = {
@@ -274,5 +274,7 @@ export function tuvalKur() {
     },
     /** Tuval ağacında koşulu sağlayan öğe */
     oge: (kosul: (o: AgacOgesi) => boolean) => ogeBul(tuval.sonuc, kosul),
+    /** Tuvalin son çizimdeki öğe ağacı (çizim çıktısı kayıtları için) */
+    agac: () => tuval.sonuc,
   };
 }
