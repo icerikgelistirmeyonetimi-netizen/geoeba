@@ -1130,20 +1130,22 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
                       </p>
                     )}
                   </div>
-                  {icerikAdresi && (
-                    <button
-                      ref={tamEkranDugmeRef}
-                      type="button"
-                      className={s['icerik-tam-ekran']}
-                      aria-label="Tam ekran"
-                      title="Tam ekranda aç"
-                      onClick={tamEkranaGec}
-                    >
-                      {ikon.tamEkran}
-                      <span aria-hidden="true">Tam ekran</span>
-                    </button>
-                  )}
                 </div>
+                {/* Başlığın dışında: genişte başlığın sağında, dar ekranda kapat (×) düğmesinin hemen altında
+                    (adalar.module.css .icerik ızgarası); başlık satırı daralmaz */}
+                {icerikAdresi && (
+                  <button
+                    ref={tamEkranDugmeRef}
+                    type="button"
+                    className={s['icerik-tam-ekran']}
+                    aria-label="Tam ekran"
+                    title="Tam ekranda aç"
+                    onClick={tamEkranaGec}
+                  >
+                    {ikon.tamEkran}
+                    <span aria-hidden="true">Tam ekran</span>
+                  </button>
+                )}
                 {acikSayfalar.length > 1 && (
                   <div className={s['icerik-secici']} role="tablist" aria-label={`${icerik.konu.title} içerikleri`}>
                     {acikSayfalar.map((sayfa, sira) => (
