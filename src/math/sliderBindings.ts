@@ -7,6 +7,8 @@ import { withUserFunctions } from './functionNames';
 export interface SliderBindingTarget {
   id: string;
   label: string;
+  /** Tür: şekiller ayar penceresinde, doğrular ve açılar nesnenin sağ tık menüsünde bağlanır */
+  tur: 'dogru' | 'aci' | 'sekil';
   properties: { key: string; label: string; disabled?: boolean }[];
 }
 
@@ -218,7 +220,10 @@ function ownsBinding(objects: readonly MathObject[], sliderId: string, target: M
   }
 }
 
-/** Açılır listede düzenlenen kaydırıcının kendi bağı yeniden seçilebilir. */
+/**
+ * Kaydırıcının bağlanabileceği nesneler ve özellikleri: şekiller (ayar penceresinin listesi) ile doğru parçası, doğru,
+ * ışın ve açı (nesnenin sağ tık menüsü). Düzenlenen kaydırıcının kendi bağı yeniden seçilebilir.
+ */
 export function sliderBindingTargets(objects: readonly MathObject[], editedSliderId?: string): SliderBindingTarget[] {
   const ownedId = objects.some(o => o.id === editedSliderId && o.type === 'slider') ? editedSliderId : undefined;
   const shared = !!ownedId && hasSharedTriangleBinding(objects, ownedId);
@@ -229,7 +234,19 @@ export function sliderBindingTargets(objects: readonly MathObject[], editedSlide
     if (object.visible === false) return [];
     let properties: SliderBindingTarget['properties'];
     let defaultLabel: string;
-    if (object.type === 'polygon') {
+    let tur: SliderBindingTarget['tur'] = 'sekil';
+    let label = object.label;
+    if (object.type === 'segment' || object.type === 'line' || object.type === 'ray') {
+      tur = 'dogru';
+      defaultLabel = object.type === 'segment' ? 'Doğru parçası' : object.type === 'line' ? 'Doğru' : 'Işın';
+      label = object.label ? `${object.label} ${object.type === 'segment' ? 'doğru parçası' : object.type === 'line' ? 'doğrusu' : 'ışını'}` : '';
+      properties = [{ key: 'length', label: 'Uzunluk' }];
+    } else if (object.type === 'angle') {
+      tur = 'aci';
+      defaultLabel = 'Açı';
+      label = object.label ? `${object.label} açısı` : '';
+      properties = [{ key: 'angle', label: 'Açı ölçüsü (°)' }];
+    } else if (object.type === 'polygon') {
       const count = object.pointIds.length;
       defaultLabel = 'Çokgen';
       properties = [
@@ -257,9 +274,11 @@ export function sliderBindingTargets(objects: readonly MathObject[], editedSlide
             || (property.key === 'sides' && kenarSayisiBaglanabilir(availableObjects, availableObject))));
       return available ? property : { ...property, disabled: true };
     });
-    return [{ id: object.id, label: object.label || defaultLabel, properties }];
-  });
+    return [{ id: object.id, label: label || defaultLabel, tur, properties }];
+  // Şekiller önde (eski sıra korunur), ardından doğrular ve açılar
+  }).sort((a, b) => HEDEF_SIRASI.indexOf(a.tur) - HEDEF_SIRASI.indexOf(b.tur));
 }
+const HEDEF_SIRASI: SliderBindingTarget['tur'][] = ['sekil', 'dogru', 'aci'];
 
 /**
  * Kaydırıcının şu anki şekil bağı: ayarlar penceresi açılınca bağlı olduğu şekil ve özellik seçili gelir. Önce kayıtlı
@@ -285,6 +304,8 @@ export function sliderCurrentBinding(objects: readonly MathObject[], sliderId: s
 export function sliderIsBound(objects: readonly MathObject[], sliderId: string): boolean {
   const slider = objects.find(o => o.id === sliderId);
   if (slider?.type !== 'slider') return false;
+  // 3B cismin özelliğine bağ kaydırıcının kendisinde tutulur
+  if (slider.cisimBagi && !slider.cisimBagi.askida) return true;
   return objects.some(o => (o.type === 'point' && constructionDependencies(o).includes(sliderId)) ||
     (o.type === 'ellipse' && Object.values(o.sliderBindings ?? {}).includes(sliderId)) ||
     (o.type === 'function' && extractVariableNames(o.expression).includes(slider.variableName)));
@@ -294,8 +315,9 @@ export function sliderIsBound(objects: readonly MathObject[], sliderId: string):
 function detachSliderGeometry(objects: readonly MathObject[], removed: ReadonlySet<string>): MathObject[] {
   const values = new Map(objects.flatMap(o => o.type === 'slider' ? [[o.id, o.value] as const] : []));
   return objects.map(o => {
-    if (o.type === 'slider' && removed.has(o.id) && o.bindingTarget) {
-      const { bindingTarget: _bindingTarget, ...rest } = o;
+    if (o.type === 'slider' && removed.has(o.id) && (o.bindingTarget || o.cisimBagi)) {
+      // Cisim bağı da çözülür: cisim son değerinde kalır
+      const { bindingTarget: _bindingTarget, cisimBagi: _cisim, cisimBagOncekiDeger: _onceki, ...rest } = o;
       return rest;
     }
     if (o.type === 'point') {
@@ -357,6 +379,12 @@ function rememberBinding(objects: MathObject[], sliderId: string, objectId: stri
  * sürüklenebilir, kaydırıcı hangi şeklin hangi özelliğine bağlı olduğunu `suspendedBinding` ile hatırlar.
  */
 export function sliderBaginiAskiyaAl(objects: MathObject[], sliderId: string): MathObject[] {
+  // 3B cisim bağı: kaydırıcıda askıya alınır; cisim bağdan önceki değerine 3B sahnesinde döner (cisimBaglari.ts)
+  const cisimli = objects.find((o): o is SliderObject => o.id === sliderId && o.type === 'slider' && !!o.cisimBagi && !o.cisimBagi.askida);
+  if (cisimli?.cisimBagi) {
+    const { cisimId, ozellik } = cisimli.cisimBagi;
+    return objects.map(o => (o.id === sliderId ? { ...cisimli, cisimBagi: { ...cisimli.cisimBagi!, askida: true }, suspendedBinding: { objectId: cisimId, propertyKey: `cisim:${ozellik}` } } : o));
+  }
   const bag = sliderCurrentBinding(objects, sliderId);
   if (!bag) throw new Error('Kaydırıcı bir şeklin kenarına, açısına ya da yarıçapına bağlı değil.');
   if (hasSharedTriangleBinding(objects, sliderId)) throw new Error('Bu kaydırıcı üçgenin diğer kaydırıcılarıyla ortak bağlı; bağı tek başına kapatılamaz.');
@@ -397,6 +425,12 @@ export function sliderBaginiAskiyaAl(objects: MathObject[], sliderId: string): M
 /** Geçici olarak kapatılan bağı yeniden kurar: şekil kaydırıcının o anki değerine döner. Kurulamazsa hata verir, sahne aynı kalır. */
 export function sliderBaginiSurdur(objects: MathObject[], sliderId: string, createPointId: () => string): MathObject[] {
   const slider = objects.find(o => o.id === sliderId);
+  if (slider?.type === 'slider' && slider.cisimBagi?.askida) {
+    // 3B cisim bağı yeniden açılır: cisim kaydırıcının değerini alır
+    const { askida: _askida, ...bag } = slider.cisimBagi;
+    const { suspendedBinding: _kapali, ...kalan } = slider;
+    return objects.map(o => (o.id === sliderId ? { ...kalan, cisimBagi: bag } : o));
+  }
   if (slider?.type !== 'slider' || !slider.suspendedBinding) throw new Error('Kaydırıcının kapatılmış bir bağı yok.');
   const { objectId, propertyKey } = slider.suspendedBinding;
   if (!objects.some(o => o.id === objectId)) throw new Error('Kaydırıcının bağlı olduğu şekil artık yok. Ayarlardan yeni bir şekle bağlayın.');

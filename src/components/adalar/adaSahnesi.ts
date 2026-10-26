@@ -1700,6 +1700,20 @@ export class AdaSahnesi extends EventTarget {
   // ---------------------------------------------------------------------------
   // Döngü
   // ---------------------------------------------------------------------------
+  /**
+   * Sahne tamamen örtülüyken (tam ekran ders) çizim durur; ders aynı ana iş parçacığında
+   * çalıştığından kare döngüsü ona yer açar. Sürerken saat sıfırlanır, zaman sıçramaz.
+   */
+  duraklat(dur: boolean): void {
+    if (!this.hazir) return;
+    if (dur) {
+      this.renderer.setAnimationLoop(null);
+      return;
+    }
+    this.saat.getDelta();
+    this.renderer.setAnimationLoop(() => this.kare());
+  }
+
   private kare(): void {
     if (!this.hazir) return;
     const dt = Math.min(this.saat.getDelta(), 0.1);

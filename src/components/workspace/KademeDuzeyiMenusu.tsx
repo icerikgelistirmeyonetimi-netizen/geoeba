@@ -4,7 +4,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Backpack, BookOpen, Check, GraduationCap, Shapes } from 'lucide-react';
 import { useWorkspace } from '@/state/WorkspaceContext';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
-import { useOturum, OTURUM_ADLARI } from '@/state/OturumContext';
+import { useOturum } from '@/state/OturumContext';
 import { TREE_TOOL_GROUPS } from './treeToolDefinitions';
 import { ARAC_KATEGORI_RENKLERI } from './toolDefinitions';
 import {
@@ -126,11 +126,9 @@ export function KademeDuzeyiMenusu({ acik, onBaslikTikla, onBaslikUzerine, onKap
   const ozet = gosterilen === 'tum' ? 'Panel süzülmez; bütün araçlar görünür.' : KADEME_DUZEYLERI[gosterilen].konular;
   const etiket = kademeEtiketi(duzey);
 
-  if (oturum.kademe) return <button type="button" onClick={oturum.oturumuKapat}
-    className="min-h-[44px] px-3 py-1 rounded-md inline-flex items-center gap-2 text-foreground/80 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-    data-kademe-duzeyi={duzey} aria-label={`${OTURUM_ADLARI[oturum.kademe]} oturumu. Oturumu değiştir`} title="Oturumu değiştir">
-    <span>{OTURUM_ADLARI[oturum.kademe]} oturumu</span>
-  </button>;
+  // Kademe oturumunda menü çubuğunda oturum düğmesi yok (kullanıcı isteği, 24 Ekim 2026): kademe araç panelinin
+  // başındaki çipte görünür, oturum Başlat menüsünden değiştirilir.
+  if (oturum.kademe) return null;
 
   return (
     <div ref={kokRef} className="relative">

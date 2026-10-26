@@ -90,7 +90,7 @@ export function SinifRozeti({ sinif, onDegistir, disabled }: { sinif: OlasilikSi
       disabled={disabled}
       aria-label={`Sınıfı değiştir (şimdi ${sinif}. sınıf)`}
       title="Sınıfı değiştir"
-      className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-[calc(var(--radius)-4px)] border border-border bg-card pl-2 pr-3 text-sm font-bold text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex min-h-[44px] basik:min-h-[36px] shrink-0 items-center gap-1.5 rounded-[calc(var(--radius)-4px)] border border-border bg-card pl-2 pr-3 text-sm font-bold text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
       data-sinif-rozeti={sinif}
     >
       <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

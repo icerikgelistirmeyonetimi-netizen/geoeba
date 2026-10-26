@@ -377,6 +377,13 @@ export interface SliderObject extends BaseMathObject {
    * hangi şeklin hangi özelliğine bağlı olduğunu hatırlar; yeniden tıklanınca bağ kaydırıcının değeriyle kurulur.
    */
   suspendedBinding?: { objectId: string; propertyKey: string };
+  /**
+   * 3B cismin özelliğine bağ (cisimBaglari.ts): cisim 3B sahnesindedir, bağ kaydırıcıda tutulur. `ad` görünen ölçü adıdır
+   * ("Küp 1: kenar uzunluğu"); `askida` bağ geçici olarak kapalı.
+   */
+  cisimBagi?: { cisimId: string; ozellik: 'kenar' | 'genislik' | 'derinlik' | 'yukseklik' | 'yaricap' | 'donme' | 'acinim'; ad: string; askida?: boolean };
+  /** Cisim bağından önceki özellik değeri: bağ geçici kapatılınca cisim buna döner */
+  cisimBagOncekiDeger?: number;
   min: number;
   max: number;
   step: number;

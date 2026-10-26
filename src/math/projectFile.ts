@@ -255,7 +255,7 @@ export function validateProjectObjects(input: unknown): MathObject[] {
   function references(value: unknown, key = '', parent?: Row): string[] {
     // armOfAngleId yalnızca "bu parça şu açının kolu" hatırlatmasıdır: açı silinince parça kalabilir,
     // bu yüzden eksik hedefi kaydı reddettirmemeli (reddedilince kayıtlı çizim boş açılıyordu).
-    if (key === 'id' || key === 'releasedRadiusPointId' || key === 'armOfAngleId' || key === 'labelAnchors' || key === 'bindingTarget' || key === 'suspendedBinding') return [];
+    if (key === 'id' || key === 'releasedRadiusPointId' || key === 'armOfAngleId' || key === 'labelAnchors' || key === 'bindingTarget' || key === 'suspendedBinding' || key === 'cisimBagi') return [];
     if (key === 'centerPointId' && parent?.type === 'circle' && parent.throughPointIds?.length) return [];
     if (key === 'sliderBindings') return Object.values(row(value)).flatMap(sliderId => references(sliderId, 'sliderId'));
     if (typeof value === 'string' && (/Ids?$/.test(key) || key === 'dependsOn')) {

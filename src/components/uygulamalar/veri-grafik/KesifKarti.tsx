@@ -227,7 +227,7 @@ function EylemSimgesi({ eylem }: { eylem: RehberEylemi }) {
 // ── Parçalar ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 const HAYALET_DUGME =
-  'grid h-11 w-11 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+  'grid h-11 w-11 basik:h-9 basik:w-9 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 /** Yalnız simgeli adım düğmesi (44 × 44; DUGME ile aynı çerçeve) */
 const SIMGE_ADIM_DUGMESI =
@@ -373,13 +373,13 @@ export function KesifKarti({ ornek, sekme, ozellikler, gorunum, onGorunum, onKap
         data-ornek-ipucu="serit"
       >
         <BilgiSimgesi className="h-4 w-4 text-primary dark:text-[#9fe0d9]" />
-        <p className="line-clamp-2 min-w-0 flex-1 py-1" data-serit-metni>
+        <p className="line-clamp-2 basik:line-clamp-1 min-w-0 flex-1 py-1 basik:py-0.5" data-serit-metni>
           {soruyuGoster && <strong className="font-bold">{metin ? `${soru} ` : soru}</strong>}
           {metin}
         </p>
         <button
           type="button"
-          className="inline-flex h-11 shrink-0 items-center gap-1 rounded-full border border-border bg-card pl-3.5 pr-2.5 text-[13px] font-bold text-primary shadow-[0_1px_2px_rgba(6,40,45,.08)] hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-[#9fe0d9]"
+          className="inline-flex h-11 basik:h-9 shrink-0 items-center gap-1 rounded-full border border-border bg-card pl-3.5 pr-2.5 text-[13px] font-bold text-primary shadow-[0_1px_2px_rgba(6,40,45,.08)] hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:text-[#9fe0d9]"
           aria-expanded={false}
           title={`Rehberli keşfi aç: ${adimlar.length} adım`}
           onClick={() => onGorunum('kart')}

@@ -11,6 +11,7 @@ import { MatematikMetni } from '@/components/workspace/MatematikMetni';
 import {
   rebindSliderProperty, sliderBindingTargets, sliderCurrentBinding, sliderIsBound, snapSliderValue, validateSliderSettings,
 } from '@/math/sliderBindings';
+import { ayarDegeriKapsar, onerilenSurguAyari, ozellikDegeri } from '@/math/surguOnerisi';
 import type { MathObject } from '@/types/math';
 
 interface SliderSettingsDialogProps {
@@ -31,6 +32,8 @@ const NUMBER_FIELDS: { key: NumberField; label: string }[] = [
   { key: 'value', label: 'Mevcut değer' },
 ];
 const INPUT_CLASS = 'w-full px-3 py-2 rounded-lg bg-input border border-border text-foreground outline-none focus:ring-1 focus:ring-primary';
+const ACI_ANAHTARI = (key: string) => key.startsWith('angle:') || key === 'angle' || key === 'centralAngle' || key === 'rotation';
+const sayiYazisi = (n: number) => String(n).replace('.', ',');
 
 /** Ondalık virgülü kabul eder; boş metni, kısmi sayıyı ve sonsuz değerleri reddeder. */
 function parseNumber(raw: string): number | null {
@@ -56,7 +59,12 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
   const generalTabRef = useRef<HTMLButtonElement>(null);
 
   const slider = objects.find(object => object.id === sliderId && object.type === 'slider');
-  const targets = useMemo(() => sliderBindingTargets(objects, sliderId ?? undefined), [objects, sliderId]);
+  // Liste kısa kalsın diye yalnız şekiller (eski liste); doğru parçası, doğru ya da açı yalnız bu kaydırıcının bağlı
+  // olduğu (ya da geçici kapalı bağının) nesnesiyse görünür. Onlar nesnenin sağ tık menüsünden ("Sürgüye bağla") bağlanır.
+  const targets = useMemo(() => {
+    const kendi = sliderId ? [sliderCurrentBinding(objects, sliderId)?.targetId, slider?.type === 'slider' ? slider.suspendedBinding?.objectId : undefined] : [];
+    return sliderBindingTargets(objects, sliderId ?? undefined).filter(item => item.tur === 'sekil' || kendi.includes(item.id));
+  }, [objects, sliderId, slider]);
   const target = targets.find(item => item.id === targetId);
   const bound = sliderId ? sliderIsBound(objects, sliderId) : false;
 
@@ -135,7 +143,7 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
     }
     if (targetId && (!target || !target.properties.some(property => property.key === propertyKey && !property.disabled))) {
       setActiveTab('general');
-      setError(target ? 'Kaydırıcıyla değiştirilecek özelliği seçin.' : 'Seçilen şekil artık bağlanabilir değil. Başka bir şekil seçin.');
+      setError(target ? 'Kaydırıcıyla değiştirilecek özelliği seçin.' : 'Seçilen nesne artık bağlanabilir değil. Başka bir nesne seçin.');
       return;
     }
 
@@ -251,9 +259,9 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
           </div>
 
           <div className="space-y-3 border-t border-border pt-3">
-            <p id="slider-settings-hint" className="text-muted-foreground leading-relaxed">{bound ? 'Şekil bağlantısını değiştirmek için şekli ve özelliği seçin.' : 'Önce şekli, sonra değiştirmek istediğiniz kenar, açı veya diğer özelliği seçin.'}</p>
+            <p id="slider-settings-hint" className="text-muted-foreground leading-relaxed">{bound ? 'Bağlantıyı değiştirmek için nesneyi ve özelliği seçin.' : 'Önce nesneyi, sonra değiştirmek istediğiniz kenar, açı veya diğer özelliği seçin.'}</p>
             <div className="space-y-1">
-              <label htmlFor="slider-settings-target" className="font-semibold text-foreground">Şekil</label>
+              <label htmlFor="slider-settings-target" className="font-semibold text-foreground">Nesne</label>
               <select
                 id="slider-settings-target"
                 value={targetId}
@@ -265,7 +273,7 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
                 }}
                 className={INPUT_CLASS}
               >
-                <option value="">{bound ? 'Mevcut bağlantıyı koru' : 'Şekil seçin'}</option>
+                <option value="">{bound ? 'Mevcut bağlantıyı koru' : 'Nesne seçin'}</option>
                 {targets.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
               </select>
             </div>
@@ -279,24 +287,34 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
                     const key = event.target.value;
                     setPropertyKey(key);
                     setError(null);
+                    const nesne = objects.find(object => object.id === targetId);
                     // Kenar sayısı 3–30 arası tam sayıdır: aralık buna uymuyorsa önerilen aralık yazılır, değer çokgenin
                     // şimdiki kenar sayısıdır (kaydedince şekil değişmez)
-                    const cokgen = objects.find(object => object.id === targetId);
-                    if (key !== 'sides' || cokgen?.type !== 'polygon') return;
-                    const n = cokgen.pointIds.length;
-                    setNumbers(previous => {
-                      const [en, enCok, adim] = [parseNumber(previous.min), parseNumber(previous.max), parseNumber(previous.step)];
-                      const uygun = en !== null && enCok !== null && adim !== null && en >= 3 && enCok <= 30 && Number.isInteger(adim) && n >= en && n <= enCok;
-                      return uygun ? { ...previous, value: String(n) } : { min: '3', max: String(Math.max(12, n)), step: '1', value: String(n) };
-                    });
+                    if (key === 'sides' && nesne?.type === 'polygon') {
+                      const n = nesne.pointIds.length;
+                      setNumbers(previous => {
+                        const [en, enCok, adim] = [parseNumber(previous.min), parseNumber(previous.max), parseNumber(previous.step)];
+                        const uygun = en !== null && enCok !== null && adim !== null && en >= 3 && enCok <= 30 && Number.isInteger(adim) && n >= en && n <= enCok;
+                        return uygun ? { ...previous, value: String(n) } : { min: '3', max: String(Math.max(12, n)), step: '1', value: String(n) };
+                      });
+                      return;
+                    }
+                    // Diğer özelliklerde kaydırıcı özelliğin şimdiki değeriyle gelir (kaydedince nesne yerinden oynamaz). Yazılan
+                    // aralık bu değeri adım ızgarasında kapsıyorsa yalnız değer değişir; kapsamıyorsa önerilen aralık yazılır.
+                    const olcu = key ? ozellikDegeri(objects, targetId, key) : null;
+                    if (!olcu) return;
+                    const oneri = onerilenSurguAyari(olcu);
+                    setNumbers(previous => ayarDegeriKapsar(parseNumber(previous.min), parseNumber(previous.max), parseNumber(previous.step), oneri.value)
+                      ? { ...previous, value: sayiYazisi(oneri.value) }
+                      : { min: sayiYazisi(oneri.min), max: sayiYazisi(oneri.max), step: sayiYazisi(oneri.step), value: sayiYazisi(oneri.value) });
                   }}
                   className={INPUT_CLASS}
                 >
                   <option value="">Özellik seçin</option>
                   {[
                     { label: 'Kenarlar', properties: target.properties.filter(property => property.key.startsWith('edge:')) },
-                    { label: 'Açılar', properties: target.properties.filter(property => property.key.startsWith('angle:') || property.key === 'centralAngle' || property.key === 'rotation') },
-                    { label: 'Diğer özellikler', properties: target.properties.filter(property => !property.key.startsWith('edge:') && !property.key.startsWith('angle:') && property.key !== 'centralAngle' && property.key !== 'rotation') },
+                    { label: 'Açılar', properties: target.properties.filter(property => ACI_ANAHTARI(property.key)) },
+                    { label: 'Diğer özellikler', properties: target.properties.filter(property => !property.key.startsWith('edge:') && !ACI_ANAHTARI(property.key)) },
                   ].filter(group => group.properties.length > 0).map(group => (
                     <optgroup key={group.label} label={group.label}>
                       {group.properties.map(property => <option key={property.key} value={property.key} disabled={property.disabled}>{property.label}{property.disabled ? ' — düzenlenemiyor' : ''}</option>)}
@@ -307,6 +325,7 @@ export function SliderSettingsDialog({ sliderId, onClose }: SliderSettingsDialog
               </div>
             )}
             {targets.length === 0 && <p className="text-muted-foreground leading-relaxed">Şu anda bağlanabilecek bir şekil yok. Kaydırıcının aralığını ve adımını yine de düzenleyebilirsiniz.</p>}
+            <p className="text-muted-foreground leading-relaxed">Doğru parçası ve açı, nesnenin sağ tık menüsündeki “Sürgüye bağla” ile bağlanır.</p>
           </div>
         </div>
 

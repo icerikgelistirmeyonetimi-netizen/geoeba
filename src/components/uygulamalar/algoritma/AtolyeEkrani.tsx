@@ -19,7 +19,7 @@ import { CozumKarti } from './CozumKarti';
 import { temelDuzeyMetni } from './AritmetikInceleme';
 import { SIMGE } from './simgeler';
 import { kalipBul } from './kaliplar';
-import { DAR_ESIK, DUGME, GOSTERGE, sayimlarKadar, useBoyut } from './ortak';
+import { DAR_ESIK, DUGME, GOSTERGE, basikMi, sayimlarKadar, useBoyut } from './ortak';
 import { atolyeGuncelle, atolyeKaydi, type LabKaydi } from './kayit';
 import { blokSayisi, bloklar, sayiMetni, type Program } from './program';
 import { calistir, type Iz } from './yorumlayici';
@@ -51,7 +51,8 @@ export function AtolyeEkrani({
   onGeri: () => void;
 }) {
   const [kokRef, boyut] = useBoyut<HTMLDivElement>();
-  const dar = boyut.en > 0 && boyut.en < DAR_ESIK;
+  const basik = basikMi(boyut);
+  const dar = boyut.en > 0 && boyut.en < DAR_ESIK && !basik;
   const gizli = boyut.en === 0 || boyut.boy === 0;
   const kart = atolye.gorunum === 'kart';
   const ifadeBirimi = atolye.gorunum === 'ifade' || atolye.sinif === 5;
@@ -228,7 +229,7 @@ export function AtolyeEkrani({
   const ipuclari = [kalip ? `${atolye.ipucu} (Kalıp: ${kalip.ad})` : atolye.ipucu, ...(atolye.ipuclari ?? [])];
 
   const yonerge = (
-    <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-card px-4 py-3" data-atolye-yonergesi>
+    <header className={`flex flex-wrap items-center gap-x-4 border-b border-border bg-card ${basik ? 'gap-y-1 px-3 py-1.5' : 'gap-y-2 px-4 py-3'}`} data-atolye-yonergesi>
       <button type="button" onClick={onGeri} className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full px-3 text-[14px] font-bold text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-atolyeden-don>
         <SIMGE.ok className="h-4 w-4 rotate-180" /> {atolye.sinif}. sınıf
       </button>
@@ -244,7 +245,7 @@ export function AtolyeEkrani({
             ))}
           </span>
         </div>
-        <p className={`mt-0.5 font-semibold leading-snug text-foreground ${kart ? 'text-[19px]' : 'text-[17px]'}`}>{atolye.yonerge}</p>
+        <p className={`mt-0.5 font-semibold leading-snug text-foreground ${basik ? (kart ? 'text-[16px]' : 'text-[15px]') : kart ? 'text-[19px]' : 'text-[17px]'}`}>{atolye.yonerge}</p>
         <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1" aria-label="Yıldız ölçütleri">
           {olcutler.map((o) => (
             <li key={o.n} className="inline-flex items-center gap-1.5 text-[13px] font-bold text-muted-foreground">
@@ -268,7 +269,7 @@ export function AtolyeEkrani({
   );
 
   const tuval = (
-    <section className={`flex min-w-0 flex-col ${dar ? '' : 'min-h-0 flex-1'} p-3`} aria-label="Tuval">
+    <section className={`flex min-w-0 flex-col ${dar ? '' : 'min-h-0 flex-1'} ${basik ? 'p-2' : 'p-3'}`} aria-label="Tuval">
       <div className={dar ? 'h-[320px]' : 'min-h-0 flex-1'}>
         <SahneAlani ref={sahneRef} dunya={dunya} donanim={donanim} koyu={koyu} azHareket={azHareket} gizli={gizli} durum={durum} ustBilgi={dunyaCipleri}
           ipucu={
@@ -315,9 +316,11 @@ export function AtolyeEkrani({
   };
   const kod = (
     <aside className={`${dar ? 'mx-3 mb-4 min-h-[460px] rounded-[calc(var(--radius)-2px)] border' : 'w-[clamp(340px,34%,460px)] shrink-0 border-l'} flex min-h-0 flex-col border-border bg-card`} aria-label="Kod">
-      <div className="flex flex-wrap items-center gap-1 border-b border-border px-2 py-2" role="tablist" aria-label="Kod görünümü" data-kod-gorunumu>
+      {/* Basıkta seçici tek satır: yalnız etkin görünümün adı yazılır (görev ekranıyla aynı) */}
+      <div className={`flex flex-wrap items-center gap-1 border-b border-border px-2 ${basik ? 'py-1' : 'py-2'}`} role="tablist" aria-label="Kod görünümü" data-kod-gorunumu>
         {gorunumler.map((k) => {
           const [ad, S] = GORUNUMLER[k];
+          const kisa = basik && etkinGorunum !== k;
           return (
             <button
               key={k}
@@ -325,11 +328,12 @@ export function AtolyeEkrani({
               role="tab"
               aria-selected={etkinGorunum === k}
               onClick={() => setGorunum(k)}
-              className={`inline-flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-full px-2 text-[13px] font-bold ${etkinGorunum === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+              title={kisa ? ad : undefined}
+              className={`inline-flex min-h-[38px] ${kisa ? 'w-10 flex-none' : 'flex-1'} items-center justify-center gap-1.5 rounded-full px-2 text-[13px] font-bold ${etkinGorunum === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
               data-gorunum={k}
             >
               <S className="h-4 w-4 shrink-0" />
-              {ad}
+              {kisa ? <span className="sr-only">{ad}</span> : ad}
             </button>
           );
         })}
@@ -367,10 +371,13 @@ export function AtolyeEkrani({
 
   return (
     <div ref={kokRef} className="relative flex h-full w-full flex-col bg-background text-foreground" data-atolye={atolye.id}>
-      {yonerge}
-      <div className={`min-h-0 flex-1 ${dar ? 'overflow-auto' : 'flex'}`}>
-        {tuval}
-        {kod}
+      {/* Basıkta yönerge ile gövde birlikte kayar (görev ekranıyla aynı düzen; bkz. ortak.tsx basikMi) */}
+      <div className={basik ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain' : 'flex min-h-0 flex-1 flex-col'} data-basik={basik || undefined}>
+        {yonerge}
+        <div className={basik ? 'flex h-full' : `min-h-0 flex-1 ${dar ? 'overflow-auto' : 'flex'}`}>
+          {tuval}
+          {kod}
+        </div>
       </div>
       {cozumAcik && <CozumKarti program={atolye.cozumler?.[dunyaSira] ?? atolye.cozum} onKapat={() => setCozumAcik(false)} sozde={etkinGorunum !== 'bloklar'} />}
     </div>

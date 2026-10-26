@@ -444,7 +444,8 @@ describe('bağlanabilir hedefler ve koruma', () => {
       { ...base('lockedPoly'), type: 'polygon', pointIds: ['A', 'B', 'C'], locked: true },
     ];
     const targets = sliderBindingTargets(objects);
-    expect(targets.map(t => t.id)).toEqual(['circum', 'ellipse', 'poly', 'circle', 'arc', 'sector', 'lockedPoly']);
+    // Şekiller önde; ardından doğru parçası, doğru, ışın ve açı (sağ tık menüsünün "Sürgüye bağla"sı için)
+    expect(targets.map(t => t.id)).toEqual(['circum', 'ellipse', 'poly', 'circle', 'arc', 'sector', 'lockedPoly', 'seg', 'line', 'ray', 'angle']);
     expect(targets.find(t => t.id === 'poly')?.properties.map(p => p.key)).toEqual(['edge:0', 'edge:1', 'edge:2', 'angle:0', 'angle:1', 'angle:2', 'sides']);
     expect(targets.find(t => t.id === 'poly')?.properties[0].label).toBe('AB kenar uzunluğu');
     expect(targets.find(t => t.id === 'poly')?.properties[3].label).toBe('A köşe açısı (∠CAB)');
@@ -470,7 +471,8 @@ describe('bağlanabilir hedefler ve koruma', () => {
     for (const anchor of [derived, hosted]) {
       const objects = [anchor, B, C, slider(), segment];
       const snapshot = JSON.stringify(objects);
-      expect(sliderBindingTargets(objects).some(t => t.id === 'seg')).toBe(false);
+      // Parça listede görünür ama uzunluğu düzenlenemez
+      expect(sliderBindingTargets(objects).find(t => t.id === 'seg')?.properties.every(p => p.disabled)).toBe(true);
       expect(() => bind(objects, 'seg', 'length')).toThrow('döngüsel');
       expect(JSON.stringify(objects)).toBe(snapshot);
     }

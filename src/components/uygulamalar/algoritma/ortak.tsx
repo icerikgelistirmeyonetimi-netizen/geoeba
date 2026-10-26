@@ -5,6 +5,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Iz } from './yorumlayici';
 
 export const DAR_ESIK = 900;
+/**
+ * Basık pencere (yatay telefon): boy bunun altında, en BASIK_EN_AZ_EN ve üstündeyse sahne ile kod — dar pencerede de —
+ * yan yana durur; yönerge kaydırınca yukarı çekilir, sahne ile kod pencerenin bütün boyunu kullanır. Alt alta düzende
+ * yönerge 302 px'lik gövdenin 200 px'ini alıyor, sahneye ~40 px kalıyordu.
+ */
+export const BASIK_ESIK = 480;
+export const BASIK_EN_AZ_EN = 560;
+
+export function basikMi(boyut: { en: number; boy: number }): boolean {
+  return boyut.boy > 0 && boyut.boy < BASIK_ESIK && boyut.en >= BASIK_EN_AZ_EN;
+}
 export const DUGME =
   'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-full px-4 text-[15px] font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-45';
 export const GOSTERGE = 'inline-flex min-h-[44px] items-center gap-2 rounded-full bg-card/95 px-3 text-[15px] font-extrabold text-foreground shadow-sm ring-1 ring-border backdrop-blur';

@@ -53,6 +53,7 @@ import { Solid3DObject, Point3D } from '@/types/workspace3d';
 import { projectSolidFor2D } from '@/math/solidProjection2D';
 import { useCisimIzdusumu } from './cisimIzdusumu';
 import { cisimIzdusumuYalnizAd, gizliSecimBirakilir, type AyrimDurumu } from './kademeDuzeyleri3B';
+import { aracGorunurMu } from './kademeDuzeyleri';
 import { cisimBilgiSatiri, cisimBilgiEtiketi, izdusumGovdesi, kenarEtiketKutulari, rozetleriYerlestir } from '@/math/cisimEtiketleri2B';
 
 /** Etiketi olmayan nesneler için menü başlığında gösterilecek tür adları. */
@@ -111,7 +112,9 @@ import { contextMenuTargets } from './contextMenuTargets';
 import { etiketReferansi, labelAnchorPointIds, shapeAnchorCenter, anchoredLabelPosition } from '@/math/labelAnchors';
 import { LABEL_LAYOUT_ZOOM, labelFontScale, labelLayoutViewport, labelZoomScale, projectLabelPoint } from '@/math/labelViewport';
 import { etiketYaziBoyu, eksenSayisiHaleKalinligi, type EtiketGrubu } from '@/math/etiketStandardi';
-import { sliderBaginiAskiyaAl, sliderBaginiSurdur, sliderCurrentBinding, sliderIsBound, snapSliderValue } from '@/math/sliderBindings';
+import { sliderBindingTargets, snapSliderValue } from '@/math/sliderBindings';
+import { yeniSurguyleBagla } from '@/math/surguyeBagla';
+import { surguBagi, surguBaginiDegistir } from './surguBagi';
 import { sliderDisplay } from '@/math/sliderDisplay';
 import { etiketHizalama } from './etiketHizalama';
 import { pointLockCandidates, isPointLocked } from '@/math/pointLock';
@@ -172,7 +175,7 @@ import { oynatmaIstegi, surguOynatmasiDegisir, useIzKaydi } from './izKaydi';
 import { serbestDonusDerecesi } from './serbestDondurme';
 import { kutuyaDuserMi } from './kutuSecimi';
 import type { CisimSuruklemesi, KutuSecimi, NesneSuruklemesi, YansitmaEkseni } from './tuvalEtkilesimi';
-import { surguEngelleri } from './surguYerlesimi';
+import { surguEngelleri, surguUzunlugu, yeniSurguYerleri } from './surguYerlesimi';
 import { fonksiyonParcalari, parcalardanYol } from '@/math/fonksiyonCizimi';
 import { fonksiyonEtiketiYazimi } from '@/math/fonksiyonYazimi';
 import { fonksiyonEtiketiEngelleri, fonksiyonEtiketYeri, type FonksiyonEtiketYeri } from './fonksiyonEtiketi';
@@ -3428,6 +3431,21 @@ export function Canvas({
       },
     }));
 
+    // Sürgüye bağla: nesnenin ölçüleri (uzunluk, kenar, açı, yarıçap…); her biri yeni bir kaydırıcı oluşturup
+    // bağlar. Kaydırıcının olduğu kademelerde (ilkokulda yok); var olan kaydırıcıya bağlamak Kaydırıcı Ayarları'ndadır.
+    if (aracGorunurMu(kademe, 'slider')) {
+      const baglanabilir = sliderBindingTargets(objects).find((t) => t.id === hedef.id);
+      const acik = baglanabilir?.properties.filter((p) => !p.disabled) ?? [];
+      if (baglanabilir && acik.length) {
+        maddeler.push({
+          id: 'surguye-bagla',
+          label: 'Sürgüye bağla',
+          separatorBefore: true,
+          submenu: acik.map((p) => ({ id: `surguye-bagla-${p.key}`, label: p.label, onSelect: () => yeniSurguyeBagla(hedef.id, p.key, `${baglanabilir.label}, ${p.label}`) })),
+        });
+      }
+    }
+
     // İzi Göster: izi tutulabilen nesnede iz aç / kapat; iz varsa bu nesnenin ya da bütün izlerin temizlenmesi
     if (IZ_TUTAN_TURLER.has(hedef.type)) {
       maddeler.push({
@@ -3542,6 +3560,36 @@ export function Canvas({
       return elipsKartSatirlari(elp.radiusX, elp.radiusY, tur === 'area', tur === 'perimeter').olculer[0] ?? null;
     }
     return null;
+  };
+
+  /**
+   * Sağ tık > Sürgüye bağla: özellik için tuvalde boş bir yere yeni bir kaydırıcı konur ve özelliğe bağlanır (tek geçmiş
+   * adımı). Kaydırıcı özelliğin şimdiki değeriyle gelir; nesne yerinden oynamaz.
+   */
+  const yeniSurguyeBagla = (hedefId: string, key: string, ozellikAdi: string) => {
+    const uzunluk = surguUzunlugu(viewport);
+    const [yer] = yeniSurguYerleri(viewport, objects, uzunluk);
+    const surguId = createId('slider');
+    const an = Date.now();
+    const noktaKimlikleri: string[] = [];
+    let ad = '';
+    const guncelle = (onceki: MathObject[]) => {
+      let sira = 0;
+      const nokta = () => {
+        const yuva = sira++;
+        return noktaKimlikleri[yuva] ?? (noktaKimlikleri[yuva] = createId('point'));
+      };
+      const sonuc = yeniSurguyleBagla(onceki, hedefId, key, { ...yer, length: uzunluk }, { surgu: surguId, nokta, an });
+      ad = sonuc.surgu.variableName;
+      return sonuc.nesneler;
+    };
+    try {
+      guncelle(objects);
+      commit(guncelle, `${ad} kaydırıcısı eklendi ve bağlandı (${ozellikAdi})`);
+      setHintMessage(`${ad} kaydırıcısı ${ozellikAdi} özelliğine bağlandı. Kaydırıcıyı ya da nesneyi sürükleyerek değiştirebilirsiniz.`);
+    } catch (hata) {
+      setHintMessage(hata instanceof Error ? hata.message : 'Kaydırıcı bağlanamadı.');
+    }
   };
 
   /**
@@ -5129,11 +5177,10 @@ export function Canvas({
             const tutamakX = sol.x + (sag.x - sol.x) * oran;
             const isSelected = selectedObjectIds.includes(s.id);
             const renk = s.color || NESNE_RENGI.mor;
-            const bagli = sliderIsBound(objects, s.id);
-            // Bağ durumu: bir şeklin özelliğine bağlı (geçici kapatılabilir), geçici kapalı, fonksiyonda kullanılıyor ya da bağsız
-            const askida = !!s.suspendedBinding && !bagli;
-            const sekleBagli = bagli && !!sliderCurrentBinding(objects, s.id);
             const gosterim = sliderDisplay(objects, s, yazim);
+            // Bağ durumu: bir nesnenin özelliğine bağlı (geçici kapatılabilir), geçici kapalı, fonksiyonda kullanılıyor ya da bağsız
+            const olcuAdi = gosterim.bagliOlcuNodes ? duzMetin(gosterim.bagliOlcuNodes) : '';
+            const { bagli, askida, durum, aciklama } = surguBagi(objects, s, olcuAdi);
             // Başlık kaydırıcının kendi adıyla ('a = 3 br'); bağlı olduğu ölçü çubuğun altında, ortada (soluk)
             const baslikSatirlari = [gosterim.degiskenNodes];
             const bagliOlcuSatirlari = gosterim.bagliOlcuNodes ? [gosterim.bagliOlcuNodes] : null;
@@ -5247,32 +5294,8 @@ export function Canvas({
                   const simge = 16;
                   const olcuGenisligi = bagliOlcuOlcu?.genislik ?? 0;
                   const satirSol = (sol.x + sag.x) / 2 - (simge + (olcuGenisligi ? 6 + olcuGenisligi : 0)) / 2;
-                  const olcuAdi = gosterim.bagliOlcuNodes ? duzMetin(gosterim.bagliOlcuNodes) : '';
-                  const durum = sekleBagli || (bagli && !askida) ? 'bagli' : askida ? 'askida' : 'bagsiz';
-                  const aciklama = sekleBagli ? `${olcuAdi} ölçüsüne bağlı. Bağı geçici olarak kapatmak için tıklayın.`
-                    : bagli ? 'Bir fonksiyonda kullanılıyor. Ayarlar için tıklayın.'
-                      : askida ? `${olcuAdi} bağı geçici olarak kapalı. Yeniden bağlamak için tıklayın.`
-                        : 'Hiçbir şekle bağlı değil. Bağlamak için tıklayın.';
-                  const bagiDegistir = () => {
-                    try {
-                      if (sekleBagli) {
-                        sliderBaginiAskiyaAl(objects, s.id);
-                        commit((prev) => sliderBaginiAskiyaAl(prev, s.id), `${s.variableName} kaydırıcısının bağı geçici olarak kapatıldı`);
-                        setHintMessage(`${s.variableName} kaydırıcısının bağı kapalı: şekil serbest. Yeniden bağlamak için zincire tıklayın.`);
-                      } else if (askida) {
-                        const yeniKimlikler: string[] = [];
-                        let sira = 0;
-                        const kimlik = () => yeniKimlikler[sira] ?? (yeniKimlikler[sira] = createId('point'));
-                        sliderBaginiSurdur(objects, s.id, () => kimlik());
-                        commit((prev) => { sira = 0; return sliderBaginiSurdur(prev, s.id, () => { const k = kimlik(); sira += 1; return k; }); }, `${s.variableName} kaydırıcısının bağı yeniden kuruldu`);
-                        setHintMessage(`${s.variableName} kaydırıcısı yeniden bağlandı: şekil kaydırıcının değerine döndü.`);
-                      } else {
-                        ayarlariAc();
-                      }
-                    } catch (hata) {
-                      setHintMessage(hata instanceof Error ? hata.message : 'Kaydırıcının bağı değiştirilemedi.');
-                    }
-                  };
+                  const bagiDegistir = () =>
+                    surguBaginiDegistir(objects, s, { commit, ipucu: setHintMessage, ayarlariAc, noktaKimligi: () => createId('point') });
                   return (
                     <>
                       <g

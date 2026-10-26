@@ -31,7 +31,7 @@ import {
 } from './spektrum';
 
 const dugmeSinifi =
-  'min-h-[44px] min-w-[44px] rounded-[calc(var(--radius)-4px)] px-3 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
+  'min-h-[44px] basik:min-h-[36px] min-w-[44px] rounded-[calc(var(--radius)-4px)] px-3 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 
 /** Spektrum çizgisinin rengi: imkânsızdan (kum) kesine (deniz) */
 const SPEKTRUM_DEGRADESI = 'linear-gradient(90deg, #d8cbb2 0%, #c99a52 50%, #216a78 100%)';
@@ -154,20 +154,21 @@ export function SpektrumGorunumu({ onSinifDegistir }: SpektrumGorunumuProps) {
   );
 
   const spektrum = (
-    <section className="flex h-full min-h-[360px] flex-col rounded-[var(--radius)] border border-border bg-card p-4 shadow-[0_18px_40px_-18px_rgba(6,40,45,.35)]" aria-label="Olasılık spektrumu" data-spektrum>
+    <section className="flex h-full min-h-[360px] basik:min-h-0 flex-col rounded-[var(--radius)] border border-border bg-card p-4 basik:p-3 shadow-[0_18px_40px_-18px_rgba(6,40,45,.35)]" aria-label="Olasılık spektrumu" data-spektrum>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <Baslik>Olasılık spektrumu</Baslik>
         <span className="text-[13px] font-semibold tabular-nums text-muted-foreground" data-spektrum-sayac>
           {bitenSayisi} / {SPEKTRUM_KARTLARI.length} olay yerleşti
         </span>
       </div>
-      <p className="mt-1 text-[13px] text-muted-foreground">Bir olayın olasılığı 0 (imkânsız) ile 1 (kesin) arasındadır; 0 ve 1 de dâhildir.</p>
+      <p className="mt-1 text-[13px] text-muted-foreground basik:hidden">Bir olayın olasılığı 0 (imkânsız) ile 1 (kesin) arasındadır; 0 ve 1 de dâhildir.</p>
       {/* Beş eşit sütun: üstte yerleşen olaylar, ortada durak düğmesi (spektrum çizgisi sütun merkezlerinden geçer), altta ad ve değer */}
       {/* Ölçek kartın kalan yüksekliğinde dikey ortalıdır (tek çalışma yüzeyi) */}
-      <div className="flex flex-1 flex-col justify-center py-4">
+      <div className="flex flex-1 flex-col justify-center py-4 basik:py-1">
       <div className="relative" role="radiogroup" aria-label="Spektrumdaki durak">
-        {/* Çizgi durak düğmelerinin ortasından geçer: işaret alanı 168 px + düğmenin yarısı 26 px − çizginin yarısı 7 px */}
-        <div className="pointer-events-none absolute left-[10%] right-[10%] h-3.5 rounded-full" style={{ top: 187, background: SPEKTRUM_DEGRADESI }} aria-hidden="true" />
+        {/* Çizgi durak düğmelerinin ortasından geçer: işaret alanı 168 px + düğmenin yarısı 26 px − çizginin yarısı 7 px.
+            Basık ekranda (yatay telefon) işaret alanı 76 px: spektrum ilk ekranda görünür (iki işaret sığar, fazlası gizli) */}
+        <div className="pointer-events-none absolute left-[10%] right-[10%] top-[187px] h-3.5 rounded-full basik:top-[95px]" style={{ background: SPEKTRUM_DEGRADESI }} aria-hidden="true" />
         <div className="grid grid-cols-5">
           {SPEKTRUM_DURAKLARI.map((durak, i) => {
             const yerlesenler = SPEKTRUM_KARTLARI.filter((k, j) => bitenler[j] && k.dogru === durak);
@@ -175,7 +176,7 @@ export function SpektrumGorunumu({ onSinifDegistir }: SpektrumGorunumuProps) {
             const taslak = secili && !kilitli;
             return (
               <div key={durak} className="flex min-w-0 flex-col items-center" data-spektrum-duragi={durak}>
-                <ul className="flex h-[168px] w-full flex-col-reverse items-center justify-start gap-1.5 overflow-hidden px-1 pb-3" aria-label={`${DURAK_ADLARI[durak]}: yerleşen olaylar`}>
+                <ul className="flex h-[168px] basik:h-[76px] w-full flex-col-reverse items-center justify-start gap-1.5 overflow-hidden px-1 pb-3" aria-label={`${DURAK_ADLARI[durak]}: yerleşen olaylar`}>
                   {taslak && (
                     <li className="max-w-full truncate rounded-full border-2 border-dashed border-primary bg-card px-2.5 py-1 text-[13px] font-bold text-foreground" data-spektrum-taslak>
                       {kart.kisaAd}
@@ -224,7 +225,7 @@ export function SpektrumGorunumu({ onSinifDegistir }: SpektrumGorunumuProps) {
   return (
     <div ref={kokRef} className="flex h-full w-full flex-col bg-background text-foreground" data-uygulama="olasilik" data-olasilik-kip="spektrum">
       {/* Üst şerit: sınıf + başlık + olay sekmeleri (numaralı; yerleşen olayda işaret) */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 basik:py-1">
         <SinifRozeti sinif={5} onDegistir={onSinifDegistir} />
         <h2 className="mx-1 text-base font-bold text-foreground">Olasılık spektrumu</h2>
         <div className="flex flex-wrap gap-1" role="tablist" aria-label="Olaylar">
@@ -263,7 +264,7 @@ export function SpektrumGorunumu({ onSinifDegistir }: SpektrumGorunumuProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-3" role="tabpanel" id={sekmeKimlikleri('spektrum', kart.id).panel} aria-labelledby={sekmeKimlikleri('spektrum', kart.id).sekme}>
+      <div className="flex-1 overflow-auto p-3 basik:p-2" role="tabpanel" id={sekmeKimlikleri('spektrum', kart.id).panel} aria-labelledby={sekmeKimlikleri('spektrum', kart.id).sekme}>
         <div className={`grid gap-3 ${orta ? 'h-full' : ''}`} style={{ gridTemplateColumns: orta ? 'minmax(300px, 400px) minmax(0, 1fr)' : 'minmax(0, 1fr)', gridTemplateRows: orta ? 'minmax(0, 1fr)' : undefined }}>
           <div className="min-w-0">{kartPaneli}</div>
           <div className="min-h-0 min-w-0">{spektrum}</div>

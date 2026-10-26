@@ -11,6 +11,11 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      // Basık ekran (yatay telefon): atölye uygulamaları çubuklarını inceltir, sahneye/grafiğe yer açar.
+      // Kabuk (sinif.module.css) aynı eşikte görev çubuğunu 44 px'e indirir ve menüyü Menü düğmesine toplar.
+      screens: {
+        basik: { raw: "(max-height: 500px)" },
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

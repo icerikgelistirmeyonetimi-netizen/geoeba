@@ -53,10 +53,15 @@ export interface SecenekKutucuklariProps {
 
 export const KUTUCUK_BOSLUGU = 8;
 export const EN_COK_SECENEK = 12;
+/** Kutucuğun en küçük yüksekliği (dokunma ve okunurluk) */
+const KUTUCUK_EN_AZ = 64;
+/** Basık alanda sütun artırılırken kutucuğun inebileceği en küçük genişlik */
+const KUTUCUK_EN_DAR = 84;
 
 /**
  * Izgara sütun ve satır sayısı (adet: kutucuklar + varsa "Seçenek ekle"). Deney nesneleri: para ve ≤ 3 renk tek
- * sütunda (geniş kutucuk: nesne solda, sayı sağda), 4–6 renk 2, zar 3 sütun (uzun alanda 2).
+ * sütunda (geniş kutucuk: nesne solda, sayı sağda), 4–6 renk 2, zar 3 sütun (uzun alanda 2). Basık alanda (yatay
+ * telefon) satırlar en az 64 px'le sığmıyorsa sütun artar (kutucuk 84 px'ten daralmadıkça, en çok 3).
  */
 export function kutucukIzgarasi(
   adet: number,
@@ -65,7 +70,7 @@ export function kutucukIzgarasi(
 ): { sutun: number; satir: number } {
   // Uzun alanda (1920'de dikey panel) zar yüzleri 2 sütunda büyür; öbür durumlarda 3 sütun
   const uzunAlan = !!alan && alan.genislik > 0 && alan.yukseklik > alan.genislik * 1.4;
-  const sutun =
+  let sutun =
     bicim === 'para'
       ? 1
       : bicim === 'zar'
@@ -81,6 +86,19 @@ export function kutucukIzgarasi(
           : adet <= 6
             ? 2
             : 3;
+  if (alan && alan.genislik > 0 && alan.yukseklik > 0) {
+    const sigar = (s: number) => {
+      const satir = Math.ceil(adet / s);
+      return satir * KUTUCUK_EN_AZ + (satir - 1) * KUTUCUK_BOSLUGU <= alan.yukseklik;
+    };
+    while (
+      sutun < Math.min(3, adet) &&
+      !sigar(sutun) &&
+      (alan.genislik - sutun * KUTUCUK_BOSLUGU) / (sutun + 1) >= KUTUCUK_EN_DAR
+    ) {
+      sutun++;
+    }
+  }
   return { sutun, satir: Math.max(1, Math.ceil(adet / sutun)) };
 }
 
@@ -91,7 +109,7 @@ export function kutucukIzgarasi(
 export function kutucukYuksekligi(kalan: number, satir: number, doldur = false): number {
   const enCok = doldur ? 360 : kalan >= 700 ? 240 : 160;
   const pay = (kalan - (satir - 1) * KUTUCUK_BOSLUGU) / Math.max(1, satir);
-  return Math.round(Math.max(64, Math.min(enCok, Number.isFinite(pay) ? pay : 64)));
+  return Math.round(Math.max(KUTUCUK_EN_AZ, Math.min(enCok, Number.isFinite(pay) ? pay : KUTUCUK_EN_AZ)));
 }
 
 /** Deney nesnesi kutucuğunun yerleşimi: geniş (nesne solda), uzun (nesne üstte) ya da sıkışık (nesne adın yanında) */
@@ -318,7 +336,8 @@ export function SecenekKutucuklari({
   };
 
   return (
-    <div ref={kapRef} className={`min-h-0 min-w-0 ${className}`} data-kutucuklar={bicim}>
+    // Sığmayan satırlar kabın içinde kayar (alttaki Geri al / Bitti çubuğunun altına taşmaz)
+    <div ref={kapRef} className={`min-h-0 min-w-0 overflow-y-auto overscroll-contain ${className}`} data-kutucuklar={bicim}>
       <div
         className="grid"
         style={{ gridTemplateColumns: `repeat(${sutun}, minmax(0, 1fr))`, gridAutoRows: `${h}px`, gap: KUTUCUK_BOSLUGU }}

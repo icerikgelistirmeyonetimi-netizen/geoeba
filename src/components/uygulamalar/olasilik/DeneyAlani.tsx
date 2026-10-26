@@ -255,7 +255,8 @@ export const DeneyAlani = forwardRef<DeneyAlaniTutamaci, DeneyAlaniProps>(functi
     <div
       className="relative w-full overflow-hidden rounded-[var(--radius)] border border-border bg-card shadow-[0_18px_40px_-18px_rgba(6,40,45,.55)]"
       // Dolduran yerleşimde kart sütunda kalan yeri alır; olağan yükseklik altına inmez
-      style={doldur ? { flex: '1 1 0%', minHeight: `max(220px, ${olaganYukseklik})` } : { height: olaganYukseklik, minHeight: 220 }}
+      // En az 220 px; basık ekranda (yatay telefon) en çok görünür gövde kadar (≈ 100dvh − kabuk ve üst şerit 200 px)
+      style={doldur ? { flex: '1 1 0%', minHeight: `max(220px, ${olaganYukseklik})` } : { height: olaganYukseklik, minHeight: 'min(220px, calc(100dvh - 200px))' }}
       onClick={() => sahneRef.current?.hizlandir()}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {

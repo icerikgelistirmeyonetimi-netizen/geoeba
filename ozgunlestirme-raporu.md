@@ -1,6 +1,6 @@
 # Kodun özgünleştirilmesi: kapsam, yöntem ve ilerleme
 
-Tarih: 25 Ekim 2026. Durum: ilk adımlar çalışma ağacında, **commit edilmedi**. Önceki iş `732ed31` ile commit edildi.
+Tarih: 25 Ekim 2026. Canvas adımı `c50fc3a` ile commit edildi; math dosyaları adımı çalışma ağacında (**commit edilmedi**).
 
 ## Amaç
 
@@ -35,14 +35,14 @@ Bu 18.734 satırın yaklaşık 7.100'ü **müfredat verisi**: MEB kazanım metin
 | `components/workspace/PropertiesPanel.tsx` | 1.145 | %78 |
 | `components/workspace/Toolbar.tsx` | 979 | %53 |
 | `math/geometry3d.ts` | 643 | %48 |
-| `math/solidProjection2D.ts` | 556 | %93 |
+| `math/solidProjection2D.ts` | 556 → **139** | %93 → %35 |
 | `components/workspace/AlgebraView.tsx` | 528 | %82 |
 | `components/workspace/WorkspaceView.tsx` | 483 | %46 |
 | `state/WorkspaceContext.tsx` | 460 | %10 |
 | `state/CurriculumContext.tsx` | 382 | %52 |
-| `math/commands/handlers/algebra/scripting.ts` | 291 | %100 |
+| `math/commands/handlers/algebra/scripting.ts` | 291 → **86** | %100 → %36 |
 | `components/workspace/Canvas3D.tsx` | 279 | %6 |
-| `math/pathAnimation.ts` | 278 | %100 |
+| `math/pathAnimation.ts` | 278 → **44** | %100 → %21 |
 | `components/workspace/ViewCube3D.tsx` | 248 | %92 |
 | `math/geometry.ts` | 248 | %30 |
 | diğerleri (Toolbar3D, Header, StylePanel, SliderDialog, AddObjectModal, coordinates…) | ~1.000 | |
@@ -114,10 +114,38 @@ Bu 18.734 satırın yaklaşık 7.100'ü **müfredat verisi**: MEB kazanım metin
 - Tasarım değişmedi: CSS ve sınıf adlarına dokunulmadı. Kaynak metni arayan üç test, yeni adlara göre güncellendi;
   davranışları artık gerçek testlerle de sınanıyor.
 
-## 5. Sıradaki adımlar
+### math dosyaları (ikinci adım)
 
-1. **Tamamı ilk sürümden kalan `math/` dosyaları:** `pathAnimation.ts`, `scripting.ts`, `solidProjection2D.ts`. Bunlar
-   saf işlev oldukları için birim testleriyle kilitlenip yeniden yazılabilir.
+| Dosya | Ne yapıldı | Güvence |
+|---|---|---|
+| `pathAnimation.ts` | Parametre ve konum için iki ayrı büyük `switch`, her taşıyıcı türü için tek bir yol tanımına (`Yol`) indi. Çokgen çevresi ortak yardımcıda; kare adımı (`adim`) tek işlevde. | Çıktı kaydı (`pathAnimationKaydi`, 40 sahne) ve eski kodla 30.000 rastgele durumda fark testi: hepsi aynı |
+| `scripting.ts` | Hedef bulma, ayraç ayrıştırma, doğru/yanlış yazımları ve iz ayarı ortak işlevlere indi; komut düzenli ifadeleri sabitlere taşındı. | Çıktı kaydı (`betikKomutlariKaydi`, 77 komut: başarılı, hatalı, doğal dil) |
+| `solidProjection2D.ts` | Taban köşeleri tek tabloda (üstten görünüm ve ayak izi aynı köşeleri kullanıyor; eskiden iki kez yazılmıştı). Ölçü etiketleri tür tablosunda; hacimli kipin yüz, ayrıt ve eğri hesapları ayrı işlevlerde. | Üstten görünüm kaydı (`solidProjection2DKaydi`, 36 durum) ve eski kodla 2.500 rastgele cisimde, iki kipte de tam fark testi: hepsi aynı |
+
+- Fark testleri eski kodun geçici kopyasıyla çalıştırıldı, sonra silindi.
+- Bu dosyalarda kalan ilk sürüm satırları bilerek korunan dış arayüz:
+  - dışa açık adlar, türler ve imzalar (başka modüller bunlara bağlı);
+  - kullanıcının gördüğü komut örnekleri ve GeoGebra komut adları.
+- Sonuç: `tsc` temiz; vitest **263 dosya / 9.923 test** yeşil.
+
+## 5. Yeniden yazım sırasında bulunan davranış tutarsızlıkları
+
+Yeniden yazım adımları davranışı bilerek değiştirmez; altın kayıt ancak böyle bozulma olmadığını kanıtlar. Bulunan
+çelişkiler burada toplanıyor; her biri kendi testiyle ayrı bir adımda düzeltilmeli.
+
+| # | Yer | Tutarsızlık | Öneri |
+|---|---|---|---|
+| 1 | Serbest döndürme kolu | Açı farkı ±180°'de sarmalanmıyor: kolu öbür yana sürükleyince +20° yerine "−340° döndürüldü" yazıyor | Farkı (−180°, 180°] aralığına indir (hata) |
+| 2 | Sağ tık > İzi Göster | Parça, çember, çokgen, yay, elips ve fonksiyonda da sunuluyor, ama iz yalnız noktalar için kaydediliyor; bu nesnelerde açılınca hiçbir şey olmuyor | Karar gerekli: şekillerde iz kaydı mı eklensin, madde yalnız noktada mı kalsın |
+| 3 | Oynatma olayı | Bilinmeyen kip noktada canlandırmayı aç / kapat yapıyor, sürgüde hiçbir şey yapmıyor | İkisinde de aynı kural |
+| 4 | Sürgü değişken kapsamı | Aynı hesap 6 ayrı yerde (Canvas3D, Toolbar ×2, WorkspaceContext ×2, komut motoru) | Hepsi `surguKapsami` kullansın |
+| 5 | Işın canlandırması | Işın parça gibi yalnız iki tanım noktası arasında gidip geliyor; geçtiği noktanın ötesindeki nokta ilk karede geri sıçrıyor | Karar gerekli: ışın boyunca sınırlı bir aralık |
+| 6 | Doğru canlandırması | Sabit [−5, 5] aralığında; bu aralığın dışındaki nokta ilk karede sıçrıyor | Aralık noktanın yerini kapsasın |
+| 7 | 3B cisim üstten görünümü | Yarıçap 0 olunca SVG içine görünmez bir "0" metin düğümü yazılıyordu (eski `radius && …`) | Yeniden yazımda kendiliğinden düzeldi; görünür fark yok |
+
+## 6. Sıradaki adımlar
+
+1. **Davranış tutarsızlıkları:** 1, 3, 4 ve 6 doğrudan düzeltilebilir; 2 ve 5 için karar gerekli.
 2. **İlk sürümün ağırlıklı olduğu bileşenler:** PropertiesPanel, Toolbar, AlgebraView, WorkspaceView, CurriculumContext,
    ViewCube3D.
 3. **Kalan dosyalar:** `geometry3d`, `geometry`, `coordinates`, Canvas'ta kalan tek satırlar.

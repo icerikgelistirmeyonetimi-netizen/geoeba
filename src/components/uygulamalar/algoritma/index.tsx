@@ -31,7 +31,7 @@ import { ekranKonumu, useOynatici } from './useOynatici';
 import { adimAnlatimi, baslangicAnlatimi } from './anlatici';
 
 export { manifest } from './manifest';
-import { DAR_ESIK, DUGME, GOSTERGE, sayimlarKadar, sesiSustur, sesliOku, useAzHareket, useBoyut, useKoyuTema } from './ortak';
+import { DAR_ESIK, DUGME, GOSTERGE, basikMi, sayimlarKadar, sesiSustur, sesliOku, useAzHareket, useBoyut, useKoyuTema } from './ortak';
 import { SiniflarSayfasi, SinifSayfasi } from './Giris';
 import { AtolyeEkrani } from './AtolyeEkrani';
 import { IpucuKarti } from './IpucuKarti';
@@ -91,7 +91,8 @@ function GorevEkrani({
 }) {
   const { kademe: oturumKademesi } = useOturum();
   const [kokRef, boyut] = useBoyut<HTMLDivElement>();
-  const dar = boyut.en > 0 && boyut.en < DAR_ESIK;
+  const basik = basikMi(boyut);
+  const dar = boyut.en > 0 && boyut.en < DAR_ESIK && !basik;
   const gizli = boyut.en === 0 || boyut.boy === 0;
 
   const unite: Unite = uniteBul(kayit.unite);
@@ -335,7 +336,7 @@ function GorevEkrani({
   };
   const ipucuKarti = ipucuAcik && acilanIpucu > 0 ? <IpucuKarti ipuclari={gorev.ipuclari} acilan={acilanIpucu} onDaha={gk.tamam ? undefined : ipucuDaha} onKapat={() => setIpucuAcik(false)} /> : null;
   const yonerge = (
-    <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border bg-card px-4 py-3" data-yonerge>
+    <header className={`flex flex-wrap items-center gap-x-4 border-b border-border bg-card ${basik ? 'gap-y-1 px-3 py-1.5' : 'gap-y-2 px-4 py-3'}`} data-yonerge>
       <button
         type="button"
         onClick={() => onSinifSayfasi(unite.sinif)}
@@ -369,7 +370,7 @@ function GorevEkrani({
             </span>
           )}
         </div>
-        <p className={`mt-0.5 flex items-start gap-1.5 font-semibold leading-snug text-foreground ${kart ? 'text-[20px]' : 'text-[17px]'}`} data-yonerge-metni>
+        <p className={`mt-0.5 flex items-start gap-1.5 font-semibold leading-snug text-foreground ${basik ? (kart ? 'text-[16px]' : 'text-[15px]') : kart ? 'text-[20px]' : 'text-[17px]'}`} data-yonerge-metni>
           <span>{gorev.yonerge}</span>
           {sesVar && (
             <button
@@ -434,7 +435,7 @@ function GorevEkrani({
   // --- Paneller --------------------------------------------------------------------
   const tahminBekliyor = tahminGorevi && gk.tahmin === undefined;
   const tuval = (
-    <section className={`flex min-w-0 flex-col ${dar ? '' : 'min-h-0 flex-1'} p-3`} aria-label="Tuval" data-tuval-paneli>
+    <section className={`flex min-w-0 flex-col ${dar ? '' : 'min-h-0 flex-1'} ${basik ? 'p-2' : 'p-3'}`} aria-label="Tuval" data-tuval-paneli>
       <div className={dar ? 'h-[320px]' : 'min-h-0 flex-1'}>
         <SahneAlani ref={sahneRef} dunya={gorev.dunya} donanim={donanim} koyu={koyu} azHareket={azHareket} gizli={gizli} durum={durum} ustBilgi={gostergeler} ipucu={ipucuKarti} altBilgi={altSatir} />
       </div>
@@ -485,9 +486,11 @@ function GorevEkrani({
     dogal: ['Doğal dil', SIMGE.sozde],
   };
   const gorunumSecici = (
-    <div className="flex flex-wrap items-center gap-1 border-b border-border px-2 py-2" role="tablist" aria-label="Kod görünümü" data-kod-gorunumu>
+    // Basıkta seçici tek satır: yalnız etkin görünümün adı yazılır, öbürleri simge (ad ipucu balonunda ve ekran okuyucuda)
+    <div className={`flex flex-wrap items-center gap-1 border-b border-border px-2 ${basik ? 'py-1' : 'py-2'}`} role="tablist" aria-label="Kod görünümü" data-kod-gorunumu>
       {gorunumler.map((k) => {
         const [ad, S] = GORUNUMLER[k];
+        const kisa = basik && etkinGorunum !== k;
         return (
           <button
             key={k}
@@ -495,11 +498,12 @@ function GorevEkrani({
             role="tab"
             aria-selected={!incelemeAcik && etkinGorunum === k}
             onClick={() => { setGorunum(k); setIncelemeAcik(false); }}
-            className={`inline-flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-full px-2 text-[13px] font-bold transition-colors ${etkinGorunum === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+            title={kisa ? ad : undefined}
+            className={`inline-flex min-h-[38px] ${kisa ? 'w-10 flex-none' : 'flex-1'} items-center justify-center gap-1.5 rounded-full px-2 text-[13px] font-bold transition-colors ${etkinGorunum === k ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
             data-gorunum={k}
           >
             <S className="h-4 w-4 shrink-0" />
-            {ad}
+            {kisa ? <span className="sr-only">{ad}</span> : ad}
           </button>
         );
       })}
@@ -563,10 +567,14 @@ function GorevEkrani({
 
   return (
     <div ref={kokRef} className="relative flex h-full w-full flex-col bg-background text-foreground" data-gorev-ekrani data-unite={unite.id} data-gorev={gorev.id}>
-      {yonerge}
-      <div className={`min-h-0 flex-1 ${dar ? 'overflow-auto' : 'flex'}`}>
-        {tuval}
-        {kod}
+      {/* Basıkta yönerge ile gövde birlikte kayar, gövde kabın boyundadır (kaplamalar kökte kalır, kaymaz). Ağaç iki
+          düzende aynı: telefon döndürülünce sahne ve kod yeniden kurulmaz */}
+      <div className={basik ? 'min-h-0 flex-1 overflow-y-auto overscroll-contain' : 'flex min-h-0 flex-1 flex-col'} data-basik={basik || undefined}>
+        {yonerge}
+        <div className={basik ? 'flex h-full' : `min-h-0 flex-1 ${dar ? 'overflow-auto' : 'flex'}`}>
+          {tuval}
+          {kod}
+        </div>
       </div>
       <OgretmenNotu acik={notAcik} onKapat={() => setNotAcik(false)} unite={unite} />
       {cozumAcik && <CozumKarti program={gorev.cozum} onKapat={() => setCozumAcik(false)} sozde={etkinGorunum !== 'bloklar'} />}

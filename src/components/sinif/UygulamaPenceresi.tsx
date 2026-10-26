@@ -127,11 +127,50 @@ export function UygulamaPenceresi({
   const cikisSuruyor = useRef(false);
   // Büyüt / geri al öncesi ölçülen dikdörtgen (FLIP başlangıcı)
   const oncekiDik = useRef<Dikdortgen | null>(null);
+  // Menü başlıkları başlık satırına sığmıyorsa Menü düğmesine toplanır: menü hiçbir genişlikte ikinci satıra inmez
+  const baslikRef = useRef<HTMLElement>(null);
+  const simgeRef = useRef<HTMLSpanElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const dugmelerRef = useRef<HTMLDivElement>(null);
+  const [menuDar, setMenuDar] = useState(false);
+  const menuVar = !!menuCubugu;
 
   const hareketiKes = () => {
     hareket.current?.();
     hareket.current = null;
   };
+
+  // Başlık satırının ihtiyacı başlıkların doğal tek satır genişliğinden hesaplanır (Menü düğmesi kipinde liste görünmez
+  // ama ölçülür; sinif.module.css). Ad 1100 px'in altında başlık satırı kipinde gizlidir, o yüzden yalnız üstünde
+  // hesaba girer: iki kipte de aynı ölçü, kipler arasında gidip gelme olmaz.
+  useTarayiciLayoutEffect(() => {
+    const baslik = baslikRef.current;
+    const menu = menuRef.current;
+    if (!menuVar || !baslik || !menu) return;
+    const olc = () => {
+      const liste = menu.querySelector<HTMLElement>('[data-menu-listesi]');
+      // Panel açıkken liste sütundur, doğal genişliği ölçülemez: kip değişmez
+      if (!liste || liste.hasAttribute('data-acik')) return;
+      const b = getComputedStyle(baslik);
+      const m = getComputedStyle(menu);
+      const aralik = parseFloat(b.columnGap) || 0;
+      const ad = baslik.clientWidth > 1100 ? baslik.querySelector<HTMLElement>('h2') : null;
+      const gereken =
+        parseFloat(b.paddingLeft) + parseFloat(b.paddingRight) +
+        (simgeRef.current?.offsetWidth ?? 0) + aralik +
+        (ad ? ad.offsetWidth + aralik : 0) +
+        parseFloat(m.marginLeft) + parseFloat(m.paddingLeft) + parseFloat(m.borderLeftWidth) +
+        liste.scrollWidth + aralik +
+        (dugmelerRef.current?.offsetWidth ?? 0);
+      setMenuDar(gereken > baslik.clientWidth);
+    };
+    olc();
+    const gozlemci = new ResizeObserver(olc);
+    gozlemci.observe(baslik);
+    const liste = menu.querySelector('[data-menu-listesi]');
+    if (liste) gozlemci.observe(liste);
+    return () => gozlemci.disconnect();
+  }, [menuVar]);
 
   // Pencerenin yuvası: görev çubuğundaki uygulama düğmesi; yoksa çalışma alanının alt ortası
   const yuva = useCallback((): Dikdortgen => {
@@ -334,6 +373,7 @@ export function UygulamaPenceresi({
         Görev çubuğuna geç
       </button>
       <header
+        ref={baslikRef}
         className={`${s['pencere-baslik']} ${s.kabuk}`}
         onDoubleClick={buyutDegistir}
         onPointerDown={surukleBasla}
@@ -341,8 +381,11 @@ export function UygulamaPenceresi({
         onPointerUp={surukleBitir}
         onPointerCancel={surukleBitir}
         data-pencere-baslik
+        data-menu-var={menuVar || undefined}
+        data-menu-dar={(menuVar && menuDar) || undefined}
       >
         <span
+          ref={simgeRef}
           className={`${s['uygulama-simge']} ${s['uygulama-simge--kucuk']}`}
           style={renk ? simgeStili(renk) : undefined}
           aria-hidden="true"
@@ -350,9 +393,9 @@ export function UygulamaPenceresi({
           {simge}
         </span>
         <h2 className={s['pencere-ad']}>{baslik}</h2>
-        {/* Menü çubuğu başlıkla aynı satırda: ayrı bir satır dikey yer kaybettiriyordu */}
-        {menuCubugu && <div className={s['pencere-menu']}>{menuCubugu}</div>}
-        <div className={s['pencere-dugmeler']}>
+        {/* Menü çubuğu başlıkla aynı satırda (hiçbir zaman ikinci satırda değil): sığmazsa Menü düğmesine toplanır */}
+        {menuCubugu && <div ref={menuRef} className={s['pencere-menu']}>{menuCubugu}</div>}
+        <div ref={dugmelerRef} className={s['pencere-dugmeler']}>
           <button type="button" className={s['pencere-dugme']} onClick={kucult} aria-label="Küçült" title="Küçült">
             {ikon.kucult}
           </button>

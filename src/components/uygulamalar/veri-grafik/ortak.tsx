@@ -140,7 +140,7 @@ export function useAcilirMenu() {
 }
 
 export const DUGME =
-  'inline-flex items-center justify-center gap-1.5 h-11 min-w-[44px] px-3 rounded-[calc(var(--radius)-6px)] border border-border bg-card text-[13px] font-semibold text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap';
+  'inline-flex items-center justify-center gap-1.5 h-11 basik:h-9 min-w-[44px] px-3 rounded-[calc(var(--radius)-6px)] border border-border bg-card text-[13px] font-semibold text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background transition-colors disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap';
 
 /**
  * Dolu (basılı / etkin) zemin: birincil renk üstünde beyaz yazı. Koyu temada birincil renk açık kaldığı için

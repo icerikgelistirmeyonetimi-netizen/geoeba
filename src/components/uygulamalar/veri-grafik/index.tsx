@@ -233,7 +233,7 @@ const sekmeGerekceleri: Partial<Record<Sekme, string>> = {
 
 /** Göster / gizle seçeneği (basılı düğme; sekme düğmeleriyle aynı dil) */
 const SECENEK_DUGMESI = (aktif: boolean, dar = false) =>
-  `inline-flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-[calc(var(--radius)-8px)] ${dar ? 'w-11' : 'px-2.5'} text-[12px] font-semibold whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 ${
+  `inline-flex h-11 basik:h-9 shrink-0 items-center justify-center gap-1.5 rounded-[calc(var(--radius)-8px)] ${dar ? 'w-11' : 'px-2.5'} text-[12px] font-semibold whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 ${
     aktif ? DOLU_ZEMIN : 'text-foreground hover:bg-accent'
   }`;
 
@@ -1860,7 +1860,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
   return (
     <div ref={kokRef} className="relative flex h-full w-full flex-col bg-background text-foreground" data-uygulama="veri-grafik">
       {/* Üst şerit: grafik türü sekmeleri + örnek veri, deney, indirme ve grafik ayarları */}
-      <div className="relative flex flex-wrap items-center gap-2 border-b border-border bg-card px-2 py-1.5" data-arac-cubugu>
+      <div className="relative flex flex-wrap items-center gap-2 border-b border-border bg-card px-2 py-1.5 basik:py-1" data-arac-cubugu>
         <div ref={sekmelerRef} role="tablist" aria-label="Grafik türü" className="flex flex-wrap gap-1 rounded-[calc(var(--radius)-4px)] bg-muted p-1">
           {gorunurSekmeler.map((s, i) => {
             const aktif = sekme === s.id;
@@ -1891,7 +1891,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                   guncelle({ sekme: liste[hedef].id });
                   document.getElementById(sekmeKimlikleri('veri', liste[hedef].id).sekme)?.focus();
                 }}
-                className={`h-11 min-w-[64px] rounded-[calc(var(--radius)-8px)] px-3 text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                className={`h-11 basik:h-9 min-w-[64px] rounded-[calc(var(--radius)-8px)] px-3 text-[13px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                   aktif
                     ? `${DOLU_ZEMIN} shadow-[0_8px_18px_-10px_rgba(6,40,45,.6)]`
                     : kullanilabilir
@@ -2172,7 +2172,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
           {/* Tablonun başlık satırı (yalnız tablo sütununda; tam genişlik değil): tablonun adı (örnek adı), bağlı örnekte
               Keşif kartını, bağlı araştırmada soru şeridini açıp kapatan "i" düğmesi ve (varsa) veri kümesi seçici */}
           {(tabloBasligi || kumeSecici) && (
-          <div className="flex min-h-[52px] shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-background py-1 pl-3 pr-1.5 text-[13px]" data-tablo-basligi>
+          <div className="flex min-h-[52px] basik:min-h-10 shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-background py-1 basik:py-0 pl-3 pr-1.5 text-[13px]" data-tablo-basligi>
             {tabloBasligi && (
               <h2 className="min-w-0 flex-1 truncate text-[14px] font-bold leading-5 text-foreground" title={tabloBasligi} data-tablo-adi>
                 {tabloBasligi}
@@ -2192,7 +2192,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                       ? 'Soru şeridini gizle'
                       : 'Soru şeridini göster: araştırma sorusu ve toplanan veri sayısı'
                 }
-                className={`grid h-11 w-11 shrink-0 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                className={`grid h-11 w-11 basik:h-9 basik:w-9 shrink-0 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                   ipucuAcik ? 'bg-accent text-primary dark:text-[#9fe0d9]' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 }`}
                 onClick={() => ipucuDegistir(ipucuAcik ? 'kapali' : kesifOrnegi ? 'kart' : 'serit')}
@@ -2259,7 +2259,7 @@ export default function VeriGrafikUygulamasi({ pencereGenisligi }: VeriGrafikUyg
                     onClick={() => {
                       if (!aktif) degiskenSec(s.id);
                     }}
-                    className={`relative inline-flex h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-[calc(var(--radius)-4px)] border px-3.5 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
+                    className={`relative inline-flex h-11 basik:h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-[calc(var(--radius)-4px)] border px-3.5 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
                       aktif
                         ? 'border-border border-b-card bg-card font-bold text-foreground shadow-[inset_0_3px_0_hsl(var(--primary))]'
                         : 'border-transparent font-semibold text-muted-foreground hover:bg-accent/70 hover:text-foreground'

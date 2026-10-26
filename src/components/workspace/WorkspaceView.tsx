@@ -24,6 +24,7 @@ import { ActivityPanel } from './ActivityPanel';
 import { FunctionDialog } from './FunctionDialog';
 import { SliderDialog } from './SliderDialog';
 import { SliderSettingsDialog } from './SliderSettingsDialog';
+import { SurguPaneli3B } from './SurguPaneli3B';
 import { RegularPolygonDialog } from './RegularPolygonDialog';
 import { CircleRadiusDialog } from './CircleRadiusDialog';
 import { ValuePromptDialog } from './ValuePromptDialog';
@@ -804,6 +805,8 @@ export function WorkspaceView() {
               <CubukMetni vurgu="altin" simge={<Lightbulb className="w-4 h-4" />} baslik={hintMessage} />
             </KayanCubuk>
           )}
+          {/* 3B tek başına açıkken sürgüler 3B tuvalin sol üstündeki panelde (2B tuval çizilmiyor) */}
+          {layoutMode === '3d_only' && <SurguPaneli3B />}
           <Canvas3D
             solids={solids}
             selectedSolidId={selectedSolidId}

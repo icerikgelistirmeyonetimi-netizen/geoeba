@@ -7,7 +7,8 @@
  * atölye Serbest Çizim Stüdyosu'nu açar. Kademe adasında sınıf binasına ya da alttaki
  * sınıf düğmesine tıklamak sağda o sınıfın temalarını (TYMM; veride "theme") listeleyen paneli açar; temanın
  * konusu seçilince panel sola doğru genişler ve konunun içeriği panelin içinde açılır
- * (sol üstteki başlık yazıları ve alttaki düğmeler bu sürede çekilir).
+ * (sol üstteki başlık yazıları ve alttaki düğmeler bu sürede çekilir). Tema listesi açık kalır:
+ * geniş ve alçak ekranda içeriğin yanında, dar dikey ekranda altında; başka konuya oradan geçilir.
  *
  * Sahne motoru (adaSahnesi.ts) yalnız tarayıcıda, effect içinde dinamik olarak yüklenir.
  * Sahne açılamazsa aynı ekranın kademe, sınıf ve konu gezinmesi kullanılabilir kalır.
@@ -68,16 +69,14 @@ const ikon = {
       <path d="M5 5l10 10M15 5L5 15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   ),
-  disari: (
+  tamEkran: (
     <svg viewBox="0 0 20 20" aria-hidden="true">
-      <path
-        d="M11 4h5v5m0-5l-6.5 6.5M14 12v3.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5H8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <path d="M3.5 7.5v-4h4M12.5 3.5h4v4M16.5 12.5v4h-4M7.5 16.5h-4v-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  tamEkranCik: (
+    <svg viewBox="0 0 20 20" aria-hidden="true">
+      <path d="M7.5 3.5v4h-4M16.5 7.5h-4v-4M12.5 16.5v-4h4M3.5 12.5h4v4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   ),
   /** EBA taşıyıcı tipi (göz karakteri), animasyonlu: yükleyicide kullanılır. Kaynak: EBA Görsel Kimlik Kılavuzu s. 22. */
@@ -134,6 +133,55 @@ function kazanimListesi(): Promise<Record<string, KazanimIcerigi>> {
     .then((veri) => (veri?.kazanimlar as Record<string, KazanimIcerigi> | undefined) ?? {})
     .catch(() => ({}));
   return kazanimListesiSozu;
+}
+
+/**
+ * Ders sayfaları sabit 1280×720 sahneyi pencereye sığdırır; giriş kapağı ise pencereyle akar ve
+ * küçük pencerede kesilir. Çerçeve bu ölçüden küçükse sayfa en az bu boyutta bir pencerede çizilip
+ * çerçeveye küçültülür: telefonda da masaüstündeki yerleşim görünür.
+ */
+const DERS_EN_AZ = { genislik: 960, yukseklik: 540 };
+/** Tam ekranda dar ve dikey ekranda ders yan çevrilir: 16:9 sahne yatayda neredeyse iki kat büyür. */
+const YAN_CEVIRME_SINIRI = 600;
+
+type TamEkranBelgesi = Document & { webkitFullscreenElement?: Element | null; webkitExitFullscreen?: () => void };
+type TamEkranOgesi = HTMLElement & { webkitRequestFullscreen?: () => void };
+type EkranYonu = ScreenOrientation & { lock?: (yon: string) => Promise<void>; unlock?: () => void };
+
+function tamEkranOgesi(): Element | null {
+  const belge = document as TamEkranBelgesi;
+  return belge.fullscreenElement ?? belge.webkitFullscreenElement ?? null;
+}
+
+/**
+ * Tarayıcının tam ekranını ister; dar dikey ekranda yatay kilit de denenir (Android). Desteklenmezse
+ * (iPhone Safari) içerik sayfa içindeki sabit katmanda kalır, yan çevirmeyi CSS üstlenir.
+ */
+function tarayiciTamEkraninaGec(oge: HTMLElement) {
+  const o = oge as TamEkranOgesi;
+  try {
+    const istek = o.requestFullscreen ? o.requestFullscreen({ navigationUI: 'hide' }) : o.webkitRequestFullscreen?.();
+    void Promise.resolve(istek)
+      .then(() => {
+        if (innerHeight > innerWidth && innerWidth < YAN_CEVIRME_SINIRI) {
+          return (screen.orientation as EkranYonu | undefined)?.lock?.('landscape');
+        }
+      })
+      .catch(() => {});
+  } catch {
+    // Sayfa içi katman yeterli
+  }
+}
+
+function tarayiciTamEkranindanCik() {
+  try {
+    (screen.orientation as EkranYonu | undefined)?.unlock?.();
+  } catch {
+    // Yön kilidi desteklenmiyor
+  }
+  if (!tamEkranOgesi()) return;
+  const belge = document as TamEkranBelgesi;
+  void Promise.resolve(belge.exitFullscreen ? belge.exitFullscreen() : belge.webkitExitFullscreen?.()).catch(() => {});
 }
 
 // WebGL2 sondası: sonuç önbelleğe alınır ve sonda bağlamı hemen bırakılır (StrictMode'da her
@@ -201,6 +249,14 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
   const [icerikSirasi, setIcerikSirasi] = useState(0);
   // Ders sayfası birkaç MB; yüklenene kadar çerçevenin üstünde geometrik yükleme ekranı durur
   const [dersHazir, setDersHazir] = useState(false);
+  // Ders tam ekranda: tarayıcı tam ekranı ya da (iPhone'da) sayfa içi sabit katman
+  const [tamEkran, setTamEkran] = useState(false);
+  // Ders çerçevesinin ölçüsü (yan çevrildiyse çevrilmiş hâli); ders sayfası buna göre küçültülür
+  const [cerceve, setCerceve] = useState<{ genislik: number; yukseklik: number; yan: boolean } | null>(null);
+  const icerikAlaniRef = useRef<HTMLDivElement>(null);
+  const tamEkranDugmeRef = useRef<HTMLButtonElement>(null);
+  const tamEkranKapatRef = useRef<HTMLButtonElement>(null);
+  const tamEkranCikisi = useRef(0);
   // Adalar hazır olunca EBA logosunun açılış animasyonu bir kez oynar (uygulama başına tek sefer)
   const [logoCanli, setLogoCanli] = useState(false);
   useEffect(() => {
@@ -213,6 +269,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
   const panelOlcusu = useRef<DOMRect | null>(null);
   const escRef = useRef<() => void>(() => {});
   const panelRef = useRef<HTMLElement>(null);
+  const uniteListesiRef = useRef<HTMLUListElement>(null);
   const panelAcan = useRef<HTMLElement | null>(null);
   const odakDonusu = useRef<HTMLElement | null>(null);
   const azHareket = useRef(false);
@@ -290,6 +347,31 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
   useEffect(() => {
     if (icerikAcik) icerikBaslikRef.current?.focus({ preventScroll: true });
   }, [icerikAcik]);
+
+  // Açık konu tema listesinde görünür kalır: dar dikey ekranda liste dersin altında kısalır, seçilen
+  // satır alanın dışına düşebilir. Panel kutusu canlandırılırken liste ölçülmez; bitince kaydırılır.
+  useEffect(() => {
+    const liste = uniteListesiRef.current;
+    const panel = panelRef.current;
+    if (!icerik || !liste || !panel) return;
+    let gecerli = true;
+    const animasyonlar = panel.getAnimations?.() ?? [];
+    void Promise.all(animasyonlar.map((a) => a.finished.catch(() => {}))).then(() => {
+      const satir = liste.querySelector<HTMLElement>('[aria-current="true"]');
+      // Dar dikey ekranda liste başlığıyla birlikte kayar (kaydırıcı liste sütunudur)
+      const kaydirici = liste.scrollHeight > liste.clientHeight ? liste : liste.parentElement;
+      if (!gecerli || !satir || !kaydirici) return;
+      const l = kaydirici.getBoundingClientRect();
+      const r = satir.getBoundingClientRect();
+      const kayma = r.top < l.top ? r.top - l.top - 8 : r.bottom > l.bottom ? r.bottom - l.bottom + 8 : 0;
+      if (kayma) kaydirici.scrollTo({ top: kaydirici.scrollTop + kayma, behavior: azHareket.current ? 'auto' : 'smooth' });
+    });
+    return () => {
+      gecerli = false;
+    };
+    // Yalnız açılan konu değişince bakılır; içerik nesnesinin kendisi her seçimde yenidir.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [icerik?.konu.id]);
 
   // Panel genişleyip daralırken kutu eski boyutundan yenisine süzülür. Konumlama biçimi ve 'auto'
   // yükseklik değiştiği için CSS geçişi çalışmaz; değişimden önce ve sonra ölçülen kutular arasında
@@ -592,6 +674,21 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
     }
   }
 
+  /** Ders bütün ekranı kaplar; çerçeve yeniden yüklenmez, öğrenci kaldığı yerden sürer. */
+  function tamEkranaGec() {
+    const alan = icerikAlaniRef.current;
+    if (!alan || tamEkran) return;
+    setTamEkran(true);
+    setCanli('Etkinlik tam ekranda açıldı.');
+    tarayiciTamEkraninaGec(alan);
+  }
+
+  function tamEkrandanCik() {
+    setTamEkran(false);
+    setCanli('Tam ekrandan çıkıldı.');
+    tarayiciTamEkranindanCik();
+  }
+
   async function atolyeyeGit() {
     if (gidiliyor.current) return;
     gidiliyor.current = true;
@@ -655,7 +752,10 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
     if (panelAcik) paneliKapat(false);
   };
   escRef.current = () => {
-    if (icerik) icerigiKapat();
+    // Tarayıcı tam ekranı Esc ile kapanırken aynı tuş buraya da düşerse içerik kapanmasın
+    if (performance.now() - tamEkranCikisi.current < 500) return;
+    if (tamEkran) tamEkrandanCik();
+    else if (icerik) icerigiKapat();
     else paneliKapat();
   };
 
@@ -679,6 +779,7 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
     ANA && s['ana-sayfa'],
     panelAcik && s['panel-acik'],
     icerikAcik && s['icerik-acik'],
+    tamEkran && s['tam-ekran'],
   ]
     .filter(Boolean)
     .join(' ');
@@ -687,6 +788,71 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
   const acikSayfalar = icerik?.konu.code ? konuSayfalari(kazanimlar[icerik.konu.code]) : [];
   const acikKazanim: IcerikSayfasi | undefined = acikSayfalar[icerikSirasi] ?? acikSayfalar[0];
   const icerikAdresi = acikKazanim ? `${KAZANIM_KLASORU}/${encodeURIComponent(acikKazanim.dosya)}${SURUM_EKI}` : null;
+  // Çerçeve DERS_EN_AZ'dan küçükse ders o ölçüde çizilip küçültülür (oran çerçeveninki kalır)
+  const dersOlcegi = cerceve
+    ? Math.min(1, cerceve.genislik / DERS_EN_AZ.genislik, cerceve.yukseklik / DERS_EN_AZ.yukseklik)
+    : 1;
+
+  // Ders çerçevesi içerik alanının ölçüsünü alır; tam ekranda dar dikey ekranda yan çevrilir.
+  // Layout effect: tam ekrana geçiş ve çıkışta eski ölçü bir kare bile görünmez.
+  useTarayiciLayoutEffect(() => {
+    const alan = icerikAlaniRef.current;
+    if (!alan || !icerikAdresi) return;
+    const olc = () => {
+      const stil = getComputedStyle(alan);
+      const en = alan.clientWidth - parseFloat(stil.paddingLeft) - parseFloat(stil.paddingRight);
+      const boy = alan.clientHeight - parseFloat(stil.paddingTop) - parseFloat(stil.paddingBottom);
+      if (en <= 0 || boy <= 0) return;
+      const yan = tamEkran && boy > en && en < YAN_CEVIRME_SINIRI;
+      const genislik = Math.floor(yan ? boy : en);
+      const yukseklik = Math.floor(yan ? en : boy);
+      setCerceve((o) =>
+        o && o.genislik === genislik && o.yukseklik === yukseklik && o.yan === yan ? o : { genislik, yukseklik, yan },
+      );
+    };
+    olc();
+    const gozlemci = new ResizeObserver(olc);
+    gozlemci.observe(alan);
+    return () => gozlemci.disconnect();
+  }, [icerik?.konu.id, icerikAdresi, tamEkran]);
+
+  // Tam ekranda ada sahnesi durur (ders aynı iş parçacığında çalışır); odak çıkış düğmesine geçer,
+  // çıkınca tam ekran düğmesine döner
+  useEffect(() => {
+    if (!tamEkran) return;
+    const sahne = sahneRef.current;
+    const dugme = tamEkranDugmeRef.current;
+    sahne?.duraklat(true);
+    tamEkranKapatRef.current?.focus({ preventScroll: true });
+    return () => {
+      sahne?.duraklat(false);
+      if (dugme?.isConnected) dugme.focus({ preventScroll: true });
+    };
+  }, [tamEkran]);
+
+  // Ders kapanınca (ör. tarayıcı Geri'si) tam ekran da kapanır
+  useEffect(() => {
+    if (tamEkran && !(icerikAcik && icerikAdresi)) tamEkrandanCik();
+    // Çıkış işlevi her çizimde yenilenir; yalnız bu durumlar değişince bakılır.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tamEkran, icerikAcik, icerikAdresi]);
+
+  // Tarayıcının tam ekranından (Esc, sistem hareketi) çıkılınca durum da kapanır
+  useEffect(() => {
+    const degisti = () => {
+      if (tamEkranOgesi()) return;
+      tamEkranCikisi.current = performance.now();
+      setTamEkran(false);
+    };
+    document.addEventListener('fullscreenchange', degisti);
+    document.addEventListener('webkitfullscreenchange', degisti);
+    return () => {
+      document.removeEventListener('fullscreenchange', degisti);
+      document.removeEventListener('webkitfullscreenchange', degisti);
+      tarayiciTamEkranindanCik();
+    };
+  }, []);
+
   const kokStili = kademe ? ({ '--vurgu': kademe.renk } as React.CSSProperties) : undefined;
   const siniflar = kademe ? ADA_SINIFLARI[kademe.id] : [];
 
@@ -879,13 +1045,15 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
                   <p className={s['panel-sayi']}>{temaSayisiMetni(paneldekiUniteler.length)}</p>
                 </div>
               </div>
-              <ul className={s['unite-listesi']} aria-label={`${sinifAdi(panelSinif)} temaları`}>
+              <ul ref={uniteListesiRef} className={s['unite-listesi']} aria-label={`${sinifAdi(panelSinif)} temaları`}>
                 {paneldekiUniteler.map((unite) => {
                   const acik = acikUnite === unite.id;
+                  // İçeriği açık konunun teması, kapatılmış olsa da numarasıyla seçilir
+                  const guncel = icerik?.uniteId === unite.id;
                   return (
                     <li
                       key={unite.id}
-                      className={`${s.unite} ${acik ? s['unite--acik'] : ''}`}
+                      className={[s.unite, acik && s['unite--acik'], guncel && s['unite--guncel']].filter(Boolean).join(' ')}
                       style={{ '--unite-renk': unite.colorTheme } as React.CSSProperties}
                     >
                       <button
@@ -963,16 +1131,17 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
                     )}
                   </div>
                   {icerikAdresi && (
-                    <a
-                      className={s['icerik-disari']}
-                      href={icerikAdresi}
-                      target="_blank"
-                      rel="noreferrer"
-                      title="İçeriği yeni sekmede aç"
+                    <button
+                      ref={tamEkranDugmeRef}
+                      type="button"
+                      className={s['icerik-tam-ekran']}
+                      aria-label="Tam ekran"
+                      title="Tam ekranda aç"
+                      onClick={tamEkranaGec}
                     >
-                      {ikon.disari}
-                      <span>Yeni sekmede</span>
-                    </a>
+                      {ikon.tamEkran}
+                      <span aria-hidden="true">Tam ekran</span>
+                    </button>
                   )}
                 </div>
                 {acikSayfalar.length > 1 && (
@@ -999,15 +1168,30 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
                 )}
                 {/* Aktarılmış kazanım sayfası (konu kimliği: data-konu); yoksa boş ileti kalır */}
                 <div
-                  className={`${s['icerik-alani']} ${icerikAdresi ? s['icerik-alani--sayfa'] : ''}`}
+                  ref={icerikAlaniRef}
+                  className={[s['icerik-alani'], icerikAdresi && s['icerik-alani--sayfa'], tamEkran && s['icerik-alani--tam']]
+                    .filter(Boolean)
+                    .join(' ')}
                   data-konu={icerik.konu.id}
                   data-kazanim={icerik.konu.code}
                 >
                   {icerikAdresi ? (
-                    <>
+                    <div
+                      className={`${s['icerik-sahne']} ${cerceve?.yan ? s['icerik-sahne--yan'] : ''}`}
+                      style={cerceve ? { width: cerceve.genislik, height: cerceve.yukseklik } : undefined}
+                    >
                       <iframe
                         key={icerikAdresi}
                         className={`${s['icerik-cerceve']} ${dersHazir ? s['icerik-cerceve--hazir'] : ''}`}
+                        style={
+                          cerceve && dersOlcegi < 1
+                            ? {
+                                width: cerceve.genislik / dersOlcegi,
+                                height: cerceve.yukseklik / dersOlcegi,
+                                transform: `scale(${dersOlcegi})`,
+                              }
+                            : undefined
+                        }
                         src={icerikAdresi}
                         title={`${icerik.konu.title} içeriği`}
                         allow="fullscreen; autoplay; microphone"
@@ -1020,7 +1204,19 @@ export function AdaEkrani({ sayfa, onKademeSec, onAtolye, onAnaSayfa, initialGra
                           <p className={s['ders-yukleme-yazi']}>Etkinlik hazırlanıyor…</p>
                         </div>
                       )}
-                    </>
+                      {tamEkran && (
+                        <button
+                          ref={tamEkranKapatRef}
+                          type="button"
+                          className={s['tam-ekran-kapat']}
+                          aria-label="Tam ekrandan çık"
+                          title="Tam ekrandan çık"
+                          onClick={tamEkrandanCik}
+                        >
+                          {ikon.tamEkranCik}
+                        </button>
+                      )}
+                    </div>
                   ) : (
                     <p className={s['icerik-bos']}>Bu kazanımın içeriği henüz eklenmedi.</p>
                   )}

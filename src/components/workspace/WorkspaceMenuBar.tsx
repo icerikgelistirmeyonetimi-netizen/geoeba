@@ -74,6 +74,7 @@ import {
   FileCode2,
   Grid2x2,
   PlusSquare,
+  Menu as MenuSimgesi,
 } from 'lucide-react';
 
 export interface WorkspaceMenuBarProps {
@@ -239,16 +240,30 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const kisayolAraclari = TOOL_GROUPS.flatMap((g) => g.tools).filter((tool) => aracSecilebilirMi(kademeDuzeyi, tool.id));
   const kisayollarSuzuldu = kisayolAraclari.length < TOOL_GROUPS.reduce((n, g) => n + g.tools.length, 0);
 
+  /**
+   * Dar pencerede (telefon) menü başlıkları Menü düğmesinin açtığı panelde alt alta durur; başlığa dokununca
+   * menü yerinde açılır (sinif.module.css .pencere-menu). Panel, menüden bir komut seçilince ya da dışarı
+   * dokununca kapanır; yalnız başlığa yeniden dokunup menüyü katlamak paneli açık bırakır.
+   */
+  const [menuPaneliAcik, setMenuPaneliAcik] = useState(false);
+  const basliktanKatlandi = useRef(false);
+  useEffect(() => {
+    if (activeMenu === null && !basliktanKatlandi.current) setMenuPaneliAcik(false);
+    basliktanKatlandi.current = false;
+  }, [activeMenu]);
+
   // Menü dışına tıklanınca kapat
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuBarRef.current && !menuBarRef.current.contains(e.target as Node)) {
         setActiveMenu(null);
+        setMenuPaneliAcik(false);
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setActiveMenu(null);
+        setMenuPaneliAcik(false);
         setInfoModalType(null);
         setIsSettingsModalOpen(false);
       }
@@ -272,6 +287,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const handleMenuHeaderClick = (menu: MenuBasligi) => {
     const yeni = basligaTiklayinca({ acik: activeMenu, uzerineGelinceAcilan: uzerineGelinceAcilan.current }, menu);
     uzerineGelinceAcilan.current = yeni.uzerineGelinceAcilan;
+    if (yeni.acik === null) basliktanKatlandi.current = true;
     setActiveMenu(yeni.acik);
   };
 
@@ -441,8 +457,31 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
         ref={menuBarRef}
         className="flex-1 flex items-center justify-between z-30 select-none min-w-0 relative"
       >
+        {/* Dar pencerede menü başlıklarını açan düğme; geniş pencerede ve pencere dışında gizli */}
+        <button
+          type="button"
+          data-menu-dugmesi
+          aria-label="Menü"
+          aria-expanded={menuPaneliAcik}
+          onClick={() => {
+            setMenuPaneliAcik((acik) => !acik);
+            if (activeMenu === null) return;
+            basliktanKatlandi.current = true;
+            setActiveMenu(null);
+          }}
+          className={`hidden min-h-[44px] min-w-[44px] items-center justify-center rounded-md transition-colors cursor-pointer ${
+            menuPaneliAcik ? 'bg-primary/15 text-primary' : 'text-foreground/80 hover:text-foreground hover:bg-muted'
+          }`}
+        >
+          <MenuSimgesi className="w-5 h-5" />
+        </button>
+
         {/* SOL: 7 ANA MENÜ LİSTESİ */}
-        <div className="flex items-center gap-0.5 sm:gap-1 text-[13px] font-medium">
+        <div
+          data-menu-listesi
+          data-acik={menuPaneliAcik || undefined}
+          className="flex items-center gap-0.5 sm:gap-1 text-[13px] font-medium"
+        >
           {/* 1. DOSYA MENÜSÜ */}
           <div className="relative">
             <button

@@ -396,7 +396,7 @@ function kokaGoreKonum(el: HTMLElement, kok: HTMLElement): { x: number; y: numbe
 // ── Görünüm ────────────────────────────────────────────────────────────────────
 
 const HUCRE =
-  'h-11 w-full min-w-0 bg-transparent px-2 text-[13px] text-foreground outline-none scroll-mt-12 focus:bg-accent/60 focus:ring-2 focus:ring-inset focus:ring-ring';
+  'h-11 basik:h-9 w-full min-w-0 bg-transparent px-2 text-[13px] text-foreground outline-none scroll-mt-12 focus:bg-accent/60 focus:ring-2 focus:ring-inset focus:ring-ring';
 
 /** Zebra şeritleri (opak: yapışkan sütunlar satır rengini devralır) */
 const ZEBRA = 'odd:bg-card even:bg-[color-mix(in_srgb,hsl(var(--muted))_40%,hsl(var(--card)))]';
@@ -1133,7 +1133,7 @@ export function VeriTablosu({
                 <th
                   scope="col"
                   className={`sticky left-0 z-20 w-[45px] min-w-[45px] border-b border-r border-border bg-muted px-1 text-center text-[13px] font-bold text-muted-foreground ${
-                    alcakBaslik ? 'h-9' : 'h-11'
+                    alcakBaslik ? 'h-9' : 'h-11 basik:h-9'
                   }`}
                 >
                   #
@@ -1152,11 +1152,11 @@ export function VeriTablosu({
                       data-sutun-id={sutun.id}
                       data-yapiskan={yapiskan || undefined}
                       style={{ minWidth: genislikler[j] }}
-                      className={`${alcakBaslik ? 'h-9' : 'h-11'} border-b border-r border-border p-0 text-left align-middle font-bold ${
+                      className={`${alcakBaslik ? 'h-9' : 'h-11 basik:h-9'} border-b border-r border-border p-0 text-left align-middle font-bold ${
                         vurguluSutun === sutun.id ? 'bg-accent' : 'bg-muted'
                       } ${yapiskan ? `sticky left-[45px] z-20 ${kaydirildi ? YAPISKAN_GOLGE : ''}` : ''}`}
                     >
-                      <div className={`flex items-stretch ${alcakBaslik ? 'min-h-9' : 'min-h-11'}`}>
+                      <div className={`flex items-stretch ${alcakBaslik ? 'min-h-9' : 'min-h-11 basik:min-h-9'}`}>
                         {/* Ad iki satıra kırılır (bantta tek satır, tamamı title'da); üstündeki görünmez girdiye dokununca
                             düzenlenir (odakta görünür) */}
                         <div className={`relative min-w-0 flex-1 ${duzenlenebilir ? 'hover:bg-accent/50' : ''}`}>
@@ -1212,7 +1212,7 @@ export function VeriTablosu({
                         </div>
                         {duraganCip && (
                           <span
-                            className="flex h-11 w-11 shrink-0 items-center justify-center self-center"
+                            className="flex h-11 basik:h-9 w-11 shrink-0 items-center justify-center self-center"
                             title="Sayısal sütun · ilk sütunun türü değişmez"
                             data-ilk-sutun-turu="sayi"
                           >
@@ -1230,7 +1230,7 @@ export function VeriTablosu({
                             aria-label={`${sutun.ad} sütunu (${sayi ? 'sayısal' : 'kategorik'}): seçenekler`}
                             title={kilitli ? KILIT_NOTU : `${sayi ? 'Sayısal' : 'Kategorik'} sütun · tür, ad ve silme`}
                             disabled={kilitli}
-                            className={`flex h-11 w-11 shrink-0 items-center justify-center gap-0.5 self-center text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${
+                            className={`flex h-11 basik:h-9 w-11 shrink-0 items-center justify-center gap-0.5 self-center text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 ${
                               menuAcikBu ? 'bg-accent text-foreground' : ''
                             }`}
                             onClick={(e) => menuAc(sutun.id, e.currentTarget)}
@@ -1244,7 +1244,7 @@ export function VeriTablosu({
                   );
                 })}
                 {tamDenetim && (
-                  <th scope="col" className="h-11 w-11 min-w-11 border-b border-border bg-muted" aria-label="Satır işlemleri" />
+                  <th scope="col" className="h-11 basik:h-9 w-11 min-w-11 border-b border-border bg-muted" aria-label="Satır işlemleri" />
                 )}
               </tr>
             </thead>
@@ -1290,7 +1290,7 @@ export function VeriTablosu({
                           title="Satırı sil"
                           data-satir-sil={i}
                           style={renk ? { boxShadow: `inset 4px 0 0 ${renk}` } : undefined}
-                          className="grid h-11 w-full place-items-center pl-1 hover:bg-[#c8704f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#15302d]"
+                          className="grid h-11 basik:h-9 w-full place-items-center pl-1 hover:bg-[#c8704f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#15302d]"
                           onClick={() => {
                             if (silmeHazir()) satiriSil(i);
                           }}
@@ -1305,7 +1305,7 @@ export function VeriTablosu({
                           data-satir-sec={i}
                           // Renk anahtarı: satırın kategorisi numaranın solunda renkli şerit olarak görünür
                           style={renk ? { boxShadow: `inset 4px 0 0 ${renk}` } : undefined}
-                          className={`h-11 w-full pl-1 text-[13px] font-bold tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
+                          className={`h-11 basik:h-9 w-full pl-1 text-[13px] font-bold tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
                             secili ? '' : 'hover:bg-accent hover:text-foreground'
                           }`}
                           onClick={() => onSatirSec(secili ? null : i)}
@@ -1376,7 +1376,7 @@ export function VeriTablosu({
                             title="Satırı sil"
                             data-satir-sil={i}
                             tabIndex={secili ? 0 : -1}
-                            className={`grid h-11 w-11 place-items-center text-muted-foreground transition-opacity hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none ${
+                            className={`grid h-11 basik:h-9 w-11 place-items-center text-muted-foreground transition-opacity hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none ${
                               secili
                                 ? 'opacity-100'
                                 : 'pointer-events-none opacity-0 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100'
@@ -1468,7 +1468,7 @@ export function VeriTablosu({
       <div
         // Bantta üst çizgi gölgedir (kenarlık 1 px daha yer kaplardı; açık bant ≤ 216 px): şerit tam 44 px
         className={`flex items-center gap-2 bg-card px-2 ${
-          bantModu ? 'min-h-11 flex-nowrap shadow-[inset_0_1px_0_hsl(var(--border))]' : 'flex-wrap border-t border-border py-2'
+          bantModu ? 'min-h-11 flex-nowrap shadow-[inset_0_1px_0_hsl(var(--border))]' : 'flex-wrap border-t border-border py-2 basik:py-1'
         }`}
         data-tablo-alt-serit
       >

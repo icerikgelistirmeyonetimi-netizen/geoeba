@@ -115,7 +115,7 @@ import { olcmeAraciMi } from '@/components/workspace/olcmeAraclari';
 
 export { createId } from './ids';
 
-type ObjectsUpdater = MathObject[] | ((prev: MathObject[]) => MathObject[]);
+export type ObjectsUpdater = MathObject[] | ((prev: MathObject[]) => MathObject[]);
 
 interface WorkspaceContextType {
   objectClipboard: ObjectClipboard | null;

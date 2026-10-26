@@ -142,9 +142,14 @@ export function sliderDisplay(objects: readonly MathObject[], slider: SliderObje
   };
 
   let selected: Name | null = null;
+  // 3B cisim bağı: kaydırıcıda saklanan ad ("Küp 1: kenar uzunluğu")
+  const cisimAdi = slider.cisimBagi
+    ? { nameNodes: [kelime(slider.cisimBagi.ad)], unit: (slider.cisimBagi.ozellik === 'donme' ? '°' : slider.cisimBagi.ozellik === 'acinim' ? '' : 'br') as SliderDisplay['unit'] }
+    : null;
+  if (cisimAdi && !slider.cisimBagi!.askida) selected = cisimAdi;
   const binding = slider.bindingTarget;
   const target = binding ? byId.get(binding.objectId) : undefined;
-  if (binding && target) selected = forTarget(target, binding.propertyKey);
+  if (!selected && binding && target) selected = forTarget(target, binding.propertyKey);
   // Üçgen komutunun üç kaydırıcısı doğrudan kenarları ölçer; aynı noktalarla
   // sonradan çizilmiş bir çember bu eski kaydırıcıya yarıçap adı vermesin.
   if (!selected && triangleSides.length) selected = fromMeasure(uzunluk(point(triangleSides[0][0]), point(triangleSides[0][1]), slider.value), 'Uzunluk');
@@ -180,7 +185,7 @@ export function sliderDisplay(objects: readonly MathObject[], slider: SliderObje
   }
   // Geçici kapatılmış bağ: hatırlanan özelliğin adı (bağ kurulu olmadığı için eşleşme aranmaz)
   const askidaki = !selected && slider.suspendedBinding ? byId.get(slider.suspendedBinding.objectId) : undefined;
-  const askida = askidaki ? forTarget(askidaki, slider.suspendedBinding!.propertyKey, false) : null;
+  const askida = askidaki ? forTarget(askidaki, slider.suspendedBinding!.propertyKey, false) : !selected && slider.cisimBagi?.askida ? cisimAdi : null;
   const { nameNodes, unit, suffix = [] } = selected ?? { nameNodes: [sembol(slider.variableName)], unit: askida?.unit ?? (slider.sliderType === 'angle' ? '°' as const : '' as const) };
   const deger: Dugum[] = [sembol(' = '), { t: 'sayi', s: String(slider.value).replace('.', ',') }, ...(unit ? [{ t: 'birim' as const, s: unit }] : [])];
   const nodes: Dugum[] = [...nameNodes, ...deger, ...suffix];

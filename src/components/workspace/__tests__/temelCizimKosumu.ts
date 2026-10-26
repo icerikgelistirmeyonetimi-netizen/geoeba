@@ -10,6 +10,7 @@ import { Canvas } from '../Canvas';
 import { RegularPolygonDialog } from '../RegularPolygonDialog';
 import { SliderSettingsDialog } from '../SliderSettingsDialog';
 import { SliderDialog } from '../SliderDialog';
+import { SurguPaneli3B } from '../SurguPaneli3B';
 import { worldToScreen } from '@/math/coordinates';
 import type { MathObject, Point2D } from '@/types/math';
 import { baglamDegerleri, bilesen, durula, ogeBul, type AgacOgesi, type Bilesen } from './kancaKosumu';
@@ -115,6 +116,24 @@ export function kaydiriciAyarlariKur(nesneler: MathObject[], sliderId: string) {
     },
     /** Penceredeki öğe (alt bileşenler çizilmez; yalnız çocuk öğelere bakılır) */
     oge: (kosul: (o: AgacOgesi) => boolean) => ogeBul(diyalog!.sonuc, kosul),
+  };
+}
+
+/** WorkspaceProvider + 3B sürgü paneli (3B tek başına açıkken tuvalin sol üstünde) */
+export function surguPaneliKur(nesneler: MathObject[]) {
+  let panel: Bilesen<unknown, unknown> | null = null;
+  const k = saglayiciKur(() => (panel ? [panel] : []));
+  if (nesneler.length) k.yap((d) => d.addObjects(nesneler, 'hazır'));
+  panel = bilesen('surguPaneli', SurguPaneli3B, {}, { efektler: false }) as Bilesen<unknown, unknown>;
+  durula([panel], k.kaydet);
+  return {
+    ...k,
+    get d() {
+      return k.d;
+    },
+    /** Panelin öğe ağacı (sürgü satırları alt bileşendir: ayrıca çizilir) */
+    agac: () => panel!.sonuc,
+    oge: (kosul: (o: AgacOgesi) => boolean) => ogeBul(panel!.sonuc, kosul),
   };
 }
 

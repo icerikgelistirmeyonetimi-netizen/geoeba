@@ -293,12 +293,13 @@ export function Laboratuvar({ durum, setDurum, ayar, kademe, onSinifDegistir }: 
     />
   );
   const dugmeSinifi =
-    'min-h-[44px] min-w-[44px] rounded-[calc(var(--radius)-4px)] px-3 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
+    'min-h-[44px] basik:min-h-[36px] min-w-[44px] rounded-[calc(var(--radius)-4px)] px-3 text-sm font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 
   return (
     <div ref={kokRef} className="flex h-full w-full flex-col bg-background text-foreground" data-uygulama="olasilik" data-olasilik-sinif={ayar.sinif} data-olasilik-kademe={kademe}>
-      {/* Üst şerit: sınıf + şablon sekmeleri + deneme düğmeleri */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2">
+      {/* Üst şerit: sınıf + şablon sekmeleri + deneme düğmeleri. Basık ekranda (yatay telefon) sekmeler yalnız simge,
+          düğmeler 36 px: şerit tek satıra iner, sahneye yer kalır */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 basik:py-1">
         <SinifRozeti sinif={ayar.sinif} onDegistir={onSinifDegistir} disabled={animasyonda} />
         <div className="flex flex-wrap gap-1" role="tablist" aria-label="Rastgele olay şablonu">
           {sablonlar.map((t, i) => (
@@ -321,9 +322,10 @@ export function Laboratuvar({ durum, setDurum, ayar, kademe, onSinifDegistir }: 
                 document.getElementById(sekmeKimlikleri('olasilik', sablonlar[hedef]).sekme)?.focus();
               }}
               className={`${dugmeSinifi} inline-flex items-center ${durum.sablonTuru === t ? 'bg-primary text-primary-foreground' : 'bg-transparent text-foreground hover:bg-muted'}`}
+              title={SABLON_ADLARI[t]}
             >
-              <SablonSimgesi tur={t} className="mr-1.5 h-5 w-5 shrink-0" />
-              {SABLON_ADLARI[t]}
+              <SablonSimgesi tur={t} className="mr-1.5 h-5 w-5 shrink-0 basik:mr-0" />
+              <span className="basik:sr-only">{SABLON_ADLARI[t]}</span>
             </button>
           ))}
         </div>
@@ -358,13 +360,13 @@ export function Laboratuvar({ durum, setDurum, ayar, kademe, onSinifDegistir }: 
         </div>
       </div>
       {/* Görev: sınıfın yaklaşımıyla tek cümle (TEGM: her sınıf kendi olasılık türünü öğrenir) */}
-      <p className="border-b border-border bg-card px-4 py-2 text-[15px] font-semibold leading-snug text-foreground" data-gorev>
+      <p className="border-b border-border bg-card px-4 py-2 text-[15px] font-semibold leading-snug text-foreground basik:py-1 basik:text-[13px]" data-gorev>
         {gorevMetni(ayar, sablon)}
       </p>
 
       {/* Gövde: geniş → 3 sütun (ayarlar + karşılaştırma ya da tablo | sahne + olasılık kartları | sonuçlar + yakınsama);
           orta → 2 sütun (panel | sahne + tablo + grafikler); dar → tek sütun (sahne, panel, tablo, grafikler) */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-auto p-3" role="tabpanel" id={sekmeKimlikleri('olasilik', durum.sablonTuru).panel} aria-labelledby={sekmeKimlikleri('olasilik', durum.sablonTuru).sekme}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto p-3 basik:p-2" role="tabpanel" id={sekmeKimlikleri('olasilik', durum.sablonTuru).panel} aria-labelledby={sekmeKimlikleri('olasilik', durum.sablonTuru).sekme}>
         <div
           className={genis ? 'grid min-h-0 flex-1 gap-3' : 'grid gap-3'}
           style={{

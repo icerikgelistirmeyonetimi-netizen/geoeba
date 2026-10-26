@@ -121,3 +121,33 @@ describe('sağ tık menüsü: canlandırma ve sürgü oynatma maddeleri', () => 
     expect(menuyuAc(t, 'A', 'text').ham.some((m) => m.id === 'canlandirma')).toBe(false);
   });
 });
+
+describe('sağ tık menüsü: Sürgüye bağla', () => {
+  it('doğru parçasında "Uzunluk" yeni kaydırıcı oluşturup bağlar; parça yerinde kalır, tek geçmiş adımı', () => {
+    const t = tuvalKur();
+    t.yap((d) => d.addObjects(sahne(), 'hazır'));
+    const madde = menuyuAc(t, 'ab').ham.find((m) => m.id === 'surguye-bagla') as Madde & { submenu: (Madde & { onSelect: () => void })[] };
+    expect(madde.submenu.map((m) => m.label)).toEqual(['Uzunluk']);
+    const onceki = t.gecmis().adimlar.length;
+    t.yap(() => madde.submenu[0].onSelect());
+    const yeni = t.d.kaynakNesneler.find((n) => n.type === 'slider' && n.bindingTarget?.objectId === 'ab') as unknown as Record<string, unknown>;
+    expect(yeni).toMatchObject({ variableName: 'c', min: 1, max: 10, step: 1, value: 6, bindingTarget: { objectId: 'ab', propertyKey: 'length' } });
+    expect(t.d.kaynakNesneler.find((n) => n.id === 'A')).toMatchObject({ x: -4, y: -2 });
+    expect(t.d.kaynakNesneler.find((n) => n.id === 'B')).toMatchObject({ x: 2, y: -2 });
+    expect(t.gecmis().adimlar.length).toBe(onceki + 1);
+    expect(t.gecmis().adimlar.at(-1)).toBe('c kaydırıcısı eklendi ve bağlandı ([AB] doğru parçası, Uzunluk)');
+  });
+
+  it('noktada madde yok: koordinat kaydırıcıya bağlanmaz', () => {
+    const t = tuvalKur();
+    t.yap((d) => d.addObjects(sahne(), 'hazır'));
+    expect(menuyuAc(t, 'B', 'text').ham.some((m) => m.id === 'surguye-bagla')).toBe(false);
+  });
+
+  it('ilkokulda madde yok (kaydırıcı aracı yok)', () => {
+    kademeDuzeyiniAyarla('ilkokul');
+    const t = tuvalKur();
+    t.yap((d) => d.addObjects(sahne(), 'hazır'));
+    expect(menuyuAc(t, 'ab').ham.some((m) => m.id === 'surguye-bagla')).toBe(false);
+  });
+});
