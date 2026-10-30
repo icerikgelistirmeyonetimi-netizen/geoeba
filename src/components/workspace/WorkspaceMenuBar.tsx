@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { VARSAYILAN_GORUNUM_AYARLARI, useWorkspace } from '@/state/WorkspaceContext';
+import { DEFAULT_ZOOM, VARSAYILAN_GORUNUM_AYARLARI, useWorkspace } from '@/state/WorkspaceContext';
 import { useTheme } from '@/state/ThemeContext';
 import { DEFAULT_STYLE_SETTINGS, ToolMode } from '@/types/workspace';
 import { LayoutMode } from './PropertiesPanel';
@@ -14,6 +14,8 @@ import { TOOL_GROUPS } from './toolDefinitions';
 import { TREE_TOOL_GROUPS } from './treeToolDefinitions';
 import { kademeyeUygunGorunumler, eskiDuzeniCevir } from './gorunumDuzenleri';
 import { YeniCalismaModal, calismaImzasi, yeniIcinSorulmaliMi } from './YeniCalismaModal';
+import { PaylasimModal, type PaylasimIstegi } from './PaylasimModal';
+import { useOturum } from '@/state/OturumContext';
 import { kilavuzBolumleri } from './kullanimKilavuzu';
 import { basligaGelince, basligaTiklayinca } from './menuGecisi';
 import { isAnyModalOpen, registerModalOpen, registerModalClose } from '@/components/ui/modalState';
@@ -23,7 +25,7 @@ import { KademeDuzeyiMenusu } from './KademeDuzeyiMenusu';
 import { aracGorunurMu, aracSecilebilirMi, gruplariSuz, kademeEtiketi } from './kademeDuzeyleri';
 import { gorunenKisayol } from './ilkokulKipi';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
-import { kamerayiSifirla } from './cisimYerlesimi';
+import { VARSAYILAN_KAMERA_3B, kamerayiSifirla } from './cisimYerlesimi';
 import {
   FileText,
   FolderOpen,
@@ -75,6 +77,7 @@ import {
   Grid2x2,
   PlusSquare,
   Menu as MenuSimgesi,
+  Share2,
 } from 'lucide-react';
 
 export interface WorkspaceMenuBarProps {
@@ -139,6 +142,10 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   }, [isSettingsModalOpen]);
   /** Dosya > Yeni onayı açık mı */
   const [yeniSoruluyor, setYeniSoruluyor] = useState(false);
+  /** Dosya > Bağlantıyla paylaş: o anki çizimin anlık görüntüsü (null: pencere kapalı) */
+  const [paylasimIstegi, setPaylasimIstegi] = useState<PaylasimIstegi | null>(null);
+  // Paylaşım bağlantısı çizimi yapıldığı oturumda açar: yalnız sınıftaki Çizim Stüdyosu'nda (oturum varken) sunulur
+  const { kademe: oturumKademesi } = useOturum();
   /** Son kaydedilen (ya da yeni açılan) çalışmanın imzası: değişmemişse Yeni sormadan açılır */
   const kayitliImza = useRef<string | null>(null);
   /** Menü çubuğunun içinde bulunduğu Atölye penceresi (iletişim kutuları buraya taşınır) */
@@ -346,6 +353,16 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
     window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
   };
 
+  // Dosya > Bağlantıyla paylaş: çizim, açık boyut ve oturum kademesi bağlantıya yazılır (PaylasimModal)
+  const handleShareLink = () => {
+    closeMenu();
+    if (!oturumKademesi) return;
+    setPaylasimIstegi({
+      proje: getProject(), boyut: studioDimension, kademe: oturumKademesi,
+      varsayilanlar: { gorunum: { zoom: DEFAULT_ZOOM, panX: 0, panY: 0, ...VARSAYILAN_GORUNUM_AYARLARI }, kamera: VARSAYILAN_KAMERA_3B },
+    });
+  };
+
   // Dosya > Yeni: 2B nesneler ve 3B cisimler silinir (geri alınabilir), görünüm orijin merkezli başlar; ayarlar korunur.
   const yeniCalismaAc = () => {
     setYeniSoruluyor(false);
@@ -543,6 +560,18 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
                   </div>
                   <span className="text-[10px] text-muted-foreground">.geoeba</span>
                 </button>
+
+                {oturumKademesi && (
+                  <button
+                    onClick={handleShareLink}
+                    className="w-full min-h-[44px] px-3 py-1.5 flex items-center justify-between gap-3 text-left text-[13px] [&_svg]:shrink-0 text-foreground hover:bg-muted/70 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Share2 className="w-3.5 h-3.5 text-ada-mercan" />
+                      <span>Bağlantıyla paylaş</span>
+                    </div>
+                  </button>
+                )}
 
                 <div className="my-1 border-t border-border/60" />
 
@@ -1340,6 +1369,9 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
         onKaydetmeden={yeniCalismaAc}
         onVazgec={() => setYeniSoruluyor(false)}
       />
+
+      {/* Dosya > Bağlantıyla paylaş */}
+      <PaylasimModal istek={paylasimIstegi} onKapat={() => setPaylasimIstegi(null)} />
 
       {/* BİLGİLENDİRME MODALLARI (Kısayollar, Hakkında, Kılavuz) */}
       {infoModalType && (

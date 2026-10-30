@@ -22,8 +22,9 @@ describe('stil ayarları varsayılanları', () => {
     expect(STYLE_SECENEKLERI.aciYazimi).toBe(ACI_YAZIMLARI);
   });
   it('varsayılan ayarlar yazimAyari ile uyumlu', () => {
-    // Uygulamanın varsayılanı: tam sayı AÇIK (kullanıcı isteği, 2026-09-25)
-    expect(yazimAyari(DEFAULT_STYLE_SETTINGS)).toEqual({ olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: true });
+    // Tam sayı yazımı kademeye bağlıdır (olcuYuvarlama.tamSayiOlcuEtkin): ortaokul ve lise varsayılanı 2 ondalık
+    // (kullanıcı, 2026-10-30); ayar nesnesi tek başına tam sayı açmaz
+    expect(yazimAyari(DEFAULT_STYLE_SETTINGS)).toEqual({ olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: false });
   });
 });
 

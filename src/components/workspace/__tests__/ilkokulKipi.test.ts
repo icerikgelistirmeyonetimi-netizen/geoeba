@@ -129,7 +129,9 @@ describe('ölçüler tam sayı (not 6)', () => {
   it('tuval yazımı ilkokulda tam sayı ayarıyla: ondalık virgül yok', () => {
     const tam = { ...yazimAyari({ tamSayiOlcu: false }), tamSayi: true };
     const metin = olcuMetni(uzunluk({ label: 'A' }, { label: 'B' }, 3.61, { birim: 'cm' }), tam);
-    expect(metin).toBe('|AB| = 4 cm');
+    // Yuvarlanan değer ≈ alır (2026-10-30); ilkokul tuvali bunu "yaklaşık" sözcüğüyle yazar (yaklasikSozcukle)
+    expect(metin).toBe('|AB| ≈ 4 cm');
+    expect(olcuMetni(uzunluk({ label: 'A' }, { label: 'B' }, 3.61, { birim: 'cm' }), { ...tam, yaklasikSozcukle: true })).toBe('|AB| yaklaşık 4 cm');
     expect(metin).not.toContain(',');
   });
 });

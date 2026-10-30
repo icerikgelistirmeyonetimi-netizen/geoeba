@@ -112,18 +112,24 @@ describe('[150] Alanı Bul / Çevre Hesapla her dokunuşta görünür sonuç ver
 });
 
 describe('[151] / [152] ortaokulda 2 ondalık ve tek birim (br); çokgen kenarı seçilebilir', () => {
-  it('tam sayı yazımı kademeye göre: ilkokul hep, ortaokul kendi ayarıyla (varsayılan kapalı), lise/tüm eski ayar', () => {
+  it('tam sayı yazımı kademeye göre: ilkokul hep, ortaokul ve lise/tüm kendi ayarıyla (varsayılan kapalı, 2026-10-30)', () => {
     const s = DEFAULT_STYLE_SETTINGS;
     expect(s.tamSayiOlcuOrtaokul).toBe(false);
+    expect(s.tamSayiOlcuLise).toBe(false);
     expect(tamSayiOlcuEtkin(s, 'ilkokul')).toBe(true);
     expect(tamSayiOlcuEtkin(s, 'ortaokul')).toBe(false);
-    expect(tamSayiOlcuEtkin(s, 'lise')).toBe(true);
-    expect(tamSayiOlcuEtkin(s, 'tum')).toBe(true);
+    expect(tamSayiOlcuEtkin(s, 'lise')).toBe(false);
+    expect(tamSayiOlcuEtkin(s, 'tum')).toBe(false);
     expect(tamSayiOlcuEtkin({ ...s, tamSayiOlcuOrtaokul: true }, 'ortaokul')).toBe(true);
-    expect(tamSayiOlcuEtkin({ ...s, tamSayiOlcu: false }, 'lise')).toBe(false);
+    expect(tamSayiOlcuEtkin({ ...s, tamSayiOlcuOrtaokul: true }, 'lise')).toBe(false);
+    expect(tamSayiOlcuEtkin({ ...s, tamSayiOlcuLise: true }, 'lise')).toBe(true);
+    expect(tamSayiOlcuEtkin({ ...s, tamSayiOlcuLise: true }, 'tum')).toBe(true);
+    expect(tamSayiOlcuEtkin({ ...s, tamSayiOlcuLise: true }, 'ortaokul')).toBe(false);
+    // Eski kayıtlardaki tamSayiOlcu (varsayılan açıktı) artık okunmaz
+    expect(tamSayiOlcuEtkin({ ...s, tamSayiOlcu: true } as typeof s, 'lise')).toBe(false);
     expect(tamSayiAyarAnahtari('ortaokul')).toBe('tamSayiOlcuOrtaokul');
-    expect(tamSayiAyarAnahtari('lise')).toBe('tamSayiOlcu');
-    expect(tamSayiAyarAnahtari('ilkokul')).toBe('tamSayiOlcu');
+    expect(tamSayiAyarAnahtari('lise')).toBe('tamSayiOlcuLise');
+    expect(tamSayiAyarAnahtari('tum')).toBe('tamSayiOlcuLise');
   });
 
   it('r = 2 dairenin alanı ortaokulda 12,57 birimkare yazılır (tam sayıda 13)', () => {

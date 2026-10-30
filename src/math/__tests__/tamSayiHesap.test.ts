@@ -76,9 +76,9 @@ describe('açı toplamı korunur', () => {
 });
 
 describe('yazım: tam sayı ayarı', () => {
-  it('uzunluk tam sayı yazılır ve ≈ KULLANILMAZ (kullanıcı isteği)', () => {
+  it('uzunluk tam sayı yazılır; yuvarlanan değer ≈ alır (kullanıcı, 2026-10-30: etiket çentikle çelişmesin)', () => {
     const o = uzunluk(N('A'), N('B'), 6.08);
-    expect(olcuMetni(o, TAM)).toBe('|AB| = 6 br');
+    expect(olcuMetni(o, TAM)).toBe('|AB| ≈ 6 br');
     expect(olcuMetni(uzunluk(N('A'), N('B'), 6), TAM)).toBe('|AB| = 6 br');
   });
 
@@ -88,10 +88,10 @@ describe('yazım: tam sayı ayarı', () => {
 
   it('ekran okuyucu ve ipucu da aynı sayıyı söyler', () => {
     const o = uzunluk(N('A'), N('B'), 6.08);
-    expect(sesli(o, TAM)).toContain('altı');
+    expect(sesli(o, TAM)).toBe('a be uzunluğu yaklaşık altı birim');
     expect(sesli(o, TAM)).not.toContain('virgül');
-    expect(sesli(o, TAM)).not.toContain('yaklaşık');
-    expect(aciklama(o, TAM)).toBe('AB uzunluğu: 6 br');
+    expect(aciklama(o, TAM)).toBe('AB uzunluğu: ≈ 6 br');
+    expect(sesli(uzunluk(N('A'), N('B'), 6), TAM)).toBe('a be uzunluğu altı birim');
   });
 
   it('sabit basamaklı türetilmiş değer yuvarlanmaz (7,5 kalır)', () => {

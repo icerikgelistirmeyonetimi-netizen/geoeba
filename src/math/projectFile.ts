@@ -94,6 +94,13 @@ export function validateProjectObjects(input: unknown): MathObject[] {
       if (metinler.length) o.labelTexts = Object.fromEntries(metinler);
       else delete o.labelTexts;
     }
+    // Köklü gösterimi açık uzunluk etiketleri (kokluGosterim.ts): tanınmayan anahtar ve yineleme düşer
+    if (o.kokluEtiketler !== undefined) {
+      if (!Array.isArray(o.kokluEtiketler)) fail('köklü gösterim kaydı geçersiz');
+      const anahtarlar = [...new Set((o.kokluEtiketler as unknown[]).filter((k): k is string => typeof k === 'string' && /^(?:length|measure|edge\d+)$/.test(k)))];
+      if (anahtarlar.length) o.kokluEtiketler = anahtarlar;
+      else delete o.kokluEtiketler;
+    }
     if (o.labelAnchors !== undefined) {
       o.labelAnchors = Object.fromEntries(Object.entries(row(o.labelAnchors)).map(([kind, value]) => {
         const anchor = row(value);

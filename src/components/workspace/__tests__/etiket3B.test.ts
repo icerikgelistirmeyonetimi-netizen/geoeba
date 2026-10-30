@@ -76,14 +76,16 @@ describe('3B etiket: yazım (alt indis, kesme işareti, sayı, birim)', () => {
     expect(orijinCizimi('(0; 0; 0)', S)).toMatchObject({ px: 11, agirlik: 900, aile: 'mono', renk: '#737373', rozet: { dolgu: '#ffffff', cizgi: '#737373', cizgiKalinligi: 1.5 } });
   });
 
-  it('ayrıt uzunluğu 2B adsız uzunluk yazımıyla: ortaokul ondalık virgül ve ≈, lise tam sayı, ilkokul "yaklaşık"', () => {
+  it('ayrıt uzunluğu 2B adsız uzunluk yazımıyla: ortaokul ve lise ondalık virgül ve ≈, ilkokul "yaklaşık"', () => {
     expect(ayritOlcusuYazisi(Math.sqrt(12), ayar('ortaokul'), false).metin).toBe('≈ 3,46 br');
     expect(ayritOlcusuYazisi(4, ayar('ortaokul'), false).metin).toBe('4 br');
     expect(ayritOlcusuYazisi(2.5, ayar('ortaokul'), false).metin).toBe('2,5 br');
-    // Ortaokulda "Ölçüleri tam sayı yaz" açılınca 2B ile aynı: tam sayı, ≈ yok
-    expect(ayritOlcusuYazisi(Math.sqrt(12), ayar('ortaokul', { ...S, tamSayiOlcuOrtaokul: true }), false).metin).toBe('3 br');
-    expect(ayritOlcusuYazisi(Math.sqrt(12), ayar('lise'), false).metin).toBe('3 br');
-    expect(ayritOlcusuYazisi(Math.sqrt(12), ayar('lise', { ...S, tamSayiOlcu: false }), false).metin).toBe('≈ 3,46 br');
+    // Ortaokulda "Ölçüleri tam sayı yaz" açılınca 2B ile aynı: tam sayı, yuvarlanan değerde ≈ (2026-10-30)
+    expect(ayritOlcusuYazisi(Math.sqrt(12), ayar('ortaokul', { ...S, tamSayiOlcuOrtaokul: true }), false).metin).toBe('≈ 3 br');
+    expect(ayritOlcusuYazisi(4, ayar('ortaokul', { ...S, tamSayiOlcuOrtaokul: true }), false).metin).toBe('4 br');
+    // Lise de ortaokul gibi varsayılan 2 ondalık (2026-10-30); kutu lisenin kendi ayarını açar
+    expect(ayritOlcusuYazisi(Math.sqrt(12), ayar('lise'), false).metin).toBe('≈ 3,46 br');
+    expect(ayritOlcusuYazisi(Math.sqrt(12), ayar('lise', { ...S, tamSayiOlcuLise: true }), false).metin).toBe('≈ 3 br');
     // İlkokul kuralı (ilkokulKipi) aynen
     for (const d of [3, Math.sqrt(12), 0.3, 2.5000000001]) {
       expect(ayritOlcusuYazisi(d, ayar('ilkokul'), true).metin).toBe(ilkokulUzunlukMetni(d, 'br'));
@@ -94,7 +96,9 @@ describe('3B etiket: yazım (alt indis, kesme işareti, sayı, birim)', () => {
   it('yüz alanı 2B adsız alan yazımıyla: "Alan = 12 birimkare", yuvarlanınca "Alan ≈ … birimkare"', () => {
     expect(yuzAlaniYazisi(12, ayar('ortaokul')).metin).toBe('Alan = 12 birimkare');
     expect(yuzAlaniYazisi(Math.PI * 1.5 * 1.5, ayar('ortaokul')).metin).toBe('Alan ≈ 7,07 birimkare');
-    expect(yuzAlaniYazisi(Math.PI * 1.5 * 1.5, ayar('lise')).metin).toBe('Alan = 7 birimkare');
+    expect(yuzAlaniYazisi(Math.PI * 1.5 * 1.5, ayar('lise')).metin).toBe('Alan ≈ 7,07 birimkare');
+    expect(yuzAlaniYazisi(Math.PI * 1.5 * 1.5, ayar('lise', { ...S, tamSayiOlcuLise: true })).metin).toBe('Alan ≈ 7 birimkare');
+    expect(yuzAlaniYazisi(12, ayar('lise', { ...S, tamSayiOlcuLise: true })).metin).toBe('Alan = 12 birimkare');
   });
 });
 

@@ -12,6 +12,9 @@
  * açılır ('uygulama'). Masaüstünde kayıt defterindeki (uygulamalar.tsx) uygulamalar birden çok
  * pencerede yan yana çalışır; pencere durumu/z sırası akis.ts'te, gövdeler tembel yüklenir.
  *
+ * Paylaşım bağlantısıyla (#/studyo/paylas/<kademe>/<veri>) açılınca açılış aynı oynar; bağlantının kademesi baştan
+ * açıldığı için oturum ekranı gelmez, masaüstünde Çizim Stüdyosu paylaşılan çizimle açılır (PaylasimAcilisi.tsx).
+ *
  * Motor (sinifSahnesi.ts) yalnız tarayıcıda, dinamik içe aktarmayla yüklenir; modül ya da model
  * varlıkları yoksa, WebGL2 yoksa ya da motor hata verirse 3B atlanır: açılış tam ekranda başlar.
  * Kullanıcı stüdyoya her durumda ulaşır.
@@ -44,6 +47,8 @@ import type { LevelId } from "@/types/curriculum";
 import { OturumEkrani } from "@/components/oturum/OturumEkrani";
 import { homografi, type Kose } from "./homografi";
 import { acilisBirimi } from "./acilisBirimi";
+import { PaylasimAcilisi } from "./PaylasimAcilisi";
+import { bekleyenPaylasim, paylasimiBirak } from "@/math/cizimPaylasimi";
 import s from "./sinif.module.css";
 
 const VARLIK_ONEKI = process.env.NEXT_PUBLIC_ASSET_PREFIX ?? "";
@@ -169,6 +174,10 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
   /** Bu ekranda tıklanan kart (depodan gelen oturum değil): kapanış animasyonu oynarken kartlar ekranda kalır */
   const [secilenOturum, setSecilenOturum] = useState<LevelId | null>(null);
   const oturumKapaniyor = d.faz === "oturum" && !!kademe && secilenOturum !== null;
+  // Paylaşım bağlantısı (sayfa açılırken yakalandı): bu sınıf ekranı alır, sonraki stüdyo açılışları olağan akışla gelir
+  const [paylasim, setPaylasim] = useState(bekleyenPaylasim);
+  useEffect(() => paylasimiBirak(), []);
+  const paylasimBitti = useCallback(() => setPaylasim(null), []);
   // Kademeye göre masaüstü listesi (ilkokulda Olasılık «olay kartları» açıklaması ve simgesiyle; uygulamalar.tsx)
   const gorunenUygulamalar = useMemo(() => kademeninUygulamalari(kademe), [kademe]);
   useEffect(() => {
@@ -743,6 +752,14 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
         className={`${s.perde} ${perde ? s["perde--acik"] : ""}`}
         aria-hidden="true"
       />
+
+      {paylasim && (
+        <PaylasimAcilisi
+          adres={paylasim}
+          iletiGosterilebilir={d.faz === "oturum" || masaustunde(d.faz)}
+          onBitti={paylasimBitti}
+        />
+      )}
     </div>
   );
 }

@@ -195,13 +195,16 @@ describe('8. adsız noktada etiket yedekleri', () => {
 });
 
 describe('9. lastik bant önizlemesi tam sayı ölçü ayarına uyar', () => {
-  it.each<[KademeDuzeyi, string]>([
-    ['tum', 'r = 3 br'],
-    ['ortaokul', 'r = 2,77 br'],
-    ['ilkokul', 'r = yaklaşık 3 br'],
-  ])('%s: %s', (kademe, beklenen) => {
+  // Lise / "Tüm araçlar" 2026-10-30'dan beri ortaokul gibi varsayılan 2 ondalık
+  it.each<[KademeDuzeyi, string, boolean]>([
+    ['tum', 'r = 2,77 br', false],
+    ['tum', 'r = 3 br', true],
+    ['ortaokul', 'r = 2,77 br', false],
+    ['ilkokul', 'r = yaklaşık 3 br', false],
+  ])('%s: %s (tam sayı kutusu: %s)', (kademe, beklenen, tamSayi) => {
     kademeDuzeyiniAyarla(kademe);
     const t = tuvalKur();
+    if (tamSayi) t.yap((d) => d.setStyleSettings((s) => ({ ...s, tamSayiOlcuLise: true })));
     t.yap((d) => d.setActiveTool('circle'));
     t.bas({ x: 1, y: 1 });
     t.birak();
@@ -267,12 +270,14 @@ describe('12. elips önizlemesi oluşan elipsle aynı merkezde', () => {
 });
 
 describe('13. sürükleyerek çizimde parça ve çember aynı yuvarlamayı kullanır', () => {
-  it.each<[KademeDuzeyi, number]>([
-    ['tum', 4],
-    ['ortaokul', 3.7],
-  ])('%s: ızgarasız 3,7 br sürükleme → parça %s br', (kademe, beklenen) => {
+  it.each<[KademeDuzeyi, number, boolean]>([
+    ['tum', 3.7, false],
+    ['tum', 4, true],
+    ['ortaokul', 3.7, false],
+  ])('%s: ızgarasız 3,7 br sürükleme → parça %s br (tam sayı kutusu: %s)', (kademe, beklenen, tamSayi) => {
     kademeDuzeyiniAyarla(kademe);
     const t = tuvalKur();
+    if (tamSayi) t.yap((d) => d.setStyleSettings((s) => ({ ...s, tamSayiOlcuLise: true })));
     t.yap((d) => d.setViewport((v) => ({ ...v, snapToGrid: false })));
     t.yap((d) => d.setActiveTool('segment'));
     t.bas({ x: 0, y: 0 });
@@ -371,10 +376,10 @@ describe('16. dilim ve yay etiketleri: ölçtüğü şeyin yanında kısa, ayrı
     t.yap((d) => d.addObjects([A, B, C, dilim('sct-1-x', A, B, C, tumu)], 'hazır'));
     expect(etiketMetni(t, 'sct-1-x', 'centralAngle')).toBe('90°');
     expect(etiketMetni(t, 'sct-1-x', 'radius')).toBe('r = 2 br');
-    expect(etiketMetni(t, 'sct-1-x', 'arcLength')).toBe('3 br');
-    expect(etiketMetni(t, 'sct-1-x', 'chordLength')).toBe('Kiriş = 3 br');
+    expect(etiketMetni(t, 'sct-1-x', 'arcLength')).toBe('≈ 3,14 br');
+    expect(etiketMetni(t, 'sct-1-x', 'chordLength')).toBe('Kiriş ≈ 2,83 br');
     // Alan ve çevrenin kısa biçimi yok: çokgendeki gibi adıyla
-    expect(etiketMetni(t, 'sct-1-x', 'area')).toBe('A(BAC dilimi) = 3 birimkare');
+    expect(etiketMetni(t, 'sct-1-x', 'area')).toBe('A(BAC dilimi) ≈ 3,14 birimkare');
     expect(t.oge((o) => o.props['data-angle-marker'] === 'right')).toBeTruthy();
     // Merkez açı rozeti merkezin yanında, dilimin içinde (sağ üst çeyrek)
     const yer = etiketYeri(t, 'sct-1-x', 'centralAngle');
@@ -392,9 +397,9 @@ describe('16. dilim ve yay etiketleri: ölçtüğü şeyin yanında kısa, ayrı
     t.yap((d) => d.addObjects([A, B, C, dilim('sct-1-x', A, B, C, { ...tumu, ...kayik })], 'hazır'));
     expect(etiketMetni(t, 'sct-1-x', 'centralAngle')).toMatch(/^m\(.*\) = 90°$/);
     expect(etiketMetni(t, 'sct-1-x', 'radius')).toBe('r = |AB| = 2 br');
-    expect(etiketMetni(t, 'sct-1-x', 'arcLength')).toMatch(/^\|.*\| = 3 br$/);
-    expect(etiketMetni(t, 'sct-1-x', 'chordLength')).toBe('Kiriş = 3 br');
-    expect(etiketMetni(t, 'sct-1-x', 'area')).toBe('A(BAC dilimi) = 3 birimkare');
+    expect(etiketMetni(t, 'sct-1-x', 'arcLength')).toMatch(/^\|.*\| ≈ 3,14 br$/);
+    expect(etiketMetni(t, 'sct-1-x', 'chordLength')).toBe('Kiriş ≈ 2,83 br');
+    expect(etiketMetni(t, 'sct-1-x', 'area')).toBe('A(BAC dilimi) ≈ 3,14 birimkare');
   });
 
   it('yayda yarıçap: kenarı çiziliyse çizginin yanında, değilse listede; ikisinde de kısa', () => {
@@ -419,7 +424,7 @@ describe('16. dilim ve yay etiketleri: ölçtüğü şeyin yanında kısa, ayrı
     const t = tuvalKur();
     t.yap((d) => d.addObjects([M, T, cember, parca('seg-mt-1-x', M, T)], 'hazır'));
     expect(etiketMetni(t, 'circ-1-x', 'radius')).toBe('r = 2 br');
-    expect(etiketMetni(t, 'circ-1-x', 'area')).toBe('Alan = 13 birimkare');
+    expect(etiketMetni(t, 'circ-1-x', 'area')).toBe('Alan ≈ 12,57 birimkare');
     let adet = 0;
     t.oge((o) => {
       if (o.props['data-label-object'] === 'circ-1-x' && o.props['data-label-kind'] === 'radius') adet++;
@@ -458,7 +463,7 @@ describe('18. tuval etiketlerinde "(büyük yay)" gibi niteleyiciler yok', () =>
     const t = tuvalKur();
     t.yap((d) => d.addObjects([A, B, C, dilim('sct-1-x', A, B, C, { showArcLength: true, labelOffsets: { arcLength: { x: 3, y: 3 } } })], 'hazır'));
     const metin = etiketMetni(t, 'sct-1-x', 'arcLength')!;
-    expect(metin).toMatch(/^\|.*\| = 9 br$/);
+    expect(metin).toMatch(/^\|.*\| ≈ 9,42 br$/);
     expect(metin).not.toContain('büyük yay');
   });
 });

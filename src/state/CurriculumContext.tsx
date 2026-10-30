@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { LevelId, GradeId, Topic, Activity, Level, Grade, MathCategory } from '@/types/curriculum';
 import { curriculumData } from '@/curriculum/curriculumData';
+import { paylasimiYakala } from '@/math/cizimPaylasimi';
 
 export type AppScreen = 'home' | 'portal' | 'grades' | 'topics' | 'mission' | 'workspace';
 
@@ -146,6 +147,8 @@ function hashForNavState(navState: HistoryNavState): string {
  * Adres çubuğundaki hash'i uygulama gezinme durumuna çevirir.
  * Desteklenen biçimler: #/home, #/studyo, #/portal, #/kademe/:levelId, #/sinif/:gradeNumber,
  * #/konu/:topicId, #/gorev/:activityId, #/calisma/:activityId
+ * Paylaşım bağlantısı #/studyo/paylas/:kademe/:veri stüdyoyu açar; çizimi CurriculumProvider hash
+ * sadeleşmeden önce yakalar (math/cizimPaylasimi.ts).
  */
 export function parseHashToNavState(rawHash: string): { state: HistoryNavState; hash: string } {
   const hash = (rawHash || '').replace(/^#\/?/, '').trim();
@@ -339,6 +342,9 @@ export function CurriculumProvider({ children }: { children: React.ReactNode }) 
     // Koşulsuz çalışır: React StrictMode bileşeni yeniden bağladığında durum
     // sıfırlanır ama adres aynı kalır; bu yüzden hash daima kaynak kabul edilir.
     // Kullanıcı gezindikçe hash ekranla eşitlendiği için tekrar uygulamak etkisizdir.
+    // Paylaşım bağlantısının çizimi adresten silinmeden önce saklanır (sınıf ekranı açılınca alır); adres '#/studyo'
+    // olarak sadeleşir: sayfa yenilenince paylaşılan çizim kullanıcının sonraki değişikliklerinin üzerine yeniden yazılmaz.
+    paylasimiYakala(window.location.hash);
     const parsed = parseHashToNavState(window.location.hash);
     window.history.replaceState({ ...(window.history.state || {}), ...parsed.state }, '', parsed.hash);
 
@@ -363,6 +369,11 @@ export function CurriculumProvider({ children }: { children: React.ReactNode }) 
     };
 
     const handlePopState = (event: PopStateEvent) => {
+      // Açık sekmenin adres çubuğuna paylaşım bağlantısı yapıştırıldı: sayfa baştan açılır (sınıf açılışı, oturum, çizim)
+      if (paylasimiYakala(window.location.hash)) {
+        window.location.reload();
+        return;
+      }
       isPopStateRef.current = true;
       const state = event.state as HistoryNavState | null;
 

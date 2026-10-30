@@ -201,9 +201,10 @@ import { aciEtiketiUzakta, aciYayYaricapi, cizgiCercevesi, cizgiEtiketiUzakta, e
 import { MatematikEtiketi, type EtiketRengi } from './MatematikEtiketi';
 import { EtiketMetniDiyalogu } from './EtiketMetniDiyalogu';
 import { etiketHedefiniBul, etiketMetniDuzenlenebilir, etiketMetniGuncelle, type EtiketHedefi } from './etiketMetni';
+import { kokluEtiketleriGuncelle, kokluGosterimAcik, kokluGosterimSunulur } from './kokluGosterim';
 import { MatematikMetni } from './MatematikMetni';
 import {
-  type Dugum, type Olcu, aciklama, cemberCevresi, daireAlani, duzMetin, egim, metinDugumleri, metniCozumle, metniSeslendir, olcuDugumleri, olcuMetni, sesli, uzunluk, yaricap, yazimAyari,
+  type Dugum, type Olcu, type YazimAyari, aciklama, cemberCevresi, daireAlani, duzMetin, egim, metinDugumleri, metniCozumle, metniSeslendir, olcuDugumleri, olcuMetni, sesli, uzunluk, yaricap, yazimAyari,
 } from '@/math/matematikYazimi';
 import {
   type Kutu, type KutuOlcusu, type Nokta, type RozetAdayi, aciRozetiYerlesimi, isinaDiz,
@@ -224,7 +225,7 @@ import { olcumParcasiMi } from '@/math/nesneAdlari';
 import { cizgininUzerindeMi, dogrultuNoktalari, goruntuNoktaAdlari, yayinUzerindeMi } from '@/math/insaYardimcilari';
 import { kesisimMesaji, kesismiyorMesaji } from './kesisimMesaji';
 import { denklemEtiketiMerkezi, noktaAdiBolgesi, olcekliKutu, yiginKaymasi, yiginYeriSec } from './etiketCakismasi';
-import { Box, Eye, EyeOff, FlipHorizontal2, Info, Lightbulb, Pentagon, PencilLine, X as CarpiSimgesi } from 'lucide-react';
+import { Box, Eye, EyeOff, FlipHorizontal2, Info, Lightbulb, Pentagon, PencilLine, Radical, X as CarpiSimgesi } from 'lucide-react';
 
 // Derlenmiş fonksiyon ifadeleri önbelleği (ifade başına tek derleme)
 const compiledExpressionCache = new Map<string, ((x: number, scope?: Record<string, number>) => number) | null>();
@@ -914,12 +915,12 @@ export function Canvas({
 
   // EŞİTLİK İŞARETLERİ (|, ||, |||): birbirine değen şekillerde eşit uzunluk/yaylar + elle konanlar.
   // Yalnız nesneler ve aç/kapa değişince hesaplanır; kaydırma/yakınlaştırma yeniden gruplamaz (viewport'a bağlı DEĞİL).
-  // Tam sayı yazımı kademeye göre: ilkokul hep, ortaokul kendi ayarıyla (varsayılan 2 ondalık), diğerleri tamSayiOlcu
+  // Tam sayı yazımı kademeye göre: ilkokul hep, ortaokul ve lise kendi ayarıyla (varsayılan 2 ondalık)
   const tamSayiOlcu = tamSayiOlcuEtkin(styleSettings, kademe);
   const esitlik = useMemo(
-    // İlkokulda "4 br" ile "yaklaşık 4 br" eş işaretlenmez (4. tur [176] denetimi; esitlikIsaretleri.yaklasikAyri)
-    () => esitlikIsaretleri(objects, { otomatik: viewport.showEqualityMarks !== false, tamSayi: tamSayiOlcu, yaklasikAyri: ilkokul }),
-    [objects, viewport.showEqualityMarks, tamSayiOlcu, ilkokul]
+    // Eşitlik GERÇEK ölçülerle kurulur; yazım ayarı (tam sayı, "yaklaşık") çentikleri değiştirmez (esitlikIsaretleri)
+    () => esitlikIsaretleri(objects, { otomatik: viewport.showEqualityMarks !== false }),
+    [objects, viewport.showEqualityMarks]
   );
   // Çentiğin altında kalmaması gereken noktalar. DİZİ: StrictMode render'ı aynı props ile iki kez çağırır,
   // tek kullanımlık bir yineleyici (pointsById.values()) ikinci çağrıda boş gelirdi.
@@ -1511,10 +1512,14 @@ export function Canvas({
   // İlkokulda ölçüler hep TAM sayı (alan uzmanları: "ondalık kesir kullanılmamalı"), ayar kapalı olsa da
   // Ortaokulda varsayılan 2 ondalık (alan uzmanı, 4. tur): tamSayi kademenin kendi ayarından (olcuYuvarlama.ts)
   // İlkokulda yuvarlanan değer tuvalde de "yaklaşık" der (uzman 4. tur [176]; matematikYazimi.yaklasikSozcukle)
+  // Kareköklü yazım (√13 br) etikete özgü bir tercihtir: sağ tık > "Köklü gösterimi aç" (kokluYazim, kokluGosterim.ts)
   const yazim = useMemo(
     () => ({ ...yazimAyari(styleSettings), tamSayi: tamSayiOlcu, niteleyiciGizli: true, ...(ilkokul ? { yaklasikSozcukle: true } : {}) }),
     [styleSettings, tamSayiOlcu, ilkokul, kademe],
   );
+  /** Uzunluk etiketinin yazımı: etikette köklü gösterim açıksa (ilkokul dışında) kılavuzdaki uzunluk √13 br yazılır. */
+  const kokluYazim = useCallback((sahip: MathObject, kind: string): YazimAyari =>
+    !ilkokul && kokluGosterimAcik(sahip, kind) ? { ...yazim, kokluGosterim: true } : yazim, [ilkokul, yazim]);
   /** Nokta arayıcı: yazım kuralları nesnenin .label'ını değil, GÖRÜNEN nokta adlarını kullanır. */
   const noktaBul = useMemo(() => noktaBulucu(pointsById), [pointsById]);
 
@@ -1789,10 +1794,13 @@ export function Canvas({
     return { rozetler };
   }, [objects, pointsById, viewport, etiketGorunumu, etiketOlcegi, yaziOlcegi, yazim, fs, showDetails, noktaBul, kartEngelleri, etiketKaymasi, etiketAyrikMi, aciYayYaricaplari]);
 
-  /** Çapa her iki yazımda da kısa kutudan hesaplanır; sürüklerken biçim değişimi konumu değiştirmez. */
-  const cizgiYazimi = useCallback((olcu: Olcu) => {
-    const { tam, kisa } = yazimlar(olcu, yazim);
-    return { tam, kisa, kisaKutu: kutuOlcusu([kisa], fs(11, 'measure')), sesli: sesli(olcu, yazim), ipucu: aciklama(olcu, yazim) };
+  /**
+   * Çapa her iki yazımda da kısa kutudan hesaplanır; sürüklerken biçim değişimi konumu değiştirmez. `ayar`: etikete özgü
+   * yazım (köklü gösterim, kokluYazim); verilmezse tuvalin yazımı.
+   */
+  const cizgiYazimi = useCallback((olcu: Olcu, ayar: YazimAyari = yazim) => {
+    const { tam, kisa } = yazimlar(olcu, ayar);
+    return { tam, kisa, kisaKutu: kutuOlcusu([kisa], fs(11, 'measure')), sesli: sesli(olcu, ayar), ipucu: aciklama(olcu, ayar) };
   }, [yazim, fs]);
 
   /**
@@ -2771,6 +2779,17 @@ export function Canvas({
         icon: <RotateCcw className="w-4 h-4" />,
         onSelect: () => updateObject(etiketSahibi.id, { labelTexts: etiketMetniGuncelle(etiketSahibi.labelTexts, etiket.kind, null) } as Partial<MathObject>),
       });
+      // Köklü gösterim (ortaokul ve lise): iki ucu kılavuzda olan uzunluk etiketi √13 br yazılabilir (kokluGosterim.ts).
+      // Elle yazılmış metin hesaplanan yazının yerine geçtiği için o etikette sunulmaz.
+      if (!ilkokul && ozel === undefined && kokluGosterimSunulur(etiketSahibi, etiket.kind, (id) => pointsById.get(id))) {
+        const acik = kokluGosterimAcik(etiketSahibi, etiket.kind);
+        etiketMaddeleri.push({
+          id: 'koklu-gosterim',
+          label: acik ? 'Köklü gösterimi kapat' : 'Köklü gösterimi aç',
+          icon: <Radical className="w-4 h-4" />,
+          onSelect: () => updateObject(etiketSahibi.id, { kokluEtiketler: kokluEtiketleriGuncelle(etiketSahibi.kokluEtiketler, etiket.kind, !acik) } as Partial<MathObject>),
+        });
+      }
       maddeler[0] = { ...maddeler[0], separatorBefore: true };
       maddeler.unshift(...etiketMaddeleri);
     }
@@ -3686,12 +3705,12 @@ export function Canvas({
             commit(
               (prev) =>
                 prev.map((o) => (o.id === seg.id ? ({ ...o, showLength: true, unit } as MathObject) : o)),
-              `${olcuMetni(olcu, yazim)} ölçüldü`
+              `${olcuMetni(olcu, kokluYazim(seg, 'length'))} ölçüldü`
             );
           }
           cancelPendingAction();
-          // Araç her dokunuşta görünür bir sonuç verir (alan uzmanı, 4. tur)
-          setHintMessage(olcumBildirimi(olcuMetni(olcu, yazim), zaten));
+          // Araç her dokunuşta görünür bir sonuç verir (alan uzmanı, 4. tur); köklü gösterim tercihi etiketle aynı
+          setHintMessage(olcumBildirimi(olcuMetni(olcu, kokluYazim(seg, 'length')), zaten));
           return;
         }
       } else if (obj.type === 'polygon' && svgRef.current) {
@@ -3712,7 +3731,7 @@ export function Canvas({
         );
         if (mevcut) {
           cancelPendingAction();
-          setHintMessage(olcumBildirimi(olcuMetni(segmentUzunlugu(mevcut, noktaBul), yazim), true));
+          setHintMessage(olcumBildirimi(olcuMetni(segmentUzunlugu(mevcut, noktaBul), kokluYazim(mevcut, 'length')), true));
           return;
         }
         handlePointClick(sonId, undefined, [ilkId]);
@@ -4393,7 +4412,7 @@ export function Canvas({
   const kenarUzunluguEtiketi = (cokgen: PolygonObject, koseler: PointObject[], ekran: Point2D[], merkez: Point2D, i: number) => {
     if (i < 0 || i >= koseler.length) return null;
     const j = (i + 1) % koseler.length;
-    const yazi = cizgiYazimi(kenarUzunlugu(koseler, i));
+    const yazi = cizgiYazimi(kenarUzunlugu(koseler, i), kokluYazim(cokgen, edgeLabelKey(i)));
     const orta = worldToScreen({ x: (koseler[i].x + koseler[j].x) / 2, y: (koseler[i].y + koseler[j].y) / 2 }, viewport);
     const n = distaKalanNormal(ekran[i], ekran[j], orta, merkez);
     const centik = esitlik.isaretHaritasi.get(esitlik.temsilci.get(`edge:${cokgen.id}:${i}`) ?? '');
@@ -4455,7 +4474,7 @@ export function Canvas({
    * bir ucu taşınınca yazı yeni doğrultuya kendiliğinden uyar.
    */
   const parcaUzunluguEtiketi = (parca: SegmentObject, s1: Point2D, s2: Point2D) => {
-    const yazi = cizgiYazimi(segmentUzunlugu(parca, noktaBul));
+    const yazi = cizgiYazimi(segmentUzunlugu(parca, noktaBul), kokluYazim(parca, 'length'));
     const n = yukariNormal(s1, s2);
     const centik = esitlik.isaretHaritasi.get(esitlik.temsilci.get(`seg:${parca.id}`) ?? '');
     const centikPayi = centik || esitlik.otomatik ? etiketPayi(centik?.kalinlik ?? (parca.thickness || 2.5), styleSettings.strokeScale, 14) : 0;
@@ -4509,7 +4528,7 @@ export function Canvas({
     const b = worldToScreen(p2, viewport);
     const n = yukariNormal(a, b);
     const olcu = uzunluk(p1, p2, calculateDistance(p1, p2));
-    const yazi = cizgiYazimi(olcu);
+    const yazi = cizgiYazimi(olcu, kokluYazim(nesne, 'length'));
     const aralik = (yazi.kisaKutu.yukseklik / 2 + 12) * kutuOlcegi;
     const yer = { x: (a.x + b.x) / 2 - n.x * aralik, y: (a.y + b.y) / 2 - n.y * aralik };
     const etiket = cizgiEtiketiniYerlestir(yazi, nesne.id, 'length', a, b, yer);
@@ -4927,7 +4946,7 @@ export function Canvas({
               }
               // MEB yazımı: |AB| = 2 br (yuvarlanan değer '≈' alır). Ad gizliyse yalnızca değer yazılır.
               const olcu = uzunluk(a, b, calculateDistance(a, b));
-              const yazi = cizgiYazimi(olcu);
+              const yazi = cizgiYazimi(olcu, kokluYazim(m, 'measure'));
               const yaziBoyu = fs(11, 'measure');
               // Kutu ölçü çizgisine PARALEL döndüğü için çizgiye dik yarı uzanımı her açıda kutu yarı yüksekliğidir.
               const yariUzanim = yazi.kisaKutu.yukseklik / 2;

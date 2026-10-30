@@ -7,24 +7,25 @@
  *  - ilkokul: her zaman tam sayı (alan uzmanları, 2. tur; değişmedi)
  *  - ortaokul: varsayılan 2 ondalık; Ayarlar'daki "Ölçüleri tam sayı yaz" kutusu ortaokulun KENDİ ayarını açar
  *    (tamSayiOlcuOrtaokul)
- *  - lise ve "Tüm araçlar": önceki ayar (tamSayiOlcu, varsayılan açık) — değişmedi
+ *  - lise ve "Tüm araçlar": ortaokuldaki gibi varsayılan 2 ondalık (kullanıcı, 2026-10-30: "lisede virgüllü hesaplama
+ *    ortaokuldaki gibi olsun"); kutu bu kademelerin kendi ayarını açar (tamSayiOlcuLise)
  */
 import type { StyleSettings } from '@/types/workspace';
 import type { KademeDuzeyi } from './kademeDuzeyleri';
 import { kademeDuzeyiniOku } from '@/hooks/useKademeDuzeyi';
 
-type TamSayiAyarlari = Partial<Pick<StyleSettings, 'tamSayiOlcu' | 'tamSayiOlcuOrtaokul'>>;
+type TamSayiAyarlari = Partial<Pick<StyleSettings, 'tamSayiOlcuOrtaokul' | 'tamSayiOlcuLise'>>;
 
 /** Bu kademede ölçüler tam sayı mı yazılır? */
 export function tamSayiOlcuEtkin(s: TamSayiAyarlari | null | undefined, kademe: KademeDuzeyi): boolean {
   if (kademe === 'ilkokul') return true;
   if (kademe === 'ortaokul') return s?.tamSayiOlcuOrtaokul === true;
-  return s?.tamSayiOlcu === true;
+  return s?.tamSayiOlcuLise === true;
 }
 
 /** Ayarlar'daki kutunun bu kademede yazdığı alan (ilkokulda kutu kilitlidir). */
-export function tamSayiAyarAnahtari(kademe: KademeDuzeyi): 'tamSayiOlcu' | 'tamSayiOlcuOrtaokul' {
-  return kademe === 'ortaokul' ? 'tamSayiOlcuOrtaokul' : 'tamSayiOlcu';
+export function tamSayiAyarAnahtari(kademe: KademeDuzeyi): 'tamSayiOlcuOrtaokul' | 'tamSayiOlcuLise' {
+  return kademe === 'ortaokul' ? 'tamSayiOlcuOrtaokul' : 'tamSayiOlcuLise';
 }
 
 /**

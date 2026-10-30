@@ -108,6 +108,12 @@ export interface BaseMathObject {
    * ('area', 'length', 'edge0', 'angle'…). Varsa hesaplanan yazının yerine geçer; silinince hesaplanan yazı döner.
    */
   labelTexts?: Record<string, string>;
+  /**
+   * Köklü gösterimi AÇIK uzunluk etiketleri; anahtar labelOffsets ile aynıdır ('length', 'edge0', 'measure'). İki ucu
+   * kılavuz noktasında olan uzunluk bu etikette kesin kareköklü yazılır (√13 br); sağ tık > "Köklü gösterimi aç"
+   * (kokluGosterim.ts; kullanıcı, 2026-10-30: "köklü gösterim ise tercihe bağlı"). İlkokulda uygulanmaz.
+   */
+  kokluEtiketler?: string[];
   /** Nesne hareket ettikçe ekranda kalıcı iz bırakır mı (GeoGebra Show Trace) */
   showTrace?: boolean;
   /**

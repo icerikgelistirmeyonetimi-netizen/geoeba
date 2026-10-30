@@ -127,16 +127,17 @@ export interface StyleSettings {
   /** Açı yazımı: 'sapka' = m(ABC^) (MEB), 'isaret' = m(∠ABC). */
   aciYazimi: AciYazimi;
   /**
-   * Uzunluk, açı, alan ve çevre TAM SAYI yazılır; alan ve çevre görünen tam sayılardan hesaplanır
-   * (kullanıcı isteği, 2026-09-25: "hesaplamalarda tam sayıya göre olmalı ki hatalı sonuç almayalım").
-   */
-  tamSayiOlcu: boolean;
-  /**
-   * ORTAOKUL kademesinde ölçüler tam sayı mı yazılır (varsayılan: hayır, 2 ondalık). Alan uzmanı, atölye inceleme
-   * 4. tur: "ölçü etiketlerini virgülden sonra 2 basamakla göster". Ortaokulda Ayarlar'daki kutu bu alanı açar;
-   * diğer kademeler tamSayiOlcu'yu kullanır (olcuYuvarlama.ts).
+   * ORTAOKUL kademesinde uzunluk, açı, alan ve çevre TAM SAYI mı yazılır (varsayılan: hayır, 2 ondalık). Alan uzmanı,
+   * atölye inceleme 4. tur: "ölçü etiketlerini virgülden sonra 2 basamakla göster". Açıkken alan ve çevre görünen
+   * tam sayılardan hesaplanır (kullanıcı, 2026-09-25). Ortaokulda Ayarlar'daki kutu bu alanı açar (olcuYuvarlama.ts).
    */
   tamSayiOlcuOrtaokul: boolean;
+  /**
+   * LİSE ve "Tüm araçlar" kademesinde ölçüler tam sayı mı yazılır (varsayılan: hayır, 2 ondalık; kullanıcı,
+   * 2026-10-30: "lisede virgüllü hesaplama ortaokuldaki gibi olsun"). Eski `tamSayiOlcu` alanının (varsayılan açık)
+   * yerine geçti: eski kayıtlardaki değer okunmaz, herkes virgüllü yazımla açılır.
+   */
+  tamSayiOlcuLise: boolean;
   /**
    * Tuval UZAKLAŞTIRILINCA yazıların (nokta adı, ölçü etiketi, yazı notu) inebileceği EN KÜÇÜK ölçek (0–1).
    * Yazılar şekille birlikte küçülür ama bu orandan aşağı inmez; böylece uzaktan da okunur kalır
@@ -156,8 +157,8 @@ export const DEFAULT_STYLE_SETTINGS: StyleSettings = {
   hideFills: false,
   olcuYazimi: 'tam',
   aciYazimi: 'sapka',
-  tamSayiOlcu: true,
   tamSayiOlcuOrtaokul: false,
+  tamSayiOlcuLise: false,
   yaziAltSiniri: 1,
 };
 

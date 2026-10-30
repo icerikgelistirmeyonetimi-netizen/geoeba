@@ -63,7 +63,8 @@ describe('[176] ilkokulda çevre: istenen çevrede gerçek kenarlar toplanır, s
     const [ilkokulCevre] = cokgenKartSatirlari(ikizkenar, false, true, true, true).olculer;
     expect(olcuMetni(ilkokulCevre, ILKOKUL_YAZIMI)).toBe('Çevre yaklaşık 13 br');
     const [eskiCevre] = cokgenKartSatirlari(ikizkenar, false, true, true).olculer;
-    expect(olcuMetni(eskiCevre, TAM_SAYI_YAZIMI)).toBe('Çevre = 12 br');
+    // Gerçek çevreden farklı olduğu için '≈' alır (2026-10-30)
+    expect(olcuMetni(eskiCevre, TAM_SAYI_YAZIMI)).toBe('Çevre ≈ 12 br');
   });
 
   it('kenarları zemine paralel tam sayılı şekilde çevre kesin: "Çevre = 14 br"', () => {
@@ -78,8 +79,8 @@ describe('[176] ilkokulda çevre: istenen çevrede gerçek kenarlar toplanır, s
     const egik = uzunluk(ikizkenar[1], ikizkenar[2], Math.hypot(2, 4));
     expect(olcuMetni(egik, ILKOKUL_YAZIMI)).toBe('yaklaşık 4 br');
     expect(olcuMetni(uzunluk(ikizkenar[0], ikizkenar[1], 4), ILKOKUL_YAZIMI)).toBe('4 br');
-    // Ortaokul / lise tam sayı yazımı: eskisi gibi '≈' yok (kullanıcı kararı, 25.09)
-    expect(olcuMetni(egik, TAM_SAYI_YAZIMI)).toBe('4 br');
+    // Ortaokul / lise tam sayı yazımı: yuvarlanan değer '≈' alır (kullanıcı, 2026-10-30; 25.09 kararının yerine)
+    expect(olcuMetni(egik, TAM_SAYI_YAZIMI)).toBe('≈ 4 br');
     // Ondalık yazım (ortaokul varsayılanı) değişmez
     expect(olcuMetni(egik, { olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: false })).toBe('≈ 4,47 br');
   });

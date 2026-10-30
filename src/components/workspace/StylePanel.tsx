@@ -153,7 +153,7 @@ const ACI_SECENEKLERI: readonly AyarSecenegi<AciYazimi>[] = [
 export function StylePanel() {
   const { styleSettings, setStyleSettings, viewport, setViewport } = useWorkspace();
   const [yaziAcik, setYaziAcik] = useState(false);
-  // "Ölçüleri tam sayı yaz" ortaokulda kendi ayarını açar (varsayılan kapalı: 2 ondalık; olcuYuvarlama.ts)
+  // "Ölçüleri tam sayı yaz" ortaokulda ve lisede kademenin kendi ayarını açar (varsayılan kapalı: 2 ondalık; olcuYuvarlama.ts)
   const [kademe] = useKademeDuzeyi();
   const tamSayiAnahtari = tamSayiAyarAnahtari(kademe);
 
@@ -299,7 +299,7 @@ export function StylePanel() {
           />
           <AyarOnay
             etiket="Ölçüleri tam sayı yaz"
-            ipucu={`Uzunluk, açı, alan ve çevre tam sayı yazılır; yuvarlanan değerin önünde ≈ durur. Alan ve çevre ekranda görünen tam sayılardan hesaplanır (dikdörtgende görünen kenarların çarpımı, çevrede görünen kenarların toplamı); bir çokgenin bütün iç açıları ölçülmüşse toplamları korunur. Tam sayılardan çıkan kesin sonuç virgüllü olabilir (3 × 5 ÷ 2 = 7,5).${kademe === 'ortaokul' ? ' Ortaokulda kapalı gelir: Ölçüler virgülden sonra 2 basamakla yazılır.' : ''}`}
+            ipucu={`Uzunluk, açı, alan ve çevre tam sayı yazılır; yuvarlanan değerin önünde ≈ durur. Alan ve çevre ekranda görünen tam sayılardan hesaplanır (dikdörtgende görünen kenarların çarpımı, çevrede görünen kenarların toplamı); bir çokgenin bütün iç açıları ölçülmüşse toplamları korunur. Tam sayılardan çıkan kesin sonuç virgüllü olabilir (3 × 5 ÷ 2 = 7,5).${kademe === 'ilkokul' ? '' : ' Kapalı gelir: Ölçüler virgülden sonra 2 basamakla yazılır.'}`}
             isaretli={styleSettings[tamSayiAnahtari] === true}
             onChange={(v) => guncelle(tamSayiAnahtari, v)}
           />

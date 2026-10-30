@@ -141,28 +141,24 @@ describe('silme kuralı: çentikli açıda yazıya tıklamak açıyı silmez', (
   });
 });
 
-describe('tam sayı yazımı: eşitlik GÖRÜNEN tam sayılara göre (kullanıcı, 2026-09-25)', () => {
-  it('ekranda ikisi de 6 yazan 6,08 ve 5,83 uzunluklu kenarlar eş sayılır', () => {
-    // A(0,0) B(6,0) C(0,6,08) : AB = 6, AC = 6,08 → ikisi de "6"; BC ayrı
+describe('eşitlik GERÇEK ölçülerle: yuvarlanınca aynı görünenler eş sayılmaz (kullanıcı, 2026-10-30)', () => {
+  // 2026-09-25'teki "görünen tam sayılara göre" kuralı kaldırıldı: tam sayı yazımında aynı yazılan
+  // eşit olmayan ölçüler eş gibi çentikleniyordu (√2 ≈ 1,41 ile 1; √13 ≈ 3,61 ile 4).
+  it('tam sayı yazımında ikisi de 6 yazılan 6 ve 6,08 uzunluklu kenarlar eş değil', () => {
     const sahne = [
       pt('A', 0, 0), pt('B', 6, 0), pt('C', 0, 6.08),
       poly('ABC', ['A', 'B', 'C']),
     ];
-    const kesin = esitlikIsaretleri(sahne);
-    const tam = esitlikIsaretleri(sahne, { tamSayi: true });
-    const duz = (s: EsitlikSonucu) => s.isaretler.filter((m) => m.tur === 'duz').length;
-    expect(duz(kesin)).toBe(0);
-    expect(duz(tam)).toBe(2);
+    expect(esitlikIsaretleri(sahne).isaretler.filter((m) => m.tur === 'duz')).toEqual([]);
   });
 
-  it('ekranda ikisi de 60° yazan 59,6° ve 60,4° açılar eş sayılır', () => {
-    // İkizkenara yakın ama tam olmayan üçgen: taban açıları 59,65° ve 60,35° (ikisi de "60°" yazılır)
+  it('ikisi de 60° yazılan 59,6° ve 60,4° açılar eş değil', () => {
+    // İkizkenara yakın ama tam olmayan üçgen: taban açıları 59,65° ve 60,35°
     const sahne = [
       pt('A', 0, 0), pt('B', 10, 0), pt('C', 5.07, 8.66),
       poly('ABC', ['A', 'B', 'C']),
       ang('a1', 'B', 'A', 'C'), ang('a2', 'C', 'B', 'A'),
     ];
     expect(aciIsaretleri(esitlikIsaretleri(sahne))).toEqual([]);
-    expect(aciIsaretleri(esitlikIsaretleri(sahne, { tamSayi: true }))).toEqual(['ang:a1=1', 'ang:a2=1']);
   });
 });

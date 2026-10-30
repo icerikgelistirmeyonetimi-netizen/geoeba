@@ -1,4 +1,5 @@
 import { formatTurkishNumber } from '@/math/coordinates';
+import { KOK_EN_BUYUK_KARE, kilavuzKaresi, kokluBicim, type KokluDeger } from '@/math/kilavuz';
 
 /**
  * MATEMATİK YAZIMI — ölçülerin MEB kurallarına uygun gösterimi (saf modül, DOM yok, vitest ile sınanır).
@@ -48,13 +49,22 @@ export interface YazimAyari {
    * Yalnız yazıdan oluşan yerlerde (komut yanıtı, nesne listesi) ve seslendirmede niteleyici kalır.
    */
   niteleyiciGizli?: boolean;
+  /**
+   * İki ucu da kılavuz noktasında olan uzunluk kesin kareköklü yazılır: '√13 br', '2√2 br' (tam karede '4 br').
+   * Kullanıcı, 2026-10-30: "kareköklü gösterim ortaokulda ve lisede olsun". Ortaokul ve lise tuvali, Uzunluk Ölç
+   * bildirimi ve paneller açar; ilkokulda kapalıdır. Kesin değer olduğu için tam sayı ayarı onu yuvarlamaz.
+   */
+  kokluGosterim?: boolean;
 }
 /** Motorun ve ayarsız çağrıların varsayılanı: tam sayı KAPALI (komut yanıtları kesin değer verir). */
 export const VARSAYILAN_YAZIM: YazimAyari = { olcuYazimi: 'tam', aciYazimi: 'sapka', tamSayi: false };
 export const OLCU_YAZIMLARI: readonly OlcuYazimi[] = ['tam', 'kisa'];
 export const ACI_YAZIMLARI: readonly AciYazimi[] = ['sapka', 'isaret'];
 
-/** StyleSettings'ten (eski kayıtlarda alanlar eksik olabilir) güvenli ayar. */
+/**
+ * StyleSettings'ten (eski kayıtlarda alanlar eksik olabilir) güvenli ayar. Tam sayı yazımı KADEMEYE bağlıdır
+ * (olcuYuvarlama.tamSayiOlcuEtkin; tuval ve 3B onu ayrıca verir); burada yalnız açıkça verilen `tamSayiOlcu` okunur.
+ */
 export function yazimAyari(s?: { olcuYazimi?: unknown; aciYazimi?: unknown; tamSayiOlcu?: unknown } | null): YazimAyari {
   const olcu = s?.olcuYazimi;
   const aci = s?.aciYazimi;
@@ -117,13 +127,13 @@ export interface Olcu {
    * (dik üçgenin alanı 3 × 5 / 2 = 7,5). Yuvarlamak öğrencinin elle bulduğu sonuçla çelişirdi.
    */
   sabitBasamak?: boolean;
-  /**
-   * '≈' HİÇ yazılmaz (tam sayı yazımı; kullanıcı, 2026-09-25: "virgüllü yazım aktif değilken yaklaşık
-   * işareti de kullanılmamalı"). Bağlaç '=' olur, sesli okunuşta "yaklaşık" denmez.
-   */
-  yaklasikYok?: boolean;
   /** Yuvarlanmış değer '≈' yerine "yaklaşık" sözcüğüyle yazılır (ilkokul; YazimAyari.yaklasikSozcukle). */
   yaklasikSozcugu?: boolean;
+  /**
+   * Değerin kesin kareköklü biçimi (iki ucu kılavuz noktasında olan uzunluk: √13 = 1 · √13, √8 = 2 · √2). Yalnız
+   * YazimAyari.kokluGosterim açıkken yazılır; kapalıyken ölçü ondalık değeriyle yazılır.
+   */
+  kok?: KokluDeger;
   /** trig: fonksiyon ve oranı kuran kenarlar */
   trig?: { fn: TrigFn; pay: string[] | null; payda: string[] | null; payDeger: number; paydaDeger: number };
 }
@@ -137,15 +147,22 @@ const TAM_SAYI_TURLERI: ReadonlySet<OlcuTuru> = new Set<OlcuTuru>([
 ]);
 
 /**
- * Ayarda tam sayı açıksa: basamak 0'a iner (sabit basamaklı türetilmiş değer — 7,5 — dokunulmaz) ve '≈'
- * kullanılmaz (kullanıcı: "virgüllü yazım aktif değilken yaklaşık işareti de kullanılmamalı").
+ * Ayarda tam sayı açıksa basamak 0'a iner (sabit basamaklı türetilmiş değer — 7,5 — dokunulmaz). Yuvarlanan değer
+ * '≈' alır (kullanıcı, 2026-10-30): ikisi de "1 br" görünen 1 ile √2 ≈ 1,41 eşitlik çentiğiyle ayrılınca etiket
+ * çentikle çelişmesin. 2026-09-25'teki "tam sayıda ≈ kullanılmasın" kuralının yerine geçti.
+ * Kareköklü yazılacak kesin değer (kokUygula sonrası `kok`) yuvarlanmaz.
  */
 export function tamSayiUygula(o: Olcu, ayar?: YazimAyari): Olcu {
-  if (!ayar?.tamSayi || !TAM_SAYI_TURLERI.has(o.tur)) return o;
-  // İlkokul: yuvarlanan değer "yaklaşık" der (gerçek değerden farklıysa — o.yaklasik ya da yuvarlama — yaklasikMi)
-  if (ayar.yaklasikSozcukle) return { ...o, basamak: o.sabitBasamak ? o.basamak : 0, yaklasikSozcugu: true };
-  return { ...o, basamak: o.sabitBasamak ? o.basamak : 0, yaklasik: undefined, yaklasikYok: true };
+  if (!ayar?.tamSayi || !TAM_SAYI_TURLERI.has(o.tur) || o.kok) return o;
+  // Yaklaşıklık gerçek değerden farktır (o.yaklasik ya da yuvarlama — yaklasikMi); ilkokulda "yaklaşık" sözcüğüyle
+  const basamak = o.sabitBasamak ? o.basamak : 0;
+  return ayar.yaklasikSozcukle ? { ...o, basamak, yaklasikSozcugu: true } : { ...o, basamak };
 }
+
+/** Kareköklü biçim yalnız ayar açıkken kalır; kapalıyken ölçü ondalık değeriyle yazılır. */
+const kokUygula = (o: Olcu, ayar?: YazimAyari): Olcu => (o.kok && !ayar?.kokluGosterim ? { ...o, kok: undefined } : o);
+/** Yazımdan önce ölçüye ayarı uygular: kareköklü biçim, sonra tam sayı. */
+const ayarUygula = (o: Olcu, ayar?: YazimAyari): Olcu => tamSayiUygula(kokUygula(o, ayar), ayar);
 
 // ------------------------------------------------------------------------------------------------ sayılar
 
@@ -199,8 +216,27 @@ export type Secenek = { basamak?: number; birim?: 'br' | 'cm' };
 const olcu = (tur: OlcuTuru, ad: string[] | null, deger: number | null, s: Secenek = {}, ek: Partial<Olcu> = {}): Olcu =>
   ({ tur, adlar: ad, deger, basamak: s.basamak ?? 2, birim: s.birim ?? 'br', ...ek });
 
-/** |AB| */
-export const uzunluk = (a: AdGirdisi, b: AdGirdisi, deger: number, s?: Secenek) => olcu('uzunluk', adlar(a, b), deger, s);
+/** Girdi bir noktaysa (x, y sayı) koordinatları. */
+function koordinatlari(p: AdGirdisi): { x: number; y: number } | null {
+  const q = p as { x?: unknown; y?: unknown } | null | undefined;
+  return q && typeof q.x === 'number' && typeof q.y === 'number' ? { x: q.x, y: q.y } : null;
+}
+/**
+ * İki ucu da kılavuz noktasındaysa uzunluğun kesin kareköklü biçimi (tam karede yok: değer zaten tam sayı).
+ * Değer iki noktanın uzaklığı değilse (sürgünün hedef değeri) eklenmez.
+ */
+function kokluUzunluk(a: AdGirdisi, b: AdGirdisi, deger: number): Partial<Olcu> {
+  const p = koordinatlari(a), q = koordinatlari(b);
+  const kare = p && q ? kilavuzKaresi(p, q) : undefined;
+  if (kare === undefined || !(kare > 0) || kare > KOK_EN_BUYUK_KARE) return {};
+  if (!(Math.abs(Math.sqrt(kare) - deger) <= 1e-9 * Math.max(1, deger))) return {};
+  const kok = kokluBicim(kare);
+  return kok.radikand === 1 ? {} : { kok };
+}
+
+/** |AB| — uçlar nokta olarak verilirse (x, y) kılavuzdaki uzunluk kareköklü yazılabilir (YazimAyari.kokluGosterim). */
+export const uzunluk = (a: AdGirdisi, b: AdGirdisi, deger: number, s?: Secenek) =>
+  olcu('uzunluk', adlar(a, b), deger, s, kokluUzunluk(a, b, deger));
 /** m(ABC^) — kol, KÖŞE, kol. disAci: 180°'den büyük (dış) açı. */
 export const aci = (p1: AdGirdisi, kose: AdGirdisi, p3: AdGirdisi, derece: number, s?: Secenek & { disAci?: boolean }) =>
   olcu('aci', adlar(p1, kose, p3), derece, s, s?.disAci ? { disAci: true } : {});
@@ -306,9 +342,15 @@ function birimOf(o: Olcu): Birim | null {
 }
 
 function yaklasikMi(o: Olcu): boolean {
-  if (o.yaklasikYok) return false;
+  if (o.kok) return false;
   return !!o.yaklasik || (o.deger !== null && yuvarlandiMi(o.deger, o.basamak));
 }
+
+/** Kareköklü değer: '2√2' = sayı 2, '√', sayı 2 (katsayı 1 yazılmaz). */
+const kokDugumleri = (k: KokluDeger): Dugum[] =>
+  [...(k.katsayi > 1 ? [sayi(k.katsayi, 0)] : []), sembol('√'), sayi(k.radikand, 0)];
+const kokMetni = (k: KokluDeger) => `${k.katsayi > 1 ? k.katsayi : ''}√${k.radikand}`;
+const kokOku = (k: KokluDeger) => `${k.katsayi > 1 ? `${tamSayiOku(k.katsayi)} ` : ''}kök ${tamSayiOku(k.radikand)}`;
 
 /** iliskisiz: biçimde '=' / '≈' bağlacı yok (yalnızca değer) — yuvarlanmışsa değerin önüne '≈ ' konur. */
 function degerDugumleri(o: Olcu, iliskisiz = false): Dugum[] {
@@ -316,7 +358,8 @@ function degerDugumleri(o: Olcu, iliskisiz = false): Dugum[] {
   const b = birimOf(o);
   const out: Dugum[] = [];
   if (iliskisiz && yaklasikMi(o)) out.push(o.yaklasikSozcugu ? kelime('yaklaşık ') : sembol('≈ '));
-  out.push(sayi(o.deger, o.basamak));
+  if (o.kok) out.push(...kokDugumleri(o.kok));
+  else out.push(sayi(o.deger, o.basamak));
   if (b) out.push({ t: 'birim', s: b });
   return out;
 }
@@ -351,7 +394,7 @@ export interface DugumSecenegi {
 
 /** Ölçünün görüntü ağacı. */
 export function olcuDugumleri(o: Olcu, ayar: YazimAyari = VARSAYILAN_YAZIM, sec: DugumSecenegi = {}): Dugum[] {
-  const d = olcuDugumleriHam(tamSayiUygula(o, ayar), ayar);
+  const d = olcuDugumleriHam(ayarUygula(o, ayar), ayar);
   const ilk = d[0];
   if (sec.cumleIci && ilk?.t === 'kelime') d[0] = { ...ilk, s: ilk.s.charAt(0).toLocaleLowerCase('tr') + ilk.s.slice(1) };
   return d;
@@ -697,24 +740,26 @@ function ozne(o: Olcu, oku: (a: string[]) => string): string {
  * Ekran okuyucu (aria-label, canlı bölge) ve ileride eklenecek konuşma çıktısı bunu kullanır.
  */
 export function sesli(girdi: Olcu, ayar?: YazimAyari): string {
-  const o = tamSayiUygula(girdi, ayar);
+  const o = ayarUygula(girdi, ayar);
   const bas = ozne(o, adlariOku);
   if (o.deger === null) return `${bas} tanımsız`;
   if (o.tur === 'koordinat') return `${bas} ${sayiOku(sayiMetni(o.deger, o.basamak))} ve ${sayiOku(sayiMetni(o.deger2 ?? 0, o.basamak))}`;
   const b = birimOf(o);
-  return [bas, yaklasikMi(o) ? 'yaklaşık' : '', sayiOku(sayiMetni(o.deger, o.basamak)), b ? BIRIM_OKU[b] : '']
+  const deger = o.kok ? kokOku(o.kok) : sayiOku(sayiMetni(o.deger, o.basamak));
+  return [bas, yaklasikMi(o) ? 'yaklaşık' : '', deger, b ? BIRIM_OKU[b] : '']
     .filter(Boolean).join(' ');
 }
 
 /** Açıklama: fare ipucu (<title>) ve kısa yazımda tam ad; adlar ve rakamlar ekrandaki gibi. */
 export function aciklama(girdi: Olcu, ayar?: YazimAyari): string {
-  const o = tamSayiUygula(girdi, ayar);
+  const o = ayarUygula(girdi, ayar);
   const bas = ozne(o, (a) => a.join(''));
   const ilk = bas.charAt(0).toLocaleUpperCase('tr') + bas.slice(1);
   if (o.deger === null) return `${ilk} tanımsız`;
   if (o.tur === 'koordinat') return `${ilk}: (${sayiMetni(o.deger, o.basamak)}; ${sayiMetni(o.deger2 ?? 0, o.basamak)})`;
   const b = birimOf(o);
-  return `${ilk}: ${yaklasikMi(o) ? (o.yaklasikSozcugu ? 'yaklaşık ' : '≈ ') : ''}${sayiMetni(o.deger, o.basamak)}${b ? birimMetni(b) : ''}`;
+  const deger = o.kok ? kokMetni(o.kok) : sayiMetni(o.deger, o.basamak);
+  return `${ilk}: ${yaklasikMi(o) ? (o.yaklasikSozcugu ? 'yaklaşık ' : '≈ ') : ''}${deger}${b ? birimMetni(b) : ''}`;
 }
 
 // ------------------------------------------------------------------------------------------------ düz metni okuma

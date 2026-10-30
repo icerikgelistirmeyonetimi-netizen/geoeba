@@ -10,7 +10,11 @@
  *   kenarında/çemberinde durması. Birbirinden ayrı şekillerin eşit uzunlukları otomatik işaretlenmez.
  * - Eşitlik TAMDIR: tolerans yalnız kayan nokta gürültüsünü ve uygulamanın kendi 4 basamaklı koordinat
  *   yuvarlamasını (bkz. YUVARLAMA_PAYI) karşılar; işaret "eştir" iddiasıdır, ekranda ikisi de "10,39" yazan
- *   10,39 ile 10,388 işaretlenmez.
+ *   10,39 ile 10,388 işaretlenmez. İki ucu da kılavuz (tam sayı koordinatlı) noktada olan parçalar uzunluk
+ *   KARELERİYLE tam karşılaştırılır (|AB|² = Δx² + Δy²).
+ * - Yazım ayarı eşitliği DEĞİŞTİRMEZ (kullanıcı, 2026-10-30: "ilkokulda yaklaşık eşitleri eşit çizgisiyle
+ *   göstermesin"): tam sayı yazımında ikisi de "1 br" görünen 1 ile √2 ≈ 1,41, ikisi de "yaklaşık 6 br" görünen
+ *   6,08 ile 5,83 eş işaretlenmez. Açılar ve yaylar da gerçek ölçüleriyle karşılaştırılır.
  * - Aynı çizgi tek öğedir: parçanın üzerine düşen çokgen kenarı, iki çokgenin ortak kenarı (köşegen) "kendine eşit" sayılmaz.
  * - Bir birleşik gruptaki farklı eşitlik grupları 1–8 çizgi alır; sıra nesnelerin sahnedeki ilk görünüşüne göredir
  *   (sürükleme sırayı değiştirmez, çizgi sayıları kararlı kalır). Numaralama alanı: sınır kutuları çakışan/değen şekiller
@@ -23,7 +27,7 @@ import type { MathObject, Point2D, PointObject, PolygonObject } from '@/types/ma
 import { getArcGeometry } from './geometry';
 import { commandCircleGeometry } from './commandBindings';
 import { isArcMeasurement, resolveArc } from './arcMeasure';
-import { yuvarlandiMi } from './matematikYazimi';
+import { kilavuzKaresi } from './kilavuz';
 
 // ------------------------------------------------------------------ sabitler
 /**
@@ -97,6 +101,8 @@ export interface EsitlikOgesi extends OgeGeometrisi {
   uyeler: string[];
   /** Düz öğede uzunluk, yayda yay uzunluğu */
   uzunluk: number;
+  /** Düz öğenin iki ucu da kılavuz noktasındaysa uzunluğun TAM karesi (Δx² + Δy², tam sayı) */
+  kare?: number;
   /** Birleşik grup (bağlı bileşen) kimliği */
   bilesen: string;
   /** Numaralama alanı kimliği */
@@ -179,6 +185,9 @@ export const aciEsit = (a: number, b: number) => {
   const m = Math.max(a, b);
   return Math.abs(a - b) <= ACI_BAGIL * m + Math.min(ACI_PAYI, YUVARLAMA_ORANI * m);
 };
+/** Düz öğe eşitliği: iki ucu kılavuzda olanlar karelerle tam, öbürleri uzunlukla (uzunlukEsit). */
+const duzEsit = (a: { uzunluk: number; kare?: number }, b: { uzunluk: number; kare?: number }) =>
+  a.kare !== undefined && b.kare !== undefined ? a.kare === b.kare : uzunlukEsit(a.uzunluk, b.uzunluk);
 const temasToleransi = (p: Point2D) => TEMAS_MUTLAK + 1e-9 * Math.max(Math.abs(p.x), Math.abs(p.y));
 
 const BAGLAYICI = new Set(['segment', 'line', 'ray', 'circle', 'ellipse', 'arc', 'sector', 'polygon']);
@@ -231,6 +240,7 @@ function elleDeger(o: MathObject | undefined, kenar?: number): number | undefine
 interface HamOge extends OgeGeometrisi {
   uyeler: { anahtar: string; sira: number; id: string; kenar?: number; kol: boolean; segment: boolean }[];
   uzunluk: number;
+  kare?: number;
   bilesenDugumu: string;
 }
 
@@ -240,34 +250,9 @@ interface HamOge extends OgeGeometrisi {
  */
 export function esitlikIsaretleri(
   objects: readonly MathObject[],
-  secenek: {
-    otomatik?: boolean;
-    /**
-     * TAM SAYI yazımı açık: eşitlik GÖRÜNEN tam sayılara göre kurulur (kullanıcı, 2026-09-25: "eşit uzun
-     * görünse de eşit saymıyor virgüllü olanı"). 6,08 ile 5,83 ekranda ikisi de "6 br" yazıldığı için eş
-     * sayılır; açılar tam dereceye, yaylar tam yarıçap ve tam dereceye göre karşılaştırılır.
-     */
-    tamSayi?: boolean;
-    /**
-     * İlkokul (tamSayi ile; atölye 4. tur [176] denetimi): yuvarlanan uzunluk tuvalde "yaklaşık" sözcüğüyle yazılır
-     * (matematikYazimi.yaklasikSozcukle). "4 br" ile "yaklaşık 4 br" ekranda AYNI yazılmadığından eş sayılmaz:
-     * tabanı 4, yüksekliği 4 br ikizkenar üçgen (4; √20; √20) eşkenar gibi işaretlenmesin. İkisi de "yaklaşık 6 br"
-     * yazılan uzunluklar yine eştir (2026-09-25 kuralı).
-     */
-    yaklasikAyri?: boolean;
-  } = {},
+  secenek: { otomatik?: boolean } = {},
 ): EsitlikSonucu {
   const otomatik = secenek.otomatik !== false;
-  const tamSayi = secenek.tamSayi === true;
-  const yaklasikAyri = tamSayi && secenek.yaklasikAyri === true;
-  const DERECE = 180 / Math.PI;
-  /**
-   * Tam sayı yazımında görünen değer: uzunluk tam birim, açı tam derece. `yaklasikAyri`: kesin ve "yaklaşık" yazılan
-   * aynı tam sayı ayrı anahtar alır (2n kesin, 2n + 1 yaklaşık; yaklaşıklık etiketteki kuralla, yuvarlandiMi).
-   */
-  const tamUzunluk = (x: number) => (yaklasikAyri ? Math.round(x) * 2 + (yuvarlandiMi(x, 0) ? 1 : 0) : Math.round(x));
-  const tamDerece = (radyan: number) => Math.round(Math.abs(radyan) * DERECE);
-  const tamEsit = (a: number, b: number) => a === b;
   // 0) dizin
   const byId = new Map<string, MathObject>();
   const sira = new Map<string, number>();
@@ -380,6 +365,7 @@ export function esitlikIsaretleri(
     if (ca === cb) return;
     const uzunluk = Math.hypot(a.x - b.x, a.y - b.y);
     if (!(uzunluk > 0) || !sonlu(uzunluk)) return;
+    const kare = kilavuzKaresi(a, b);
     const ciftAnahtari = ca < cb ? `${ca}|${cb}` : `${cb}|${ca}`;
     const s = (sira.get(o.id) ?? 0) * 4096 + (kenar ?? 0);
     const segment = o.type === 'segment';
@@ -388,7 +374,7 @@ export function esitlikIsaretleri(
     if (!mevcut) {
       duzAileleri.set(ciftAnahtari, {
         anahtar, tur: 'duz', sahipId: o.id, kenar, renk, kalinlik, sira: s, a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y },
-        uyeler: [uye], uzunluk, bilesenDugumu: o.id,
+        uyeler: [uye], uzunluk, kare, bilesenDugumu: o.id,
       });
       return;
     }
@@ -397,7 +383,7 @@ export function esitlikIsaretleri(
     // Parça, çokgen kenarının üstünde çizilir: temsilci ilk parçadır
     const temsilciParcaMi = mevcut.uyeler.some((u) => u.anahtar === mevcut.anahtar && u.segment);
     if (segment && !temsilciParcaMi) {
-      Object.assign(mevcut, { anahtar, sahipId: o.id, kenar, renk, kalinlik, a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, uzunluk, bilesenDugumu: o.id });
+      Object.assign(mevcut, { anahtar, sahipId: o.id, kenar, renk, kalinlik, a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, uzunluk, kare, bilesenDugumu: o.id });
     }
   };
   for (const o of objects) {
@@ -642,7 +628,7 @@ export function esitlikIsaretleri(
     const oge: EsitlikOgesi = {
       anahtar: h.anahtar, tur: h.tur, sahipId: h.sahipId, kenar: h.kenar, renk: h.renk, kalinlik: h.kalinlik, sira: h.sira,
       a: h.a, b: h.b, merkez: h.merkez, yaricap: h.yaricap, baslangic: h.baslangic, tarama: h.tarama,
-      uyeler: uyeler.map((u) => u.anahtar), uzunluk: h.uzunluk, bilesen, alan: alanUf.bul(bilesen), elle,
+      uyeler: uyeler.map((u) => u.anahtar), uzunluk: h.uzunluk, kare: h.kare, bilesen, alan: alanUf.bul(bilesen), elle,
       aciKolu: h.tur === 'duz' && uyeler.every((u) => u.kol),
     };
     ogeler.set(oge.anahtar, oge);
@@ -680,12 +666,13 @@ export function esitlikIsaretleri(
       if (l) l.push(o); else bilesenler.set(k, [o]);
     }
     const adaylar: { tur: EsitlikTuru; uyeler: EsitlikOgesi[]; alan: string; bilesen: string; sira: number }[] = [];
-    const kumele = <T,>(liste: T[], deger: (x: T) => number, esit: (a: number, b: number) => boolean): T[][] => {
+    /** Değere göre sıralı listeyi kümeler: öğe, kümenin İLK öğesine eşitse o kümeye girer. */
+    const kumele = (liste: EsitlikOgesi[], deger: (x: EsitlikOgesi) => number, esit: (a: EsitlikOgesi, b: EsitlikOgesi) => boolean): EsitlikOgesi[][] => {
       const sirali = [...liste].sort((a, b) => deger(a) - deger(b));
-      const sonuc: T[][] = [];
-      let ilk: T | undefined;
+      const sonuc: EsitlikOgesi[][] = [];
+      let ilk: EsitlikOgesi | undefined;
       for (const x of sirali) {
-        if (ilk !== undefined && esit(deger(ilk), deger(x))) sonuc[sonuc.length - 1].push(x);
+        if (ilk !== undefined && esit(ilk, x)) sonuc[sonuc.length - 1].push(x);
         else { sonuc.push([x]); ilk = x; }
       }
       return sonuc;
@@ -693,18 +680,12 @@ export function esitlikIsaretleri(
     for (const liste of bilesenler.values()) {
       if (liste.length < 2) continue;
       const tur = liste[0].tur;
-      const kumeler = tamSayi
-        // Tam sayı yazımı: ekranda aynı sayıyı gösterenler eştir
-        ? (tur === 'duz'
-          ? kumele(liste, (o) => tamUzunluk(o.uzunluk), tamEsit)
-          : tur === 'aci'
-            ? kumele(liste, (o) => tamDerece(o.tarama!), tamEsit)
-            : kumele(liste, (o) => tamUzunluk(o.yaricap!), tamEsit).flatMap((k) => kumele(k, (o) => tamDerece(o.tarama!), tamEsit)))
-        : tur === 'duz'
-          ? kumele(liste, (o) => o.uzunluk, uzunlukEsit)
-          : tur === 'aci'
-            ? kumele(liste, (o) => Math.abs(o.tarama!), aciEsit)
-            : kumele(liste, (o) => o.yaricap!, uzunlukEsit).flatMap((k) => kumele(k, (o) => o.tarama!, aciEsit));
+      const kumeler = tur === 'duz'
+        ? kumele(liste, (o) => o.uzunluk, duzEsit)
+        : tur === 'aci'
+          ? kumele(liste, (o) => Math.abs(o.tarama!), (a, b) => aciEsit(Math.abs(a.tarama!), Math.abs(b.tarama!)))
+          : kumele(liste, (o) => o.yaricap!, (a, b) => uzunlukEsit(a.yaricap!, b.yaricap!))
+            .flatMap((k) => kumele(k, (o) => o.tarama!, (a, b) => aciEsit(a.tarama!, b.tarama!)));
       for (const k of kumeler) {
         if (k.length < 2) continue;
         if (k.length > OTOMATIK_GRUP_EN_COK) { atlanan++; continue; }
@@ -719,17 +700,11 @@ export function esitlikIsaretleri(
      * üst üste binen iki eş kare "4 ≠ 4" dememeli. Ölçüsü farklı gruplar yine ayrı sayı alır.
      */
     const alanVerilen = new Map<string, { oge: EsitlikOgesi; sayi: number }[]>();
-    const ayniOlcu = (a: EsitlikOgesi, b: EsitlikOgesi) => (tamSayi
-      ? (a.tur === 'duz'
-        ? tamUzunluk(a.uzunluk) === tamUzunluk(b.uzunluk)
-        : a.tur === 'aci'
-          ? tamDerece(a.tarama ?? 0) === tamDerece(b.tarama ?? 0)
-          : tamUzunluk(a.yaricap ?? 0) === tamUzunluk(b.yaricap ?? 0) && tamDerece(a.tarama ?? 0) === tamDerece(b.tarama ?? 0))
-      : a.tur === 'duz'
-        ? uzunlukEsit(a.uzunluk, b.uzunluk)
-        : a.tur === 'aci'
-          ? aciEsit(Math.abs(a.tarama ?? 0), Math.abs(b.tarama ?? 0))
-          : uzunlukEsit(a.yaricap ?? 0, b.yaricap ?? 0) && aciEsit(a.tarama ?? 0, b.tarama ?? 0));
+    const ayniOlcu = (a: EsitlikOgesi, b: EsitlikOgesi) => (a.tur === 'duz'
+      ? duzEsit(a, b)
+      : a.tur === 'aci'
+        ? aciEsit(Math.abs(a.tarama ?? 0), Math.abs(b.tarama ?? 0))
+        : uzunlukEsit(a.yaricap ?? 0, b.yaricap ?? 0) && aciEsit(a.tarama ?? 0, b.tarama ?? 0));
     for (const g of adaylar) {
       const anahtar = `${g.tur}|${g.alan}`;
       const verilen = alanVerilen.get(anahtar) ?? [];
