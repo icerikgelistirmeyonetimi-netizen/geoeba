@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { LevelId, GradeId, Topic, Activity, Level, Grade, MathCategory } from '@/types/curriculum';
 import { curriculumData } from '@/curriculum/curriculumData';
-import { paylasimiYakala } from '@/math/cizimPaylasimi';
+import { paylasimGecisi, paylasimiYakala } from '@/math/cizimPaylasimi';
 
 export type AppScreen = 'home' | 'portal' | 'grades' | 'topics' | 'mission' | 'workspace';
 
@@ -288,6 +288,9 @@ export function CurriculumProvider({ children }: { children: React.ReactNode }) 
   const [completedActivityIds, setCompletedActivityIds] = useState<string[]>([]);
 
   const isPopStateRef = useRef(false);
+  /** Serbest stüdyo (sınıf ekranı) şu an açık mı: popstate dinleyicisi bir kez kurulur, güncel değeri buradan okur */
+  const studyoAcikRef = useRef(false);
+  studyoAcikRef.current = currentScreen === 'workspace' && isFreeSandbox;
 
   const selectedLevel = selectedLevelId ? curriculumData.levels[selectedLevelId] : null;
   // Hazırlık Sınıfı'nın gradeNumber değeri 0'dır; 0 falsy olduğu için burada `||` kullanılamaz.
@@ -369,8 +372,12 @@ export function CurriculumProvider({ children }: { children: React.ReactNode }) 
     };
 
     const handlePopState = (event: PopStateEvent) => {
-      // Açık sekmenin adres çubuğuna paylaşım bağlantısı yapıştırıldı: sayfa baştan açılır (sınıf açılışı, oturum, çizim)
-      if (paylasimiYakala(window.location.hash)) {
+      // Paylaşım adresi: stüdyonun kendi geçmiş kaydına (adres çizimle güncellenmişti) geri / ileri gelindiyse çizim
+      // yakalanır ve kayıt olağan uygulanır (sınıf ekranı bağlanınca alır). Adres çubuğuna yapıştırılan bağlantıda ya da
+      // stüdyo zaten açıkken sayfa baştan açılır (sınıf açılışı, oturum, çizim).
+      const gecis = paylasimGecisi(window.location.hash, event.state, studyoAcikRef.current);
+      if (gecis !== 'yok') paylasimiYakala(window.location.hash);
+      if (gecis === 'yenile') {
         window.location.reload();
         return;
       }

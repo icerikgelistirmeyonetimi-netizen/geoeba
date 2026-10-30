@@ -190,9 +190,38 @@ export async function paylasimVerisiOlustur(
   return `z${base64url(await akisiOku(akisla(bytes, new CompressionStream('deflate-raw'))))}`;
 }
 
+/** Paylaşım hash'i: '#/studyo/paylas/<kademe>/<veri>' (adres çubuğu da çizim değiştikçe bununla güncellenir). */
+export function paylasimHashi(kademe: LevelId, veri: string): string {
+  return `#/${ONEK}${kademe}/${veri}`;
+}
+
 /** Bağlantının tamamı: bulunduğu sayfanın adresi (origin + pathname) + paylaşım hash'i. */
 export function paylasimBaglantisi(kademe: LevelId, veri: string, konum: Pick<Location, 'origin' | 'pathname'> = window.location): string {
-  return `${konum.origin}${konum.pathname}#/${ONEK}${kademe}/${veri}`;
+  return `${konum.origin}${konum.pathname}${paylasimHashi(kademe, veri)}`;
+}
+
+/**
+ * İki projenin çizimi (2B nesneler + 3B cisimler) aynı mı? Görünüm, stil, kamera ve düzen sayılmaz; kimlikler ve createdAt
+ * küçültmedeki gibi sıraya göre karşılaştırılır. Sayfa kendi adresiyle yenilenince açılan çizim kayıtlı çizimle aynıdır:
+ * "Paylaşılan çizim açıldı" denmez.
+ */
+export function ayniCizimMi(a: ProjectFile, b: ProjectFile): boolean {
+  const cizim = (p: ProjectFile) => {
+    const k = paylasimIcinKucult({ version: '2.0', objects: p.objects, solids: p.solids });
+    return JSON.stringify([k.objects, k.solids]);
+  };
+  return cizim(a) === cizim(b);
+}
+
+/**
+ * popstate'te adres bir paylaşım adresiyse ne yapılır? Kendi geçmiş kaydımız (geri / ileri; durumda stüdyo ekranı var)
+ * sayfa yenilenmeden uygulanır: stüdyo yeniden bağlanır ve çizimi alır. Adres çubuğuna yapıştırılan bağlantının durumu
+ * yoktur; stüdyo zaten açıkken de bağlanan sınıf ekranı yoktur: ikisinde sayfa baştan açılır.
+ */
+export function paylasimGecisi(hash: string, durum: unknown, studyoAcik: boolean): 'yok' | 'uygula' | 'yenile' {
+  if (!paylasimAdresiniCoz(hash)) return 'yok';
+  const kayit = durum && typeof durum === 'object' ? (durum as { screen?: unknown; isFreeSandbox?: unknown }) : null;
+  return kayit?.screen === 'workspace' && kayit.isFreeSandbox === true && !studyoAcik ? 'uygula' : 'yenile';
 }
 
 /** Hash bir paylaşım bağlantısı mı? Değilse null; kademe tanınmıyorsa kademe: null. */

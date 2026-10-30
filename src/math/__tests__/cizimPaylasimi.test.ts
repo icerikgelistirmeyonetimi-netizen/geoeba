@@ -6,9 +6,12 @@ import { DEFAULT_STYLE_SETTINGS } from '@/types/workspace';
 import {
   PAYLASIM_UYARI_UZUNLUGU,
   PaylasimHatasi,
+  ayniCizimMi,
   bekleyenPaylasim,
   paylasimAdresiniCoz,
   paylasimBaglantisi,
+  paylasimGecisi,
+  paylasimHashi,
   paylasimIcinKucult,
   paylasimVerisiOlustur,
   paylasimVerisiniCoz,
@@ -271,5 +274,42 @@ describe('bozuk ya da eski bağlantı', () => {
   it('boyut tanınmıyorsa 2B açılır', async () => {
     const acilan = await paylasimVerisiniCoz(jsonVerisi({ s: 1, boyut: '4D', proje: ornekProje() }));
     expect(acilan.boyut).toBe('2D');
+  });
+});
+
+describe('adres çizimle eşit', () => {
+  it('hash bağlantının hash bölümüyle aynıdır', () => {
+    expect(paylasimHashi('ortaokul', 'zABC')).toBe('#/studyo/paylas/ortaokul/zABC');
+    const baglanti = paylasimBaglantisi('ortaokul', 'zABC', { origin: 'http://localhost:3000', pathname: '/' });
+    expect(baglanti.endsWith(paylasimHashi('ortaokul', 'zABC'))).toBe(true);
+    expect(paylasimAdresiniCoz(paylasimHashi('lise', 'zX'))).toEqual({ kademe: 'lise', veri: 'zX' });
+  });
+
+  it('aynı çizim: kimlik, createdAt, görünüm, stil ve kamera farkı sayılmaz; nesne ya da cisim farkı sayılır', async () => {
+    const kayitli = ornekProje({ solids: ornekCisimler() });
+    const acilan = (await paylasimVerisiniCoz(await paylasimVerisiOlustur({ boyut: '2D', proje: kayitli }))).proje;
+    // Açılan proje kısa takma adlar ve farklı createdAt taşır
+    expect(acilan.objects[0].id).not.toBe(kayitli.objects[0].id);
+    expect(ayniCizimMi(kayitli, acilan)).toBe(true);
+    expect(ayniCizimMi(kayitli, { ...acilan, viewport: { zoom: 90, panX: 4 }, styleSettings: { ...DEFAULT_STYLE_SETTINGS, fontScale: 2 }, layoutMode: '3d_only' })).toBe(true);
+    const tasinmis = acilan.objects.map((o) => (o.type === 'point' && o.label === 'A' ? { ...o, x: 9 } : o));
+    expect(ayniCizimMi(kayitli, { ...acilan, objects: tasinmis as typeof acilan.objects })).toBe(false);
+    expect(ayniCizimMi(kayitli, { ...acilan, solids: acilan.solids.slice(1) })).toBe(false);
+    expect(ayniCizimMi(kayitli, { ...acilan, objects: acilan.objects.slice(0, -1) })).toBe(false);
+  });
+
+  it('geri / ileri ile stüdyonun kendi kaydına gelinirse sayfa yenilenmez; yapıştırılan bağlantı ya da açık stüdyo yeniler', () => {
+    const hash = '#/studyo/paylas/ortaokul/zAAA';
+    const studyoKaydi = { screen: 'workspace', isFreeSandbox: true, levelId: null };
+    expect(paylasimGecisi(hash, studyoKaydi, false)).toBe('uygula');
+    // Adres çubuğuna yapıştırılan bağlantı: tarayıcı durumsuz yeni kayıt açar
+    expect(paylasimGecisi(hash, null, false)).toBe('yenile');
+    expect(paylasimGecisi(hash, { __NA: true }, false)).toBe('yenile');
+    // Stüdyo zaten açık: bağlanacak yeni sınıf ekranı yok
+    expect(paylasimGecisi(hash, studyoKaydi, true)).toBe('yenile');
+    // Etkinlik çalışma alanı ya da paylaşım olmayan adres
+    expect(paylasimGecisi(hash, { screen: 'workspace', isFreeSandbox: false }, false)).toBe('yenile');
+    expect(paylasimGecisi('#/studyo', studyoKaydi, false)).toBe('yok');
+    expect(paylasimGecisi('#/home', null, true)).toBe('yok');
   });
 });

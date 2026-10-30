@@ -14,6 +14,7 @@
  *
  * Paylaşım bağlantısıyla (#/studyo/paylas/<kademe>/<veri>) açılınca açılış aynı oynar; bağlantının kademesi baştan
  * açıldığı için oturum ekranı gelmez, masaüstünde Çizim Stüdyosu paylaşılan çizimle açılır (PaylasimAcilisi.tsx).
+ * Çizim Stüdyosu öndeyken adres çubuğu da çizimle aynı biçimde güncellenir (AdresEsitleyici.tsx).
  *
  * Motor (sinifSahnesi.ts) yalnız tarayıcıda, dinamik içe aktarmayla yüklenir; modül ya da model
  * varlıkları yoksa, WebGL2 yoksa ya da motor hata verirse 3B atlanır: açılış tam ekranda başlar.
@@ -48,6 +49,7 @@ import { OturumEkrani } from "@/components/oturum/OturumEkrani";
 import { homografi, type Kose } from "./homografi";
 import { acilisBirimi } from "./acilisBirimi";
 import { PaylasimAcilisi } from "./PaylasimAcilisi";
+import { AdresEsitleyici } from "./AdresEsitleyici";
 import { bekleyenPaylasim, paylasimiBirak } from "@/math/cizimPaylasimi";
 import s from "./sinif.module.css";
 
@@ -752,6 +754,9 @@ export function SinifEkrani({ onAnaSayfa }: SinifEkraniProps) {
         className={`${s.perde} ${perde ? s["perde--acik"] : ""}`}
         aria-hidden="true"
       />
+
+      {/* Adres çizimle eşit: yalnız Stüdyo öndeyken ve bekleyen paylaşım yüklendikten sonra (yoksa kendi çizimi yazılırdı) */}
+      {kademe && !paylasim && masaustunde(d.faz) && ondekiId === CIZIM_KIMLIGI && <AdresEsitleyici kademe={kademe} />}
 
       {paylasim && (
         <PaylasimAcilisi

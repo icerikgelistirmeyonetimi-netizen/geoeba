@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { DEFAULT_ZOOM, VARSAYILAN_GORUNUM_AYARLARI, useWorkspace } from '@/state/WorkspaceContext';
+import { VARSAYILAN_GORUNUM_AYARLARI, useWorkspace } from '@/state/WorkspaceContext';
 import { useTheme } from '@/state/ThemeContext';
 import { DEFAULT_STYLE_SETTINGS, ToolMode } from '@/types/workspace';
 import { LayoutMode } from './PropertiesPanel';
@@ -15,6 +15,7 @@ import { TREE_TOOL_GROUPS } from './treeToolDefinitions';
 import { kademeyeUygunGorunumler, eskiDuzeniCevir } from './gorunumDuzenleri';
 import { YeniCalismaModal, calismaImzasi, yeniIcinSorulmaliMi } from './YeniCalismaModal';
 import { PaylasimModal, type PaylasimIstegi } from './PaylasimModal';
+import { PAYLASIM_VARSAYILANLARI } from './paylasimVarsayilanlari';
 import { useOturum } from '@/state/OturumContext';
 import { kilavuzBolumleri } from './kullanimKilavuzu';
 import { basligaGelince, basligaTiklayinca } from './menuGecisi';
@@ -25,7 +26,7 @@ import { KademeDuzeyiMenusu } from './KademeDuzeyiMenusu';
 import { aracGorunurMu, aracSecilebilirMi, gruplariSuz, kademeEtiketi } from './kademeDuzeyleri';
 import { gorunenKisayol } from './ilkokulKipi';
 import { useKademeDuzeyi } from '@/hooks/useKademeDuzeyi';
-import { VARSAYILAN_KAMERA_3B, kamerayiSifirla } from './cisimYerlesimi';
+import { kamerayiSifirla } from './cisimYerlesimi';
 import {
   FileText,
   FolderOpen,
@@ -357,10 +358,7 @@ export function WorkspaceMenuBar(props: WorkspaceMenuBarProps = {}) {
   const handleShareLink = () => {
     closeMenu();
     if (!oturumKademesi) return;
-    setPaylasimIstegi({
-      proje: getProject(), boyut: studioDimension, kademe: oturumKademesi,
-      varsayilanlar: { gorunum: { zoom: DEFAULT_ZOOM, panX: 0, panY: 0, ...VARSAYILAN_GORUNUM_AYARLARI }, kamera: VARSAYILAN_KAMERA_3B },
-    });
+    setPaylasimIstegi({ proje: getProject(), boyut: studioDimension, kademe: oturumKademesi, varsayilanlar: PAYLASIM_VARSAYILANLARI });
   };
 
   // Dosya > Yeni: 2B nesneler ve 3B cisimler silinir (geri alınabilir), görünüm orijin merkezli başlar; ayarlar korunur.

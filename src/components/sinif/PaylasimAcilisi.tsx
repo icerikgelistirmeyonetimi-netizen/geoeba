@@ -17,7 +17,7 @@ import { AlertTriangle } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { useOturum } from '@/state/OturumContext';
 import { useWorkspace } from '@/state/WorkspaceContext';
-import { PaylasimHatasi, paylasimVerisiniCoz, type PaylasilanCizim, type PaylasimAdresi } from '@/math/cizimPaylasimi';
+import { PaylasimHatasi, ayniCizimMi, paylasimVerisiniCoz, type PaylasilanCizim, type PaylasimAdresi } from '@/math/cizimPaylasimi';
 
 const KADEMESIZ = 'Paylaşılan çizim açılamadı: bağlantıdaki oturum (ilkokul, ortaokul ya da lise) tanınmadı. Bağlantının tamamını kopyaladığınızdan emin olun; oturumunuzu seçip devam edebilirsiniz.';
 const YUKLENEMEDI = 'Paylaşılan çizim açılamadı. Kendi çiziminiz korundu.';
@@ -38,7 +38,7 @@ interface PaylasimAcilisiProps {
 
 export function PaylasimAcilisi({ adres, iletiGosterilebilir, onBitti }: PaylasimAcilisiProps) {
   const { kademe, oturumAc } = useOturum();
-  const { sceneBridge, loadProject, setStudioDimension, setHintMessage } = useWorkspace();
+  const { sceneBridge, getProject, loadProject, setStudioDimension, setHintMessage } = useWorkspace();
   const [cizim, setCizim] = useState<Omit<PaylasilanCizim, 'kademe'> | null>(null);
   const [hata, setHata] = useState<string | null>(adres.kademe ? null : KADEMESIZ);
   const uygulandi = useRef(false);
@@ -67,16 +67,18 @@ export function PaylasimAcilisi({ adres, iletiGosterilebilir, onBitti }: Paylasi
     const t = window.setTimeout(() => {
       uygulandi.current = true;
       try {
+        // Sayfa kendi adresiyle yenilendiyse (AdresEsitleyici) çizim kayıtlı çizimle aynıdır: yalnız görünüm geri gelir, ipucu yok
+        const ayni = ayniCizimMi(getProject(), cizim.proje);
         loadProject(cizim.proje);
         setStudioDimension(cizim.boyut);
-        setHintMessage('Paylaşılan çizim açıldı. Kendi çiziminize Geri Al ile dönebilirsiniz.');
+        if (!ayni) setHintMessage('Paylaşılan çizim açıldı. Kendi çiziminize Geri Al ile dönebilirsiniz.');
         onBittiRef.current();
       } catch (e) {
         setHata(e instanceof Error && e.message ? `${YUKLENEMEDI} (${e.message})` : YUKLENEMEDI);
       }
     }, 0);
     return () => window.clearTimeout(t);
-  }, [cizim, sceneBridge, kademe, adres.kademe, loadProject, setStudioDimension, setHintMessage]);
+  }, [cizim, sceneBridge, kademe, adres.kademe, getProject, loadProject, setStudioDimension, setHintMessage]);
 
   return (
     <Modal

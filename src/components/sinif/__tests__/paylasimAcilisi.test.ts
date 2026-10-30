@@ -16,6 +16,7 @@ const durum = vi.hoisted(() => ({
   oturum: { kademe: null as string | null, oturumAc: (() => {}) as (k: string) => void, oturumuKapat: () => {} },
   calisma: {
     sceneBridge: null as object | null,
+    getProject: (() => ({})) as () => unknown,
     loadProject: (() => {}) as (p: unknown) => void,
     setStudioDimension: (() => {}) as (b: string) => void,
     setHintMessage: (() => {}) as (m: string | null) => void,
@@ -50,6 +51,12 @@ let setStudioDimension: ReturnType<typeof vi.fn>;
 let setHintMessage: ReturnType<typeof vi.fn>;
 let onBitti: ReturnType<typeof vi.fn>;
 let ortamiGeriAl: () => void;
+/** Alıcının o anki (kayıtlı) çizimi: varsayılan olarak paylaşılandan farklı tek bir nokta */
+const kendiCizimi: ProjectFile = {
+  version: '2.0',
+  objects: [{ id: 'z', type: 'point', label: 'Z', x: 6, y: 4, isIndependent: true, color: '#e11d48', visible: true, showLabel: true, createdAt: 0 }] as unknown as ProjectFile['objects'],
+  solids: [],
+};
 
 beforeEach(() => {
   oturumAc = vi.fn((k: LevelId) => { durum.oturum.kademe = k; });
@@ -58,7 +65,7 @@ beforeEach(() => {
   setHintMessage = vi.fn();
   onBitti = vi.fn();
   durum.oturum = { kademe: null, oturumAc, oturumuKapat: () => {} };
-  durum.calisma = { sceneBridge: null, loadProject, setStudioDimension, setHintMessage };
+  durum.calisma = { sceneBridge: null, getProject: () => kendiCizimi, loadProject, setStudioDimension, setHintMessage };
   ortamiGeriAl = tarayiciOrtamiKur();
   // Yalnız uygulama zamanlayıcısı sahte: veri çözme (akışlar) gerçek görevlerle ilerler
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -111,6 +118,22 @@ describe('paylaşım bağlantısıyla açılış', () => {
       expect(t.iletiAcik()).toBe(false);
     });
   }
+
+  it('sayfa kendi adresiyle yenilendiyse (çizim kayıtlıyla aynı) çizim ve görünüm yüklenir ama "paylaşılan" ipucu çıkmaz', async () => {
+    // Kayıtlı çizim aynı nesnelerdir; kimlikler ve createdAt farklı olabilir (bağlantı kısa takma adlar taşır), görünüm farklıdır
+    const kayitli: ProjectFile = { ...proje, objects: proje.objects.map((o, i) => ({ ...o, createdAt: 1_761_822_345_000 + i })), viewport: { zoom: 44, panX: 0, panY: 0 } };
+    durum.calisma = { ...durum.calisma, getProject: () => kayitli };
+    const t = kur({ kademe: 'ortaokul', veri: await paylasimVerisiOlustur({ boyut: '3D', proje: { ...proje, viewport: { zoom: 61, panX: -20, panY: 5 } } }) });
+    await t.cozulsun();
+    durum.calisma = { ...durum.calisma, sceneBridge: {} };
+    t.ciz();
+    vi.runAllTimers();
+    expect(loadProject).toHaveBeenCalledTimes(1);
+    expect(loadProject.mock.calls[0][0]).toMatchObject({ viewport: { zoom: 61, panX: -20, panY: 5 } });
+    expect(setStudioDimension).toHaveBeenCalledWith('3D');
+    expect(setHintMessage).not.toHaveBeenCalled();
+    expect(onBitti).toHaveBeenCalledTimes(1);
+  });
 
   it('2B paylaşım 2B açılır', async () => {
     const t = kur({ kademe: 'ortaokul', veri: await paylasimVerisiOlustur({ boyut: '2D', proje: { ...proje, layoutMode: '2d_only' } }) });
